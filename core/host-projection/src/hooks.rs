@@ -705,13 +705,11 @@ type GoalStateManageDispatchFn = fn(&Value, &Path, &str) -> std::result::Result<
 type QualityGateManageDispatchFn = fn(&Value, &Path, &str) -> std::result::Result<String, FrameworkError>;
 type CloseoutRecordWriteDispatchFn = fn(&Value, &Path) -> std::result::Result<String, FrameworkError>;
 type CloseoutGateEvaluateFn = fn(&Value, &Path, &str) -> std::result::Result<String, FrameworkError>;
-type RoutingEvolutionDispatchFn = fn(&Value, &Path) -> std::result::Result<String, FrameworkError>;
 
 once_lock_hook! { static GOAL_STATE_MANAGE_DISPATCH: GoalStateManageDispatchFn; register register_tool_goal_state_manage_dispatch; fn tool_goal_state_manage_dispatch(args: &Value, repo_root: &Path, session_id: &str) -> Result<String> = err("GOAL_STATE_MANAGE_DISPATCH not registered — runtime-core boot required"); }
 once_lock_hook! { static QUALITY_GATE_MANAGE_DISPATCH: QualityGateManageDispatchFn; register register_tool_quality_gate_manage_dispatch; fn tool_quality_gate_manage_dispatch(args: &Value, repo_root: &Path, session_id: &str) -> Result<String> = err("QUALITY_GATE_MANAGE_DISPATCH not registered — runtime-core boot required"); }
 once_lock_hook! { static CLOSEOUT_RECORD_WRITE_DISPATCH: CloseoutRecordWriteDispatchFn; register register_tool_closeout_record_write_dispatch; fn tool_closeout_record_write_dispatch(args: &Value, repo_root: &Path) -> Result<String> = err("CLOSEOUT_RECORD_WRITE_DISPATCH not registered — runtime-core boot required"); }
 once_lock_hook! { static CLOSEOUT_GATE_EVALUATE: CloseoutGateEvaluateFn; register register_tool_closeout_gate_evaluate; fn tool_closeout_gate_evaluate(args: &Value, repo_root: &Path, host_id: &str) -> Result<String> = err("CLOSEOUT_GATE_EVALUATE not registered — runtime-core boot required"); }
-once_lock_hook! { static ROUTING_EVOLUTION_DISPATCH: RoutingEvolutionDispatchFn; register register_tool_routing_evolution_dispatch; fn tool_routing_evolution_dispatch(args: &Value, repo_root: &Path) -> Result<String> = err("ROUTING_EVOLUTION_DISPATCH not registered — runtime-core boot required"); }
 
 // ── Mirror type structural canary tests ──
 

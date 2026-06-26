@@ -7,6 +7,8 @@ use std::path::{Path, PathBuf};
 
 pub use framework_kernel::json_value::{required_non_empty_string, optional_non_empty_string, optional_bool};
 
+use core_policy::error::FrameworkError;
+
 use crate::types::{
     SESSION_SUPERVISOR_STORE_SCHEMA_VERSION, SessionSupervisorStore, WorkerEvent,
     WorkerSessionRecord,
@@ -19,7 +21,7 @@ pub fn worker_log_path(state_path: &Path, worker_id: &str) -> PathBuf {
         .join(format!("{}.log", sanitize_segment(worker_id)))
 }
 
-pub fn load_store(path: &Path) -> Result<SessionSupervisorStore, String> {
+pub fn load_store(path: &Path) -> Result<SessionSupervisorStore, FrameworkError> {
     if !path.is_file() {
         return Ok(SessionSupervisorStore {
             schema_version: SESSION_SUPERVISOR_STORE_SCHEMA_VERSION.to_string(),
@@ -27,27 +29,16 @@ pub fn load_store(path: &Path) -> Result<SessionSupervisorStore, String> {
             workers: Vec::new(),
         });
     }
-    let payload: SessionSupervisorStore = serde_json::from_str(
-        &fs::read_to_string(path).map_err(|err| format!("read supervisor store failed: {err}"))?,
-    )
-    .map_err(|err| format!("parse supervisor store failed: {err}"))?;
+    let payload: SessionSupervisorStore = serde_json::from_str(&fs::read_to_string(path)?)?;
     Ok(payload)
 }
 
-pub fn save_store(path: &Path, store: &SessionSupervisorStore) -> Result<(), String> {
+pub fn save_store(path: &Path, store: &SessionSupervisorStore) -> Result<(), FrameworkError> {
     if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)
-            .map_err(|err| format!("create supervisor state dir failed: {err}"))?;
+        fs::create_dir_all(parent)?;
     }
-    let payload = serde_json::to_string_pretty(store)
-        .map_err(|err| format!("serialize supervisor store failed: {err}"))?
-        + "\n";
-    let parent = path.parent().ok_or_else(|| {
-        format!(
-            "supervisor state path {} has no parent directory",
-            path.display()
-        )
-    })?;
+    let payload = serde_json::to_string_pretty(store)? + "\n";
+    let parent = path.parent().ok_or_else(|| FrameworkError::path(path))?;
     let file_name = path
         .file_name()
         .and_then(|n| n.to_str())
@@ -58,30 +49,18 @@ pub fn save_store(path: &Path, store: &SessionSupervisorStore) -> Result<(), Str
             .create(true)
             .truncate(true)
             .write(true)
-            .open(&tmp_path)
-            .map_err(|err| {
-                format!(
-                    "create supervisor state temp file {} failed: {err}",
-                    tmp_path.display()
-                )
-            })?;
+            .open(&tmp_path)?;
         tmp_file
             .write_all(payload.as_bytes())
             .and_then(|_| tmp_file.sync_all())
             .map_err(|err| {
                 let _ = fs::remove_file(&tmp_path);
-                format!(
-                    "write supervisor state temp payload failed for {}: {err}",
-                    tmp_path.display()
-                )
+                FrameworkError::Io(err)
             })?;
     }
     fs::rename(&tmp_path, path).map_err(|err| {
         let _ = fs::remove_file(&tmp_path);
-        format!(
-            "replace supervisor state failed for {}: {err}",
-            path.display()
-        )
+        FrameworkError::Io(err)
     })?;
     core_state_utils::atomic_write::fsync_parent_dir(path)
         .unwrap_or_else(|e| tracing::warn!("fsync supervisor state parent dir failed: {e}"));
@@ -109,8 +88,8 @@ pub fn upsert_worker(store: &mut SessionSupervisorStore, worker: WorkerSessionRe
     store.version += 1;
 }
 
-pub fn resolve_state_path(payload: &Value) -> Result<PathBuf, String> {
-    let cwd = std::env::current_dir().map_err(|err| format!("read current_dir failed: {err}"))?;
+pub fn resolve_state_path(payload: &Value) -> Result<PathBuf, FrameworkError> {
+    let cwd = std::env::current_dir()?;
     let default = cwd.join("artifacts/session_supervisor/state.json");
     if let Some(path) = optional_non_empty_string(payload, "state_path") {
         let pb = PathBuf::from(&path);
@@ -123,11 +102,11 @@ pub fn resolve_state_path(payload: &Value) -> Result<PathBuf, String> {
         let under_cwd = candidate.strip_prefix(&cwd).is_ok();
         let under_tmp = candidate.strip_prefix(&temp).is_ok();
         if !under_cwd && !under_tmp {
-            return Err(format!(
+            return Err(FrameworkError::validation(format!(
                 "state_path must be under cwd {} or system temp {}",
                 cwd.display(),
                 temp.display()
-            ));
+            )));
         }
         Ok(candidate)
     } else {
@@ -135,7 +114,7 @@ pub fn resolve_state_path(payload: &Value) -> Result<PathBuf, String> {
     }
 }
 
-pub fn now_from_payload(payload: &Value) -> Result<String, String> {
+pub fn now_from_payload(payload: &Value) -> Result<String, FrameworkError> {
     if let Some(now) = optional_non_empty_string(payload, "now") {
         parse_rfc3339(&now)?;
         return Ok(now);
@@ -143,15 +122,15 @@ pub fn now_from_payload(payload: &Value) -> Result<String, String> {
     Ok(framework_kernel::time::now_iso())
 }
 
-pub fn add_seconds_rfc3339(now: &str, seconds: i64) -> Result<String, String> {
+pub fn add_seconds_rfc3339(now: &str, seconds: i64) -> Result<String, FrameworkError> {
     let dt = parse_rfc3339(now)?;
     Ok((dt + Duration::seconds(seconds)).to_rfc3339())
 }
 
-pub fn parse_rfc3339(value: &str) -> Result<DateTime<Utc>, String> {
+pub fn parse_rfc3339(value: &str) -> Result<DateTime<Utc>, FrameworkError> {
     DateTime::parse_from_rfc3339(value)
         .map(|dt| dt.with_timezone(&Utc))
-        .map_err(|err| format!("invalid RFC3339 timestamp {value:?}: {err}"))
+        .map_err(|err| FrameworkError::validation(format!("invalid RFC3339 timestamp {value:?}: {err}")))
 }
 pub fn optional_i64(payload: &Value, key: &str) -> Option<i64> {
     payload.get(key).and_then(Value::as_i64)

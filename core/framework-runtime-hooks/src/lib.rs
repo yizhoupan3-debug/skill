@@ -66,7 +66,7 @@ pub fn register(h: RuntimeCoreHooks) {
 // ── 遥测钩子组 ──
 pub struct TelemetryHooks {
     pub hook_fired: fn(hook_name: &str, action: &str),
-    pub tool_call: fn(tool: &str, count: u32, blocked: bool),
+    pub tool_call: fn(tool: &str, duration_ms: u64, success: bool),
     pub route_decision: fn(query: &str, decision: &Value, reroute: bool),
     pub prediction_outcome: fn(task_id: &str, checks_summary: &str, verification_status: &str, checks_count: usize),
     pub rfv_round: fn(round: u32, verdict: &str),
@@ -83,7 +83,7 @@ pub struct HostProviderHooks {
 // ── Method wrappers for hook function pointer calls ──
 impl RuntimeCoreHooks {
     pub fn emit_hook_fired(&self, name: &str, action: &str) { (self.telemetry.hook_fired)(name, action); }
-    pub fn emit_tool_call(&self, tool: &str, count: u32, blocked: bool) { (self.telemetry.tool_call)(tool, count, blocked); }
+    pub fn emit_tool_call(&self, tool: &str, duration_ms: u64, success: bool) { (self.telemetry.tool_call)(tool, duration_ms, success); }
     pub fn emit_route_decision(&self, query: &str, decision: &Value, reroute: bool) { (self.telemetry.route_decision)(query, decision, reroute); }
     pub fn emit_prediction_outcome(&self, task_id: &str, checks_summary: &str, verification_status: &str, checks_count: usize) { (self.telemetry.prediction_outcome)(task_id, checks_summary, verification_status, checks_count); }
     pub fn emit_rfv_round(&self, round: u32, verdict: &str) { (self.telemetry.rfv_round)(round, verdict); }
@@ -390,7 +390,7 @@ mod tests {
         h.emit_prediction_outcome("", "", "", 0);
         h.emit_rfv_round(0, "");
         // Large values
-        h.emit_tool_call("tool-name-with-many-characters", u32::MAX, false);
+        h.emit_tool_call("tool-name-with-many-characters", u64::MAX, false);
         h.emit_rfv_round(u32::MAX, "LONG_VERDICT_STRING");
     }
 

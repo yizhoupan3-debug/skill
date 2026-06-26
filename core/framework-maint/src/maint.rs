@@ -38,7 +38,9 @@ pub fn dispatch(command: MaintSubcommand) -> Result<(), String> {
         }
         MaintSubcommand::ContinuityAudit(args) => {
             let root = repo_from_maint_repo_args(&args)?;
-            framework_extra::framework_doctor::run_continuity_audit(&root).map(|_| ())
+            framework_extra::framework_doctor::run_continuity_audit(&root)
+                .map(|_| ())
+                .map_err(|e| e.to_string())
         }
         MaintSubcommand::CleanHookState(args) => {
             let root = repo_from_framework_root_arg(args.framework_root.as_deref())?;

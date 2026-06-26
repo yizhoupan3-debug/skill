@@ -58,6 +58,7 @@ pub fn dispatch_task_ledger_command(cmd: TaskLedgerCommand) -> Result<Value, Str
         TaskLedgerCommand::QualityGate(p) => crate::telemetry_emit::framework_quality_gate(p),
         TaskLedgerCommand::SessionArtifacts(p) => {
             framework_extra::session_artifacts::write_framework_session_artifacts(p)
+                .map_err(|e| e.to_string())
         }
         TaskLedgerCommand::HookEvidenceAppend(p) => {
             Ok(framework_extra::evidence::framework_hook_evidence_append(p)?)

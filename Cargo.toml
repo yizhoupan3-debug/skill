@@ -47,7 +47,7 @@ members = [
     "core/runtime-infra",
     "core/loop-engine",
     "core/research-harness",
-    "tools/evolution-rs",
+    "tools/observer-rs",
     "core/framework-maint",
     "core/codegraph-rs",
     "core/mcp-tool-registry",

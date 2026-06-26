@@ -1,5 +1,7 @@
 //! Prompt resolver — resolves content-store references into full text.
 
+use core_policy::error::FrameworkError;
+
 use crate::content_store::{ContentNotFound, ContentStore};
 
 /// Resolves content-store references from a compression output.
@@ -17,11 +19,11 @@ impl PromptResolver {
     ///
     /// Sanitizes the input: strips `[ref:` / `ref:` prefix and `]` suffix,
     /// trims whitespace — the LLM may pass a `[ref:…]` placeholder verbatim.
-    pub fn resolve_one(&self, raw_hash: &str) -> Result<String, String> {
+    pub fn resolve_one(&self, raw_hash: &str) -> Result<String, FrameworkError> {
         let hash = sanitize_hash(raw_hash);
         match self.store.get(hash) {
             Ok(content) => Ok(content),
-            Err(ContentNotFound(h)) => Err(format!("content not found: {h}")),
+            Err(ContentNotFound(h)) => Err(FrameworkError::not_found(format!("content not found: {h}"))),
         }
     }
 }

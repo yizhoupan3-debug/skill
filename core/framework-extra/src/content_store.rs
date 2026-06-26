@@ -10,6 +10,7 @@
 //!
 //! Reuses `fr_utils::json_io::*` for all I/O (no new filesystem primitives).
 
+use core_policy::error::FrameworkError;
 use fr_utils::constants::CONTENT_STORE_DIR;
 use fr_utils::json_io::write_json_if_changed;
 use serde::{Deserialize, Serialize};
@@ -53,24 +54,21 @@ impl ContentStore {
     /// Store `content` under its SHA-256 digest and return the hex hash.
     ///
     /// If an entry with the same hash already exists this is a no-op (idempotent).
-    pub fn put(&self, content: &str) -> Result<String, String> {
+    pub fn put(&self, content: &str) -> Result<String, FrameworkError> {
         let hash = hex_hash(content);
         let path = self.path_for(&hash);
         if path.exists() {
             return Ok(hash); // already stored, idempotent
         }
         if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)
-                .map_err(|e| format!("content-store mkdir failed: {e}"))?;
+            std::fs::create_dir_all(parent)?;
         }
         let entry = ContentEntry {
             hash: hash.clone(),
             content: content.to_string(),
         };
-        let entry_value =
-            serde_json::to_value(&entry).map_err(|e| format!("serialize content entry: {e}"))?;
-        write_json_if_changed(&path, &entry_value)
-            .map_err(|e| format!("content-store put failed: {e}"))?;
+        let entry_value = serde_json::to_value(&entry)?;
+        write_json_if_changed(&path, &entry_value)?;
         Ok(hash)
     }
 
@@ -104,29 +102,25 @@ impl ContentStore {
     /// Remove entries older than `max_age`.
     ///
     /// Returns the number of removed files.
-    pub fn remove_stale(&self, max_age: Duration) -> Result<usize, String> {
+    pub fn remove_stale(&self, max_age: Duration) -> Result<usize, FrameworkError> {
         let now = SystemTime::now();
         let mut removed = 0usize;
         if !self.store_root.exists() {
             return Ok(0);
         }
-        for shard in
-            std::fs::read_dir(&self.store_root).map_err(|e| format!("read store root: {e}"))?
-        {
-            let shard = shard.map_err(|e| format!("shard entry: {e}"))?;
-            if !shard.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+        for shard in std::fs::read_dir(&self.store_root)? {
+            let shard = shard?;
+            if !shard.file_type()?.is_dir() {
                 continue;
             }
-            for entry in std::fs::read_dir(shard.path())
-                .map_err(|e| format!("read shard {}: {e}", shard.path().display()))?
-            {
-                let entry = entry.map_err(|e| format!("entry in shard: {e}"))?;
-                let meta = entry.metadata().map_err(|e| format!("metadata: {e}"))?;
+            for entry in std::fs::read_dir(shard.path())? {
+                let entry = entry?;
+                let meta = entry.metadata()?;
                 let age = now
                     .duration_since(meta.modified().unwrap_or_else(|_| SystemTime::UNIX_EPOCH))
                     .unwrap_or(Duration::ZERO);
                 if age > max_age {
-                    std::fs::remove_file(entry.path()).map_err(|e| format!("remove stale: {e}"))?;
+                    std::fs::remove_file(entry.path())?;
                     removed += 1;
                 }
             }

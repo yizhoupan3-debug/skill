@@ -8,6 +8,7 @@
 //! counters and only persists to disk periodically (every `FLUSH_INTERVAL_SECS`
 //! seconds), avoiding the previous 5-step sync I/O chain on every tool call.
 
+use core_policy::error::FrameworkError;
 use core_state_utils::task_write_lock::apply_task_ledger_mutation;
 use serde_json::{Value, json};
 use std::collections::HashMap;
@@ -94,7 +95,7 @@ fn should_flush() -> bool {
 
 /// Drain in-memory accumulators and persist to disk. Called periodically
 /// from `record_tool_call` and on-demand from `check_anomalies` / `read_tracker_state`.
-fn flush_to_disk(repo_root: &Path) -> Result<(), String> {
+fn flush_to_disk(repo_root: &Path) -> Result<(), FrameworkError> {
     if !FLUSH_NEEDED.load(Ordering::Relaxed) && !should_flush() {
         return Ok(());
     }
@@ -106,7 +107,7 @@ fn flush_to_disk(repo_root: &Path) -> Result<(), String> {
         let map = PER_TOOL.get_or_init(|| Mutex::new(HashMap::new()));
         let mut map = map
             .lock()
-            .map_err(|e| format!("per_tool map lock poisoned: {e}"))?;
+            .map_err(|e| FrameworkError::validation(format!("per_tool map lock poisoned: {e}")))?;
         std::mem::take(&mut *map)
     };
 
@@ -122,8 +123,8 @@ fn flush_to_disk(repo_root: &Path) -> Result<(), String> {
         return Ok(());
     }
 
-    Ok(apply_task_ledger_mutation(repo_root, || {
-        let mut payload = load_or_init_tracker(&path)?;
+    apply_task_ledger_mutation(repo_root, || -> Result<(), String> {
+        let mut payload = load_or_init_tracker(&path).map_err(|e| e.to_string())?;
 
         payload["total_calls"] = json!(payload["total_calls"].as_u64().unwrap_or(0) + total);
 
@@ -174,7 +175,7 @@ fn flush_to_disk(repo_root: &Path) -> Result<(), String> {
             json!(cur_in + in_tok + cur_out + out_tok),
         );
 
-        write_tracker(&path, &payload)?;
+        write_tracker(&path, &payload).map_err(|e| e.to_string())?;
 
         let mut guard = last_flush()
             .lock()
@@ -182,13 +183,13 @@ fn flush_to_disk(repo_root: &Path) -> Result<(), String> {
         *guard = Some(Instant::now());
 
         Ok(())
-    })?)
+    }).map_err(FrameworkError::validation)
 }
 
 // ── Public API ───────────────────────────────────────────────────────
 
 /// Initialize or reset the session tracker.
-pub fn init_tracker(repo_root: &Path) -> Result<(), String> {
+pub fn init_tracker(repo_root: &Path) -> Result<(), FrameworkError> {
     let path = tracker_path(repo_root);
     let now = unix_timestamp();
     let payload = default_payload(now);
@@ -231,13 +232,13 @@ pub fn record_tool_call(
 }
 
 /// Check for anomalies. Returns a list of human-readable warning strings.
-pub fn check_anomalies(repo_root: &Path) -> Result<Vec<String>, String> {
+pub fn check_anomalies(repo_root: &Path) -> Result<Vec<String>, FrameworkError> {
     // Flush in-memory accumulators so anomaly check sees up-to-date data.
     flush_to_disk(repo_root)?;
 
-    Ok(apply_task_ledger_mutation(repo_root, || {
+    apply_task_ledger_mutation(repo_root, || -> Result<Vec<String>, String> {
         let path = tracker_path(repo_root);
-        let payload = load_or_init_tracker(&path)?;
+        let payload = load_or_init_tracker(&path).map_err(|e| e.to_string())?;
         let mut warnings: Vec<String> = vec![];
 
         let total = payload["total_calls"].as_u64().unwrap_or(0);
@@ -251,9 +252,6 @@ pub fn check_anomalies(repo_root: &Path) -> Result<Vec<String>, String> {
         }
 
         // Rule 2: No goal state set after 20+ calls
-        // Desktop sessions that run 20+ calls without setting a GOAL_STATE are
-        // likely drifting. The 20-call threshold is tuned for Desktop MCP where
-        // sessions are shorter than CLI hooks (which can hit 50+ calls easily).
         if total >= 20 {
             let has_goal = payload["per_tool"].get("goal_state_manage").is_some();
             if !has_goal {
@@ -262,8 +260,6 @@ pub fn check_anomalies(repo_root: &Path) -> Result<Vec<String>, String> {
         }
 
         // Rule 3: No closeout after 15+ calls
-        // Desktop MCP sessions typically end at 10-20 calls. The 15-call threshold
-        // catches unverified Desktop sessions before they grow too long.
         if total >= 15 {
             let has_closeout = payload["per_tool"]
                 .as_object()
@@ -314,14 +310,14 @@ pub fn check_anomalies(repo_root: &Path) -> Result<Vec<String>, String> {
         }
 
         // Write the tracker immediately (pass through unchanged warnings as Vec<String>)
-        write_tracker(&path, &payload)?;
+        write_tracker(&path, &payload).map_err(|e| e.to_string())?;
 
         Ok(warnings)
-    })?)
+    }).map_err(FrameworkError::validation)
 }
 
 /// Read the current tracker state as JSON (for MCP resource).
-pub fn read_tracker_state(repo_root: &Path) -> Result<Value, String> {
+pub fn read_tracker_state(repo_root: &Path) -> Result<Value, FrameworkError> {
     // Flush in-memory accumulators so readers see up-to-date data.
     flush_to_disk(repo_root)?;
 
@@ -357,11 +353,10 @@ fn default_payload(started_at: u64) -> Value {
 }
 
 /// Load tracker from disk, or initialize and persist a new one if missing.
-fn load_or_init_tracker(path: &Path) -> Result<Value, String> {
+fn load_or_init_tracker(path: &Path) -> Result<Value, FrameworkError> {
     if path.exists() {
-        let content =
-            std::fs::read_to_string(path).map_err(|e| format!("Failed to read tracker: {e}"))?;
-        serde_json::from_str(&content).map_err(|e| format!("Failed to parse tracker: {e}"))
+        let content = std::fs::read_to_string(path)?;
+        serde_json::from_str(&content).map_err(FrameworkError::Json)
     } else {
         let now = unix_timestamp();
         let payload = default_payload(now);
@@ -370,35 +365,29 @@ fn load_or_init_tracker(path: &Path) -> Result<Value, String> {
     }
 }
 
-fn write_tracker(path: &Path, payload: &Value) -> Result<(), String> {
+fn write_tracker(path: &Path, payload: &Value) -> Result<(), FrameworkError> {
     // Acquire global lock for thread-safe writes
     let lock = get_tracker_lock();
     let _guard = lock.lock().map_err(|e| {
         tracing::warn!("[router-rs] tracker lock poisoned: {e}");
-        format!("tracker lock poisoned: {e}")
+        FrameworkError::validation(format!("tracker lock poisoned: {e}"))
     })?;
 
     if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|e| format!("Failed to create tracker dir: {e}"))?;
+        std::fs::create_dir_all(parent)?;
     }
 
     // Use temp file + rename for atomic write (PID suffix avoids cross-process collision)
     let temp_path = path.with_extension(format!("{}.tmp", std::process::id()));
-    let content = serde_json::to_string_pretty(payload)
-        .map_err(|e| format!("Failed to serialize tracker: {e}"))?;
+    let content = serde_json::to_string_pretty(payload)?;
 
-    let file = File::create(&temp_path).map_err(|e| format!("Failed to create temp file: {e}"))?;
+    let file = File::create(&temp_path)?;
     let mut writer = BufWriter::new(file);
-    writer
-        .write_all(content.as_bytes())
-        .map_err(|e| format!("Failed to write temp file: {e}"))?;
-    writer
-        .flush()
-        .map_err(|e| format!("Failed to flush: {e}"))?;
+    writer.write_all(content.as_bytes())?;
+    writer.flush()?;
     drop(writer);
 
-    std::fs::rename(&temp_path, path).map_err(|e| format!("Failed to atomically rename: {e}"))?;
+    std::fs::rename(&temp_path, path)?;
 
     Ok(())
 }

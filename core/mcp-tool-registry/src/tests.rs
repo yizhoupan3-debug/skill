@@ -321,7 +321,7 @@ fn test_schema_version_mismatch_error() {
     write_json(&path, JSON_SCHEMA_MISMATCH);
 
     let err = load_tool_records(&path).unwrap_err();
-    assert!(err.contains("schema mismatch"), "error: {err}");
+    assert!(err.to_string().contains("schema mismatch"), "error: {err}");
 }
 
 #[test]
@@ -332,7 +332,7 @@ fn test_missing_tools_array_error() {
     write_json(&path, JSON_MISSING_TOOLS);
 
     let err = load_tool_records(&path).unwrap_err();
-    assert!(err.contains("missing 'tools'"), "error: {err}");
+    assert!(err.to_string().contains("missing 'tools'"), "error: {err}");
 }
 
 #[test]
@@ -355,7 +355,7 @@ fn test_v1_missing_keys_array_error() {
     write_json(&path, JSON_V1_MISSING_KEYS);
 
     let err = load_tool_records(&path).unwrap_err();
-    assert!(err.contains("missing 'keys'"), "error: {err}");
+    assert!(err.to_string().contains("missing 'keys'"), "error: {err}");
 }
 
 #[test]
@@ -366,7 +366,7 @@ fn test_v1_empty_keys_array_error() {
     write_json(&path, JSON_V1_EMPTY_KEYS);
 
     let err = load_tool_records(&path).unwrap_err();
-    assert!(err.contains("empty 'keys'"), "error: {err}");
+    assert!(err.to_string().contains("empty 'keys'"), "error: {err}");
 }
 
 #[test]
@@ -377,7 +377,7 @@ fn test_v1_missing_slug_error() {
     write_json(&path, JSON_V1_MISSING_SLUG);
 
     let err = load_tool_records(&path).unwrap_err();
-    assert!(err.contains("missing slug"), "error: {err}");
+    assert!(err.to_string().contains("missing slug"), "error: {err}");
 }
 
 #[test]
@@ -389,7 +389,7 @@ fn test_v2_missing_required_slug_error() {
 
     let err = load_tool_records(&path).unwrap_err();
     // The serde error should indicate slug is missing
-    assert!(err.contains("slug"), "error: {err}");
+    assert!(err.to_string().contains("slug"), "error: {err}");
 }
 
 #[test]
@@ -400,7 +400,7 @@ fn test_invalid_json_error() {
     write_json(&path, "this is not valid json");
 
     let err = load_tool_records(&path).unwrap_err();
-    assert!(err.contains("failed to parse"), "error: {err}");
+    assert!(err.to_string().contains("failed to parse"), "error: {err}");
 }
 
 #[test]
@@ -409,7 +409,7 @@ fn test_nonexistent_file_error() {
     let path = dir.path().join("nonexistent_file.json");
 
     let err = load_tool_records(&path).unwrap_err();
-    assert!(err.contains("failed to read"), "error: {err}");
+    assert!(err.to_string().contains("failed to read"), "error: {err}");
 }
 
 #[test]
@@ -421,7 +421,7 @@ fn test_v1_tool_not_array_nor_object_error() {
     write_json(&path, JSON_V1_ENTRY_NOT_ARRAY);
 
     let err = load_tool_records(&path).unwrap_err();
-    assert!(err.contains("must be arrays"), "error: {err}");
+    assert!(err.to_string().contains("must be arrays"), "error: {err}");
 }
 
 // ── Cache behavior ────────────────────────────────────────────────────────────

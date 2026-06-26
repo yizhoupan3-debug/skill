@@ -132,15 +132,6 @@ pub fn manifest_skill_columns(manifest: &serde_json::Value) -> Option<ManifestCo
     })
 }
 
-pub fn manifest_skill_slug_column(
-    manifest: &serde_json::Value,
-) -> Option<(&Vec<serde_json::Value>, usize)> {
-    let skills = manifest.get("skills")?.as_array()?;
-    let keys = manifest.get("keys")?.as_array()?;
-    let idx_slug = keys.iter().position(|key| key.as_str() == Some("slug"))?;
-    Some((skills, idx_slug))
-}
-
 pub fn truncate_ts_chars(ts: &str, max_chars: usize) -> String {
     ts.chars().take(max_chars).collect()
 }

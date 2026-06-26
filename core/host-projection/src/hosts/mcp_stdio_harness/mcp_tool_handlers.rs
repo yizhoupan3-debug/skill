@@ -58,13 +58,13 @@ impl CompositeRegistry {
 }
 
 // ---------------------------------------------------------------------------
-// RoutingTools (5 tools)
+// RoutingTools (4 tools)
 // ---------------------------------------------------------------------------
 
 pub struct RoutingTools;
 impl ToolHandler for RoutingTools {
     fn tool_names(&self) -> &[&'static str] {
-        &["skill_route", "skill_search", "skill_read", "skill_route_status", "routing_evolution"]
+        &["skill_route", "skill_search", "skill_read", "skill_route_status"]
     }
     fn dispatch(&self, tool_name: &str, args: &Value, ctx: &ToolCallContext) -> Result<String, String> {
         match tool_name {
@@ -72,7 +72,6 @@ impl ToolHandler for RoutingTools {
             "skill_search" => tool_skill_search(args, &ctx.repo_root, &ctx.host_id),
             "skill_read" => tool_skill_read(args, &ctx.repo_root),
             "skill_route_status" => tool_skill_route_status(&ctx.repo_root),
-            "routing_evolution" => skill_routing_evolution(args, &ctx.repo_root),
             _ => Err(format!("RoutingTools: unknown tool: {tool_name}")),
         }
     }

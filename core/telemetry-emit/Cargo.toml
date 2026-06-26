@@ -1,7 +1,7 @@
 [package]
 name = "telemetry-emit"
 version = "0.1.0"
-description = "L0 unified telemetry emit primitives: structured emit, MetricCounter, tracing+telemetry macros"
+description = "L0 unified telemetry emit primitives: structured emit via TelemetryEvent + hook action helpers"
 edition = "2024"
 [lints]
 workspace = true

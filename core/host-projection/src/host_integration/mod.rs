@@ -345,11 +345,11 @@ mod tests {
             load_runtime_registry_payload(&root).expect_err("expected missing registry error");
         let expected_registry = root.join("configs/framework/RUNTIME_REGISTRY.json");
         assert!(
-            err.contains(expected_registry.to_string_lossy().as_ref()),
+            err.to_string().contains(expected_registry.to_string_lossy().as_ref()),
             "error should include expected repo-local registry path: {err}"
         );
         assert!(
-            err.contains("framework-root"),
+            err.to_string().contains("framework-root"),
             "error should mention framework-root / --framework-root: {err}"
         );
 

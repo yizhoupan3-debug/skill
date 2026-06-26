@@ -2,6 +2,7 @@
 //!
 //! This file contains static data constructors with hardcoded parameters.
 
+use core_policy::error::FrameworkError;
 use std::collections::HashSet;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -1046,24 +1047,24 @@ pub fn runtime_observability_dashboard_schema() -> Value {
     })
 }
 
-pub fn build_runtime_metric_record(payload: Value) -> Result<Value, String> {
+pub fn build_runtime_metric_record(payload: Value) -> Result<Value, FrameworkError> {
     let metric_name = required_non_empty_string(&payload, "metric_name", "runtime metric record")?;
     let spec = runtime_observability_metric_catalog()
         .into_iter()
         .find(|entry| {
             entry.get("metric_name").and_then(Value::as_str) == Some(metric_name.as_str())
         })
-        .ok_or_else(|| format!("unsupported runtime metric: {metric_name}"))?;
+        .ok_or_else(|| FrameworkError::unsupported(format!("unsupported runtime metric: {metric_name}")))?;
 
     let value = payload
         .get("value")
         .cloned()
-        .ok_or_else(|| "runtime metric record requires a numeric value".to_string())?;
+        .ok_or_else(|| FrameworkError::validation("runtime metric record requires a numeric value".to_string()))?;
     let numeric_value = value
         .as_f64()
-        .ok_or_else(|| "runtime metric record requires a numeric value".to_string())?;
+        .ok_or_else(|| FrameworkError::validation("runtime metric record requires a numeric value".to_string()))?;
     if !numeric_value.is_finite() {
-        return Err("metric value must be finite".to_string());
+        return Err(FrameworkError::validation("metric value must be finite".to_string()));
     }
 
     let service_name =
@@ -1081,10 +1082,10 @@ pub fn build_runtime_metric_record(payload: Value) -> Result<Value, String> {
     let attempt = payload
         .get("attempt")
         .and_then(Value::as_i64)
-        .ok_or_else(|| "runtime metric record requires integer field attempt".to_string())?;
+        .ok_or_else(|| FrameworkError::validation("runtime metric record requires integer field attempt".to_string()))?;
     if attempt < 0 {
         return Err(
-            "runtime metric record requires non-negative integer field attempt".to_string(),
+            FrameworkError::validation("runtime metric record requires non-negative integer field attempt".to_string()),
         );
     }
 

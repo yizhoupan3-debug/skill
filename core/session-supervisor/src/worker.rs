@@ -4,6 +4,8 @@ use serde_json::{Map, Value, json};
 use std::path::Path;
 use std::sync::OnceLock;
 
+use core_policy::error::FrameworkError;
+
 use crate::driver::{build_driver_command, default_resume_mode, driver_id_for_host};
 use crate::process::{launch_process, process_is_alive, terminate_process};
 use crate::runtime::{
@@ -20,9 +22,11 @@ pub fn launch_worker(
     state_path: &Path,
     dry_run: bool,
     now: &str,
-) -> Result<WorkerSessionRecord, String> {
-    let host = required_non_empty_string(payload, "host", "session supervisor")?;
-    let cwd = required_non_empty_string(payload, "cwd", "session supervisor")?;
+) -> Result<WorkerSessionRecord, FrameworkError> {
+    let host = required_non_empty_string(payload, "host", "session supervisor")
+        .map_err(FrameworkError::validation)?;
+    let cwd = required_non_empty_string(payload, "cwd", "session supervisor")
+        .map_err(FrameworkError::validation)?;
     let prompt = optional_non_empty_string(payload, "prompt");
     let resume_target = optional_non_empty_string(payload, "resume_target");
     let resume_mode = optional_non_empty_string(payload, "resume_mode")
@@ -45,7 +49,7 @@ pub fn launch_worker(
         false,
         worktree_name_val.clone(),
         worktree_path_val.clone(),
-    )?;
+    ).map_err(FrameworkError::session)?;
     let resume_command = Some(build_driver_command(
         &host,
         &cwd,
@@ -55,7 +59,7 @@ pub fn launch_worker(
         true,
         worktree_name_val,
         worktree_path_val,
-    )?);
+    ).map_err(FrameworkError::session)?);
     let retry_policy = payload
         .get("retry_policy")
         .cloned()
@@ -148,7 +152,7 @@ pub fn mark_worker_blocked(
     worker: &mut WorkerSessionRecord,
     payload: &Value,
     now: &str,
-) -> Result<BlockClassification, String> {
+) -> Result<BlockClassification, FrameworkError> {
     let classification =
         if let Some(evidence_text) = optional_non_empty_string(payload, "evidence_text") {
             classify_rate_limit_block(&worker.host, &evidence_text)?
@@ -196,11 +200,11 @@ pub fn resume_worker(
     state_path: &Path,
     dry_run: bool,
     now: &str,
-) -> Result<String, String> {
+) -> Result<String, FrameworkError> {
     let command = worker
         .resume_command
         .clone()
-        .ok_or_else(|| format!("Worker {} has no resume command", worker.worker_id))?;
+        .ok_or_else(|| FrameworkError::not_found(format!("Worker {} has no resume command", worker.worker_id)))?;
 
     if dry_run {
         worker.status = "resume_scheduled".to_string();
@@ -243,7 +247,7 @@ pub fn terminate_worker(
     worker: &mut WorkerSessionRecord,
     dry_run: bool,
     now: &str,
-) -> Result<bool, String> {
+) -> Result<bool, FrameworkError> {
     if dry_run {
         worker.status = "interrupted".to_string();
         worker.updated_at = now.to_string();
@@ -278,7 +282,7 @@ pub fn reap_stale_workers(
     workers: &mut [WorkerSessionRecord],
     now: &str,
     stale_after_secs: i64,
-) -> Result<(), String> {
+) -> Result<(), FrameworkError> {
     if stale_after_secs <= 0 {
         return Ok(());
     }
@@ -314,7 +318,7 @@ pub fn reap_stale_workers(
     Ok(())
 }
 
-pub fn worker_ready_for_resume(worker: &WorkerSessionRecord, now: &str) -> Result<bool, String> {
+pub fn worker_ready_for_resume(worker: &WorkerSessionRecord, now: &str) -> Result<bool, FrameworkError> {
     if !matches!(
         worker.status.as_str(),
         "blocked_rate_limit" | "resume_scheduled"
@@ -331,7 +335,7 @@ pub fn worker_ready_for_resume(worker: &WorkerSessionRecord, now: &str) -> Resul
 pub fn classify_rate_limit_block(
     host: &str,
     evidence_text: &str,
-) -> Result<BlockClassification, String> {
+) -> Result<BlockClassification, FrameworkError> {
     let lowered = host.trim().to_ascii_lowercase();
     // All hosts use the same universal rate-limit patterns.
     // No host-specific pattern sets — new hosts get coverage automatically.
@@ -340,10 +344,10 @@ pub fn classify_rate_limit_block(
         classification.host = lowered;
     }
     matched.ok_or_else(|| {
-        format!(
+        FrameworkError::validation(format!(
             "Could not classify a rate-limit block for host {} from the provided evidence.",
             host
-        )
+        ))
     })
 }
 

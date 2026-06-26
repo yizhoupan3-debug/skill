@@ -1,6 +1,7 @@
 //! 子命令 `dispatch_*` 实现。
 
 use serde_json::{Value, json};
+use serde::Serialize;
 use std::fs;
 use std::path::Path;
 
@@ -8,8 +9,9 @@ use fr_exec::trace_stream_io::{
     inspect_trace_stream, replay_trace_stream, write_trace_compaction_delta, write_trace_metadata,
 };
 use host_projection::hooks;
+use host_projection::host_entrypoint_sync::sync_host_entrypoints;
 use super::args::*;
-use fr_utils::json_io::{parse_json_input, print_json_value};
+use fr_utils::json_io::{parse_json_input, print_json_value as raw_print_json_value};
 use runtime_core::closeout_enforcement::{
     CloseoutEvidenceContext, closeout_enforcement_contract, evaluate_closeout_record_value,
     evaluate_closeout_record_value_with_context,
@@ -50,6 +52,11 @@ use host_projection::hooks::read_stdin_limited;
 use runtime_core::telemetry_emit::{emit_hook_fired, hook_action_from_optional_output};
 
 use runtime_core::runtime_storage::RuntimeStorageRequestPayload;
+
+/// Thin wrapper: print_json_value shim that bridges FrameworkError → String.
+fn print_json_value<T: Serialize>(v: &T) -> Result<(), String> {
+    raw_print_json_value(v).map_err(|e| e.to_string())
+}
 
 fn hook_output_to_value(output: Option<HookOutput>, event_name: &str) -> Value {
     match output {
@@ -256,7 +263,7 @@ pub fn dispatch_framework_skills(command: SkillsSubcommand) -> Result<(), String
     match command {
         SkillsSubcommand::Validate(args) => {
             let repo_root = resolve_repo_root_arg(args.framework_root.as_deref())?;
-            validate_skills(&repo_root)
+            validate_skills(&repo_root).map_err(|e| e.to_string())
         }
         SkillsSubcommand::Refresh {
             repo_root,
@@ -273,7 +280,7 @@ pub fn dispatch_framework_skills(command: SkillsSubcommand) -> Result<(), String
                 backfill,
                 dry_run,
                 generate,
-            })
+            }).map_err(|e| e.to_string())
         }
     }
 }

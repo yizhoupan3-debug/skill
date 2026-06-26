@@ -40,7 +40,7 @@ CJK_RE = re.compile(r"[一-鿿㐀-䶿豈-﫿]")
 # Framework-internal skills NOT expected in the routing manifest.
 # Each entry must have a brief justification.
 NON_ROUTABLE_SKILLS = {
-    "evolution-rs",       # Framework-operational: audit/health/telemetry
+    "observer-rs",        # Framework-operational: audit/health/telemetry
     "primary-runtime",    # Framework lifecycle orchestration, not user-facing
     "shared-references",  # Lookup library consumed by other skills
 }

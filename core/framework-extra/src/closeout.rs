@@ -3,6 +3,7 @@
 //! Functions for evaluating closeout records, checking environment-level
 //! enforcement gates, and caching task-registry lookups.
 
+use core_policy::error::FrameworkError;
 use fr_contracts::closeout_enforcement::{
     CloseoutEvidenceContext, evaluate_closeout_record_value,
     evaluate_closeout_record_value_with_context,
@@ -25,21 +26,21 @@ pub fn closeout_programmatic_enforcement_enabled() -> bool {
 }
 
 /// Default location for a task's closeout record.
-pub fn closeout_record_path_for_task(repo_root: &Path, task_id: &str) -> Result<PathBuf, String> {
+pub fn closeout_record_path_for_task(repo_root: &Path, task_id: &str) -> Result<PathBuf, FrameworkError> {
     // SECURITY: Validate task_id to prevent path traversal attacks.
     // Only allow alphanumeric characters, hyphens, and underscores.
     let sanitized = task_id.trim();
     if sanitized.is_empty() {
-        return Err("task_id cannot be empty".to_string());
+        return Err(FrameworkError::validation("task_id cannot be empty"));
     }
     if !sanitized
         .chars()
         .all(|c| c.is_alphanumeric() || c == '-' || c == '_')
     {
-        return Err(format!(
+        return Err(FrameworkError::validation(format!(
             "task_id contains invalid characters (only alphanumeric, hyphen, underscore allowed): {:?}",
             sanitized
-        ));
+        )));
     }
 
     let path = repo_root
@@ -54,10 +55,9 @@ pub fn closeout_record_path_for_task(repo_root: &Path, task_id: &str) -> Result<
         std::fs::canonicalize(&closeout_dir).map(|p| p.join(format!("{}.json", sanitized)))
     });
     if let Ok(canonical) = canonical_path {
-        let canonical_dir = std::fs::canonicalize(&closeout_dir)
-            .map_err(|e| format!("failed to canonicalize closeout directory: {}", e))?;
+        let canonical_dir = std::fs::canonicalize(&closeout_dir)?;
         if !canonical.starts_with(&canonical_dir) {
-            return Err("path traversal detected".to_string());
+            return Err(FrameworkError::validation("path traversal detected"));
         }
     }
 
@@ -158,22 +158,22 @@ pub fn evaluate_closeout_record_file_for_task(
     repo_root: &Path,
     task_id: &str,
     record_path: &Path,
-) -> Result<Value, String> {
+) -> Result<Value, FrameworkError> {
     let tid = task_id.trim();
     if tid.is_empty() {
-        return Err("task_id is empty".to_string());
+        return Err(FrameworkError::validation("task_id is empty"));
     }
     let text = std::fs::read_to_string(record_path).map_err(|err| {
-        format!(
+        FrameworkError::validation(format!(
             "read closeout record failed ({}): {err}",
             record_path.display()
-        )
+        ))
     })?;
     let record: Value = serde_json::from_str(&text).map_err(|err| {
-        format!(
+        FrameworkError::validation(format!(
             "parse closeout record JSON failed ({}): {err}",
             record_path.display()
-        )
+        ))
     })?;
     let (rows_non_empty, has_success) =
         core_state::state_manager::task_evidence_artifacts_summary_for_task(repo_root, tid);
@@ -190,7 +190,7 @@ pub fn evaluate_closeout_record_file_for_task(
         goal_prediction,
     };
     evaluate_closeout_record_value_with_context(record, &ctx)
-        .map_err(|err| format!("closeout record evaluation failed: {err}"))
+        .map_err(|err| FrameworkError::validation(format!("closeout record evaluation failed: {err}")))
 }
 
 fn in_ci_like_environment() -> bool {
@@ -245,7 +245,7 @@ fn closeout_enforcement_disabled_by_env() -> bool {
 ///   - status claims completion but no `closeout_record` is provided, or
 ///   - status claims completion and the provided record fails evaluation
 ///     (`closeout_allowed=false` or parse error).
-pub(super) fn enforce_closeout_for_session_payload(payload: &Value) -> Result<Option<Value>, String> {
+pub(super) fn enforce_closeout_for_session_payload(payload: &Value) -> Result<Option<Value>, FrameworkError> {
     let status_lower = value_text(payload.get("status")).to_ascii_lowercase();
     let claims_completion = CLOSEOUT_COMPLETION_STATUSES
         .iter()
@@ -257,9 +257,9 @@ pub(super) fn enforce_closeout_for_session_payload(payload: &Value) -> Result<Op
         return Ok(None);
     }
     let closeout_record = payload.get("closeout_record").cloned().ok_or_else(|| {
-        "framework session artifact write claims completion (status in {completed,done,passed,...}) but no closeout_record was provided. \
+        FrameworkError::validation("framework session artifact write claims completion (status in {completed,done,passed,...}) but no closeout_record was provided. \
          A closeout record is required so closeout_enforcement can verify completion evidence (verification_status, commands_run, artifacts_checked, summary). \
-         Re-issue the request with a closeout_record matching configs/framework/CLOSEOUT_RECORD_SCHEMA.json.".to_string()
+         Re-issue the request with a closeout_record matching configs/framework/CLOSEOUT_RECORD_SCHEMA.json.".to_string())
     })?;
     // Try to attach an EvidenceContext so R8 (`claimed_passed_without_evidence_index_rows`) runs.
     // Both repo_root and task_id must resolve from the write payload; otherwise fall back to the
@@ -286,10 +286,10 @@ pub(super) fn enforce_closeout_for_session_payload(payload: &Value) -> Result<Op
             goal_prediction,
         };
         evaluate_closeout_record_value_with_context(closeout_record, &ctx)
-            .map_err(|err| format!("closeout enforcement failed: {err}"))?
+            .map_err(|err| FrameworkError::validation(format!("closeout enforcement failed: {err}")))?
     } else {
         evaluate_closeout_record_value(closeout_record)
-            .map_err(|err| format!("closeout enforcement failed: {err}"))?
+            .map_err(|err| FrameworkError::validation(format!("closeout enforcement failed: {err}")))?
     };
     let allowed = evaluation
         .get("closeout_allowed")
@@ -304,11 +304,11 @@ pub(super) fn enforce_closeout_for_session_payload(payload: &Value) -> Result<Op
             .get("missing_evidence")
             .map(|v| v.to_string())
             .unwrap_or_else(|| "[]".to_string());
-        return Err(format!(
+        return Err(FrameworkError::validation(format!(
             "closeout_enforcement blocked completion: closeout_allowed=false. \
              violations={violations} missing_evidence={missing}. \
              Resolve violations or downgrade status before re-issuing the artifact write."
-        ));
+        )));
     }
     Ok(Some(evaluation))
 }

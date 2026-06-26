@@ -15,6 +15,8 @@ use serde_json::Value;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use core_policy::error::FrameworkError;
+
 use crate::process::{
     register_agent_alive,
     unregister_agent,
@@ -26,7 +28,7 @@ pub const TEAM_ARTIFACTS_DIR: &str = "artifacts/teams";
 // ── Path sanitization ──────────────────────────────────────────
 
 /// Core sanitization with configurable dot allowance.
-fn sanitize_path_segment_inner(raw: &str, allow_dots: bool) -> Result<String, String> {
+fn sanitize_path_segment_inner(raw: &str, allow_dots: bool) -> Result<String, FrameworkError> {
     let sanitized: String = raw
         .chars()
         .filter(|&c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || (allow_dots && c == '.'))
@@ -37,20 +39,20 @@ fn sanitize_path_segment_inner(raw: &str, allow_dots: bool) -> Result<String, St
         sanitized
     };
     if trimmed.is_empty() {
-        return Err(format!("invalid (empty after sanitization): {raw:?}"));
+        return Err(FrameworkError::validation(format!("invalid (empty after sanitization): {raw:?}")));
     }
     Ok(trimmed)
 }
 
 /// Sanitize a user-supplied team_id for use as a single path segment.
 /// Strips everything except alphanumeric, `-`, `_`, `.`.
-pub fn sanitize_path_segment(raw: &str) -> Result<String, String> {
+pub fn sanitize_path_segment(raw: &str) -> Result<String, FrameworkError> {
     sanitize_path_segment_inner(raw, true)
 }
 
 /// Sanitize an agent_id or to_agent for use in a file name.
 /// No dots (prevents `..` traversal), only alphanumeric + `-` + `_`.
-pub fn sanitize_segment_strict(raw: &str) -> Result<String, String> {
+pub fn sanitize_segment_strict(raw: &str) -> Result<String, FrameworkError> {
     sanitize_path_segment_inner(raw, false)
 }
 
@@ -113,31 +115,25 @@ fn team_messages_dir_safe(repo_root: &Path, safe_team: &str) -> PathBuf {
     team_dir_safe(repo_root, safe_team).join("messages")
 }
 
-fn load_team_registry_raw(path: &Path) -> Result<TeamRegistry, String> {
+fn load_team_registry_raw(path: &Path) -> Result<TeamRegistry, FrameworkError> {
     if !path.is_file() {
         return Ok(TeamRegistry {
             schema_version: TEAM_SCHEMA_VERSION.to_string(),
             teams: Vec::new(),
         });
     }
-    let raw = fs::read_to_string(path)
-        .map_err(|e| format!("read team registry failed: {e}"))?;
-    serde_json::from_str(&raw)
-        .map_err(|e| format!("parse team registry failed: {e}"))
+    let raw = fs::read_to_string(path)?;
+    Ok(serde_json::from_str(&raw)?)
 }
 
-fn save_team_registry_raw(path: &Path, registry: &TeamRegistry) -> Result<(), String> {
+fn save_team_registry_raw(path: &Path, registry: &TeamRegistry) -> Result<(), FrameworkError> {
     if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)
-            .map_err(|e| format!("create team registry dir failed: {e}"))?;
+        fs::create_dir_all(parent)?;
     }
     let tmp_path = path.with_extension("json.tmp");
-    let payload = serde_json::to_string_pretty(registry)
-        .map_err(|e| format!("serialize team registry failed: {e}"))?;
-    fs::write(&tmp_path, &payload)
-        .map_err(|e| format!("write team registry tmp failed: {e}"))?;
-    fs::rename(&tmp_path, path)
-        .map_err(|e| format!("rename team registry failed: {e}"))?;
+    let payload = serde_json::to_string_pretty(registry)?;
+    fs::write(&tmp_path, &payload)?;
+    fs::rename(&tmp_path, path)?;
     core_state_utils::atomic_write::fsync_parent_dir(path)
         .unwrap_or_else(|e| tracing::warn!("fsync team registry parent dir failed: {e}"));
     Ok(())
@@ -145,12 +141,13 @@ fn save_team_registry_raw(path: &Path, registry: &TeamRegistry) -> Result<(), St
 
 /// Execute `f` with an exclusive lock on the team registry.
 /// Lock is held for the entire load → modify → save cycle.
-fn with_team_registry<F, T>(repo_root: &Path, f: F) -> Result<T, String>
+fn with_team_registry<F, T>(repo_root: &Path, f: F) -> Result<T, FrameworkError>
 where
-    F: FnOnce(&mut TeamRegistry) -> Result<T, String>,
+    F: FnOnce(&mut TeamRegistry) -> Result<T, FrameworkError>,
 {
     let path = team_registry_path(repo_root);
-    let _lock = rt_storage::runtime_storage::acquire_runtime_path_lock(&path)?;
+    let _lock = rt_storage::runtime_storage::acquire_runtime_path_lock(&path)
+        .map_err(|e| FrameworkError::lock(e))?;
     let mut registry = load_team_registry_raw(&path)?;
     let result = f(&mut registry)?;
     save_team_registry_raw(&path, &registry)?;
@@ -159,12 +156,13 @@ where
 
 /// Read-only access: acquires the lock so the caller sees a consistent snapshot.
 /// The registry is a borrow, so the lock lives for the duration of the call.
-pub fn with_team_registry_ro<F, T>(repo_root: &Path, f: F) -> Result<T, String>
+pub fn with_team_registry_ro<F, T>(repo_root: &Path, f: F) -> Result<T, FrameworkError>
 where
-    F: FnOnce(&TeamRegistry) -> Result<T, String>,
+    F: FnOnce(&TeamRegistry) -> Result<T, FrameworkError>,
 {
     let path = team_registry_path(repo_root);
-    let _lock = rt_storage::runtime_storage::acquire_runtime_path_lock(&path)?;
+    let _lock = rt_storage::runtime_storage::acquire_runtime_path_lock(&path)
+        .map_err(|e| FrameworkError::lock(e))?;
     let registry = load_team_registry_raw(&path)?;
     f(&registry)
 }
@@ -178,19 +176,17 @@ pub fn create_team(
     name: &str,
     supervisor_agent_id: Option<&str>,
     now: &str,
-) -> Result<TeamDescriptor, String> {
+) -> Result<TeamDescriptor, FrameworkError> {
     let safe_team = sanitize_path_segment(team_id)?;
 
     with_team_registry(repo_root, |registry| {
         if registry.teams.iter().any(|t| t.team_id == team_id) {
-            return Err(format!("team already exists: {team_id}"));
+            return Err(FrameworkError::registry(format!("team already exists: {team_id}")));
         }
 
         let member_meta_path = team_dir_safe(repo_root, &safe_team).join("members");
-        fs::create_dir_all(&member_meta_path)
-            .map_err(|e| format!("create team dir failed: {e}"))?;
-        fs::create_dir_all(team_messages_dir_safe(repo_root, &safe_team))
-            .map_err(|e| format!("create messages dir failed: {e}"))?;
+        fs::create_dir_all(&member_meta_path)?;
+        fs::create_dir_all(team_messages_dir_safe(repo_root, &safe_team))?;
 
         let team = TeamDescriptor {
             team_id: team_id.to_string(),
@@ -208,10 +204,8 @@ pub fn create_team(
 
         // Save team.json metadata (outside the main registry but under lock)
         let meta_path = team_dir_safe(repo_root, &safe_team).join("team.json");
-        let raw = serde_json::to_string_pretty(&team)
-            .map_err(|e| format!("serialize team meta failed: {e}"))?;
-        fs::write(&meta_path, &raw)
-            .map_err(|e| format!("write team meta failed: {e}"))?;
+        let raw = serde_json::to_string_pretty(&team)?;
+        fs::write(&meta_path, &raw)?;
 
         registry.teams.push(team.clone());
         Ok(team)
@@ -233,16 +227,16 @@ pub fn add_team_member(
     role: &str,
     host_id: &str,
     now: &str,
-) -> Result<TeamMember, String> {
+) -> Result<TeamMember, FrameworkError> {
     let safe_team = sanitize_path_segment(team_id)?;
     let safe_agent = sanitize_segment_strict(agent_id)?;
 
     with_team_registry(repo_root, |registry| {
         let team = find_team_mut(registry, team_id)
-            .ok_or_else(|| format!("team not found: {team_id}"))?;
+            .ok_or_else(|| FrameworkError::not_found(format!("team not found: {team_id}")))?;
 
         if team.members.iter().any(|m| m.agent_id == agent_id) {
-            return Err(format!("agent {agent_id} already in team {team_id}"));
+            return Err(FrameworkError::registry(format!("agent {agent_id} already in team {team_id}")));
         }
 
         // Register in agent health (under the team lock)
@@ -268,10 +262,8 @@ pub fn add_team_member(
         let member_path = team_dir_safe(repo_root, &safe_team)
             .join("members")
             .join(format!("{safe_agent}.json"));
-        let raw = serde_json::to_string_pretty(&member)
-            .map_err(|e| format!("serialize member failed: {e}"))?;
-        fs::write(&member_path, &raw)
-            .map_err(|e| format!("write member file failed: {e}"))?;
+        let raw = serde_json::to_string_pretty(&member)?;
+        fs::write(&member_path, &raw)?;
 
         team.members.push(member.clone());
         team.updated_at = now.to_string();
@@ -287,10 +279,10 @@ pub fn remove_team_member(
     terminal_status: &str,
     error: Option<&str>,
     now: &str,
-) -> Result<(), String> {
+) -> Result<(), FrameworkError> {
     with_team_registry(repo_root, |registry| {
         let team = find_team_mut(registry, team_id)
-            .ok_or_else(|| format!("team not found: {team_id}"))?;
+            .ok_or_else(|| FrameworkError::not_found(format!("team not found: {team_id}")))?;
 
         unregister_agent(repo_root, agent_id, terminal_status, error, now)?;
 
@@ -309,12 +301,12 @@ pub fn complete_team(
     repo_root: &Path,
     team_id: &str,
     now: &str,
-) -> Result<TeamDescriptor, String> {
+) -> Result<TeamDescriptor, FrameworkError> {
     let safe_team = sanitize_path_segment(team_id)?;
 
     with_team_registry(repo_root, |registry| {
         let team = find_team_mut(registry, team_id)
-            .ok_or_else(|| format!("team not found: {team_id}"))?;
+            .ok_or_else(|| FrameworkError::not_found(format!("team not found: {team_id}")))?;
 
         // Re-entrancy guard: skip if already completed
         if team.status == "completed" {
@@ -342,10 +334,8 @@ pub fn complete_team(
 
         // Update team.json metadata
         let meta_path = team_dir_safe(repo_root, &safe_team).join("team.json");
-        let raw = serde_json::to_string_pretty(&team)
-            .map_err(|e| format!("serialize team meta failed: {e}"))?;
-        fs::write(&meta_path, &raw)
-            .map_err(|e| format!("write team meta failed: {e}"))?;
+        let raw = serde_json::to_string_pretty(&team)?;
+        fs::write(&meta_path, &raw)?;
 
         Ok(team.clone())
     })
@@ -362,7 +352,7 @@ pub fn send_message(
     kind: &str,
     payload: Value,
     now: &str,
-) -> Result<InterAgentMessage, String> {
+) -> Result<InterAgentMessage, FrameworkError> {
     let safe_team = sanitize_path_segment(team_id)?;
     let safe_from = sanitize_segment_strict(from_agent)?;
     let safe_target = to_agent
@@ -395,7 +385,7 @@ pub fn send_message(
 
     with_team_registry(repo_root, |registry| {
         let team = find_team_mut(registry, team_id)
-            .ok_or_else(|| format!("team not found: {team_id}"))?;
+            .ok_or_else(|| FrameworkError::not_found(format!("team not found: {team_id}")))?;
 
         if let Some(sender) = team.members.iter_mut().find(|m| m.agent_id == from_agent) {
             sender.messages_sent += 1;
@@ -409,14 +399,11 @@ pub fn send_message(
 
         // Write message file inside the lock
         if let Some(parent) = msg_path.parent() {
-            fs::create_dir_all(parent)
-                .map_err(|e| format!("create message dir failed: {e}"))?;
+            fs::create_dir_all(parent)?;
         }
 
-        let raw = serde_json::to_string_pretty(&msg)
-            .map_err(|e| format!("serialize message failed: {e}"))?;
-        fs::write(&msg_path, &raw)
-            .map_err(|e| format!("write message failed: {e}"))?;
+        let raw = serde_json::to_string_pretty(&msg)?;
+        fs::write(&msg_path, &raw)?;
 
         Ok(msg)
     })
@@ -428,14 +415,14 @@ pub fn read_my_messages(
     repo_root: &Path,
     team_id: &str,
     agent_id: &str,
-) -> Result<Vec<InterAgentMessage>, String> {
+) -> Result<Vec<InterAgentMessage>, FrameworkError> {
     // Validate team exists first (under read lock)
     let safe_team = sanitize_path_segment(team_id)?;
     let safe_agent = sanitize_segment_strict(agent_id)?;
 
     with_team_registry_ro(repo_root, |registry| {
         if registry.teams.iter().all(|t| t.team_id != team_id) {
-            return Err(format!("team not found: {team_id}"));
+            return Err(FrameworkError::not_found(format!("team not found: {team_id}")));
         }
         Ok(())
     })?;
@@ -447,16 +434,14 @@ pub fn read_my_messages(
 
     // Read agent's own inbox
     if inbox.is_dir() {
-        let mut entries: Vec<_> = fs::read_dir(&inbox)
-            .map_err(|e| format!("read inbox failed: {e}"))?
+        let mut entries: Vec<_> = fs::read_dir(&inbox)?
             .filter_map(|e| e.ok())
             .filter(|e| e.path().extension().is_some_and(|ext| ext == "json"))
             .collect();
         entries.sort_by_key(|e| e.path().file_name().map(|n| n.to_os_string()));
 
         for entry in &entries {
-            let raw = fs::read_to_string(entry.path())
-                .map_err(|e| format!("read message failed: {e}"))?;
+            let raw = fs::read_to_string(entry.path())?;
             if let Ok(mut msg) = serde_json::from_str::<InterAgentMessage>(&raw) {
                 // Mark as read
                 if !msg.read {
@@ -472,15 +457,13 @@ pub fn read_my_messages(
 
     // Read broadcast messages
     if broadcast_dir.is_dir() && broadcast_dir != inbox {
-        let entries: Vec<_> = fs::read_dir(&broadcast_dir)
-            .map_err(|e| format!("read broadcast dir failed: {e}"))?
+        let entries: Vec<_> = fs::read_dir(&broadcast_dir)?
             .filter_map(|e| e.ok())
             .filter(|e| e.path().extension().is_some_and(|ext| ext == "json"))
             .collect();
 
         for entry in entries {
-            let raw = fs::read_to_string(entry.path())
-                .map_err(|e| format!("read broadcast failed: {e}"))?;
+            let raw = fs::read_to_string(entry.path())?;
             if let Ok(mut msg) = serde_json::from_str::<InterAgentMessage>(&raw)
                 && !messages.iter().any(|m| m.message_id == msg.message_id) {
                     // Mark broadcast as read too
@@ -503,11 +486,11 @@ pub fn read_my_messages(
 pub fn team_alive_members(
     repo_root: &Path,
     team_id: &str,
-) -> Result<Vec<String>, String> {
+) -> Result<Vec<String>, FrameworkError> {
     with_team_registry_ro(repo_root, |registry| {
         let team = registry.teams.iter()
             .find(|t| t.team_id == team_id)
-            .ok_or_else(|| format!("team not found: {team_id}"))?;
+            .ok_or_else(|| FrameworkError::not_found(format!("team not found: {team_id}")))?;
         Ok(team
             .members
             .iter()
@@ -521,7 +504,7 @@ pub fn team_alive_members(
 pub fn team_list(
     repo_root: &Path,
     team_id_filter: Option<&str>,
-) -> Result<Vec<TeamDescriptor>, String> {
+) -> Result<Vec<TeamDescriptor>, FrameworkError> {
     with_team_registry_ro(repo_root, |registry| {
         let teams: Vec<TeamDescriptor> = if let Some(filter) = team_id_filter {
             registry.teams.iter().filter(|t| t.team_id == filter).cloned().collect()
@@ -536,7 +519,7 @@ pub fn team_list(
 pub fn reap_stale_teams(
     repo_root: &Path,
     retention_seconds: i64,
-) -> Result<usize, String> {
+) -> Result<usize, FrameworkError> {
     if retention_seconds <= 0 {
         return Ok(0);
     }

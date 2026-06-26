@@ -6,7 +6,7 @@ use serde_json::{Value, json};
 use tracing::{debug, instrument};
 
 mod driver;
-mod evolution_idle;
+mod idle_observer;
 mod process;
 mod runtime;
 pub mod team_manager;
@@ -25,7 +25,7 @@ pub use types::AgentHealthEntry;
 pub use types::AgentHealthStore;
 pub use worker::classify_rate_limit_block;
 
-use evolution_idle::maybe_trigger_evolution_on_idle;
+use idle_observer::maybe_trigger_idle_observation;
 use process::reconcile_process_state;
 use runtime::{
     load_store, now_from_payload, optional_bool, required_non_empty_string, resolve_state_path,
@@ -37,11 +37,11 @@ use worker::{
     worker_ready_for_resume,
 };
 
-fn evolution_idle_side_effect(payload: &Value, workers: &[types::WorkerSessionRecord]) -> Value {
+fn idle_observation_side_effect(payload: &Value, workers: &[types::WorkerSessionRecord]) -> Value {
     let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
     let dry_run = optional_bool(payload, "dry_run").unwrap_or(false);
-    let force = optional_bool(payload, "force_evolution_idle").unwrap_or(false);
-    let result = maybe_trigger_evolution_on_idle(&cwd, workers, dry_run, force);
+    let force = optional_bool(payload, "force_idle_observation").unwrap_or(false);
+    let result = maybe_trigger_idle_observation(&cwd, workers, dry_run, force);
     json!({
         "triggered": result.triggered,
         "status": result.status,
@@ -122,7 +122,7 @@ pub fn handle_session_supervisor_operation(payload: Value) -> Result<Value, Stri
             if let Ok(cwd) = std::env::current_dir() {
                 let _ = process::reap_stale_agents(&cwd, stale_after_secs);
             }
-            let evolution_idle = evolution_idle_side_effect(&payload, &store.workers);
+            let idle_observation = idle_observation_side_effect(&payload, &store.workers);
             Ok(json!({
                 "schema_version": SESSION_SUPERVISOR_SCHEMA_VERSION,
                 "authority": SESSION_SUPERVISOR_AUTHORITY,
@@ -130,7 +130,7 @@ pub fn handle_session_supervisor_operation(payload: Value) -> Result<Value, Stri
                 "state_path": state_path.display().to_string(),
                 "changed": true,
                 "workers": store.workers,
-                "evolution_idle": evolution_idle,
+                "observation_idle": idle_observation,
             }))
         }
         "terminate" => {
@@ -194,26 +194,26 @@ pub fn handle_session_supervisor_operation(payload: Value) -> Result<Value, Stri
                     })),
                     Err(err) => {
                         worker.status = "failed".to_string();
-                        worker.last_error = Some(err.clone());
+                        worker.last_error = Some(err.to_string());
                         worker.updated_at = now.clone();
                         runtime::push_event(
                             worker,
                             "resume_failed",
                             "failed",
                             &now,
-                            Some(err.clone()),
+                            Some(err.to_string()),
                         );
                         failed_workers.push(json!({
                             "worker_id": worker.worker_id,
                             "status": worker.status,
-                            "error": err,
+                            "error": err.to_string(),
                             "worker": worker,
                         }));
                     }
                 }
             }
             save_store(&state_path, &store)?;
-            let evolution_idle = evolution_idle_side_effect(&payload, &store.workers);
+            let idle_observation = idle_observation_side_effect(&payload, &store.workers);
             Ok(json!({
                 "schema_version": SESSION_SUPERVISOR_SCHEMA_VERSION,
                 "authority": SESSION_SUPERVISOR_AUTHORITY,
@@ -223,7 +223,7 @@ pub fn handle_session_supervisor_operation(payload: Value) -> Result<Value, Stri
                 "dry_run": dry_run,
                 "resumed_workers": resumed_workers,
                 "failed_workers": failed_workers,
-                "evolution_idle": evolution_idle,
+                "observation_idle": idle_observation,
             }))
         }
 

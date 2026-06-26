@@ -128,14 +128,14 @@ mod tests {
     #[test]
     fn health_score_from_route_events() {
         let dir = std::env::temp_dir().join(format!(
-            "evo-health-{}",
+            "obs-health-{}",
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
                 .as_nanos()
         ));
         let journal = dir.join("events.jsonl");
-        let out = dir.join("evolution");
+        let out = dir.join("observer");
         std::fs::create_dir_all(&dir).unwrap();
         let mut f = std::fs::File::create(&journal).unwrap();
         writeln!(

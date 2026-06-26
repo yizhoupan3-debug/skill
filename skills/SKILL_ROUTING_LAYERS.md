@@ -1,6 +1,7 @@
 # Skill 分层路由详解
 
 > 这是扩展参考，不是默认入口。
+> 本版路由引擎实现详情见 `docs/routing/architecture.md`
 > 默认只看 `SKILL_ROUTING_RUNTIME.json`；不够再看 [SKILL_LOADOUTS.json](SKILL_LOADOUTS.json)。
 > 只有 owner / overlay / reroute 仍有歧义时，才打开本页。
 > 协议细节见 [SKILL_FRAMEWORK_PROTOCOLS.md](SKILL_FRAMEWORK_PROTOCOLS.md)
@@ -24,7 +25,7 @@
 自动化是 **异步演化通道**，不参与同轮 owner 竞争：
 
 - `skill-ci.yml`：push / PR 校验、生成物漂移拦截
-- `evolution-audit.yml`：定时健康审计、同步 routing 产物、创建维护 issue
+- `observer-audit.yml`：定时健康审计、同步 routing 产物、创建维护 issue
 - 宿主 automations（路径由 `RUNTIME_REGISTRY.json` 定义）：
   异步收集维护任务、例行检查、产物刷新
 

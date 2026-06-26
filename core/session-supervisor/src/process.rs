@@ -5,6 +5,8 @@ use std::process::{Command, Stdio};
 use std::thread;
 use std::time::Duration;
 
+use core_policy::error::FrameworkError;
+
 use crate::types::{AgentHealthEntry, AgentHealthStore, DriverCommandSpec, WorkerSessionRecord};
 
 pub struct ProcessLaunchResult {
@@ -16,19 +18,16 @@ pub fn launch_process(
     command: &DriverCommandSpec,
     cwd: &str,
     log_path: &Path,
-) -> Result<ProcessLaunchResult, String> {
+) -> Result<ProcessLaunchResult, FrameworkError> {
     if let Some(parent) = log_path.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|err| format!("create worker log dir failed: {err}"))?;
+        std::fs::create_dir_all(parent)?;
     }
     let log_file = OpenOptions::new()
         .create(true)
         .append(true)
-        .open(log_path)
-        .map_err(|err| format!("open worker log {} failed: {err}", log_path.display()))?;
+        .open(log_path)?;
     let stderr_log = log_file
-        .try_clone()
-        .map_err(|err| format!("dup worker log handle failed: {err}"))?;
+        .try_clone()?;
 
     let mut cmd = Command::new(&command.binary);
     cmd.args(&command.args)
@@ -55,9 +54,7 @@ pub fn launch_process(
         }
     }
 
-    let child = cmd
-        .spawn()
-        .map_err(|err| format!("spawn {} failed: {err}", command.binary))?;
+    let child = cmd.spawn()?;
     let pid = child.id();
 
     Ok(ProcessLaunchResult {
@@ -166,7 +163,7 @@ fn kill_pid_alive(_pid: u32) -> bool {
     false
 }
 
-pub fn terminate_process(pid: u32) -> Result<(), String> {
+pub fn terminate_process(pid: u32) -> Result<(), FrameworkError> {
     if pid == 0 {
         return Ok(());
     }
@@ -227,7 +224,7 @@ pub fn reconcile_process_state(worker: &mut WorkerSessionRecord) {
 }
 
 #[cfg(unix)]
-fn send_signal_to_pgrp(pid: u32, signal: i32) -> Result<(), String> {
+fn send_signal_to_pgrp(pid: u32, signal: i32) -> Result<(), FrameworkError> {
     // setsid() in launch_process makes the worker a session leader; prefer pgid kill
     // so shell-spawned children (e.g. smoke-shell's sleep loop) are terminated too.
     // SAFETY: getpgid() reads the kernel's process group table for the given pid.
@@ -248,9 +245,9 @@ fn send_signal_to_pgrp(pid: u32, signal: i32) -> Result<(), String> {
     if err.raw_os_error() == Some(libc::ESRCH) {
         return Ok(());
     }
-    Err(format!(
+    Err(FrameworkError::session(format!(
         "kill(target={target}, signal={signal}) failed: {err}"
-    ))
+    )))
 }
 
 /// Reap a child that has exited (including zombie). Returns true when the pid is gone.
@@ -289,35 +286,32 @@ fn agent_health_path(repo_root: &Path) -> PathBuf {
     repo_root.join(AGENT_HEALTH_REL_PATH)
 }
 
-fn load_agent_health_raw(path: &Path) -> Result<AgentHealthStore, String> {
+fn load_agent_health_raw(path: &Path) -> Result<AgentHealthStore, FrameworkError> {
     if !path.is_file() {
         return Ok(AgentHealthStore::default());
     }
-    let raw = std::fs::read_to_string(path)
-        .map_err(|e| format!("read agent health registry failed: {e}"))?;
-    serde_json::from_str(&raw)
-        .map_err(|e| format!("parse agent health registry failed: {e}"))
+    let raw = std::fs::read_to_string(path)?;
+    Ok(serde_json::from_str(&raw)?)
 }
 
-fn save_agent_health_raw(path: &Path, store: &AgentHealthStore) -> Result<(), String> {
+fn save_agent_health_raw(path: &Path, store: &AgentHealthStore) -> Result<(), FrameworkError> {
     if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|e| format!("create agent health dir failed: {e}"))?;
+        std::fs::create_dir_all(parent)?;
     }
-    let payload = serde_json::to_string_pretty(store)
-        .map_err(|e| format!("serialize agent health failed: {e}"))?;
-    std::fs::write(path, &payload)
-        .map_err(|e| format!("write agent health failed: {e}"))
+    let payload = serde_json::to_string_pretty(store)?;
+    std::fs::write(path, &payload)?;
+    Ok(())
 }
 
 /// Acquire a cross-process lock on the agent health registry, then call `f`
 /// with an `&mut AgentHealthStore`. The lock is held for the entire cycle.
-fn with_agent_health<F, T>(repo_root: &Path, f: F) -> Result<T, String>
+fn with_agent_health<F, T>(repo_root: &Path, f: F) -> Result<T, FrameworkError>
 where
-    F: FnOnce(&mut AgentHealthStore) -> Result<T, String>,
+    F: FnOnce(&mut AgentHealthStore) -> Result<T, FrameworkError>,
 {
     let path = agent_health_path(repo_root);
-    let _lock = rt_storage::runtime_storage::acquire_runtime_path_lock(&path)?;
+    let _lock = rt_storage::runtime_storage::acquire_runtime_path_lock(&path)
+        .map_err(|e| FrameworkError::lock(e))?;
     let mut store = load_agent_health_raw(&path)?;
     let result = f(&mut store)?;
     save_agent_health_raw(&path, &store)?;
@@ -331,7 +325,7 @@ pub fn register_agent_alive(
     host_id: &str,
     spawned_by_tool: &str,
     now: &str,
-) -> Result<(), String> {
+) -> Result<(), FrameworkError> {
     with_agent_health(repo_root, |store| {
         store.agents.retain(|a| a.agent_id != agent_id);
         store.agents.push(AgentHealthEntry {
@@ -354,7 +348,7 @@ pub fn unregister_agent(
     terminal_status: &str,
     error: Option<&str>,
     now: &str,
-) -> Result<(), String> {
+) -> Result<(), FrameworkError> {
     with_agent_health(repo_root, |store| {
         let mut found = false;
         for agent in &mut store.agents {
@@ -385,7 +379,7 @@ pub fn unregister_agent(
 pub fn reap_stale_agents(
     repo_root: &Path,
     retention_seconds: i64,
-) -> Result<usize, String> {
+) -> Result<usize, FrameworkError> {
     with_agent_health(repo_root, |store| {
         let before = store.agents.len();
         let deadline = framework_kernel::time::now_iso();
@@ -408,7 +402,7 @@ pub fn reap_stale_agents(
 }
 
 /// List all currently running agents.
-pub fn list_running_agents(repo_root: &Path) -> Result<Vec<AgentHealthEntry>, String> {
+pub fn list_running_agents(repo_root: &Path) -> Result<Vec<AgentHealthEntry>, FrameworkError> {
     with_agent_health(repo_root, |store| {
         let mut running: Vec<_> = store.agents.iter().filter(|a| a.is_alive()).cloned().collect();
         running.sort_by(|a, b| b.spawned_at.cmp(&a.spawned_at));

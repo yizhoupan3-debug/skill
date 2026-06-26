@@ -212,10 +212,16 @@ fn register_runtime_contract_hooks_impl() {
     framework_runtime_hooks::register(framework_runtime_hooks::RuntimeCoreHooks {
         telemetry: framework_runtime_hooks::TelemetryHooks {
             hook_fired: telemetry_emit::emit_hook_fired,
-            tool_call: |tool, count, blocked| {
-                telemetry_emit::emit_tool_call(tool, count as u64, blocked);
+            tool_call: telemetry_emit::emit_tool_call,
+            route_decision: |query, decision, reroute| {
+                let selected = decision.get("selected_skill").and_then(|v| v.as_str()).unwrap_or("none");
+                tracing::debug!(
+                    query_len = query.len(),
+                    reroute,
+                    selected_skill = %selected,
+                    "route decision registered"
+                );
             },
-            route_decision: |_query, _decision, _reroute| {},
             prediction_outcome: |_task_id, _checks_summary, _verification_status, _checks_count| {},
             rfv_round: telemetry_emit::emit_rfv_round,
         },
@@ -404,9 +410,6 @@ fn register_tool_dispatch_hooks_impl() {
     );
     host_projection::hooks::register_tool_closeout_gate_evaluate(
         framework_runtime::tool_handlers::closeout_gate_evaluate,
-    );
-    host_projection::hooks::register_tool_routing_evolution_dispatch(
-        framework_runtime::tool_handlers::routing_evolution_dispatch,
     );
 }
 

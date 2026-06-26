@@ -1,3 +1,4 @@
+use core_policy::error::FrameworkError;
 use serde_json::Value;
 use std::path::Path;
 use std::process::Command;
@@ -7,7 +8,7 @@ use fr_exec::runtime_view::{
 };
 use fr_utils::json_value::{value_string_list, value_text};
 
-pub fn build_framework_statusline(repo_root: &Path) -> Result<String, String> {
+pub fn build_framework_statusline(repo_root: &Path) -> Result<String, FrameworkError> {
     let snapshot = load_framework_runtime_view(repo_root, None, None);
     let continuity = classify_runtime_continuity(&snapshot);
     let task_view = core_state::task_state::resolve_task_view(repo_root, None);

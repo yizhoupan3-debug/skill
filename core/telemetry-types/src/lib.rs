@@ -1,18 +1,17 @@
-//! Shared telemetry event types used by framework-kernel (writer) and evolution-rs (reader).
+//! Shared telemetry event types used by framework-kernel (writer) and observer-rs (reader).
 //!
 //! This micro-crate is the **single source of truth** for `TelemetryEvent` and
 //! `PredictionOutcomeCheck`. Previously both `framework-kernel::telemetry` and
-//! `evolution-rs::telemetry_journal` defined their own copies, which drifted
+//! `observer-rs::telemetry_journal` defined their own copies, which drifted
 //! (framework-kernel's `RouteDecision` had extra fields like `latency_ms`,
 //! `reasons`, `matched_tokens`, `parity_gate`, `candidates`).
 
 #![cfg_attr(not(test), deny(clippy::unwrap_used, clippy::expect_used))]
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 /// Canonical telemetry event enum emitted by the runtime and consumed by
-/// offline analysis tools (evolution-rs audit/manifest).
+/// offline analysis tools (observer-rs audit/manifest).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum TelemetryEvent {
@@ -63,13 +62,6 @@ pub enum TelemetryEvent {
         checks_summary: String,
         checks: Vec<PredictionOutcomeCheck>,
     },
-    /// Structured metric with name, numeric value, and labels.
-    /// Enables aggregation queries: `sum(value) WHERE metric_name='...' GROUP BY labels['...']`.
-    MetricEvent {
-        metric_name: String,
-        value: f64,
-        labels: HashMap<String, String>,
-    },
 }
 
 /// A single check result within a `PredictionOutcome` event.
@@ -83,7 +75,6 @@ pub struct PredictionOutcomeCheck {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashMap;
 
     fn roundtrip(event: TelemetryEvent) -> TelemetryEvent {
         let json = serde_json::to_string(&event).unwrap();
@@ -174,19 +165,6 @@ mod tests {
                     severity: "warning".into(),
                 },
             ],
-        };
-        assert_eq!(event, roundtrip(event.clone()));
-    }
-
-    #[test]
-    fn serde_roundtrip_metric_event() {
-        let mut labels = HashMap::new();
-        labels.insert("host".into(), "worker-1".into());
-        labels.insert("region".into(), "us-east".into());
-        let event = TelemetryEvent::MetricEvent {
-            metric_name: "search.latency".into(),
-            value: 1.5,
-            labels,
         };
         assert_eq!(event, roundtrip(event.clone()));
     }
@@ -293,14 +271,6 @@ mod tests {
                 },
                 "prediction_outcome",
             ),
-            (
-                TelemetryEvent::MetricEvent {
-                    metric_name: "m".into(),
-                    value: 1.0,
-                    labels: HashMap::new(),
-                },
-                "metric_event",
-            ),
         ];
         for (event, expected_kind) in pairs {
             let value = serde_json::to_value(&event).unwrap();
@@ -366,18 +336,6 @@ mod tests {
             success: true,
         };
         assert_ne!(a, b);
-    }
-
-    #[test]
-    fn metric_event_empty_labels() {
-        let event = TelemetryEvent::MetricEvent {
-            metric_name: "test.metric".into(),
-            value: 0.0,
-            labels: HashMap::new(),
-        };
-        let value = serde_json::to_value(&event).unwrap();
-        let labels = value.get("labels").unwrap();
-        assert!(labels.as_object().unwrap().is_empty());
     }
 
     #[test]

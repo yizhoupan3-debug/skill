@@ -556,8 +556,8 @@ fn subagent_spawn_error_shutdown_smoke() {
 }
 
 #[test]
-fn list_idle_workers_reports_evolution_analyze_dry_run() {
-    let state_path = temp_state_path("evolution-idle-dry-run");
+fn list_idle_workers_reports_observation_analyze_dry_run() {
+    let state_path = temp_state_path("observation-idle-dry-run");
     let now = "2026-04-23T10:00:00Z";
 
     let launch = handle_session_supervisor_operation(json!({
@@ -565,7 +565,7 @@ fn list_idle_workers_reports_evolution_analyze_dry_run() {
         "state_path": state_path,
         "host": "codex",
         "cwd": "/tmp/project",
-        "prompt": "idle evolution smoke",
+        "prompt": "idle observation smoke",
         "dry_run": true,
         "now": now,
     }))
@@ -588,22 +588,22 @@ fn list_idle_workers_reports_evolution_analyze_dry_run() {
         "operation": "list",
         "state_path": state_path,
         "dry_run": true,
-        "force_evolution_idle": true,
+        "force_idle_observation": true,
         "now": now,
     }))
     .expect("list idle workers");
-    let evolution_idle = listed["evolution_idle"]
+    let observation_idle = listed["observation_idle"]
         .as_object()
-        .expect("evolution_idle");
-    assert_eq!(evolution_idle.get("triggered"), Some(&json!(true)));
-    assert_eq!(evolution_idle.get("status"), Some(&json!("dry_run")));
+        .expect("observation_idle");
+    assert_eq!(observation_idle.get("triggered"), Some(&json!(true)));
+    assert_eq!(observation_idle.get("status"), Some(&json!("dry_run")));
 
     let _ = fs::remove_file(state_path);
 }
 
 #[test]
-fn list_with_running_worker_skips_evolution_idle_trigger() {
-    let state_path = temp_state_path("evolution-idle-active");
+fn list_with_running_worker_skips_idle_observation_trigger() {
+    let state_path = temp_state_path("observation-idle-active");
     let now = "2026-04-23T10:00:00Z";
     let mut running = sample_worker_for_idle_test("running");
     running.worker_id = "running-worker".to_string();
@@ -624,15 +624,15 @@ fn list_with_running_worker_skips_evolution_idle_trigger() {
         "operation": "list",
         "state_path": state_path,
         "dry_run": true,
-        "force_evolution_idle": true,
+        "force_idle_observation": true,
         "now": now,
     }))
     .expect("list active workers");
-    let evolution_idle = listed["evolution_idle"]
+    let observation_idle = listed["observation_idle"]
         .as_object()
-        .expect("evolution_idle");
-    assert_eq!(evolution_idle.get("triggered"), Some(&json!(false)));
-    assert_eq!(evolution_idle.get("status"), Some(&json!("workers_active")));
+        .expect("observation_idle");
+    assert_eq!(observation_idle.get("triggered"), Some(&json!(false)));
+    assert_eq!(observation_idle.get("status"), Some(&json!("workers_active")));
 
     let _ = fs::remove_file(state_path);
 }

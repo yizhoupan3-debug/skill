@@ -15,7 +15,7 @@ pub use framework_extra::util;
 
 // ── Modules that remain in runtime-core (deep coupling) ──
 pub use fr_utils::constants;
-pub use fr_exec::evolution_observer;
+pub use fr_exec::telemetry_observer;
 pub use fr_utils::io_utils;
 pub use fr_utils::json_io;
 pub use fr_utils::json_value;

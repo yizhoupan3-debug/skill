@@ -188,14 +188,14 @@ mod tests {
     #[test]
     fn analyze_writes_report_file() {
         let dir = std::env::temp_dir().join(format!(
-            "evo-analyze-{}",
+            "obs-analyze-{}",
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
                 .as_nanos()
         ));
         let journal = dir.join("events.jsonl");
-        let out = dir.join("evolution");
+        let out = dir.join("observer");
         std::fs::create_dir_all(&dir).unwrap();
         let mut f = std::fs::File::create(&journal).unwrap();
         writeln!(
@@ -203,8 +203,8 @@ mod tests {
             r#"{{"kind":"hook_fired","hook_name":"stop","action":"allow"}}"#
         )
         .unwrap();
-        writeln!(f, r#"{{"kind":"quality_gate_round","round":1,"verdict":"PASS"}}"#).unwrap();
-        writeln!(f, r#"{{"kind":"quality_gate_round","round":2,"verdict":"FAIL"}}"#).unwrap();
+        writeln!(f, r#"{{"kind":"rfv_round","round":1,"verdict":"PASS"}}"#).unwrap();
+        writeln!(f, r#"{{"kind":"rfv_round","round":2,"verdict":"FAIL"}}"#).unwrap();
         let path = run_analyze(&journal, &out, 30, &ObserverConfig::default()).unwrap();
         let raw = std::fs::read_to_string(path).unwrap();
         assert!(raw.contains("hook_fired_by_name"));
@@ -219,14 +219,14 @@ mod tests {
     #[test]
     fn analyze_filters_events_outside_window_by_ts() {
         let dir = std::env::temp_dir().join(format!(
-            "evo-analyze-window-{}",
+            "obs-analyze-window-{}",
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
                 .as_nanos()
         ));
         let journal = dir.join("events.jsonl");
-        let out = dir.join("evolution");
+        let out = dir.join("observer");
         std::fs::create_dir_all(&dir).unwrap();
         let mut f = std::fs::File::create(&journal).unwrap();
         writeln!(
@@ -249,14 +249,14 @@ mod tests {
     #[test]
     fn analyze_counts_prediction_outcomes() {
         let dir = std::env::temp_dir().join(format!(
-            "evo-analyze-pred-{}",
+            "obs-analyze-pred-{}",
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
                 .as_nanos()
         ));
         let journal = dir.join("events.jsonl");
-        let out = dir.join("evolution");
+        let out = dir.join("observer");
         std::fs::create_dir_all(&dir).unwrap();
         let mut f = std::fs::File::create(&journal).unwrap();
         writeln!(

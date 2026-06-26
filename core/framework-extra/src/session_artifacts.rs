@@ -1,3 +1,4 @@
+use core_policy::error::FrameworkError;
 use fr_utils::constants::{
     CURRENT_ARTIFACT_DIR, EVIDENCE_INDEX_FILENAME, EVIDENCE_INDEX_SCHEMA_VERSION,
     NEXT_ACTIONS_FILENAME, NEXT_ACTIONS_SCHEMA_VERSION, SESSION_SUMMARY_FILENAME,
@@ -18,26 +19,21 @@ use serde_json::{Value, json};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-fn resolve_session_repo_root_for_task_ledger(payload: &Value) -> Result<Option<PathBuf>, String> {
+fn resolve_session_repo_root_for_task_ledger(payload: &Value) -> Result<Option<PathBuf>, FrameworkError> {
     let rr = value_text(payload.get("repo_root"));
     if rr.is_empty() {
         return Ok(None);
     }
     let path = PathBuf::from(&rr);
     if !path.is_dir() {
-        fs::create_dir_all(&path).map_err(|e| {
-            format!(
-                "framework session artifact writer: repo_root create_dir_all {} failed: {e}",
-                path.display()
-            )
-        })?;
+        fs::create_dir_all(&path)?;
     }
     Ok(Some(framework_kernel::repo_roots::resolve_repo_root_arg(Some(path.as_path()))?))
 }
 
-pub fn write_framework_session_artifacts(payload: Value) -> Result<Value, String> {
+pub fn write_framework_session_artifacts(payload: Value) -> Result<Value, FrameworkError> {
     let run = || -> Result<Value, String> {
-        let closeout_evaluation = super::closeout::enforce_closeout_for_session_payload(&payload)?;
+        let closeout_evaluation = super::closeout::enforce_closeout_for_session_payload(&payload).map_err(|e| e.to_string())?;
         let mut plan = build_session_artifact_write_plan(&payload)?;
         let sync_repo = plan.repo_root.clone();
         let sync_tid = plan.task_id.clone();
@@ -58,8 +54,8 @@ pub fn write_framework_session_artifacts(payload: Value) -> Result<Value, String
         Ok(response)
     };
     match resolve_session_repo_root_for_task_ledger(&payload)? {
-        Some(resolved) => core_state_utils::task_write_lock::apply_task_ledger_mutation(&resolved, run).map_err(|e| e.to_string()),
-        None => run(),
+        Some(resolved) => apply_task_ledger_mutation(&resolved, run).map_err(FrameworkError::validation),
+        None => run().map_err(FrameworkError::validation),
     }
 }
 
@@ -252,8 +248,6 @@ fn write_repo_session_focus(plan: &mut SessionArtifactWritePlan) -> Result<(), S
     Ok(())
 }
 
-/// ADR-001: Stop/automatic checkpoint (`focus: false`) refreshes task artifacts and syncs
-/// `.supervisor_state.json` to the checkpoint `task_id` without moving active/focus pointers.
 fn write_supervisor_state_for_non_focus_checkpoint(
     plan: &mut SessionArtifactWritePlan,
     repo_root: &Path,
@@ -677,6 +671,7 @@ fn normalized_string_array(value: Option<&Value>) -> Option<Vec<Value>> {
 }
 
 pub(super) use core_state_utils::json_io::{write_json_if_changed, write_text_if_changed};
+pub(super) use core_state_utils::task_write_lock::apply_task_ledger_mutation;
 
 pub(super) fn current_file_hash(path: &Path) -> Result<Option<String>, String> {
     match fs::read(path) {

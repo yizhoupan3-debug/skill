@@ -62,7 +62,9 @@ core/router-rs/artifacts/session_supervisor/
 core/router-rs/artifacts/telemetry/
 artifacts/telemetry/
 artifacts/evolution/
+artifacts/observer/
 core/browser-mcp/artifacts/evolution/
+core/browser-mcp/artifacts/observer/
 core/browser-mcp/artifacts/session_supervisor/
 core/router-rs/probe.err
 **/.router-rs.*.lock
@@ -79,7 +81,7 @@ codex_agno_runtime/data/runtime_checkpoint_store.sqlite3
 codex_agno_runtime/data/runtime_checkpoint_store.sqlite3-*
 codex_agno_runtime/data/runtime_event_transports/
 codex_agno_runtime/data/runtime_sandbox_events.jsonl
-skills/.evolution_journal.jsonl
+skills/.observer_journal.jsonl
 skills/dist/*.skill
 rust_tools/target/
 scripts/**/target/

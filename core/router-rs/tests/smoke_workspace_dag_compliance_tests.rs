@@ -57,7 +57,7 @@ fn workspace_has_nine_core_crates() {
         "core/routing-engine",
         "core/router-rs",
         "tools/codegraph-rs",
-        "tools/evolution-rs",
+        "tools/observer-rs",
         "core/research-harness",
     ];
 
@@ -78,7 +78,7 @@ fn leaf_crates_have_zero_workspace_deps() {
         "core/core-state",
         "core/framework-kernel",
         "core/routing-engine",
-        "tools/evolution-rs",
+        "tools/observer-rs",
         "tools/codegraph-rs",
     ];
 
@@ -89,7 +89,7 @@ fn leaf_crates_have_zero_workspace_deps() {
         "routing-engine",
         "router-rs",
         "codegraph-rs",
-        "evolution-rs",
+        "observer-rs",
         "research-harness",
     ];
 
@@ -170,8 +170,8 @@ fn b10_codegraph_rs_is_independent() {
 }
 
 #[test]
-fn b11_evolution_rs_is_independent() {
-    let content = read_cargo_toml("tools/evolution-rs");
+fn b11_observer_rs_is_independent() {
+    let content = read_cargo_toml("tools/observer-rs");
     let framework_crates = [
         "core-state",
         "core-policy",
@@ -182,7 +182,7 @@ fn b11_evolution_rs_is_independent() {
     for dep in &framework_crates {
         assert!(
             !has_workspace_dep(&content, dep),
-            "B11 evolution-rs should not depend on {}",
+            "B11 observer-rs should not depend on {}",
             dep
         );
     }

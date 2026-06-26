@@ -98,9 +98,9 @@ fn stamp_cooldown(repo_cwd: &Path) -> Result<(), String> {
 
 fn spawn_observer_analyze(repo_cwd: &Path) -> Result<u32, String> {
     let journal = repo_cwd.join("artifacts/telemetry/events.jsonl");
-    let output_dir = repo_cwd.join("artifacts/evolution");
-    let config = repo_cwd.join("configs/evolution/evolution.toml");
-    let mut cmd = Command::new("evolution-rs");
+    let output_dir = repo_cwd.join("artifacts/observer");
+    let config = repo_cwd.join("configs/observer/observer.toml");
+    let mut cmd = Command::new("observer-rs");
     cmd.current_dir(repo_cwd)
         .arg("analyze")
         .arg("--journal")
@@ -192,7 +192,7 @@ mod tests {
     #[test]
     fn dry_run_idle_trigger_reports_dry_run() {
         let dir = std::env::temp_dir().join(format!(
-            "evo-idle-{}",
+            "obs-idle-{}",
             SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .unwrap()

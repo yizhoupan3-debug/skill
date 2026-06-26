@@ -569,18 +569,5 @@ pub(super) fn tool_web_fetch(arguments: &Value) -> Result<String, String> {
         .map_err(|err| format!("web_fetch serialize failed: {err}"))
 }
 
-// ---------------------------------------------------------------------------
-// Routing evolution: delegated to runtime-core via hook
-// ---------------------------------------------------------------------------
-
-/// Aggregate routing stats from telemetry journal.
-/// Delegates to runtime-core for the actual implementation.
-pub(super) fn skill_routing_evolution(
-    arguments: &Value,
-    repo_root: &Path,
-) -> Result<String, String> {
-    Ok(crate::hooks::tool_routing_evolution_dispatch(arguments, repo_root)?)
-}
-
 // ── Research Harness MCP Tools ──
 

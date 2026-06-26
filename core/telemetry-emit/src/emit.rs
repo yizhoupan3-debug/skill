@@ -92,7 +92,6 @@ pub fn emit_hook_timing_telemetry(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::TelemetryEvent;
     use serde_json::json;
 
     #[test]
@@ -112,29 +111,5 @@ mod tests {
     fn hook_timing_action_encodes_durations() {
         let action = hook_timing_action(42, 3, 7);
         assert_eq!(action, "timing:42ms:lock=3:cargo=7");
-    }
-
-    #[test]
-    fn metric_counter_basics() {
-        let counter = crate::MetricCounter::new("test_metric")
-            .with_label("env", "test");
-        // just verify it doesn't panic and labels are stored
-        assert_eq!(counter.name(), "test_metric");
-        assert_eq!(counter.label_value("env"), Some("test"));
-    }
-
-    #[test]
-    fn metric_counter_emit_creates_valid_metric_event() {
-        let metric = crate::MetricCounter::new("test_emit")
-            .with_label("tool", "my_tool");
-        let event = metric.build_event(42.0);
-        match &event {
-            TelemetryEvent::MetricEvent { metric_name, value, labels } => {
-                assert_eq!(metric_name, "test_emit");
-                assert!((*value - 42.0).abs() < f64::EPSILON);
-                assert_eq!(labels.get("tool"), Some(&"my_tool".to_string()));
-            }
-            _ => panic!("expected MetricEvent variant"),
-        }
     }
 }

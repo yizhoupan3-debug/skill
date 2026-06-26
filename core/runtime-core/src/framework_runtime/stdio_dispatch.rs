@@ -198,7 +198,7 @@ fn dispatch_routing_stdio_request(op: &str, payload: Value) -> Result<Value, Str
     match op {
         "route" => dispatch_stdio_route(payload),
         "search_skills" => dispatch_stdio_search_skills(payload),
-        "hook_policy" => evaluate_hook_policy_value(payload),
+        "hook_policy" => evaluate_hook_policy_value(payload).map_err(|e| e.to_string()),
         "pre_tool_use_guard" => Ok(evaluate_pre_tool_use_guard_value(payload)?),
         "concurrency_defaults" => serialize_payload(runtime_concurrency_defaults_payload(), "concurrency defaults"),
         "route_report" => dispatch_stdio_route_report(payload),
@@ -273,18 +273,18 @@ fn dispatch_runtime_stdio_request(op: &str, payload: Value) -> Result<Value, Str
         #[cfg(not(feature = "l5-state"))]
         "background_state" => Err("background_state requires l5-state feature".to_string()),
         "session_supervisor" => handle_session_supervisor_operation(payload),
-        "describe_transport" => build_trace_transport_descriptor(payload),
-        "describe_handoff" => build_trace_handoff_descriptor(payload),
-        "checkpoint_resume_manifest" => build_checkpoint_resume_manifest(payload),
+        "describe_transport" => build_trace_transport_descriptor(payload).map_err(|e| e.to_string()),
+        "describe_handoff" => build_trace_handoff_descriptor(payload).map_err(|e| e.to_string()),
+        "checkpoint_resume_manifest" => build_checkpoint_resume_manifest(payload).map_err(|e| e.to_string()),
         "runtime_checkpoint_control_plane" => {
             build_checkpoint_control_plane_compiler_payload(payload)
         }
-        "write_transport_binding" => write_transport_binding_payload(payload),
-        "write_checkpoint_resume_manifest" => write_checkpoint_resume_manifest_payload(payload),
-        "attach_runtime_event_transport" => attach_runtime_event_transport(payload),
-        "subscribe_attached_runtime_events" => subscribe_attached_runtime_events(payload),
+        "write_transport_binding" => write_transport_binding_payload(payload).map_err(|e| e.to_string()),
+        "write_checkpoint_resume_manifest" => write_checkpoint_resume_manifest_payload(payload).map_err(|e| e.to_string()),
+        "attach_runtime_event_transport" => attach_runtime_event_transport(payload).map_err(|e| e.to_string()),
+        "subscribe_attached_runtime_events" => subscribe_attached_runtime_events(payload).map_err(|e| e.to_string()),
         "cleanup_attached_runtime_event_transport" => {
-            cleanup_attached_runtime_event_transport(payload)
+            cleanup_attached_runtime_event_transport(payload).map_err(|e| e.to_string())
         }
         "runtime_storage" => parse_and_dispatch::<RuntimeStorageRequestPayload, _, _>(
             payload,
@@ -355,7 +355,7 @@ fn dispatch_framework_stdio_request(op: &str, payload: Value) -> Result<Value, S
             let content = resolver.resolve_one(&hash)?;
             Ok(serde_json::json!({ "content": content }))
         }
-        "framework_session_artifact_write" => write_framework_session_artifacts(payload),
+        "framework_session_artifact_write" => write_framework_session_artifacts(payload).map_err(|e| e.to_string()),
         "framework_hook_evidence_append" => Ok(framework_hook_evidence_append(payload)?),
         "framework_goal_drive" => {
             crate::telemetry_emit::framework_goal_drive(payload)

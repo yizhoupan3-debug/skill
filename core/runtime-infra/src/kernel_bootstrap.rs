@@ -28,13 +28,13 @@ static TELEMETRY_HANDLE: Mutex<Option<LogAggregatorHandle>> = Mutex::new(None);
 pub fn ensure_kernel_bootstrap() {
     BOOTSTRAP_ONCE.call_once(|| {
         bootstrap_core();        // tokenizer + probes (all modes need these)
-        bootstrap_telemetry();   // LogAggregator + EvolutionObserver + route poller thread
+        bootstrap_telemetry();   // LogAggregator + TelemetryObserver + route poller thread
     });
 }
 
 /// Light bootstrap for short-lived CLI subprocesses (hook events, etc.).
 ///
-/// Skips LogAggregator, EvolutionObserver, and route cache poller thread —
+/// Skips LogAggregator, TelemetryObserver, and route cache poller thread —
 /// these are file-backed services designed for long-lived processes.
 /// A hook subprocess (~30ms lifetime) doesn't need them and the thread
 /// would be killed by OS process exit before doing useful work.
@@ -54,18 +54,18 @@ fn bootstrap_core() {
     );
 }
 
-/// Full telemetry stack: LogAggregator, EvolutionObserver, route cache poller.
+/// Full telemetry stack: LogAggregator, TelemetryObserver, route cache poller.
 /// Only for long-lived processes (stdio JSON loop, etc.).
 fn bootstrap_telemetry() {
     let journal = PathBuf::from("artifacts/telemetry/events.jsonl");
     let handle = LogAggregator::start(&journal);
-    let observer = fr_exec::evolution_observer::EvolutionObserver::new(
-        fr_exec::evolution_observer::EvolutionObserverConfig {
-            alerts_path: PathBuf::from("artifacts/evolution/alerts.jsonl"),
+    let observer = fr_exec::telemetry_observer::TelemetryObserver::new(
+        fr_exec::telemetry_observer::TelemetryObserverConfig {
+            alerts_path: PathBuf::from("artifacts/observer/alerts.jsonl"),
             ..Default::default()
         },
     );
-    let fanout = fr_exec::evolution_observer::FanoutTelemetryWriter::new(
+    let fanout = fr_exec::telemetry_observer::FanoutTelemetryWriter::new(
         handle.writer(),
         observer,
     );

@@ -33,7 +33,7 @@ pub struct McpToolRecord {
     /// Tool classification: "builtin" | "research" | "external" | "independent".
     pub layer: String,
     /// Which dispatch domain handles this tool: "domain:goal" | "domain:quality-gate"
-    /// | "domain:closeout" | "domain:routing-evolution" | "domain:framework"
+    /// | "domain:closeout" | "domain:framework"
     /// | "research" | "browser" | "codegraph" | "stdio-binary".
     pub dispatch_domain: String,
     /// Owning team/component: "framework" | "research" | "browser" | "codegraph" | "rust-tools".

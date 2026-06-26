@@ -640,7 +640,6 @@
         "session_checkpoint",
         "quality_gate_manage",
         "quality_gate_status",
-        "routing_evolution",
         "web_fetch"
       ],
       "host_config_keys": {

@@ -32,7 +32,7 @@ pub fn dispatch_router_command(command: RouterCommand) -> Result<(), String> {
                 command.allow_overlay,
                 command.first_turn,
             )?;
-            print_json_value(&decision)
+            print_json_value(&decision).map_err(|e| e.to_string())
         }
         RouterCommand::Search(command) => {
             let records = load_records_cached_for_stdio(
@@ -44,7 +44,7 @@ pub fn dispatch_router_command(command: RouterCommand) -> Result<(), String> {
                 search_skills_subset(&records, Some(&host_indices), &command.query, command.limit);
             let payload = build_search_results_payload(&command.query, rows.clone());
             if command.json {
-                return print_json_value(&payload);
+                return print_json_value(&payload).map_err(|e| e.to_string());
             }
             print_search_results(&command.query, &payload, rows);
             Ok(())

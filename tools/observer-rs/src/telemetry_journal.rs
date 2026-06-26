@@ -249,7 +249,7 @@ mod tests {
     #[test]
     fn load_parses_prediction_outcome_lines() {
         let dir = std::env::temp_dir().join(format!(
-            "evo-pred-{}",
+            "obs-pred-{}",
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
@@ -271,7 +271,7 @@ mod tests {
     #[test]
     fn load_parses_route_decision_lines() {
         let dir = std::env::temp_dir().join(format!(
-            "evo-tel-{}",
+            "obs-tel-{}",
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
@@ -293,7 +293,7 @@ mod tests {
     #[test]
     fn load_parses_timestamped_route_decision_lines() {
         let dir = std::env::temp_dir().join(format!(
-            "evo-tel-ts-{}",
+            "obs-tel-ts-{}",
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
@@ -319,7 +319,7 @@ mod tests {
     #[test]
     fn audit_loader_accepts_telemetry_and_legacy_formats() {
         let dir = std::env::temp_dir().join(format!(
-            "evo-audit-mix-{}",
+            "obs-audit-mix-{}",
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()

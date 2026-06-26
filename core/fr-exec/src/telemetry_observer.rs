@@ -310,7 +310,7 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        std::env::temp_dir().join(format!("evo-alerts-{suffix}.jsonl"))
+        std::env::temp_dir().join(format!("obs-alerts-{suffix}.jsonl"))
     }
 
     #[test]
@@ -387,7 +387,7 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        let dir = std::env::temp_dir().join(format!("evo-tail-{suffix}"));
+        let dir = std::env::temp_dir().join(format!("obs-tail-{suffix}"));
         fs::create_dir_all(&dir).unwrap();
         let journal = dir.join("events.jsonl");
         let alerts = dir.join("alerts.jsonl");
@@ -416,7 +416,7 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        let dir = std::env::temp_dir().join(format!("evo-fanout-{suffix}"));
+        let dir = std::env::temp_dir().join(format!("obs-fanout-{suffix}"));
         fs::create_dir_all(&dir).unwrap();
         let journal = dir.join("events.jsonl");
         let alerts = dir.join("alerts.jsonl");

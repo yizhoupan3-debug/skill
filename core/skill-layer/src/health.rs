@@ -38,7 +38,7 @@ struct HealthManifest {
 // ---------------------------------------------------------------------------
 
 /// Read the existing health manifest (if any) and update it with fresh
-/// timestamps.  If no evolution-rs output is available, preserves existing
+/// timestamps.  If no observer-rs output is available, preserves existing
 /// scores and updates the `generated_at` timestamp.
 ///
 /// `repo_root` is the project root (parent of `skills/`).

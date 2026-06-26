@@ -1,12 +1,13 @@
 //! Human-readable checks for `router-rs framework doctor`.
 
+use core_policy::doc_registry;
+use core_policy::error::FrameworkError;
 use fr_exec::router_env_flags::router_rs_task_ledger_flock_enabled;
 use core_state::task_state::resolve_task_view;
 use serde_json::{Value, json};
 use std::fs;
 use std::path::Path;
 
-use core_policy::doc_registry;
 use serde::Serialize;
 
 /// Structured result for `router-rs framework doctor`.
@@ -22,7 +23,7 @@ pub struct DoctorResult {
 
 /// Run framework diagnostics. Returns structured `DoctorResult` (JSON printed to stdout).
 /// If `warn_count > 0`, the caller should exit with code 1.
-pub fn run_framework_doctor(repo_root: &Path) -> Result<DoctorResult, String> {
+pub fn run_framework_doctor(repo_root: &Path) -> Result<DoctorResult, FrameworkError> {
     println!("router-rs framework doctor");
     println!("repo_root: {}", repo_root.display());
     match std::env::current_exe() {
@@ -384,7 +385,7 @@ fn read_single_pointer(path: &Path) -> Option<String> {
 }
 
 /// Continuity audit: check task pointers, registry consistency, and orphan directories.
-pub fn run_continuity_audit(repo_root: &Path) -> Result<Value, String> {
+pub fn run_continuity_audit(repo_root: &Path) -> Result<Value, FrameworkError> {
     let mut issues: Vec<String> = Vec::new();
     let mut warnings: Vec<String> = Vec::new();
     let mut info: Vec<String> = Vec::new();
@@ -645,7 +646,7 @@ pub fn run_continuity_audit(repo_root: &Path) -> Result<Value, String> {
 }
 
 /// Report broken symlinks without removing them (diagnostic-only).
-pub fn report_broken_symlinks(repo_root: &Path) -> Result<usize, String> {
+pub fn report_broken_symlinks(repo_root: &Path) -> Result<usize, FrameworkError> {
     let mut targets: Vec<&str> = framework_kernel::runtime_registry::ALL_KNOWN_HOST_DIRS.to_vec();
     targets.push("artifacts");
     let mut broken_count = 0;
