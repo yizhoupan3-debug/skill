@@ -50,12 +50,6 @@ pub fn emit_hook_timing_line(event: &str) {
         event, duration_ms, lock_wait_ms, cargo_check_ms,
         "hook timing"
     );
-    crate::telemetry_emit::emit_hook_timing_telemetry(
-        event,
-        duration_ms,
-        lock_wait_ms,
-        cargo_check_ms,
-    );
     HOOK_STARTED.with(|c| c.set(None));
     LOCK_WAIT_MS.with(|c| c.set(0));
     CARGO_CHECK_MS.with(|c| c.set(0));

@@ -233,12 +233,6 @@ pub trait HostHookDispatcher: HostHookConfig {
                 "tool_type": format!("post_tool_use:{normalized}"),
                 "now": now,
             });
-            if let Some(result) = crate::hooks::session_supervisor_op(payload) {
-                match result {
-                    Ok(_) => debug!("PostToolUse: registered subagent {agent_id}"),
-                    Err(e) => tracing::warn!("PostToolUse: agent_register failed: {e}"),
-                }
-            }
         }
 
         // Auto-checkpoint: if there's an active goal and the tool call succeeded,
@@ -324,12 +318,6 @@ pub trait HostHookDispatcher: HostHookConfig {
             "tool_type": "subagent_start_hook",
             "now": now,
         });
-        if let Some(result) = crate::hooks::session_supervisor_op(payload) {
-            match result {
-                Ok(_) => debug!("SubagentStart: registered agent {agent_id}"),
-                Err(e) => tracing::warn!("SubagentStart: agent_register failed: {e}"),
-            }
-        }
         None
     }
 
@@ -353,12 +341,6 @@ pub trait HostHookDispatcher: HostHookConfig {
             "error": error,
             "now": now,
         });
-        if let Some(result) = crate::hooks::session_supervisor_op(payload) {
-            match result {
-                Ok(_) => debug!("SubagentStop: unregistered agent {agent_id} ({terminal_status})"),
-                Err(e) => tracing::warn!("SubagentStop: agent_unregister failed: {e}"),
-            }
-        }
         None
     }
 

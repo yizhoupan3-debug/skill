@@ -65,7 +65,8 @@ fn tool_verification_literature(arguments: &Value) -> Result<String, FrameworkEr
         "doi" => {
             let doi = arguments.get("doi").and_then(Value::as_str)
                 .ok_or(FrameworkError::validation("doi check requires 'doi' (string)"))?;
-            let reachable = crate::verification::literature::doi_reachable(doi)
+            let reachable = tokio::runtime::Handle::current()
+                .block_on(crate::verification::literature::verify_doi_reachable(doi))
                 .map_err(|e| FrameworkError::validation(format!("DOI check failed: {e}")))?;
             serde_json::to_string_pretty(&json!({
                 "check": "doi_reachability", "doi": doi, "reachable": reachable,

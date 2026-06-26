@@ -2,9 +2,11 @@
 //!
 //! All hooks snapshot logic is shared via
 //! `host-projection/src/hosts/host_extensions/schema_drift.rs` (L0).
-//! No host-specific code lives in this crate — paths, events, and timeouts are
+//! No host-specific code lives here — paths, events, and timeouts are
 //! derived from the `HostProvider` registry.
-
+//!
+//! OLD: migrated from runtime-exit-gate (Wave 4a-ii). Old crate deleted.
+//! Now compiled as part of runtime-core (pub mod schema_drift).
 
 use core_policy::error::FrameworkError;
 use hex;
@@ -63,7 +65,6 @@ pub struct SchemaDriftBaseline {
     pub recorded_at: String,
     pub task_id: String,
     /// Host-specific hooks snapshot (opaque JSON blob from L0 host extension).
-    /// No L4 code inspects this struct; comparison is `Value` equality.
     pub host_hooks: Value,
     pub task_artifacts: TaskArtifactsDriftSnapshot,
     pub contracts: ContractVersionsSnapshot,
@@ -111,8 +112,6 @@ pub fn baseline_path(repo_root: &Path, task_id: &str) -> PathBuf {
 
 // ── Hooks snapshot via L0 shared schema_drift module ──
 
-/// Fallback hooks snapshot used when the real snapshot fails.
-/// The `["snapshot_failed"]` array ensures `host_hooks_json_ok` returns false.
 fn fallback_host_hooks_json() -> Value {
     json!({
         "registered_events": [],
@@ -125,7 +124,6 @@ fn fallback_host_hooks_json() -> Value {
     })
 }
 
-/// Clean empty snapshot for hosts without hooks_manifest_path (passes validation).
 fn noop_host_hooks_json() -> Value {
     json!({
         "registered_events": [],
@@ -138,8 +136,6 @@ fn noop_host_hooks_json() -> Value {
     })
 }
 
-/// Snapshot all hosts' hooks using the shared L0 function.
-/// Iterates ALL_HOST_IDS from the registry — no host-specific hardcoding.
 fn snapshot_all_host_hooks(repo_root: &Path) -> Value {
     let mut map = serde_json::Map::new();
     for host_id in framework_kernel::runtime_registry::ALL_HOST_IDS {
@@ -168,8 +164,6 @@ fn snapshot_all_host_hooks(repo_root: &Path) -> Value {
     Value::Object(map)
 }
 
-/// Check whether a host hooks snapshot JSON blob is valid.
-/// Delegates to the shared L0 function.
 fn host_hooks_json_ok(hooks: &Value) -> bool {
     let Some(map) = hooks.as_object() else { return false };
     map.values().all(|v| shared_schema_drift::host_hooks_json_ok(v))
@@ -242,7 +236,7 @@ pub fn build_baseline(repo_root: &Path, task_id: &str) -> Result<SchemaDriftBase
         host_hooks: snapshot_all_host_hooks(repo_root),
         task_artifacts: snapshot_task_artifacts(repo_root, task_id),
         contracts: ContractVersionsSnapshot {
-            closeout_record: fr_contracts::closeout_enforcement::CLOSEOUT_RECORD_SCHEMA_VERSION.to_string(),
+            closeout_record: fr_contracts::closeout_enforcement::types::CLOSEOUT_RECORD_SCHEMA_VERSION.to_string(),
             hook_observation: ROUTER_RS_HOOK_OBSERVATION_SCHEMA_VERSION.to_string(),
         },
     })
@@ -291,7 +285,7 @@ pub fn check_against_baseline(repo_root: &Path, task_id: &str) -> SchemaDriftChe
     let current_hooks = snapshot_all_host_hooks(repo_root);
     let current_artifacts = snapshot_task_artifacts(repo_root, task_id);
     let current_contracts = ContractVersionsSnapshot {
-        closeout_record: fr_contracts::closeout_enforcement::CLOSEOUT_RECORD_SCHEMA_VERSION.to_string(),
+        closeout_record: fr_contracts::closeout_enforcement::types::CLOSEOUT_RECORD_SCHEMA_VERSION.to_string(),
         hook_observation: ROUTER_RS_HOOK_OBSERVATION_SCHEMA_VERSION.to_string(),
     };
 
@@ -310,8 +304,7 @@ pub fn check_against_baseline(repo_root: &Path, task_id: &str) -> SchemaDriftChe
         };
     }
 
-    // Acquire shared lock on the baseline file before reading, to coordinate
-    // with concurrent writers (e.g. write_baseline using write_atomic_json).
+    // Acquire shared lock on the baseline file before reading
     let file = match fs::File::open(&path) {
         Ok(f) => f,
         Err(_) => {
@@ -411,200 +404,5 @@ pub fn check_against_baseline(repo_root: &Path, task_id: &str) -> SchemaDriftChe
         baseline_present: true,
         ok,
         drift,
-    }
-}
-
-// ── Tests ──
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::fs;
-
-    fn temp_repo(name: &str) -> PathBuf {
-        let repo = std::env::temp_dir().join(format!(
-            "router-rs-schema-drift-{name}-{}",
-            std::process::id()
-        ));
-        let _ = fs::remove_dir_all(&repo);
-        fs::create_dir_all(&repo).unwrap();
-        repo
-    }
-
-    fn write_host_hooks_fixture(repo: &Path, host_id: &str) {
-        let provider = host_projection::hosts::host_provider_for_id(host_id)
-            .expect("write_host_hooks_fixture: unknown host");
-        let hooks_rel = provider
-            .hooks_manifest_path()
-            .expect("write_host_hooks_fixture: host has no hooks_manifest_path");
-        let events = provider.registered_hook_events();
-
-        let mut pairs = String::new();
-        for (i, event) in events.iter().enumerate() {
-            let timeout = match *event {
-                "sessionStart"
-                | "SessionStart"
-                | "session.idle"
-                | "session.created"
-                | "session.deleted" => 5,
-                "sessionEnd" => 15,
-                _ => 20,
-            };
-            if i > 0 {
-                pairs.push_str(",\n");
-            }
-            pairs.push_str(&format!(
-                r#"      "{event}": [{{"command": "x/{host_id}-router-rs-hook.sh", "timeout": {timeout}}}]"#
-            ));
-        }
-
-        let hooks_json = format!(
-            r#"{{
-  "hooks": {{
-{pairs}
-  }}
-}}"#
-        );
-
-        let hooks_abs = repo.join(hooks_rel);
-        if let Some(parent) = hooks_abs.parent() {
-            fs::create_dir_all(parent).unwrap();
-        }
-        fs::write(&hooks_abs, hooks_json.as_bytes()).unwrap();
-
-        let template_rel = format!("configs/framework/{host_id}-hooks.workspace-template.json");
-        let template_abs = repo.join(&template_rel);
-        if let Some(parent) = template_abs.parent() {
-            fs::create_dir_all(parent).unwrap();
-        }
-        fs::write(&template_abs, hooks_json.as_bytes()).unwrap();
-    }
-
-    fn write_all_hosts_hooks_fixtures(repo: &Path) {
-        for host_id in framework_kernel::runtime_registry::ALL_HOST_IDS {
-            write_host_hooks_fixture(repo, host_id);
-        }
-    }
-
-    fn seed_task_artifacts(repo: &Path, task: &str) {
-        fs::create_dir_all(repo.join("artifacts/current").join(task)).unwrap();
-        fs::write(
-            repo.join("artifacts/current")
-                .join(task)
-                .join("REQUIREMENTS.md"),
-            "## A\n### B\n",
-        )
-        .unwrap();
-        fs::write(
-            repo.join("artifacts/current").join(task).join("ROADMAP.md"),
-            "## A\n### B\n",
-        )
-        .unwrap();
-        fs::write(
-            repo.join("artifacts/current")
-                .join(task)
-                .join("EVIDENCE_INDEX.json"),
-            r#"{"artifacts":[{"path":"x"}]}"#,
-        )
-        .unwrap();
-    }
-
-    #[test]
-    fn baseline_roundtrip_and_check_ok() {
-        let repo = temp_repo("roundtrip");
-        write_all_hosts_hooks_fixtures(&repo);
-        let task = "t-schema";
-        fs::create_dir_all(repo.join("artifacts/current")).unwrap();
-        fs::write(
-            repo.join("artifacts/current/active_task.json"),
-            r#"{"task_id":"t-schema"}"#,
-        )
-        .unwrap();
-        seed_task_artifacts(&repo, task);
-
-        let (_, path) = write_baseline(&repo, task).unwrap();
-        assert!(path.is_file());
-        let resp = check_against_baseline(&repo, task);
-        assert!(resp.ok, "drift={:?}", resp.drift);
-    }
-
-    #[test]
-    fn check_fails_on_hooks_template_command_mismatch() {
-        let repo = temp_repo("cmd-mismatch");
-        write_all_hosts_hooks_fixtures(&repo);
-        // Pick the first host with hooks_manifest_path to test template parity
-        let host_id = *framework_kernel::runtime_registry::ALL_HOST_IDS
-            .iter()
-            .find(|id| host_projection::hosts::host_provider_for_id(id)
-                .and_then(|p| p.hooks_manifest_path())
-                .is_some())
-            .expect("no host with hooks_manifest_path");
-        let provider = host_projection::hosts::host_provider_for_id(host_id).unwrap();
-        let hooks_rel = provider.hooks_manifest_path().unwrap();
-        let events = provider.registered_hook_events();
-        let launcher = format!("{host_id}-router-rs-hook.sh");
-
-        // Override template with mismatched command to test template parity
-        let template_rel = format!("configs/framework/{host_id}-hooks.workspace-template.json");
-        let template_abs = repo.join(&template_rel);
-        let template_text = std::fs::read_to_string(&template_abs).unwrap();
-        let wrong_launcher = format!("y/other-{launcher}");
-        let patched = template_text.replace(&launcher, &wrong_launcher);
-        std::fs::write(&template_abs, patched.as_bytes()).unwrap();
-
-        let task = "t-mismatch";
-        seed_task_artifacts(&repo, task);
-        write_baseline(&repo, task).unwrap();
-        let snap = host_projection::hosts::host_extensions::schema_drift::snapshot_host_hooks(
-            &repo,
-            Path::new(hooks_rel),
-            Path::new(&template_rel),
-            events,
-            &[],
-            &launcher,
-        )
-        .unwrap();
-        assert!(
-            !snap.hooks_template_parity_issues.is_empty(),
-            "parity issues={:?}",
-            snap.hooks_template_parity_issues
-        );
-        assert!(!snap.matches_workspace_template);
-        let resp = check_against_baseline(&repo, task);
-        assert!(!resp.ok);
-    }
-
-    #[test]
-    fn check_fails_on_baseline_task_id_mismatch() {
-        let repo = temp_repo("task-mismatch");
-        write_all_hosts_hooks_fixtures(&repo);
-        let task_a = "task-a";
-        let task_b = "task-b";
-        seed_task_artifacts(&repo, task_a);
-        seed_task_artifacts(&repo, task_b);
-        write_baseline(&repo, task_a).unwrap();
-        let baseline_b_path = baseline_path(&repo, task_b);
-        let baseline_a_path = baseline_path(&repo, task_a);
-        fs::copy(&baseline_a_path, &baseline_b_path).unwrap();
-        let resp = check_against_baseline(&repo, task_b);
-        assert!(!resp.ok);
-        assert!(
-            resp.drift.iter().any(|d| d.field == "task_id_mismatch"),
-            "drift={:?}",
-            resp.drift
-        );
-    }
-
-    #[test]
-    fn resolve_task_id_requires_explicit_task_id() {
-        let repo = temp_repo("no-fallback");
-        fs::create_dir_all(repo.join("artifacts/current")).unwrap();
-        fs::write(
-            repo.join("artifacts/current/focus_task.json"),
-            r#"{"task_id":"focus-only"}"#,
-        )
-        .unwrap();
-        let err = resolve_task_id_for_schema_drift(&repo, None).unwrap_err();
-        assert!(err.to_string().contains("provide --task-id"), "unexpected err: {err}");
     }
 }

@@ -1,7 +1,7 @@
 //! Host hooks snapshot for schema drift: capture and compare hook configurations.
 //!
 //! All host-specific data (hook paths, events) is passed as parameters —
-//! not hardcoded. L4 runtime-exit-gate stores the result as an opaque JSON blob
+//! not hardcoded. L4 schema drift (runtime-core) stores the result as an opaque JSON blob
 //! and compares for equality; it never inspects the struct directly.
 //!
 //! ## Usage

@@ -54,8 +54,8 @@ pub fn parse_task_ledger_command_envelope(envelope: &Value) -> Result<TaskLedger
 /// Dispatch without taking an extra outer lock (`apply_task_ledger_mutation` is invoked inside handlers where needed).
 pub fn dispatch_task_ledger_command(cmd: TaskLedgerCommand) -> Result<Value, String> {
     match cmd {
-        TaskLedgerCommand::GoalDrive(p) => crate::telemetry_emit::framework_goal_drive(p),
-        TaskLedgerCommand::QualityGate(p) => crate::telemetry_emit::framework_quality_gate(p),
+        TaskLedgerCommand::GoalDrive(p) => runtime_infra::kernel_utils::framework_goal_drive(p),
+        TaskLedgerCommand::QualityGate(p) => crate::qg_entry::quality_gate_hook_wrapper(p).map_err(|e| e.to_string()),
         TaskLedgerCommand::SessionArtifacts(p) => {
             framework_extra::session_artifacts::write_framework_session_artifacts(p)
                 .map_err(|e| e.to_string())

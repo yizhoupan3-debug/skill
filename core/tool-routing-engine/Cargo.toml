@@ -2,7 +2,7 @@
 name = "tool-routing-engine"
 version = "0.1.0"
 edition = "2024"
-description = "Tool routing engine: scoring pipeline, routing, and search for MCP tools."
+description = "Tool routing engine: scoring pipeline, routing, and search for MCP tools"
 [lints]
 workspace = true
 

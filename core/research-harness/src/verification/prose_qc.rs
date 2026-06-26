@@ -4,6 +4,7 @@
 
 use std::collections::HashMap;
 use anyhow::Result;
+use serde::{Deserialize, Serialize};
 
 /// 检查文本中的术语使用是否与术语表一致。
 /// 返回不一致的术语列表（找到的非标准用法）。
@@ -120,7 +121,7 @@ pub fn detect_zh_slop(text: &str) -> Vec<SlopHit> {
 }
 
 /// A slop word/phrase hit with its position and suggested replacement.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SlopHit {
     pub word: String,
     pub replacement: String,

@@ -154,13 +154,64 @@ pub(crate) fn install_test_deps() {
                 record_path.display()
             ))
         }
-        hooks::register_framework_runtime(
-            test_closeout_record_path,
-            test_evaluate_closeout_record,
-            test_extract_duration,
-            test_post_tool_ok,
-            test_closeout_followup,
-        );
+        // Set RuntimeHooks directly (replaces old register_framework_runtime + register_session_call_tracker).
+        // Paper hooks and research mode inference use individual OnceLock below (external override pattern).
+        hooks::set_runtime_hooks(hooks::RuntimeHooks {
+            // session_call_tracker
+            init_tracker: test_init_tracker,
+            record_tool_call: test_record_tool_call,
+            read_tracker_state: test_read_tracker_state,
+            // framework_runtime
+            closeout_record_path_for_task: test_closeout_record_path,
+            evaluate_closeout_record_file_for_task: test_evaluate_closeout_record,
+            extract_post_tool_duration_ms: test_extract_duration,
+            post_tool_call_succeeded: test_post_tool_ok,
+            closeout_stop_followup_for_completion_text: test_closeout_followup,
+            // paper hooks (defaults — individual OnceLock has priority)
+            maybe_append_paper_prose_context: |_, _, _, _| {},
+            maybe_merge_paper_prose_before_submit: |_, _, _, _, _| {},
+            maybe_append_paper_adversarial_context: |_, _, _, _| {},
+            maybe_merge_paper_adversarial_before_submit: |_, _, _, _, _| {},
+            // research activity
+            maybe_record_research_activity: |_, _, _| {},
+            // research mode inference
+            research_mode_for_request: |_| "quick".to_string(),
+            // kernel bootstrap
+            ensure_kernel_bootstrap: || {},
+            // framework_runtime_extra
+            current_local_timestamp: || "1970-01-01T00:00:00Z".into(),
+            write_framework_session_artifacts: |_| Err(FrameworkError::validation("not registered in test")),
+            route_task_with_manifest_fallback: |_, _, _, _, _, _| Err(FrameworkError::validation("not registered in test")),
+            build_automatic_continuity_checkpoint_payload: |_, _, _, _, _, _| Value::Null,
+            append_evidence_index: |_, _, _| Err(FrameworkError::validation("not registered in test")),
+            closeout_record_schema_version: || "closeout-record-v1",
+            check_anomalies: |_| Ok(vec![]),
+            // web_fetch_guard
+            validate_and_resolve_web_fetch_url: |_| Err(FrameworkError::validation("not registered in test")),
+            resolve_web_fetch_redirect: |_, _| Err(FrameworkError::validation("not registered in test")),
+            resolve_web_fetch_addresses: |_, _| Err(FrameworkError::validation("not registered in test")),
+            // mcp_pre_guard
+            evaluate_mcp_pre_guard_safe: |_, _, _| hooks::McpPreGuardVerdict { blocked: false, reason: None },
+            // quality_gate_drive
+            quality_gate_drive: |_| Err(FrameworkError::validation("not registered in test")),
+            // session_supervisor_op
+            session_supervisor_op: |_| Err(FrameworkError::validation("not registered in test")),
+            // research_tool_dispatch
+            research_tool_dispatch: |_, _| Err(FrameworkError::validation("not registered in test")),
+            // mcp_tool_routing
+            mcp_tool_skill_route: |_, _, _, _| Err(FrameworkError::validation("not registered in test")),
+            mcp_tool_search_skills: |_, _, _, _| Err(FrameworkError::validation("not registered in test")),
+            // tool_dispatch
+            tool_goal_state_manage_dispatch: |_, _, _| Err(FrameworkError::validation("not registered in test")),
+            tool_quality_gate_manage_dispatch: |_, _, _| Err(FrameworkError::validation("not registered in test")),
+            tool_closeout_record_write_dispatch: |_, _| Err(FrameworkError::validation("not registered in test")),
+            tool_closeout_gate_evaluate: |_, _, _| Err(FrameworkError::validation("not registered in test")),
+            // browser_dispatch
+            browser_dispatch: |_| Err(FrameworkError::validation("not registered in test")),
+            // runtime_trace_transport
+            attach_runtime_event_transport: |_| Err(FrameworkError::validation("not registered in test")),
+            inspect_trace_stream: |_| Err(FrameworkError::validation("not registered in test")),
+        });
 
         // Register paper hooks with actual content injection for tests.
         // The builtin PAPER_PROSE_QUALITY_HOOK text is included at compile time.
@@ -315,7 +366,7 @@ pub(crate) fn install_test_deps() {
             "quick".to_string()
         });
 
-        // Register session call tracker hooks for tests.
+        // Register session call tracker hooks for tests (function definitions kept for RuntimeHooks above).
         fn test_init_tracker(repo_root: &std::path::Path) -> Result<(), FrameworkError> {
             let dir = repo_root.join("artifacts/current");
             std::fs::create_dir_all(&dir)?;
@@ -350,6 +401,5 @@ pub(crate) fn install_test_deps() {
             let data = std::fs::read_to_string(&path)?;
             Ok(serde_json::from_str(&data)?)
         }
-        hooks::register_session_call_tracker(test_init_tracker, test_record_tool_call, test_read_tracker_state);
     });
 }

@@ -132,7 +132,7 @@ pub fn host_requires_strict_pre_tool_fallback(
 ) -> Result<bool> {
     let id = host_id.trim();
     // 1. HostProvider hint (highest priority after explicit overrides)
-    if let Some(strict) = framework_runtime_hooks::hooks().host_provider_strict_pre_tool_fallback_hint(id) {
+    if let Some(strict) = framework_kernel::runtime_hooks::hooks().host_provider_strict_pre_tool_fallback_hint(id) {
         return Ok(strict);
     }
     if has_native_hook_override == Some(true) {
@@ -204,7 +204,7 @@ pub fn host_requires_strict_pre_tool_fallback(
 pub fn evaluate_pre_tool_use_guard(
     request: PreToolUseGuardRequest,
 ) -> Result<PreToolUseGuardResponse> {
-    framework_runtime_hooks::hooks().ensure_kernel_bootstrap();
+    framework_kernel::runtime_hooks::hooks().ensure_kernel_bootstrap();
     let repo_root = request
         .repo_root
         .as_deref()
@@ -235,12 +235,12 @@ pub fn evaluate_pre_tool_use_guard(
             request.approval_digest.as_deref(),
             &digest,
         );
-        framework_runtime_hooks::hooks().emit_tool_call(
+        framework_kernel::runtime_hooks::hooks().emit_tool_call(
             &tool_name,
             0,
             approved && verdict != PreToolUseGuardVerdict::Block,
         );
-        framework_runtime_hooks::hooks().emit_hook_fired(
+        framework_kernel::runtime_hooks::hooks().emit_hook_fired(
             "pre_tool_use_guard",
             if approved { "approve" } else { "deny" },
         );
@@ -293,7 +293,7 @@ pub fn evaluate_pre_tool_use_guard(
         PreToolUseGuardVerdict::Block => "block",
         PreToolUseGuardVerdict::RequiresStdioApproval => "require_approval",
     };
-    framework_runtime_hooks::hooks().emit_hook_fired("pre_tool_use_guard", action);
+    framework_kernel::runtime_hooks::hooks().emit_hook_fired("pre_tool_use_guard", action);
     Ok(build_response(
         &host_id,
         &tool_name,
@@ -524,8 +524,8 @@ fn has_path_traversal(tool_input: &Value) -> bool {
 #[cfg(test)]
 #[ctor::ctor]
 fn register_test_hooks() {
-    use framework_runtime_hooks::{RuntimeCoreHooks, TelemetryHooks, HostProviderHooks};
-    framework_runtime_hooks::register(RuntimeCoreHooks {
+    use framework_kernel::runtime_hooks::{RuntimeCoreHooks, TelemetryHooks, HostProviderHooks};
+    framework_kernel::runtime_hooks::register(RuntimeCoreHooks {
         telemetry: TelemetryHooks {
             hook_fired: |_, _| {},
             tool_call: |_, _, _| {},

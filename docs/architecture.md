@@ -1,5 +1,5 @@
 ---
-last_verified: "2026-06-25"
+last_verified: "2026-06-27"
 ---
 
 # 架构规约
@@ -17,13 +17,13 @@ last_verified: "2026-06-25"
 | **P5** | 跨层通信通过 L0 或函数指针 | 不在高层硬编码低层细节 |
 | **P6** | L0–L7 承载实质运行域 | 每层有明确的物理 crate 归属 |
 | **P7** | Feature 层可插拔 | feature-gate 编译期可选，不硬编码宿主名 |
-| **P8** | L0 完全无上层依赖 | 所有 L0 crate（6 个）零 L1-L7 依赖 |
+| **P8** | L0 完全无上层依赖 | 所有 L0 crate（7 个）零 L1-L7 依赖 |
 | **P9** | 基础设施碎片收敛到唯一实现 | 每项功能只应有一个定义（§6） |
 | **P10** | 函数指针注册表后备语义为 no-op | 不 panic，不硬阻断 |
 
 ### 1.2 Hook 通信模型
 
-函数指针注册表（`framework-runtime-hooks`）是 L0 的一部分，作为跨层通信机制被 L4–L7 消费。注册方向（高层→L0）与调用方向（L0→高层）**相反**，这是依赖方向合规的关键设计。未注册的 slot 通过 `try_hooks()` 静默走 fallback/no-op。
+函数指针注册表（`framework-kernel::runtime_hooks`）是 L0 的一部分，作为跨层通信机制被 L4–L7 消费。注册方向（高层→L0）与调用方向（L0→高层）**相反**，这是依赖方向合规的关键设计。未注册的 slot 通过 `try_hooks()` 静默走 fallback/no-op。
 
 ```
 L4–L7 ──register(hooks)──→ L0 RuntimeCoreHooks [OnceLock]
@@ -45,12 +45,12 @@ L0 hook 事件到来 ──────────→ hooks 方法调用 → L4
 |----|------|-----------|
 | L7 | Bridge / Dispatch — stdio 分发、聚合 facade | `runtime-core`, `router-rs` |
 | L6 | Orchestration — RFV 闭环、可选自动化 | `loop-engine`, `session-supervisor`, `framework-extra` |
-| L5 | Hook Infrastructure — 事件路由、MCP 桥、fn-pointer 消费 | `host-projection`, `runtime-exit-gate`, `runtime-infra`, `mcp-tool-registry` |
+| L5 | Hook Infrastructure — 事件路由、MCP 桥、fn-pointer 消费 | `host-projection`, `runtime-infra`, `mcp-tool-registry` |
 | L4 | State Management — Task Engine、路由、skill-layer | `core-state`, `routing-engine`, `skill-layer` |
 | L3 | Execution — LLM 实时执行、沙箱 | `fr-exec`, `browser-mcp` |
-| L2 | Contracts — 验证规则、守卫合约、纯类型 | `fr-contracts`, `core-state-types`, `runtime-core-contracts` |
+| L2 | Contracts — 验证规则、守卫合约、纯类型 | `fr-contracts`, `core-state-types`, `runtime-core-contracts`, `quality-gate` |
 | L1 | IO & Persistence — 存储后端、trace | `fr-utils`, `runtime-storage`, `trace-runtime` |
-| L0 | Kernel — 纯抽象、策略规则、fn-pointer 注册表 | `framework-kernel`, `core-policy`, `core-state-utils`, `framework-runtime-hooks`, `telemetry-types`, `http-util` |
+| L0 | Kernel — 纯抽象、策略规则、fn-pointer 注册表 | `framework-kernel`, `core-policy`, `core-state-utils`, `telemetry-types`, `http-util`, `telemetry-emit`, `browser-mcp-dispatch` |
 
 ---
 
@@ -82,7 +82,6 @@ L7       ✓   ✓   ✓   ✓   ✓   ✓   ✓   ✓
 | L6 | `framework-extra` | 编排控制面：doctor、session_artifacts、snapshot |
 | L6 | `framework-maint` | L6 framework 维护：inline snapshot、maintenance commands |
 | L5 | `host-projection` | Hook 分派、MCP stdio 桥、投影安装 |
-| L5 | `runtime-exit-gate` | Quality gate RFV 循环 |
 | L5 | `runtime-infra` | 运行时初始化、基础 API 门面 |
 | L5 | `mcp-tool-registry` | 统一 MCP 工具注册表 |
 | L5 | `eval-route` | 路由评估框架：validate routing decisions against expected outcomes |
@@ -97,13 +96,13 @@ L7       ✓   ✓   ✓   ✓   ✓   ✓   ✓   ✓
 | L2 | `fr-contracts` | Closeout 验证、执行合约、pre-tool-use 守卫 |
 | L2 | `core-state-types` | 纯类型定义，零内部依赖 |
 | L2 | `runtime-core-contracts` | Hook 事件路由、观测、出站保护；被 L5+ crates 消费
+| L2 | `quality-gate` | Quality Gate 合约：CheckerRegistry、GateChecker trait、场景/严重度类型、GateVerdict |
 | L1 | `fr-utils` | JSON/IO 工具、stdio 操作域注册 |
 | L1 | `runtime-storage` | 文件系统/SQLite/内存后端、路径解析 |
 | L1 | `trace-runtime` | Trace 录制与压紧 |
 | L0 | `framework-kernel` | 时间、根发现、JSON 操作、cli_args、runtime 注册表 |
 | L0 | `core-policy` | Hook 策略、env_flags、review gate、goal 检测 |
 | L0 | `core-state-utils` | IO/path/JSONL 原语，零内部依赖 |
-| L0 | `framework-runtime-hooks` | fn-pointer 注册表 (OnceLock)，跨层通信中枢 |
 | L0 | `telemetry-types` | 纯遥测事件类型 |
 | L0 | `http-util` | HTTP 客户端工厂 |
 | L0 | `telemetry-emit` | 统一遥测发射原语：structured emit、MetricCounter、tracing+telemetry macros |
@@ -180,5 +179,73 @@ L7       ✓   ✓   ✓   ✓   ✓   ✓   ✓   ✓
 | `now_iso()` | `framework_kernel::time` | UTC ISO 8601 时间戳 |
 | HTTP 代理 URL 缓存 | `http_util::cached_proxy_url` | 代理环境变量解析 |
 | 退避公式 | `exponential_backoff` | 几何退避计算 |
+
+---
+
+## 7. Quality Gate Route (QG Route)
+
+### 7.1 概述
+
+QG Route 是 v10 引入的统一质量门评估系统，替代分散的旧质量门（runtime-exit-gate 已删除）。核心模型：
+
+```
+CheckerRegistry (quality-gate, L2)
+    │
+    ├── In-place checkers (runtime-core, L7)
+    │   ├── AdversarialChecker (GENERAL)
+    │   ├── EvidenceChecker (GENERAL/CODE_REVIEW/RESEARCH)
+    │   ├── CorrectnessChecker (CODE_REVIEW)
+    │   ├── SecurityChecker (CODE_REVIEW)
+    │   ├── ScreenshotLayoutChecker (VISUAL)
+    │   └── OverflowChecker (SLIDES)
+    │
+    └── Extern checkers (research-harness, L5, feature-gate=research)
+        ├── Reproducibility (real: runs reproducibility audit on repo)
+        ├── Structure (real: validates LaTeX compilability + cross-references)
+        ├── ProseQC (real: slop detection, hedging analysis on paper text)
+        ├── Literature (real: DOI extraction + reachability verification)
+        └── 6 skeletal (Asymptotic, DimensionalConsistency, Inequality,
+            Statistical, Symbolic, SympyBridge — await extended CheckContext)
+```
+
+### 7.2 架构组件
+
+| 组件 | Crate | 层 | 职责 |
+|------|-------|-----|------|
+| `CheckerRegistry` | `quality-gate` | L2 | 场景分发的 checker 容器、注册与评估 |
+| `GateChecker` trait | `quality-gate` | L2 | Checker 接口：`id()`、`scenes()`、`description()`、`check(ctx)` |
+| `QG_ROUTE` 单例 | `runtime-core::qg_route` | L7 | OnceLock 持有 CheckerRegistry，注册点与评估入口 |
+| `EXTERN_CHECKERS` 钩子 | `runtime-core::qg_route` | L7 | OnceLock&lt;fn&gt; 跨 crate 注册回调，避免循环依赖 |
+| `QGEntry` | `runtime-core::qg_entry` | L7 | 两阶段退出门：Stage 1 防欺诈 + Stage 2 质量门 dispatch |
+
+### 7.3 初始化流程
+
+```
+router-rs-cli (L7)
+    │ set_extern_checkers(research_harness::register_qg_checkers)
+    │
+    ▼
+runtime_core::init_hooks()
+    │
+    ▼
+qg_route::init_qg_route()
+    ├── CheckerRegistry::new()
+    ├── register_checkers(&mut registry)    ← 6 in-place checkers
+    └── EXTERN_CHECKERS.get()(registry)      ← 10 research checkers
+```
+
+使用与 `register_paper_hooks`、`set_browser_dispatch` 相同的 `OnceLock&lt;fn&gt;` 钩子模式，避免 runtime-core 与 research-harness 间的循环依赖。
+
+### 7.4 评估与聚合规则
+
+`evaluate_qg_route(scene, ctx)` 返回 `GateVerdict`：
+
+| 严重度 | 门结果 |
+|--------|--------|
+| P0 / P1 / AdvisoryP3 / AdvisoryP4 (Critical/High) | ❌ Gate 失败（硬阻断） |
+| Warning / C (Medium/Low/Info) | ✅ Advisory 仅 |
+| 无违规 | ✅ 通过 |
+| QG_ROUTE 未初始化 | ✅ 通过（fallback no-op，符合 P10） |
+| 空 registry | ✅ 通过（退化行为） |
 
 归属规则（全满足）：不依赖 L3+ 业务类型、可被 ≥2 crate 独立使用、语义不因宿主而异。L5 不得重复实现 L0/L4 已有功能。

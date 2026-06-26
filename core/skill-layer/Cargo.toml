@@ -2,7 +2,7 @@
 name = "skill-layer"
 version = "0.1.0"
 edition = "2024"
-description = "Skill layer infrastructure: schema, validation, lifecycle, and dependency management."
+description = "Skill layer infrastructure: schema, validation, lifecycle, and dependency management"
 [lints]
 workspace = true
 

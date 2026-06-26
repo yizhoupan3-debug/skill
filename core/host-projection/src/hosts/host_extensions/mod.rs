@@ -22,7 +22,7 @@ pub mod schema_drift;
 // ── HostHookConfig constants (merged from config.rs) ──
 
 /// Get the registered hook events for a host from the HostProvider registry.
-/// Used by runtime-exit-gate schema drift validation.
+/// Used by schema drift validation (migrated to runtime-core, Wave 4a-ii).
 pub fn host_registered_hook_events(host_id: &str) -> &'static [&'static str] {
     crate::hosts::host_provider_for_id(host_id)
         .map(|p| p.registered_hook_events())

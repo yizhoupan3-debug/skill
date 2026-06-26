@@ -9,7 +9,6 @@ use routing_engine::route::{
     RouteDecision, SkillRecord, filter_records_for_host, literal_framework_alias_decision,
     normalize_text, route_task, tokenize_route_text,
 };
-use runtime_infra::telemetry_emit;
 
 pub fn route_task_with_manifest_fallback(
     runtime_records: &[SkillRecord],
@@ -23,10 +22,8 @@ pub fn route_task_with_manifest_fallback(
     let normalized = normalize_text(query);
     let tokens = tokenize_route_text(query);
     if let Some(decision) = literal_framework_alias_decision(&scoped_runtime, query, &normalized, &tokens, session_id) {
-        telemetry_emit::emit_route_decision(query, &decision, false, 0, "");
         return Ok(decision);
     }
     let decision = route_task(&scoped_runtime, query, session_id, allow_overlay, first_turn)?;
-    telemetry_emit::emit_route_decision(query, &decision, false, 0, "");
     Ok(decision)
 }

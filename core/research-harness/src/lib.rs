@@ -53,3 +53,20 @@ pub mod workspace;
 /// Safe to call multiple times — internal `OnceLock` guards make repeated
 /// registration calls no-ops.
 pub use hooks::init::init_hooks;
+
+/// Register all research verification gate checkers into the QG Route registry.
+///
+/// Call this during application bootstrap (after `init_qg_route()`) to register
+/// RESEARCH-scene checkers from research-harness into the shared CheckerRegistry.
+pub fn register_qg_checkers(registry: &mut quality_gate::CheckerRegistry) {
+    registry.register(quality_gate::scene::RESEARCH, Box::new(verification::asymptotic_gate::Asymptotic));
+    registry.register(quality_gate::scene::RESEARCH, Box::new(verification::formal_gate::DimensionalConsistency));
+    registry.register(quality_gate::scene::RESEARCH, Box::new(verification::inequality_gate::Inequality));
+    registry.register(quality_gate::scene::RESEARCH, Box::new(verification::literature_gate::Literature));
+    registry.register(quality_gate::scene::RESEARCH, Box::new(verification::prose_qc_gate::ProseQCChecker));
+    registry.register(quality_gate::scene::RESEARCH, Box::new(verification::reproducibility_gate::Reproducibility));
+    registry.register(quality_gate::scene::RESEARCH, Box::new(verification::statistical_gate::StatisticalChecker));
+    registry.register(quality_gate::scene::RESEARCH, Box::new(verification::structure_gate::Structure));
+    registry.register(quality_gate::scene::RESEARCH, Box::new(verification::symbolic_gate::Symbolic));
+    registry.register(quality_gate::scene::RESEARCH, Box::new(verification::sympy_bridge_gate::SympyBridge));
+}

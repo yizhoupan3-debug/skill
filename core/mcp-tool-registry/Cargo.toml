@@ -2,7 +2,7 @@
 name = "mcp-tool-registry"
 version = "0.1.0"
 edition = "2024"
-description = "Unified MCP tool registry: discovery and record loading for all framework tools."
+description = "Unified MCP tool registry: discovery and record loading for all framework tools"
 [lints]
 workspace = true
 

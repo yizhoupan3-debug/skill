@@ -4,5 +4,5 @@
 //! Extracted from `runtime-core/src/infrastructure/` per ADR-010 §10.3.
 
 pub mod kernel_bootstrap;
+pub mod kernel_utils;
 pub mod stdio_transport;
-pub mod telemetry_emit;

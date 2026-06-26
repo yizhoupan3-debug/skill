@@ -2,7 +2,7 @@
 name = "runtime-infra"
 version = "0.1.0"
 edition = "2024"
-description = "L5 运行时基础设施 (env/path/time/io/sync/compute/bootstrap) — 实际依赖 L5 host-projection/runtime-exit-gate，从 L4 升级"
+description = "L5 runtime infrastructure: env/path/time/io/sync/compute/bootstrap"
 [lints]
 workspace = true
 
@@ -20,7 +20,6 @@ routing-engine = { path = "../routing-engine" }
 # L4
 fr-exec = { path = "../fr-exec" }
 fr-utils = { path = "../fr-utils" }
-runtime-exit-gate = { path = "../runtime-exit-gate" }
 runtime-storage = { path = "../runtime-storage" }
 
 # workspace

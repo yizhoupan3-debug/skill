@@ -257,7 +257,7 @@ pub fn run_framework_doctor(repo_root: &Path) -> Result<DoctorResult, FrameworkE
     );
 
     println!("\n--- Codex hooks duplication (operator) ---");
-    for line in framework_runtime_hooks::check_hook_duplicates(repo_root) {
+    for line in framework_kernel::runtime_hooks::check_hook_duplicates(repo_root) {
         println!("{line}");
         // Lines from this helper are warnings by convention.
         warns.push(line);

@@ -30,8 +30,8 @@ pub fn emit_rfv_round(round: u32, verdict: &str) {
 }
 
 /// Emit a `ToolCall` event (raw — no bootstrap guard).
-/// Callers at L4+ should use `runtime-infra::telemetry_emit::emit_tool_call`
-/// which calls `ensure_kernel_bootstrap()` first.
+/// Call `ensure_kernel_bootstrap()` before calling this if called from L4+.
+/// `runtime-infra::telemetry_emit` was deleted in Wave 2d — callers now use this crate directly.
 pub fn emit_tool_call(tool: &str, duration_ms: u64, success: bool) {
     crate::emit_telemetry(&TelemetryEvent::ToolCall {
         tool: tool.to_string(),

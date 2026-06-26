@@ -64,7 +64,7 @@ cargo run -p observer-rs -- snapshot -m skills/SKILL_MANIFEST.json \
 
 - `artifacts/observer/analysis.json` — aggregate metrics + per-skill stats + recommendations
 - `artifacts/observer/health-score.json` — per-skill blended health scores
-- `artifacts/observer/alerts.jsonl` — online threshold breach alerts (written by TelemetryObserver in fr-exec)
+- `artifacts/observer/alerts.jsonl` — online threshold breach alerts (TelemetryObserver removed per Wave 2d; output no longer actively generated)
 
 ## Maintenance
 

@@ -2,7 +2,7 @@
 name = "routing-engine"
 version = "0.1.0"
 edition = "2024"
-description = "Skill routing engine: 16-step scoring pipeline, routing, search, and evaluation for skill routing."
+description = "Skill routing engine: 16-step scoring pipeline, routing, search, and evaluation for skill routing"
 [lints]
 workspace = true
 

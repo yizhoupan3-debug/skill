@@ -87,7 +87,7 @@ pub fn quality_gate_manage_dispatch(
         ))),
     }
 
-    // Delegate to the registered quality gate hook (runtime_exit_gate)
+    // Delegate to the registered quality gate hook (replaced by QG Route wrapper, Wave 4a-ii)
     let result = match host_projection::hooks::quality_gate_drive_registered() {
         Some(f) => f(payload)?,
         None => return Err(FrameworkError::validation(

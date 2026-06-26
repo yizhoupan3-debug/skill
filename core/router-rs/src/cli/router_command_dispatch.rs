@@ -49,7 +49,6 @@ use runtime_core::trace_runtime::{
 };
 use host_projection::hosts::hook_dispatch::{HookEvent, HookOutput};
 use host_projection::hooks::read_stdin_limited;
-use runtime_core::telemetry_emit::{emit_hook_fired, hook_action_from_optional_output};
 
 use runtime_core::runtime_storage::RuntimeStorageRequestPayload;
 
@@ -560,12 +559,6 @@ fn dispatch_host_hook(host_id: &str, event: &str, repo_root: Option<&Path>) -> R
 
     // Emit hook timing telemetry + tracing::debug! to stderr
     runtime_core::hook_timing::emit_hook_timing_line(event);
-
-    // Emit tool telemetry
-    let telemetry_event = event.to_ascii_lowercase();
-    if telemetry_event.contains("tool") {
-        emit_hook_fired(&telemetry_event, hook_action_from_optional_output(Some(&json_output)));
-    }
 
     print_json_value(&json_output)?;
     Ok(())

@@ -21,6 +21,10 @@ pub mod stdio_payload_types;
 // ── migrated from framework-profile crate ──
 pub mod framework_profile;
 
+// ── runtime hooks: migrated from framework-runtime-hooks crate (Wave 3b) ──
+// Placed in L0 to break circular deps — all consumers already depend on framework-kernel.
+pub mod runtime_hooks;
+
 pub use telemetry::{
     LogAggregator, LogAggregatorHandle, MpscTelemetryWriter, PredictionOutcomeCheck,
     TelemetryEvent, TelemetryWriter, emit_telemetry, global_telemetry_writer,

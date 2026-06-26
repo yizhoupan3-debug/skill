@@ -41,9 +41,7 @@ members = [
     "core/browser-mcp-dispatch",
     "tools/browser-mcp",
     "core/host-projection",
-    "core/framework-runtime-hooks",
     "core/framework-extra",
-    "core/runtime-exit-gate",
     "core/runtime-infra",
     "core/loop-engine",
     "core/research-harness",
@@ -54,7 +52,8 @@ members = [
     "core/skill-layer",
     "core/routing-core",
     "core/tool-routing-engine",
-    "core/http-util"]
+    "core/http-util",
+    "core/quality-gate"]
 exclude = [
     "codex-aggregator"
 ]

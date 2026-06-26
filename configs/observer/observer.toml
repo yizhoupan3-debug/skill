@@ -25,7 +25,7 @@ static_blend = 0.4
 top_ngram_candidates = 10
 
 # Online observer thresholds (TelemetryObserver in framework-runtime)
-# These are also used as defaults in telemetry_observer.rs
+# `telemetry_observer.rs` was deleted in Wave 2d — these defaults live in the Rust code.
 [observer.online]
 window_capacity = 256
 reroute_rate_alert = 0.35

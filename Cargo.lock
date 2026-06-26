@@ -630,23 +630,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "evolution-rs"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "chrono",
- "clap",
- "fs2",
- "hex",
- "serde",
- "serde_json",
- "sha2 0.11.0",
- "telemetry-types",
- "toml",
- "tracing",
-]
-
-[[package]]
 name = "fallible-iterator"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -704,7 +687,6 @@ dependencies = [
  "ctor",
  "fr-utils",
  "framework-kernel",
- "framework-runtime-hooks",
  "hex",
  "insta",
  "serde",
@@ -775,7 +757,6 @@ dependencies = [
  "fr-exec",
  "fr-utils",
  "framework-kernel",
- "framework-runtime-hooks",
  "hex",
  "host-projection",
  "insta",
@@ -820,14 +801,6 @@ dependencies = [
  "host-projection",
  "serde_json",
  "tracing",
-]
-
-[[package]]
-name = "framework-runtime-hooks"
-version = "0.1.0"
-dependencies = [
- "core-errors",
- "serde_json",
 ]
 
 [[package]]
@@ -1686,6 +1659,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "observer-rs"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "clap",
+ "fs2",
+ "hex",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "telemetry-types",
+ "toml",
+ "tracing",
+]
+
+[[package]]
 name = "once_cell"
 version = "1.21.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1842,6 +1832,16 @@ dependencies = [
  "rusty-fork",
  "tempfile",
  "unarray",
+]
+
+[[package]]
+name = "quality-gate"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]
@@ -2112,6 +2112,7 @@ dependencies = [
  "framework-kernel",
  "host-projection",
  "minilp",
+ "quality-gate",
  "regex",
  "reqwest",
  "rusqlite",
@@ -2120,6 +2121,7 @@ dependencies = [
  "serde_yml",
  "sha2 0.11.0",
  "tempfile",
+ "tokio",
  "tracing",
 ]
 
@@ -2225,7 +2227,6 @@ dependencies = [
  "framework-extra",
  "framework-kernel",
  "framework-maint",
- "framework-runtime-hooks",
  "fs2",
  "hex",
  "host-projection",
@@ -2233,13 +2234,13 @@ dependencies = [
  "libc",
  "loop-engine",
  "mcp-tool-registry",
+ "quality-gate",
  "rayon",
  "regex",
  "reqwest",
  "routing-core",
  "routing-engine",
  "runtime-core-contracts",
- "runtime-exit-gate",
  "runtime-infra",
  "runtime-storage",
  "rusqlite",
@@ -2249,6 +2250,7 @@ dependencies = [
  "session-supervisor",
  "sha2 0.11.0",
  "tempfile",
+ "tokio",
  "tool-routing-engine",
  "trace-runtime",
  "tracing",
@@ -2272,27 +2274,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "runtime-exit-gate"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "core-policy",
- "core-state",
- "core-state-utils",
- "fr-contracts",
- "fr-exec",
- "framework-kernel",
- "fs2",
- "hex",
- "host-projection",
- "runtime-core-contracts",
- "serde",
- "serde_json",
- "sha2 0.11.0",
- "tracing",
-]
-
-[[package]]
 name = "runtime-infra"
 version = "0.1.0"
 dependencies = [
@@ -2304,7 +2285,6 @@ dependencies = [
  "framework-kernel",
  "host-projection",
  "routing-engine",
- "runtime-exit-gate",
  "runtime-storage",
  "serde",
  "serde_json",

@@ -23,28 +23,30 @@ Unified research harness crate for the skill framework. Integrates paper revisio
 
 ## Dependencies
 
-- `core-state` (leaf crate, no cycle risk)
-- `loop-engine` (generic loop scheduler)
+- `core-state`, `core-state-utils`, `core-policy` (leaf crates, no cycle risk)
+- `framework-kernel` (L0 kernel utilities)
+- `host-projection` (L5 hook dispatch via function pointers)
+- `fr-utils` (constants, types)
 - Common workspace deps (anyhow, chrono, reqwest, rusqlite, serde, regex, ...)
 
-**不依赖** `runtime-core`，避免循环依赖。
-`runtime-core` 可通过函数指针调用 `research-harness` 的 hook 接口。
+Does **not** depend on `runtime-core` — avoids circular dependency.
+`runtime-core` can call `research-harness` hook interfaces through `host-projection` function pointers.
 
 ## MCP Tools
 
-通过 `host-projection` 的 `mcp_stdio_harness` 暴露：
+Exposed through `host-projection`'s `mcp_stdio_harness`:
 
-- `research_review_dimensions` — 获取审稿维度 prompt + checklist
-- `research_aigc_check` — AIGC 检测（0-100 评分 + 信号列表）
-- `research_aigc_humanize` — AIGC 降重（句法改写/词汇替换）
-- `research_claim_drift` — Claim 漂移检测（原始 vs 当前声明）
-- `research_review_loop` — 多轮对抗审稿循环
+- `research_review_dimensions` — Get review dimension prompts and checklists
+- `research_aigc_check` — AIGC detection (0-100 score + signal list)
+- `research_aigc_humanize` — AIGC reduction (syntactic rewriting / lexical substitution)
+- `research_claim_drift` — Claim drift detection (original vs current claims)
+- `research_review_loop` — Multi-round adversarial review loop
 
-## 向后兼容
+## Backward Compatibility
 
-- `research-harness` 保留为独立 binary（thin CLI wrapper 待完成）
-- `host-projection` 的 hook 注册可渐进迁移为调用 `research_harness::hooks`
-- 所有现有 MCP tool 名称不变，调用方无感知
+- `research-harness` remains as an independent binary (thin CLI wrapper pending)
+- `host-projection` hook registration can be incrementally migrated to `research_harness::hooks`
+- All existing MCP tool names remain unchanged; callers are unaffected
 
 ## Building
 

@@ -352,8 +352,10 @@ fn stdio_framework_goal_drive_roundtrip() {
 }
 
 
+use runtime_core::qg_route::init_qg_route;
 #[test]
 fn stdio_framework_quality_gate_roundtrip() {
+    init_qg_route();
     let repo_root = temp_dir_path("stdio-rfv-loop");
     let _ = fs::remove_dir_all(&repo_root);
     let output_dir = repo_root.join("artifacts").join("current");
@@ -379,30 +381,15 @@ fn stdio_framework_quality_gate_roundtrip() {
             "operation": "start",
             "task_id": "rfv-stdio-task",
             "goal": "deepen RFV",
-            "max_rounds": 100u64,
-            "allow_external_research": true,
-            "verify_commands": ["cargo test -q"],
         }
     });
     let line = serde_json::to_string(&start).expect("serialize");
     let response = handle_stdio_json_line(&line);
     assert!(response.ok, "{:?}", response.error);
     let body = response.payload.expect("payload");
-    assert_eq!(body["goal_state_cleared"], json!(false));
-
-    let path = repo_root.join("artifacts/current/rfv-stdio-task/RFV_LOOP_STATE.json");
-    assert!(path.is_file(), "missing {}", path.display());
-
-    assert_eq!(
-        body["quality_gate_state"]["prefer_structured_external_research"],
-        json!(true),
-        "prefer_structured defaults true when allow_external_research=true"
-    );
-    assert_eq!(
-        body["quality_gate_state"]["external_research_strict"],
-        json!(true),
-        "external_research_strict defaults true in persisted RFV state"
-    );
+    // Old QG state machine deleted (Wave 4a-ii). Now returns GateVerdict from QG Route.
+    assert!(body.get("passed").is_some(), "GateVerdict should have passed field");
+    assert!(body.get("checkers_ran").is_some(), "GateVerdict should have checkers_ran");
 
     let _ = fs::remove_dir_all(&repo_root);
 }

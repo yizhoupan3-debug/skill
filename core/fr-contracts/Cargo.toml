@@ -12,7 +12,6 @@ core-policy = { path = "../core-policy" }
 core-state-types = { path = "../core-state-types" }
 framework-kernel = { path = "../framework-kernel" }
 hex.workspace = true
-framework-runtime-hooks = { path = "../framework-runtime-hooks" }
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true

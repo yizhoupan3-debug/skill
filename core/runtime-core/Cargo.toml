@@ -18,7 +18,6 @@ core-state-utils = { path = "../core-state-utils" }
 core-policy = { path = "../core-policy", features = ["dev-exempt", "test-sync"] }
 framework-extra = { path = "../framework-extra" }
 framework-kernel = { path = "../framework-kernel" }
-framework-runtime-hooks = { path = "../framework-runtime-hooks" }
 framework-maint = { path = "../framework-maint" }
 host-projection = { path = "../host-projection" }
 fr-utils = { path = "../fr-utils" }
@@ -27,7 +26,6 @@ fr-exec = { path = "../fr-exec" }
 routing-core = { path = "../routing-core" }
 routing-engine = { path = "../routing-engine" }
 runtime-core-contracts = { path = "../runtime-core-contracts" }
-runtime-exit-gate = { path = "../runtime-exit-gate" }
 runtime-infra = { path = "../runtime-infra" }
 runtime-storage = { path = "../runtime-storage" }
 session-supervisor = { path = "../session-supervisor" }
@@ -44,6 +42,7 @@ rusqlite.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
+tokio.workspace = true
 tungstenite.workspace = true
 tracing.workspace = true
 which.workspace = true
@@ -51,6 +50,7 @@ codegraph-rs = { path = "../codegraph-rs", optional = true }
 eval-route = { path = "../eval-route" }
 loop-engine = { path = "../loop-engine" }
 mcp-tool-registry = { path = "../mcp-tool-registry" }
+quality-gate = { path = "../quality-gate" }
 tool-routing-engine = { path = "../tool-routing-engine" }
 
 [build-dependencies]

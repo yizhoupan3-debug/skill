@@ -22,7 +22,6 @@ framework-kernel = { path = "../framework-kernel" }
 fr-utils = { path = "../fr-utils" }
 fr-contracts = { path = "../fr-contracts" }
 fr-exec = { path = "../fr-exec" }
-framework-runtime-hooks = { path = "../framework-runtime-hooks" }
 trace-runtime = { path = "../trace-runtime" }
 runtime-core-contracts = { path = "../runtime-core-contracts" }
 runtime-storage = { path = "../runtime-storage" }

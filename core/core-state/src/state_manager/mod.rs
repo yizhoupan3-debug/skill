@@ -41,7 +41,7 @@ pub use pointer_ops::{
 
 // Re-export from quality_gate_ops (primary names)
 pub use quality_gate_ops::{
-    deactivate_goal_for_conflict_with_quality_gate, quality_gate_state_path, read_quality_gate_state,
+    quality_gate_state_path, read_quality_gate_state,
 };
 // Re-export from goal_ops
 pub use goal_ops::{
@@ -1100,37 +1100,6 @@ mod tests {
 
         let err = read_quality_gate_state(&repo, Some("   ")).expect_err("empty override");
         assert!(err.contains("empty"));
-
-        let _ = fs::remove_dir_all(&repo);
-    }
-
-    #[test]
-    fn deactivate_goal_for_conflict_with_rfv_marks_superseded() {
-        let suffix = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("time")
-            .as_nanos();
-        let repo = std::env::temp_dir().join(format!("core-state-goal-rfv-{suffix}"));
-        let _ = fs::remove_dir_all(&repo);
-        fs::create_dir_all(repo.join("artifacts/current/g-rfv")).expect("mkdir");
-        let goal_path = repo.join("artifacts/current/g-rfv/GOAL_STATE.json");
-        crate::utils::atomic_write::write_atomic_json(
-            &goal_path,
-            &json!({
-                "schema_version": GOAL_STATE_SCHEMA_VERSION,
-                "status": "running",
-                "goal": "ship",
-            }),
-        )
-        .expect("goal");
-
-        let changed = deactivate_goal_for_conflict_with_quality_gate(&repo, "g-rfv").expect("deactivate");
-        assert!(changed);
-        let st = read_goal_state(&repo, Some("g-rfv"))
-            .expect("read")
-            .expect("state");
-        assert_eq!(st["status"], json!("superseded"));
-        assert_eq!(st["metadata"]["superseded_by"], json!("quality_gate"));
 
         let _ = fs::remove_dir_all(&repo);
     }

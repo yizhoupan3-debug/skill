@@ -108,18 +108,7 @@ pub fn evaluate_closeout_record(record: &CloseoutRecord) -> CloseoutEnforcementR
         &mut violations,
     );
 
-    // @later(v7.2): task-scoped depth / `GOAL_STATE.completion_gates` alignment
-    // Phase 3 pointer consolidation (3B/3C) completed 2026-06-02.
-    // Next: re-evaluate closeout vs completion_gates alignment -- state model simplified
-    //   (5 files -> 2 control-plane anchors), closeout gate should align with
-    //   GOAL_STATE.completion_gates.min_depth_score against depth_compliance_aggregate output.
-
-    // R7 (depth review P0-B): verification_status=passed but record carries no command evidence
-    // and the optional EvidenceContext (when supplied by orchestrator) shows no successful
-    // EVIDENCE_INDEX rows either. Pure self-attestation should not be enough to claim "passed".
-    // The context-aware overload `evaluate_closeout_record_with_context` enforces this; here we
-    // emit only the record-internal half so the rule is documented and `commands_run`-empty
-    // claims at least surface a violation when no risks are acknowledged.
+    // R7 — record-internal half: verification_status=passed with no commands_run and no risks
     validate_r7_claimed_passed_without_evidence(record, &status_lower, &mut violations, &mut missing);
 
     build_closeout_response(record, &status_lower, claimed_completion, violations, missing)
@@ -477,7 +466,7 @@ fn append_prediction_verification(
             });
     }
     if !checks.is_empty() {
-        framework_runtime_hooks::hooks().emit_prediction_outcome(
+        framework_kernel::runtime_hooks::hooks().emit_prediction_outcome(
             &response.task_id,
             &format!("prediction: {} => {}", prediction.expected_verification_status.as_deref().unwrap_or("?"), prediction.hypothesis.as_deref().unwrap_or("?")),
             verification_status,
