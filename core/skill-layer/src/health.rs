@@ -1,6 +1,7 @@
 //! Health manifest generation for SKILL_HEALTH_MANIFEST.json.
 
 use crate::constants;
+use core_errors::FrameworkError;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
@@ -10,6 +11,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
+
+pub type Result<T> = std::result::Result<T, FrameworkError>;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct HealthEntry {
@@ -30,36 +33,6 @@ struct HealthManifest {
     generated_at: String,
     skills: std::collections::HashMap<String, HealthEntry>,
 }
-
-#[derive(Debug)]
-pub enum HealthError {
-    Io(std::io::Error),
-    Json(serde_json::Error),
-}
-
-impl std::fmt::Display for HealthError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Io(e) => write!(f, "I/O error: {e}"),
-            Self::Json(e) => write!(f, "JSON error: {e}"),
-        }
-    }
-}
-
-impl std::error::Error for HealthError {}
-
-impl From<std::io::Error> for HealthError {
-    fn from(e: std::io::Error) -> Self {
-        Self::Io(e)
-    }
-}
-
-impl From<serde_json::Error> for HealthError {
-    fn from(e: serde_json::Error) -> Self {
-        Self::Json(e)
-    }
-}
-
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -71,7 +44,7 @@ impl From<serde_json::Error> for HealthError {
 /// `repo_root` is the project root (parent of `skills/`).
 pub fn generate_health_manifest(
     repo_root: &Path,
-) -> Result<(), HealthError> {
+) -> Result<()> {
     let skills_root = crate::paths::skills_root(repo_root);
     let manifest_path = crate::paths::health_json(repo_root);
 
@@ -116,9 +89,9 @@ pub fn generate_health_manifest(
         skills,
     };
 
-    let json_val = serde_json::to_value(&manifest).map_err(HealthError::Json)?;
+    let json_val = serde_json::to_value(&manifest)?;
     core_state_utils::atomic_write::write_atomic_json(&manifest_path, &json_val)
-        .map_err(|e| HealthError::Io(std::io::Error::other(e)))?;
+        .map_err(|e| std::io::Error::other(e))?;
     tracing::info!(
         "health manifest: wrote {} entries to {}",
         manifest.skills.len(),

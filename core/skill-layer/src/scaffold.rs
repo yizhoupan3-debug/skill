@@ -3,7 +3,7 @@
 use crate::frontmatter::{
     RecordKind, RoutingGate, RoutingLayer, RoutingOwner, RoutingPriority, SessionStart,
 };
-use std::fmt;
+use core_errors::FrameworkError;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -43,30 +43,7 @@ pub struct ScaffoldResult {
 // Errors
 // ---------------------------------------------------------------------------
 
-#[derive(Debug)]
-pub enum ScaffoldError {
-    /// The skill directory already exists.
-    AlreadyExists(PathBuf),
-    /// I/O error during file creation.
-    Io(std::io::Error),
-}
-
-impl fmt::Display for ScaffoldError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::AlreadyExists(p) => write!(f, "skill directory already exists: {}", p.display()),
-            Self::Io(e) => write!(f, "I/O error: {e}"),
-        }
-    }
-}
-
-impl std::error::Error for ScaffoldError {}
-
-impl From<std::io::Error> for ScaffoldError {
-    fn from(e: std::io::Error) -> Self {
-        Self::Io(e)
-    }
-}
+pub type Result<T> = std::result::Result<T, FrameworkError>;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -201,13 +178,16 @@ source: local
 pub fn scaffold_skill(
     skills_root: &Path,
     opts: &ScaffoldOptions,
-) -> Result<ScaffoldResult, ScaffoldError> {
+) -> Result<ScaffoldResult> {
     crate::validate::validate_skill_name(&opts.name).map_err(|e| {
-        ScaffoldError::Io(std::io::Error::new(std::io::ErrorKind::InvalidInput, e))
+        std::io::Error::new(std::io::ErrorKind::InvalidInput, e)
     })?;
     let skill_dir = skills_root.join(&opts.name);
     if skill_dir.exists() {
-        return Err(ScaffoldError::AlreadyExists(skill_dir));
+        return Err(FrameworkError::validation(format!(
+            "skill directory already exists: {}",
+            skill_dir.display()
+        )));
     }
 
     fs::create_dir_all(&skill_dir)?;
@@ -233,7 +213,7 @@ pub fn register_and_generate(
     repo_root: &Path,
     slug: &str,
     opts: &ScaffoldOptions,
-) -> Result<(), String> {
+) -> std::result::Result<(), String> {
     use serde_json::json;
     use std::collections::HashMap;
 
@@ -332,7 +312,7 @@ pub fn register_and_generate(
 pub fn register_framework_command_in_runtime_registry(
     repo_root: &Path,
     slug: &str,
-) -> Result<(), String> {
+) -> std::result::Result<(), String> {
     let runtime_registry_path = repo_root.join("configs/framework/RUNTIME_REGISTRY.json");
     let text = fs::read_to_string(&runtime_registry_path)
         .map_err(|e| format!("read RUNTIME_REGISTRY.json: {e}"))?;
@@ -397,10 +377,13 @@ pub fn register_framework_command_in_runtime_registry(
 pub fn scaffold_dry_run(
     skills_root: &Path,
     opts: &ScaffoldOptions,
-) -> Result<ScaffoldResult, ScaffoldError> {
+) -> Result<ScaffoldResult> {
     let skill_dir = skills_root.join(&opts.name);
     if skill_dir.exists() {
-        return Err(ScaffoldError::AlreadyExists(skill_dir));
+        return Err(FrameworkError::validation(format!(
+            "skill directory already exists: {}",
+            skill_dir.display()
+        )));
     }
     let skill_md_path = skill_dir.join("SKILL.md");
     Ok(ScaffoldResult {
@@ -448,7 +431,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         scaffold_skill(tmp.path(), &test_opts()).unwrap();
         let err = scaffold_skill(tmp.path(), &test_opts()).unwrap_err();
-        assert!(matches!(err, ScaffoldError::AlreadyExists(_)));
+        assert!(matches!(err, FrameworkError::Validation { .. }));
     }
 
     #[test]

@@ -1,0 +1,15 @@
+[package]
+name = "core-errors"
+version = "0.1.0"
+edition = "2024"
+description = "L0 universal FrameworkError type — shared across all framework crates, zero dependencies beyond serde/thiserror"
+[lints]
+workspace = true
+
+[dependencies]
+serde_json.workspace = true
+serde_yml.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+insta.workspace = true

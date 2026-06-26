@@ -6,6 +6,7 @@
 use crate::frontmatter::{
     RecordKind, RoutingGate, RoutingLayer, RoutingOwner, RoutingPriority, SessionStart,
 };
+use core_errors::FrameworkError;
 use serde::Deserialize;
 use std::fmt;
 
@@ -52,41 +53,25 @@ pub fn extract_body(text: &str) -> Option<&str> {
 /// Error type for frontmatter parsing failures.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FrontmatterError {
-    /// No `---` delimited frontmatter block found.
-    MissingFrontmatter,
-    /// YAML syntax error.
+    /// YAML syntax or validation error.
     ParseError(String),
-    /// A required field is absent.
-    MissingRequiredField(String),
-    /// An enum field has a value not in its allowed set.
-    InvalidEnumValue {
-        field: String,
-        value: String,
-        allowed: Vec<String>,
-    },
 }
 
 impl fmt::Display for FrontmatterError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::MissingFrontmatter => write!(f, "no YAML frontmatter block found"),
-            Self::ParseError(msg) => write!(f, "YAML parse error: {msg}"),
-            Self::MissingRequiredField(field) => {
-                write!(f, "missing required field: {field}")
-            }
-            Self::InvalidEnumValue {
-                field,
-                value,
-                allowed,
-            } => write!(
-                f,
-                "invalid value `{value}` for field `{field}`; allowed: {allowed:?}"
-            ),
+            Self::ParseError(msg) => write!(f, "frontmatter error: {msg}"),
         }
     }
 }
 
 impl std::error::Error for FrontmatterError {}
+
+impl From<FrontmatterError> for FrameworkError {
+    fn from(e: FrontmatterError) -> Self {
+        FrameworkError::validation(e.to_string())
+    }
+}
 
 /// Warning emitted when a frontmatter field passes parse but triggers a
 /// soft constraint (e.g. `trigger_hints` is empty).
@@ -140,15 +125,18 @@ struct RawFrontmatter {
 fn parse_enum<T: std::str::FromStr + fmt::Debug>(
     field: &str,
     raw: Option<&str>,
-) -> Result<T, FrontmatterError>
+) -> std::result::Result<T, FrontmatterError>
 where
     <T as std::str::FromStr>::Err: fmt::Display,
 {
-    let val = raw.ok_or_else(|| FrontmatterError::MissingRequiredField(field.to_string()))?;
-    val.parse::<T>().map_err(|e| FrontmatterError::InvalidEnumValue {
-        field: field.to_string(),
-        value: val.to_string(),
-        allowed: vec![e.to_string()],
+    let val = raw.ok_or_else(|| {
+        FrontmatterError::ParseError(format!("missing required field: {field}"))
+    })?;
+    val.parse::<T>().map_err(|e| {
+        FrontmatterError::ParseError(format!(
+            "invalid value `{}` for field `{field}`: {e}",
+            val,
+        ))
     })
 }
 
@@ -177,9 +165,9 @@ fn parse_trigger_hints(val: &Option<serde_json::Value>) -> Result<Vec<String>, F
 /// fields are missing, or enum values are invalid.
 pub fn parse_frontmatter(
     text: &str,
-) -> Result<crate::frontmatter::SkillFrontmatter, FrontmatterError> {
+) -> std::result::Result<crate::frontmatter::SkillFrontmatter, FrontmatterError> {
     let block = extract_frontmatter_block(text)
-        .ok_or(FrontmatterError::MissingFrontmatter)?;
+        .ok_or(FrontmatterError::ParseError("no YAML frontmatter block found".into()))?;
 
     let raw: RawFrontmatter = serde_yml::from_str(block)
         .map_err(|e| FrontmatterError::ParseError(e.to_string()))?;
@@ -188,11 +176,11 @@ pub fn parse_frontmatter(
     let _name = raw
         .name
         .as_deref()
-        .ok_or_else(|| FrontmatterError::MissingRequiredField("name".into()))?;
+        .ok_or_else(|| FrontmatterError::ParseError("missing required field: name".into()))?;
     let _description = raw
         .description
         .as_deref()
-        .ok_or_else(|| FrontmatterError::MissingRequiredField("description".into()))?;
+        .ok_or_else(|| FrontmatterError::ParseError("missing required field: description".into()))?;
 
     let routing_layer: RoutingLayer =
         parse_enum("routing_layer", raw.routing_layer.as_deref())?;
@@ -252,13 +240,10 @@ pub fn validate_frontmatter(
 /// soft-constraint warnings.
 pub fn parse_and_validate(
     text: &str,
-) -> Result<
-    (
-        crate::frontmatter::SkillFrontmatter,
-        Vec<FrontmatterWarning>,
-    ),
-    FrontmatterError,
-> {
+) -> std::result::Result<(
+    crate::frontmatter::SkillFrontmatter,
+    Vec<FrontmatterWarning>,
+), FrontmatterError> {
     let fm = parse_frontmatter(text)?;
     let warnings = validate_frontmatter(&fm);
     Ok((fm, warnings))
@@ -565,8 +550,8 @@ routing_gate: none
 "#;
         let err = parse_frontmatter(text).unwrap_err();
         assert!(
-            matches!(err, FrontmatterError::MissingRequiredField(_)),
-            "expected MissingRequiredField, got: {err}"
+            matches!(err, FrontmatterError::ParseError(_)),
+            "expected ParseError, got: {err}"
         );
     }
 
@@ -585,8 +570,8 @@ trigger_hints: []
 "#;
         let err = parse_frontmatter(text).unwrap_err();
         assert!(
-            matches!(err, FrontmatterError::InvalidEnumValue { .. }),
-            "expected InvalidEnumValue, got: {err}"
+            matches!(err, FrontmatterError::ParseError(_)),
+            "expected ParseError, got: {err}"
         );
     }
 

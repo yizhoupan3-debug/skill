@@ -1,6 +1,7 @@
 //! Skill discovery: find SKILL.md files, resolve slugs, safe path resolution.
 
 use crate::paths;
+use core_errors::FrameworkError;
 use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -9,43 +10,18 @@ use std::path::{Path, PathBuf};
 // Errors
 // ---------------------------------------------------------------------------
 
-#[derive(Debug)]
-pub enum DiscoveryError {
-    Io(std::io::Error),
-    InvalidSlug(String),
-}
-
-impl std::fmt::Display for DiscoveryError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Io(e) => write!(f, "I/O error: {e}"),
-            Self::InvalidSlug(s) => write!(f, "invalid skill slug: `{s}`"),
-        }
-    }
-}
-
-impl std::error::Error for DiscoveryError {}
-
-impl From<std::io::Error> for DiscoveryError {
-    fn from(e: std::io::Error) -> Self {
-        Self::Io(e)
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Slug discovery (disk scan)
-// ---------------------------------------------------------------------------
+pub type Result<T> = std::result::Result<T, FrameworkError>;
 
 /// Scan `skills_root` recursively and return all slugs that have a SKILL.md.
-///
+
 /// Extracted from `runtime-infra::framework_skills::discover_skill_md_slugs`.
-pub fn discover_skill_md_slugs(skills_root: &Path) -> Result<BTreeSet<String>, DiscoveryError> {
+pub fn discover_skill_md_slugs(skills_root: &Path) -> Result<BTreeSet<String>> {
     let mut slugs = BTreeSet::new();
     walk_skill_md(skills_root, &mut slugs)?;
     Ok(slugs)
 }
 
-fn walk_skill_md(dir: &Path, slugs: &mut BTreeSet<String>) -> Result<(), DiscoveryError> {
+fn walk_skill_md(dir: &Path, slugs: &mut BTreeSet<String>) -> Result<()> {
     for entry in fs::read_dir(dir)? {
         let entry = entry?;
         let path = entry.path();
@@ -68,7 +44,7 @@ fn walk_skill_md(dir: &Path, slugs: &mut BTreeSet<String>) -> Result<(), Discove
 ///
 /// Uses a lightweight extraction (only looks for `name:` key) rather than
 /// the full `parse_frontmatter` parser, since discovery only needs the slug.
-pub fn parse_skill_name_from_path(path: &Path) -> Result<Option<String>, DiscoveryError> {
+pub fn parse_skill_name_from_path(path: &Path) -> Result<Option<String>> {
     let text = fs::read_to_string(path)?;
     // Lightweight: just extract frontmatter block and find name: line
     let Some(block) = crate::frontmatter_parser::extract_frontmatter_block(&text) else {
@@ -99,10 +75,10 @@ pub fn parse_skill_name_from_path(path: &Path) -> Result<Option<String>, Discove
 pub fn safe_skill_md_path(
     skills_root: &Path,
     slug: &str,
-) -> Result<PathBuf, DiscoveryError> {
+) -> Result<PathBuf> {
     // Validate slug characters
     if slug.contains("..") || slug.contains('/') || slug.contains('\\') {
-        return Err(DiscoveryError::InvalidSlug(slug.to_string()));
+        return Err(FrameworkError::validation(format!("invalid skill slug: `{slug}`")));
     }
 
     let path = skills_root.join(slug).join("SKILL.md");
@@ -110,17 +86,17 @@ pub fn safe_skill_md_path(
     // Verify the resolved path is still under skills_root.
     // Both paths must canonicalize successfully — fail-closed against traversal.
     let canonical_skills = fs::canonicalize(skills_root).map_err(|e| {
-        DiscoveryError::InvalidSlug(format!(
+        FrameworkError::validation(format!(
             "skills_root canonicalize failed for slug `{slug}`: {e}"
         ))
     })?;
     let canonical_path = fs::canonicalize(&path).map_err(|e| {
-        DiscoveryError::InvalidSlug(format!(
+        FrameworkError::validation(format!(
             "skill path canonicalize failed for slug `{slug}`: {e}"
         ))
     })?;
     if !canonical_path.starts_with(&canonical_skills) {
-        return Err(DiscoveryError::InvalidSlug(format!(
+        return Err(FrameworkError::validation(format!(
             "path traversal detected: {slug}"
         )));
     }
@@ -234,7 +210,7 @@ mod tests {
     fn safe_path_rejects_traversal() {
         let tmp = tempfile::tempdir().unwrap();
         let err = safe_skill_md_path(tmp.path(), "../etc/passwd").unwrap_err();
-        assert!(matches!(err, DiscoveryError::InvalidSlug(_)));
+        assert!(matches!(err, FrameworkError::Validation { .. }));
     }
 
     #[test]
