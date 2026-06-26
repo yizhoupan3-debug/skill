@@ -10,6 +10,7 @@
 //! `configs/framework/RUNTIME_REGISTRY.json` at compile time. Adding a new host
 //! requires only editing the registry — the generated code stays in sync automatically.
 
+use core_errors::FrameworkError;
 use serde::Deserialize;
 use serde_json::Value;
 use std::fs;
@@ -63,111 +64,111 @@ pub struct RuntimeSkillsDefaults {
     pub source_rel: Option<String>,
 }
 
-pub fn runtime_registry_path(repo_root: &Path) -> Result<PathBuf, String> {
+pub fn runtime_registry_path(repo_root: &Path) -> Result<PathBuf, FrameworkError> {
     let repo_candidate = repo_root.join(RUNTIME_REGISTRY_PATH);
     // Read-first pattern: check existence by attempting to read metadata,
     // avoiding TOCTOU between is_file() and subsequent open.
     match fs::metadata(&repo_candidate) {
         Ok(m) if m.is_file() => Ok(repo_candidate),
-        Ok(_) => Err(format!(
+        Ok(_) => Err(FrameworkError::validation(format!(
             "Runtime registry path exists but is not a file: {}. Expected a regular file at {}.",
             repo_root.to_string_lossy(),
             repo_candidate.to_string_lossy()
-        )),
-        Err(e) => Err(format!(
+        ))),
+        Err(e) => Err(FrameworkError::validation(format!(
             "Runtime registry not found at active workspace root: {}. Expected {}. Fix by opening the framework repo root as the active workspace or passing --framework-root <framework-repo-root>. Error: {e}",
             repo_root.to_string_lossy(),
             repo_candidate.to_string_lossy()
-        )),
+        ))),
     }
 }
 
-pub fn load_runtime_registry_json(framework_root: &Path) -> Result<Value, String> {
+pub fn load_runtime_registry_json(framework_root: &Path) -> Result<Value, FrameworkError> {
     let path = framework_root.join(RUNTIME_REGISTRY_PATH);
     // Read-first pattern: attempt to read directly, avoiding TOCTOU between is_file() and read_to_string().
     let payload = match fs::read_to_string(&path) {
         Ok(payload) => payload,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-            return Err(format!(
+            return Err(FrameworkError::validation(format!(
                 "runtime registry not found under framework root {} (expected {})",
                 framework_root.display(),
                 path.display()
-            ));
+            )));
         }
         Err(e) => {
-            return Err(format!(
+            return Err(FrameworkError::validation(format!(
                 "failed to read runtime registry {}: {e}",
                 path.display()
-            ));
+            )));
         }
     };
     let parsed: Value = serde_json::from_str(&payload).map_err(|e| {
-        format!(
+        FrameworkError::validation(format!(
             "invalid JSON in {}: {e}; see {HOST_ADAPTER_CONTRACT_PATH}",
             path.display()
-        )
+        ))
     })?;
     let sv = parsed
         .get("schema_version")
         .and_then(Value::as_str)
         .ok_or_else(|| {
-            format!(
+            FrameworkError::validation(format!(
                 "RUNTIME_REGISTRY.json missing schema_version at {}",
                 path.display()
-            )
+            ))
         })?;
     if sv != RUNTIME_REGISTRY_SCHEMA_VERSION {
-        return Err(format!(
+        return Err(FrameworkError::validation(format!(
             "unsupported RUNTIME_REGISTRY schema_version {:?} at {}",
             sv,
             path.display()
-        ));
+        )));
     }
     Ok(parsed)
 }
 
-pub fn load_runtime_registry_payload(repo_root: &Path) -> Result<Value, String> {
+pub fn load_runtime_registry_payload(repo_root: &Path) -> Result<Value, FrameworkError> {
     load_runtime_registry_json(repo_root).map_err(|e| {
-        format!(
+        FrameworkError::validation(format!(
             "{e}. If the workspace root differs from the framework repo, \
              pass --framework-root <framework-repo-root> or open the framework repo as the active workspace."
-        )
+        ))
     })
 }
 
 pub fn load_runtime_registry_payload_if_repo_local(
     repo_root: &Path,
-) -> Result<Option<Value>, String> {
+) -> Result<Option<Value>, FrameworkError> {
     let path = repo_root.join(RUNTIME_REGISTRY_PATH);
     // Read-first pattern: avoid TOCTOU between is_file() and read_to_string().
     let payload = match fs::read_to_string(&path) {
         Ok(payload) => payload,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(e) => return Err(format!("read {}: {e}", path.display())),
+        Err(e) => return Err(FrameworkError::validation(format!("read {}: {e}", path.display()))),
     };
-    let parsed = serde_json::from_str::<Value>(&payload).map_err(|err| err.to_string())?;
+    let parsed = serde_json::from_str::<Value>(&payload).map_err(|err| FrameworkError::validation(err.to_string()))?;
     let schema_version = parsed
         .get("schema_version")
         .and_then(Value::as_str)
         .ok_or_else(|| {
-            format!(
+            FrameworkError::validation(format!(
                 "Runtime registry missing schema_version at {}",
                 path.to_string_lossy()
-            )
+            ))
         })?;
     if schema_version != RUNTIME_REGISTRY_SCHEMA_VERSION {
-        return Err(format!(
+        return Err(FrameworkError::validation(format!(
             "Unsupported runtime registry schema_version {:?} at {}",
             schema_version,
             path.to_string_lossy()
-        ));
+        )));
     }
     Ok(Some(parsed))
 }
 
-pub fn load_runtime_registry(repo_root: &Path) -> Result<RuntimeRegistry, String> {
+pub fn load_runtime_registry(repo_root: &Path) -> Result<RuntimeRegistry, FrameworkError> {
     let payload = load_runtime_registry_payload(repo_root)?;
-    serde_json::from_value::<RuntimeRegistry>(payload).map_err(|err| err.to_string())
+    serde_json::from_value::<RuntimeRegistry>(payload).map_err(|err| FrameworkError::validation(err.to_string()))
 }
 
 /// Map MCP stdio host spellings to `host_projections` keys (avoid `hosts` import cycle).

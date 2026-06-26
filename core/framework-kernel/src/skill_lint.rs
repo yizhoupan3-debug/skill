@@ -1,3 +1,4 @@
+use core_errors::FrameworkError;
 use serde_json::{Value, json};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -49,7 +50,7 @@ pub const FAILURE_TAXONOMY: &[(&str, &str)] = &[
     ),
 ];
 
-pub fn lint_skill_contracts(payload: Value) -> Result<Value, String> {
+pub fn lint_skill_contracts(payload: Value) -> Result<Value, FrameworkError> {
     let skills_root = payload
         .get("skills_root")
         .and_then(Value::as_str)
@@ -85,7 +86,7 @@ pub fn lint_skill_contracts(payload: Value) -> Result<Value, String> {
             continue;
         }
         let text = fs::read_to_string(&path)
-            .map_err(|err| format!("read skill {} failed: {err}", path.display()))?;
+            .map_err(|err| FrameworkError::validation(format!("read skill {} failed: {err}", path.display())))?;
         scanned.push(slug.clone());
         lint_one_skill(&slug, &path, &text, &mut findings);
     }

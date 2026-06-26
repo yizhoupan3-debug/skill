@@ -1,5 +1,6 @@
 //! MPSC telemetry pipeline: workers enqueue, Log Aggregator serializes disk writes.
 
+use core_errors::FrameworkError;
 use serde::Serialize;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
@@ -13,7 +14,7 @@ use std::time::{Duration, SystemTime};
 pub use telemetry_types::{PredictionOutcomeCheck, TelemetryEvent};
 
 pub trait TelemetryWriter: Send + Sync {
-    fn write_event(&self, event: &TelemetryEvent) -> Result<(), String>;
+    fn write_event(&self, event: &TelemetryEvent) -> Result<(), FrameworkError>;
 }
 
 /// Worker-side writer: enqueue only; never touches the journal file directly.
@@ -28,10 +29,10 @@ impl MpscTelemetryWriter {
 }
 
 impl TelemetryWriter for MpscTelemetryWriter {
-    fn write_event(&self, event: &TelemetryEvent) -> Result<(), String> {
+    fn write_event(&self, event: &TelemetryEvent) -> Result<(), FrameworkError> {
         self.sender
             .send(event.clone())
-            .map_err(|e| format!("telemetry channel closed: {e}"))
+            .map_err(|e| FrameworkError::validation(format!("telemetry channel closed: {e}")))
     }
 }
 
@@ -125,7 +126,7 @@ struct JournalLine<'a> {
     event: &'a TelemetryEvent,
 }
 
-fn flush_buffer(journal_path: &Path, buffer: &mut Vec<TelemetryEvent>) -> Result<(), String> {
+fn flush_buffer(journal_path: &Path, buffer: &mut Vec<TelemetryEvent>) -> Result<(), FrameworkError> {
     if buffer.is_empty() {
         return Ok(());
     }
@@ -135,7 +136,7 @@ fn flush_buffer(journal_path: &Path, buffer: &mut Vec<TelemetryEvent>) -> Result
             ts: crate::time::now_iso(),
             event,
         };
-        let serialized = serde_json::to_string(&line).map_err(|e| e.to_string())?;
+        let serialized = serde_json::to_string(&line).map_err(FrameworkError::from)?;
         lines.push_str(&serialized);
         lines.push('\n');
     }
@@ -144,10 +145,10 @@ fn flush_buffer(journal_path: &Path, buffer: &mut Vec<TelemetryEvent>) -> Result
             .create(true)
             .append(true)
             .open(journal_path)
-            .map_err(|e| format!("open journal {}: {e}", journal_path.display()))?;
+            .map_err(|e| FrameworkError::validation(format!("open journal {}: {e}", journal_path.display())))?;
         file.write_all(lines.as_bytes())
-            .map_err(|e| format!("append journal: {e}"))?;
-        file.sync_all().map_err(|e| format!("sync journal: {e}"))?;
+            .map_err(|e| FrameworkError::validation(format!("append journal: {e}")))?;
+        file.sync_all().map_err(|e| FrameworkError::validation(format!("sync journal: {e}")))?;
     }
     write_atomic_snapshot(journal_path)?;
     buffer.clear();
@@ -155,10 +156,10 @@ fn flush_buffer(journal_path: &Path, buffer: &mut Vec<TelemetryEvent>) -> Result
 }
 
 /// Point-in-time journal metadata for B11 readers (§4.2 atomic rename).
-fn write_atomic_snapshot(journal_path: &Path) -> Result<(), String> {
+fn write_atomic_snapshot(journal_path: &Path) -> Result<(), FrameworkError> {
     let dir = journal_path
         .parent()
-        .ok_or_else(|| format!("journal path {} has no parent", journal_path.display()))?;
+        .ok_or_else(|| FrameworkError::validation(format!("journal path {} has no parent", journal_path.display())))?;
     let snapshot_path = dir.join("snapshot.json");
     let tmp_path = dir.join("snapshot.json.tmp");
     let bytes = fs::metadata(journal_path).map(|m| m.len()).unwrap_or(0);
@@ -171,11 +172,11 @@ fn write_atomic_snapshot(journal_path: &Path) -> Result<(), String> {
             .map(|d| d.as_secs())
             .unwrap_or(0),
     });
-    let payload = serde_json::to_string(&snapshot).map_err(|e| e.to_string())? + "\n";
+    let payload = serde_json::to_string(&snapshot).map_err(FrameworkError::from)? + "\n";
     fs::write(&tmp_path, payload.as_bytes())
-        .map_err(|e| format!("write snapshot tmp {}: {e}", tmp_path.display()))?;
+        .map_err(|e| FrameworkError::validation(format!("write snapshot tmp {}: {e}", tmp_path.display())))?;
     fs::rename(&tmp_path, &snapshot_path)
-        .map_err(|e| format!("rename snapshot {}: {e}", snapshot_path.display()))?;
+        .map_err(|e| FrameworkError::validation(format!("rename snapshot {}: {e}", snapshot_path.display())))?;
     Ok(())
 }
 
