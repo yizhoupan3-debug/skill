@@ -5,18 +5,21 @@
 use core_policy::error::FrameworkError;
 use serde_json::{Value, json};
 use std::collections::HashMap;
+use std::path::Path;
 
 /// Handle a research MCP tool call.
 /// Delegates to the appropriate research-harness module.
 pub fn handle_research_tool(name: &str, arguments: &Value) -> Result<String, FrameworkError> {
     match name {
         "research_aigc_check" => Ok(tool_research_aigc_check(arguments)?),
-        "research_aigc_humanize" => Ok(tool_research_aigc_humanize(arguments)?),
         "research_review_dimensions" => Ok(tool_research_review_dimensions(arguments)?),
         "research_claim_drift" => Ok(tool_research_claim_drift(arguments)?),
         "research_review_loop" => Ok(tool_research_review_loop(arguments)?),
         "research_smoke" => Ok(tool_research_smoke(arguments)?),
         _ if name.starts_with("math_") => Ok(math_tool_dispatch(name, arguments)?),
+        _ if name.starts_with("research_verification_") => {
+            verification_tool_dispatch(name, arguments)
+        }
         _ => Err(FrameworkError::validation(format!("unknown research tool: {name}"))),
     }
 }
@@ -27,7 +30,6 @@ fn math_tool_dispatch(name: &str, arguments: &Value) -> Result<String, Framework
     match name {
         "math_prove_inequality" => tool_math_prove_inequality(arguments),
         "math_backend_available" => tool_math_backend_available(arguments),
-        "math_backend_status" => tool_math_backend_available(arguments),
         "math_asymptotic_estimate" => tool_math_asymptotic_estimate(arguments),
         "math_asymptotic_chain" => tool_math_asymptotic_chain(arguments),
         "math_proof_dag_init" => tool_math_proof_dag_init(arguments),
@@ -38,6 +40,214 @@ fn math_tool_dispatch(name: &str, arguments: &Value) -> Result<String, Framework
         "math_sympy_simplify" => tool_math_sympy_simplify(arguments),
         "math_lean_verify" => tool_math_lean_verify(arguments),
         _ => Err(FrameworkError::validation(format!("unknown math tool: {name}"))),
+    }
+}
+
+// ── Verification tool sub-dispatch ──
+
+fn verification_tool_dispatch(name: &str, arguments: &Value) -> Result<String, FrameworkError> {
+    match name {
+        "research_verification_literature" => tool_verification_literature(arguments),
+        "research_verification_prose" => tool_verification_prose(arguments),
+        "research_verification_reproducibility" => tool_verification_reproducibility(arguments),
+        "research_verification_statistical" => tool_verification_statistical(arguments),
+        "research_verification_structure" => tool_verification_structure(arguments),
+        _ => Err(FrameworkError::validation(format!("unknown verification tool: {name}"))),
+    }
+}
+
+// ── Literature verification ──
+
+fn tool_verification_literature(arguments: &Value) -> Result<String, FrameworkError> {
+    let check = arguments.get("check").and_then(Value::as_str)
+        .ok_or(FrameworkError::validation("literature verification requires 'check' (doi|claim_coverage)"))?;
+    match check {
+        "doi" => {
+            let doi = arguments.get("doi").and_then(Value::as_str)
+                .ok_or(FrameworkError::validation("doi check requires 'doi' (string)"))?;
+            let reachable = crate::verification::literature::doi_reachable(doi)
+                .map_err(|e| FrameworkError::validation(format!("DOI check failed: {e}")))?;
+            serde_json::to_string_pretty(&json!({
+                "check": "doi_reachability", "doi": doi, "reachable": reachable,
+            })).map_err(FrameworkError::Json)
+        }
+        "claim_coverage" => {
+            let claims: Vec<String> = arguments.get("claims").and_then(Value::as_array)
+                .ok_or(FrameworkError::validation("claim_coverage requires 'claims' array"))?
+                .iter().filter_map(|v| v.as_str().map(String::from)).collect();
+            let references: Vec<String> = arguments.get("references").and_then(Value::as_array)
+                .ok_or(FrameworkError::validation("claim_coverage requires 'references' array"))?
+                .iter().filter_map(|v| v.as_str().map(String::from)).collect();
+            let score = crate::verification::literature::verify_claim_coverage(&claims, &references)
+                .map_err(|e| FrameworkError::validation(format!("claim coverage failed: {e}")))?;
+            serde_json::to_string_pretty(&json!({
+                "check": "claim_coverage", "claims_analyzed": claims.len(),
+                "coverage_score": format!("{:.2}", score), "covered_pct": (score * 100.0).round() as u64,
+            })).map_err(FrameworkError::Json)
+        }
+        _ => Err(FrameworkError::validation(format!("unknown literature check: {check}"))),
+    }
+}
+
+// ── Prose QC ──
+
+fn tool_verification_prose(arguments: &Value) -> Result<String, FrameworkError> {
+    let check = arguments.get("check").and_then(Value::as_str)
+        .ok_or(FrameworkError::validation("prose verification requires 'check' (terminology|slop|hedging)"))?;
+    match check {
+        "terminology" => {
+            let text = arguments.get("text").and_then(Value::as_str)
+                .ok_or(FrameworkError::validation("terminology check requires 'text' (string)"))?;
+            let glossary = arguments.get("glossary").and_then(Value::as_object)
+                .map(|obj| obj.iter().map(|(k, v)| (k.clone(), v.as_str().unwrap_or("").to_string())).collect())
+                .unwrap_or_default();
+            let violations = crate::verification::prose_qc::check_terminology_consistency(text, &glossary)
+                .map_err(|e| FrameworkError::validation(format!("terminology check failed: {e}")))?;
+            serde_json::to_string_pretty(&json!({
+                "check": "terminology_consistency", "violations": violations,
+                "has_violations": !violations.is_empty(),
+            })).map_err(FrameworkError::Json)
+        }
+        "slop" => {
+            let text = arguments.get("text").and_then(Value::as_str)
+                .ok_or(FrameworkError::validation("slop check requires 'text' (string)"))?;
+            let language = arguments.get("language").and_then(Value::as_str).unwrap_or("en");
+            let hits = match language {
+                "zh" | "chinese" => crate::verification::prose_qc::detect_zh_slop(text),
+                _ => crate::verification::prose_qc::detect_en_slop(text),
+            };
+            serde_json::to_string_pretty(&json!({
+                "check": "slop_detection", "language": language,
+                "hits_found": hits.len(), "hits": hits,
+            })).map_err(FrameworkError::Json)
+        }
+        "hedging" => {
+            let text = arguments.get("text").and_then(Value::as_str)
+                .ok_or(FrameworkError::validation("hedging check requires 'text' (string)"))?;
+            let count = crate::verification::prose_qc::count_hedging_words(text);
+            serde_json::to_string_pretty(&json!({
+                "check": "hedging_analysis", "hedging_word_count": count,
+                "suggestion": if count > 5 { "High hedging density — consider firming up language".to_string() }
+                    else if count > 2 { "Moderate hedging — review for unnecessary qualifiers".to_string() }
+                    else { "Hedging count is acceptable".to_string() },
+            })).map_err(FrameworkError::Json)
+        }
+        _ => Err(FrameworkError::validation(format!("unknown prose check: {check}"))),
+    }
+}
+
+// ── Reproducibility verification ──
+
+fn tool_verification_reproducibility(arguments: &Value) -> Result<String, FrameworkError> {
+    let experiment_dir = arguments.get("experiment_dir").and_then(Value::as_str)
+        .ok_or(FrameworkError::validation("reproducibility audit requires 'experiment_dir' (string path)"))?;
+    let dir = Path::new(experiment_dir);
+
+    let run_paths: Option<Vec<&Path>> = arguments.get("run_paths").and_then(Value::as_array)
+        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(Path::new)).collect());
+
+    let report = crate::verification::reproducibility::run_reproducibility_audit(
+        dir, run_paths.as_deref(),
+    ).map_err(|e| FrameworkError::validation(format!("reproducibility audit failed: {e}")))?;
+
+    let checks: Vec<Value> = report.checks.iter().map(|c| {
+        let (status, detail) = match &c.status {
+            crate::verification::reproducibility::CheckStatus::Pass =>
+                ("PASS", String::new()),
+            crate::verification::reproducibility::CheckStatus::Fail(msg) =>
+                ("FAIL", msg.clone()),
+            crate::verification::reproducibility::CheckStatus::Warn(msg) =>
+                ("WARN", msg.clone()),
+            crate::verification::reproducibility::CheckStatus::Skip(msg) =>
+                ("SKIP", msg.clone()),
+        };
+        json!({"name": c.name, "status": status, "detail": detail})
+    }).collect();
+
+    serde_json::to_string_pretty(&json!({
+        "module": "reproducibility", "checks": checks,
+        "all_pass": report.checks.iter().all(|c| matches!(c.status, crate::verification::reproducibility::CheckStatus::Pass)),
+    })).map_err(FrameworkError::Json)
+}
+
+// ── Statistical verification ──
+
+fn tool_verification_statistical(arguments: &Value) -> Result<String, FrameworkError> {
+    let check = arguments.get("check").and_then(Value::as_str)
+        .ok_or(FrameworkError::validation("statistical verification requires 'check' (grim|p_value|multiple_comparison)"))?;
+    match check {
+        "grim" => {
+            let mean = arguments.get("mean").and_then(Value::as_f64)
+                .ok_or(FrameworkError::validation("grim test requires 'mean' (f64)"))?;
+            let n = arguments.get("n").and_then(Value::as_u64)
+                .ok_or(FrameworkError::validation("grim test requires 'n' (u64 sample size)"))?;
+            let decimals = arguments.get("decimals").and_then(Value::as_u64).unwrap_or(2) as usize;
+            let passed = crate::verification::statistical::grim_test(mean, n as usize, decimals)
+                .map_err(|e| FrameworkError::validation(format!("GRIM test failed: {e}")))?;
+            serde_json::to_string_pretty(&json!({
+                "check": "grim_test", "mean": mean, "sample_size": n,
+                "decimals": decimals, "passed": passed,
+                "detail": if passed { "Mean is reconstructible from integer responses".to_string() }
+                    else { format!("SUSPICIOUS: Mean {mean} with n={n} and {decimals} decimal places is not reconstructible from integer granularity") },
+            })).map_err(FrameworkError::Json)
+        }
+        "p_value" => {
+            let observed = arguments.get("observed").and_then(Value::as_f64)
+                .ok_or(FrameworkError::validation("p_value check requires 'observed' (f64)"))?;
+            let expected = arguments.get("expected").and_then(Value::as_f64)
+                .ok_or(FrameworkError::validation("p_value check requires 'expected' (f64)"))?;
+            let tolerance = arguments.get("tolerance").and_then(Value::as_f64).unwrap_or(0.01);
+            let passed = crate::verification::statistical::verify_p_value(observed, expected, tolerance);
+            serde_json::to_string_pretty(&json!({
+                "check": "p_value", "observed": observed, "expected": expected,
+                "tolerance": tolerance, "passed": passed,
+            })).map_err(FrameworkError::Json)
+        }
+        "multiple_comparison" => {
+            let num_tests = arguments.get("num_tests").and_then(Value::as_u64)
+                .ok_or(FrameworkError::validation("multiple_comparison requires 'num_tests' (u64)"))?;
+            let correction_applied = arguments.get("correction_applied").and_then(Value::as_bool).unwrap_or(false);
+            let passed = crate::verification::statistical::check_multiple_comparison_correction(num_tests as usize, correction_applied);
+            serde_json::to_string_pretty(&json!({
+                "check": "multiple_comparison", "num_tests": num_tests,
+                "correction_applied": correction_applied, "passed": passed,
+                "detail": if passed { "OK".to_string() }
+                    else { format!("WARNING: {num_tests} tests performed without multiple comparison correction") },
+            })).map_err(FrameworkError::Json)
+        }
+        _ => Err(FrameworkError::validation(format!("unknown statistical check: {check}"))),
+    }
+}
+
+// ── Structure verification ──
+
+fn tool_verification_structure(arguments: &Value) -> Result<String, FrameworkError> {
+    let check = arguments.get("check").and_then(Value::as_str)
+        .ok_or(FrameworkError::validation("structure verification requires 'check' (latex|figures)"))?;
+    match check {
+        "latex" => {
+            let path = arguments.get("path").and_then(Value::as_str)
+                .ok_or(FrameworkError::validation("latex check requires 'path' (string path to .tex file)"))?;
+            let passed = crate::verification::structure::check_latex_compilable(Path::new(path))
+                .map_err(|e| FrameworkError::validation(format!("LaTeX compilation check failed: {e}")))?;
+            serde_json::to_string_pretty(&json!({
+                "check": "latex_compilation", "path": path, "passed": passed,
+                "detail": if passed { "LaTeX syntax check passed (balanced braces + environments)".to_string() }
+                    else { "LaTeX syntax check FAILED — unbalanced braces or environments".to_string() },
+            })).map_err(FrameworkError::Json)
+        }
+        "figures" => {
+            let path = arguments.get("path").and_then(Value::as_str)
+                .ok_or(FrameworkError::validation("figures check requires 'path' (string path to .tex file)"))?;
+            let missing = crate::verification::structure::check_figure_references(Path::new(path))
+                .map_err(|e| FrameworkError::validation(format!("figure reference check failed: {e}")))?;
+            serde_json::to_string_pretty(&json!({
+                "check": "figure_references", "path": path,
+                "missing_refs": missing, "has_missing": !missing.is_empty(),
+                "total_missing": missing.len(),
+            })).map_err(FrameworkError::Json)
+        }
+        _ => Err(FrameworkError::validation(format!("unknown structure check: {check}"))),
     }
 }
 
@@ -275,41 +485,6 @@ fn tool_research_aigc_check(arguments: &Value) -> Result<String, FrameworkError>
         "ai_probability": score as f64 / 100.0,
         "segments_analyzed": results.len(),
         "results": results,
-    }))
-    .map_err(FrameworkError::Json)
-}
-
-fn tool_research_aigc_humanize(arguments: &Value) -> Result<String, FrameworkError> {
-    let text = arguments
-        .get("text")
-        .and_then(Value::as_str)
-        .ok_or(FrameworkError::validation("research_aigc_humanize requires 'text' parameter"))?;
-    let language = parse_language(arguments, "language");
-    let preserve_academic_tone = arguments
-        .get("preserve_academic_tone")
-        .and_then(Value::as_bool)
-        .unwrap_or(true);
-
-    use crate::aigc::humanizer::{HumanizeConfig, HumanizeStrategy};
-    let config = HumanizeConfig {
-        strategies: vec![
-            HumanizeStrategy::VocabularySwap,
-            HumanizeStrategy::SyntacticRewrite,
-            HumanizeStrategy::SentenceVariation,
-        ],
-        preserve_academic_tone,
-        language,
-        ..Default::default()
-    };
-    let result = crate::aigc::humanizer::humanize_with_config(text, &config)
-        .map_err(|e| FrameworkError::validation(format!("AIGC humanization failed: {e}")))?;
-
-    serde_json::to_string_pretty(&json!({
-        "original_length": text.len(),
-        "rewritten_length": result.rewritten.len(),
-        "strategies_applied": result.strategies_applied,
-        "estimated_score_improvement": result.estimated_score_improvement,
-        "rewritten": result.rewritten,
     }))
     .map_err(FrameworkError::Json)
 }
@@ -603,13 +778,6 @@ mod tests {
     }
 
     #[test]
-    fn research_aigc_humanize_missing_text() {
-        let result = handle_research_tool("research_aigc_humanize", &json!({}));
-        assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("requires 'text'"));
-    }
-
-    #[test]
     fn research_aigc_check_with_language_en() {
         let result = handle_research_tool(
             "research_aigc_check",
@@ -636,31 +804,6 @@ mod tests {
         let result = handle_research_tool(
             "research_aigc_check",
             &json!({"text": "Some default language test text."}),
-        );
-        assert!(result.is_ok());
-    }
-
-    #[test]
-    fn research_aigc_humanize_with_language_and_tone() {
-        let result = handle_research_tool(
-            "research_aigc_humanize",
-            &json!({
-                "text": "This is a very important discovery that significantly advances the field.",
-                "language": "en",
-                "preserve_academic_tone": true,
-            }),
-        );
-        assert!(result.is_ok());
-        let parsed: Value = serde_json::from_str(&result.unwrap()).unwrap();
-        assert!(parsed.get("original_length").is_some());
-        assert!(parsed.get("rewritten").is_some());
-    }
-
-    #[test]
-    fn research_aigc_humanize_default_params() {
-        let result = handle_research_tool(
-            "research_aigc_humanize",
-            &json!({"text": "Simple text without extra params."}),
         );
         assert!(result.is_ok());
     }
@@ -1032,12 +1175,6 @@ mod tests {
     #[test]
     fn test_math_backend_available_ok() {
         let result = handle_research_tool("math_backend_available", &json!({}));
-        assert!(result.is_ok());
-    }
-
-    #[test]
-    fn test_math_backend_status_ok() {
-        let result = handle_research_tool("math_backend_status", &json!({}));
         assert!(result.is_ok());
     }
 

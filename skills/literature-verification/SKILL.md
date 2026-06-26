@@ -62,6 +62,8 @@ trigger_hints:
 
 Rust 实现：`research_harness::verification::literature`（通过 MCP tool 或直接调用）
 
+MCP tool: `research_verification_literature` → `verification_tool_dispatch`（`check` 参数：`doi` / `claim_coverage`）
+
 ```
 # DOI 可达性检查：
 research_harness::verification::literature::verify_doi_reachable(doi).await

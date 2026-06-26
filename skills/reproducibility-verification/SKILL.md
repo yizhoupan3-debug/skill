@@ -63,6 +63,8 @@ trigger_hints:
 
 Rust 实现：`research_harness::verification::reproducibility`（通过 MCP tool 或直接调用）
 
+MCP tool: `research_verification_reproducibility` → `verification_tool_dispatch`（`experiment_dir` + 可选 `run_paths`）
+
 ```
 # 种子检查：
 research_harness::verification::reproducibility::check_seed_set(experiment_dir)

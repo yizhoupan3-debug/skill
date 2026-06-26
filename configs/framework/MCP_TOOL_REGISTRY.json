@@ -1,9 +1,9 @@
 {
   "schema_version": "mcp-tool-registry-v2",
   "scope": {
-    "total_count": 66,
-    "builtin_count": 15,
-    "research_count": 17,
+    "total_count": 68,
+    "builtin_count": 14,
+    "research_count": 21,
     "independent_count": 23,
     "external_count": 11
   },
@@ -511,50 +511,6 @@
       }
     },
     {
-      "slug": "routing_evolution",
-      "display_name": "路由演化分析",
-      "description": "路由日志分析（stats/analyze/extract/calibrate）",
-      "layer": "builtin",
-      "dispatch_domain": "domain:routing-evolution",
-      "owner": "framework",
-      "trigger_hints": [
-        "路由",
-        "routing",
-        "演化",
-        "evolution",
-        "分析",
-        "日志",
-        "路由诊断",
-        "路由统计",
-        "日志分析"
-      ],
-      "host_platforms": [],
-      "mcp_server": "router-rs",
-      "tool_flags": [
-        "behavior:core_routing_tool"
-      ],
-      "input_schema": {
-        "type": "object",
-        "required": [
-          "operation"
-        ],
-        "properties": {
-          "operation": {
-            "type": "string",
-            "description": "操作类型：stats/analyze/extract/calibrate"
-          },
-          "skill": {
-            "type": "string",
-            "description": "技能名称过滤"
-          },
-          "days": {
-            "type": "integer",
-            "description": "分析时间范围（天数）"
-          }
-        }
-      }
-    },
-    {
       "slug": "research_aigc_check",
       "display_name": "AIGC 检测",
       "description": "检测文本是否由 AI 生成，返回概率评分和逐段分析",
@@ -566,45 +522,39 @@
         "检测",
         "AI",
         "生成",
-        "论文"
+        "论文",
+        "AI写作检测",
+        "GPT检测",
+        "ChatGPT",
+        "机器生成",
+        "ai detection",
+        "文本分析",
+        "原创性检测",
+        "AI概率",
+        "抄袭风险",
+        "AI文本"
       ],
       "host_platforms": [],
       "mcp_server": "research-harness",
       "tool_flags": [],
       "input_schema": {
         "type": "object",
-        "required": ["text"],
+        "required": [
+          "text"
+        ],
         "properties": {
-          "text": {"type": "string", "description": "待检测文本"},
-          "language": {"type": "string", "enum": ["en", "zh"], "description": "语言：en=英语, zh=中文"}
-        }
-      }
-    },
-    {
-      "slug": "research_aigc_humanize",
-      "display_name": "AIGC 降重",
-      "description": "对 AI 生成文本进行句法改写和词汇替换降重",
-      "layer": "research",
-      "dispatch_domain": "research",
-      "owner": "research",
-      "trigger_hints": [
-        "AIGC",
-        "降重",
-        "改写",
-        "论文"
-      ],
-      "host_platforms": [],
-      "mcp_server": "research-harness",
-      "tool_flags": [
-        "deprecated"
-      ],
-      "input_schema": {
-        "type": "object",
-        "required": ["text"],
-        "properties": {
-          "text": {"type": "string", "description": "待改写文本"},
-          "language": {"type": "string", "enum": ["en", "zh"], "description": "语言：en=英语, zh=中文"},
-          "preserve_academic_tone": {"type": "boolean", "description": "保留学术语气（默认 true）"}
+          "text": {
+            "type": "string",
+            "description": "待检测文本"
+          },
+          "language": {
+            "type": "string",
+            "enum": [
+              "en",
+              "zh"
+            ],
+            "description": "语言：en=英语, zh=中文"
+          }
         }
       }
     },
@@ -620,17 +570,34 @@
         "维度",
         "review",
         "对抗",
-        "论文"
+        "论文",
+        "审稿维度",
+        "审稿角度",
+        "reviewer prompt",
+        "审稿模板",
+        "论文审查",
+        "审稿清单",
+        "审稿要点",
+        "审稿方向",
+        "多维度审稿"
       ],
       "host_platforms": [],
       "mcp_server": "research-harness",
       "tool_flags": [],
       "input_schema": {
         "type": "object",
-        "required": ["round"],
+        "required": [
+          "round"
+        ],
         "properties": {
-          "round": {"type": "integer", "description": "审稿轮次"},
-          "manuscript_summary": {"type": "string", "description": "论文摘要（可选）"}
+          "round": {
+            "type": "integer",
+            "description": "审稿轮次"
+          },
+          "manuscript_summary": {
+            "type": "string",
+            "description": "论文摘要（可选）"
+          }
         }
       }
     },
@@ -646,17 +613,42 @@
         "漂移",
         "drift",
         "检测",
-        "声明"
+        "声明",
+        "声明变化",
+        "声明差异",
+        "对比",
+        "不一致",
+        "版本对比",
+        "声明演变",
+        "证据变化",
+        "claim change",
+        "原始声明",
+        "当前声明"
       ],
       "host_platforms": [],
       "mcp_server": "research-harness",
       "tool_flags": [],
       "input_schema": {
         "type": "object",
-        "required": ["original_claims", "current_claims"],
+        "required": [
+          "original_claims",
+          "current_claims"
+        ],
         "properties": {
-          "original_claims": {"type": "array", "items": {"type": "object"}, "description": "原始声明列表（含 id/text/ceiling/evidence）"},
-          "current_claims": {"type": "array", "items": {"type": "object"}, "description": "当前声明列表"}
+          "original_claims": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            },
+            "description": "原始声明列表（含 id/text/ceiling/evidence）"
+          },
+          "current_claims": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            },
+            "description": "当前声明列表"
+          }
         }
       }
     },
@@ -673,7 +665,16 @@
         "review",
         "loop",
         "对抗",
-        "论文"
+        "论文",
+        "多轮审稿",
+        "审稿管理",
+        "对抗审稿",
+        "review cycle",
+        "重复审稿",
+        "自动审稿",
+        "审稿流程",
+        "审稿进度",
+        "持续审稿"
       ],
       "host_platforms": [],
       "mcp_server": "research-harness",
@@ -681,12 +682,33 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "operation": {"type": "string", "description": "操作：start（默认）/submit_round/status"},
-          "max_rounds": {"type": "integer", "description": "最大轮次（默认 10；start 操作设定上限，submit_round 操作可传以触发 ceiling 检测）"},
-          "min_rounds": {"type": "integer", "description": "最小轮次（默认 5；仅 start 操作）"},
-          "consecutive_stable_required": {"type": "integer", "description": "连续稳定轮次要求（默认 2；仅 start 操作）"},
-          "round": {"type": "integer", "description": "当前轮次号（submit_round/status 操作必填）"},
-          "findings": {"type": "array", "items": {"type": "object"}, "description": "本轮审稿发现数组（submit_round 操作）"}
+          "operation": {
+            "type": "string",
+            "description": "操作：start（默认）/submit_round/status"
+          },
+          "max_rounds": {
+            "type": "integer",
+            "description": "最大轮次（默认 10；start 操作设定上限，submit_round 操作可传以触发 ceiling 检测）"
+          },
+          "min_rounds": {
+            "type": "integer",
+            "description": "最小轮次（默认 5；仅 start 操作）"
+          },
+          "consecutive_stable_required": {
+            "type": "integer",
+            "description": "连续稳定轮次要求（默认 2；仅 start 操作）"
+          },
+          "round": {
+            "type": "integer",
+            "description": "当前轮次号（submit_round/status 操作必填）"
+          },
+          "findings": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            },
+            "description": "本轮审稿发现数组（submit_round 操作）"
+          }
         }
       }
     },
@@ -703,7 +725,16 @@
         "freshness",
         "学术搜索",
         "arXiv",
-        "Semantic Scholar"
+        "Semantic Scholar",
+        "数据源检查",
+        "学术搜索检测",
+        "API可用性",
+        "源端数据",
+        "新鲜度检查",
+        "搜索是否正常",
+        "数据源状态",
+        "连接测试",
+        "学术数据"
       ],
       "host_platforms": [],
       "mcp_server": "research-harness",
@@ -711,9 +742,18 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "source": {"type": "string", "description": "过滤源：arxiv/semantic-scholar（可选）"},
-          "barrier_id": {"type": "string", "description": "按 barrier_id 过滤（可选）"},
-          "repo_root": {"type": "string", "description": "仓库根路径（可选，默认当前目录）"}
+          "source": {
+            "type": "string",
+            "description": "过滤源：arxiv/semantic-scholar（可选）"
+          },
+          "barrier_id": {
+            "type": "string",
+            "description": "按 barrier_id 过滤（可选）"
+          },
+          "repo_root": {
+            "type": "string",
+            "description": "仓库根路径（可选，默认当前目录）"
+          }
         }
       }
     },
@@ -730,17 +770,34 @@
         "inequality",
         "Z3",
         "数学证明",
-        "线性不等式"
+        "线性不等式",
+        "不等式验证",
+        "不等式求解",
+        "约束验证",
+        "数学约束",
+        "可行性检查",
+        "contradiction check",
+        "矛盾检测",
+        "数学检验",
+        "SMT"
       ],
       "host_platforms": [],
       "mcp_server": "research-harness",
       "tool_flags": [],
       "input_schema": {
         "type": "object",
-        "required": ["expression"],
+        "required": [
+          "expression"
+        ],
         "properties": {
-          "expression": {"type": "string", "description": "不等式表达式"},
-          "timeout_ms": {"type": "integer", "description": "超时毫秒（可选）"}
+          "expression": {
+            "type": "string",
+            "description": "不等式表达式"
+          },
+          "timeout_ms": {
+            "type": "integer",
+            "description": "超时毫秒（可选）"
+          }
         }
       }
     },
@@ -758,31 +815,16 @@
         "工具可用性",
         "Z3",
         "SymPy",
-        "Lean"
-      ],
-      "host_platforms": [],
-      "mcp_server": "research-harness",
-      "tool_flags": [],
-      "input_schema": {
-        "type": "object",
-        "properties": {}
-      }
-    },
-    {
-      "slug": "math_backend_status",
-      "display_name": "数学后端状态",
-      "description": "检查所有数学验证后端的详细状态与版本信息（同 math_backend_available 别名）",
-      "layer": "research",
-      "dispatch_domain": "research",
-      "owner": "research",
-      "trigger_hints": [
-        "后端状态",
-        "backend status",
-        "数学版本",
-        "Z3 版本",
-        "SymPy 版本",
-        "Lean 版本",
-        "安装检查"
+        "Lean",
+        "检查环境",
+        "验证环境",
+        "数学后端",
+        "环境检查",
+        "工具状态",
+        "安装状态",
+        "检查安装",
+        "backend check",
+        "环境就绪"
       ],
       "host_platforms": [],
       "mcp_server": "research-harness",
@@ -805,18 +847,38 @@
         "量级",
         "O",
         "估计",
-        "数学分析"
+        "数学分析",
+        "复杂度估计",
+        "big O",
+        "时间复杂度",
+        "渐近分析",
+        "量级分析",
+        "主导项",
+        "极限行为",
+        "增长率",
+        "复杂度分析"
       ],
       "host_platforms": [],
       "mcp_server": "research-harness",
       "tool_flags": [],
       "input_schema": {
         "type": "object",
-        "required": ["expression"],
+        "required": [
+          "expression"
+        ],
         "properties": {
-          "expression": {"type": "string", "description": "数学表达式"},
-          "variable": {"type": "string", "description": "变量名（默认 x）"},
-          "regime": {"type": "string", "description": "极限 regime: oo=无穷大, 0=趋于零（默认 oo）"}
+          "expression": {
+            "type": "string",
+            "description": "数学表达式"
+          },
+          "variable": {
+            "type": "string",
+            "description": "变量名（默认 x）"
+          },
+          "regime": {
+            "type": "string",
+            "description": "极限 regime: oo=无穷大, 0=趋于零（默认 oo）"
+          }
         }
       }
     },
@@ -831,20 +893,46 @@
         "渐近链",
         "asymptotic chain",
         "推导验证",
-        "O 链",
-        "数学推理"
+        "O链",
+        "数学推理",
+        "渐近关系",
+        "链验证",
+        "传递性",
+        "量级比较",
+        "不等式链",
+        "渐近排序",
+        "关系链",
+        "渐近传递",
+        "big O链"
       ],
       "host_platforms": [],
       "mcp_server": "research-harness",
       "tool_flags": [],
       "input_schema": {
         "type": "object",
-        "required": ["steps"],
+        "required": [
+          "steps"
+        ],
         "properties": {
-          "steps": {"type": "array", "items": {"type": "object"}, "description": "渐近推理步骤列表"},
-          "variable": {"type": "string", "description": "变量名（默认 x）"},
-          "regime": {"type": "string", "description": "极限 regime（默认 oo）"},
-          "sympy_check": {"type": "boolean", "description": "是否用 SymPy 验证（默认 true）"}
+          "steps": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            },
+            "description": "渐近推理步骤列表"
+          },
+          "variable": {
+            "type": "string",
+            "description": "变量名（默认 x）"
+          },
+          "regime": {
+            "type": "string",
+            "description": "极限 regime（默认 oo）"
+          },
+          "sympy_check": {
+            "type": "boolean",
+            "description": "是否用 SymPy 验证（默认 true）"
+          }
         }
       }
     },
@@ -856,22 +944,39 @@
       "dispatch_domain": "research",
       "owner": "research",
       "trigger_hints": [
-        "证明 DAG",
+        "证明DAG",
         "proof DAG",
         "证明分解",
         "数学证明",
         "proof decomposition",
-        "蓝图"
+        "蓝图",
+        "证明规划",
+        "证明策略",
+        "证明流程",
+        "proof planning",
+        "证明结构",
+        "蓝图规划",
+        "证明框架",
+        "证明入口",
+        "DAG初始化"
       ],
       "host_platforms": [],
       "mcp_server": "research-harness",
       "tool_flags": [],
       "input_schema": {
         "type": "object",
-        "required": ["goal"],
+        "required": [
+          "goal"
+        ],
         "properties": {
-          "goal": {"type": "string", "description": "证明目标陈述"},
-          "name": {"type": "string", "description": "证明名称（可选，默认 proof）"}
+          "goal": {
+            "type": "string",
+            "description": "证明目标陈述"
+          },
+          "name": {
+            "type": "string",
+            "description": "证明名称（可选，默认 proof）"
+          }
         }
       }
     },
@@ -887,18 +992,42 @@
         "证明分解",
         "子目标",
         "proof decompose",
-        "DAG 分解"
+        "DAG分解",
+        "AND/OR分解",
+        "子问题",
+        "证明拆分",
+        "目标分解",
+        "子证明",
+        "递归分解",
+        "证明细化",
+        "拆解证明",
+        "子目标生成"
       ],
       "host_platforms": [],
       "mcp_server": "research-harness",
       "tool_flags": [],
       "input_schema": {
         "type": "object",
-        "required": ["parent_id", "children"],
+        "required": [
+          "parent_id",
+          "children"
+        ],
         "properties": {
-          "parent_id": {"type": "string", "description": "父节点 ID"},
-          "children": {"type": "array", "items": {"type": "object"}, "description": "子目标节点列表"},
-          "and": {"type": "boolean", "description": "AND 分解（全部成立）或 OR 分解（任一成立）（默认 false=OR）"}
+          "parent_id": {
+            "type": "string",
+            "description": "父节点 ID"
+          },
+          "children": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            },
+            "description": "子目标节点列表"
+          },
+          "and": {
+            "type": "boolean",
+            "description": "AND 分解（全部成立）或 OR 分解（任一成立）（默认 false=OR）"
+          }
         }
       }
     },
@@ -910,11 +1039,20 @@
       "dispatch_domain": "research",
       "owner": "research",
       "trigger_hints": [
-        "DAG 验证",
+        "DAG验证",
         "证明验证",
         "proof verify",
         "完整性检查",
-        "论证审查"
+        "论证审查",
+        "证明检查",
+        "验证DAG",
+        "结构验证",
+        "证明完整性",
+        "DAG完整性",
+        "proof check",
+        "验证结构",
+        "DAG检查",
+        "证明结构验证"
       ],
       "host_platforms": [],
       "mcp_server": "research-harness",
@@ -932,11 +1070,20 @@
       "dispatch_domain": "research",
       "owner": "research",
       "trigger_hints": [
-        "DAG 状态",
+        "DAG状态",
         "证明进度",
         "proof status",
         "摘要",
-        "当前进度"
+        "当前进度",
+        "证明摘要",
+        "进度查询",
+        "DAG进度",
+        "状态摘要",
+        "证明概览",
+        "检查进度",
+        "查看状态",
+        "进度摘要",
+        "DAG概览"
       ],
       "host_platforms": [],
       "mcp_server": "research-harness",
@@ -959,18 +1106,41 @@
         "恒等式",
         "sympy verify",
         "代数化简",
-        "数学验证"
+        "数学验证",
+        "代数验证",
+        "恒等式验证",
+        "identity check",
+        "等式检测",
+        "代数恒等式",
+        "公式验证",
+        "符号验证",
+        "恒等检查"
       ],
       "host_platforms": [],
       "mcp_server": "research-harness",
       "tool_flags": [],
       "input_schema": {
         "type": "object",
-        "required": ["lhs", "rhs"],
+        "required": [
+          "lhs",
+          "rhs"
+        ],
         "properties": {
-          "lhs": {"type": "string", "description": "等式左侧表达式"},
-          "rhs": {"type": "string", "description": "等式右侧表达式"},
-          "assumptions": {"type": "array", "items": {"type": "string"}, "description": "前提条件列表（可选）"}
+          "lhs": {
+            "type": "string",
+            "description": "等式左侧表达式"
+          },
+          "rhs": {
+            "type": "string",
+            "description": "等式右侧表达式"
+          },
+          "assumptions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "前提条件列表（可选）"
+          }
         }
       }
     },
@@ -986,16 +1156,30 @@
         "simplify",
         "SymPy",
         "表达式化简",
-        "代数化简"
+        "代数化简",
+        "公式化简",
+        "表达式简化",
+        "代数简化",
+        "符号化简",
+        "简化表达式",
+        "合并同类项",
+        "因式分解",
+        "代数简化",
+        "符号计算"
       ],
       "host_platforms": [],
       "mcp_server": "research-harness",
       "tool_flags": [],
       "input_schema": {
         "type": "object",
-        "required": ["expression"],
+        "required": [
+          "expression"
+        ],
         "properties": {
-          "expression": {"type": "string", "description": "待化简的数学表达式"}
+          "expression": {
+            "type": "string",
+            "description": "待化简的数学表达式"
+          }
         }
       }
     },
@@ -1012,21 +1196,320 @@
         "命题验证",
         "formal proof",
         "lean verify",
-        "形式化证明"
+        "形式化证明",
+        "形式验证",
+        "定理验证",
+        "Lean4",
+        "证明检查",
+        "命题证明",
+        "逻辑验证",
+        "定理检查",
+        "形式证明",
+        "lean4"
       ],
       "host_platforms": [],
       "mcp_server": "research-harness",
       "tool_flags": [],
       "input_schema": {
         "type": "object",
-        "required": ["script"],
+        "required": [
+          "script"
+        ],
         "properties": {
-          "script": {"type": "string", "description": "Lean 4 脚本内容"}
+          "script": {
+            "type": "string",
+            "description": "Lean 4 脚本内容"
+          }
         }
       }
     },
     {
-      "slug": "browser_tabs",
+      "slug": "research_verification_literature",
+      "display_name": "文献验证",
+      "description": "验证学术文献的 DOI 可达性和声明覆盖率",
+      "layer": "research",
+      "dispatch_domain": "research",
+      "owner": "research",
+      "trigger_hints": [
+        "文献验证",
+        "DOI",
+        "可达性",
+        "声明覆盖率",
+        "引用检查",
+        "论文引用",
+        "引用验证",
+        "文献核实",
+        "DOI检查",
+        "claim coverage",
+        "引用可达性"
+      ],
+      "host_platforms": [],
+      "mcp_server": "research-harness",
+      "tool_flags": [],
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "check"
+        ],
+        "properties": {
+          "check": {
+            "type": "string",
+            "enum": [
+              "doi",
+              "claim_coverage"
+            ],
+            "description": "验证类型：doi=DOI可达性检查, claim_coverage=声明覆盖率计算"
+          },
+          "doi": {
+            "type": "string",
+            "description": "DOI 标识符（check=doi 时必填）"
+          },
+          "claims": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "声明列表（check=claim_coverage 时必填）"
+          },
+          "references": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "引用列表（check=claim_coverage 时必填）"
+          }
+        }
+      }
+    },
+    {
+      "slug": "research_verification_prose",
+      "display_name": "文本质控",
+      "description": "验证论文文本质素：术语一致性、AI slop 检测和 hedging 分析",
+      "layer": "research",
+      "dispatch_domain": "research",
+      "owner": "research",
+      "trigger_hints": [
+        "文本质控",
+        "术语一致性",
+        "slop检测",
+        "hedging分析",
+        "AI套话",
+        "学术写作",
+        "写作检查",
+        "prose QC",
+        "术语检查",
+        "中文套话",
+        "AI slop",
+        "防御性语气",
+        "prose quality",
+        "文字检查"
+      ],
+      "host_platforms": [],
+      "mcp_server": "research-harness",
+      "tool_flags": [],
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "check"
+        ],
+        "properties": {
+          "check": {
+            "type": "string",
+            "enum": [
+              "terminology",
+              "slop",
+              "hedging"
+            ],
+            "description": "检查类型：terminology=术语一致性, slop=AI套话检测, hedging=防御性语气"
+          },
+          "text": {
+            "type": "string",
+            "description": "待检查文本"
+          },
+          "glossary": {
+            "type": "object",
+            "description": "术语表（check=terminology 时可用）"
+          },
+          "language": {
+            "type": "string",
+            "enum": [
+              "en",
+              "zh"
+            ],
+            "description": "语言（check=slop 时，默认为 en）"
+          }
+        }
+      }
+    },
+    {
+      "slug": "research_verification_reproducibility",
+      "display_name": "可复现性审计",
+      "description": "审计实验的可复现性（README/环境/脚本/数据/种子/Docker）",
+      "layer": "research",
+      "dispatch_domain": "research",
+      "owner": "research",
+      "trigger_hints": [
+        "可复现性",
+        "复现审计",
+        "reproducibility",
+        "实验验证",
+        "实验环境",
+        "脚本检查",
+        "Docker",
+        "种子",
+        "数据文件",
+        "README检查",
+        "实验审计",
+        "复现检查",
+        "实验完整性",
+        "reproducibility audit"
+      ],
+      "host_platforms": [],
+      "mcp_server": "research-harness",
+      "tool_flags": [],
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "experiment_dir"
+        ],
+        "properties": {
+          "experiment_dir": {
+            "type": "string",
+            "description": "实验目录路径"
+          },
+          "run_paths": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "运行脚本路径列表（可选，为空则自动扫描）"
+          }
+        }
+      }
+    },
+    {
+      "slug": "research_verification_statistical",
+      "display_name": "统计验证",
+      "description": "验证统计声明的正确性：GRIM 测试、p值验证、多重比较校正检查",
+      "layer": "research",
+      "dispatch_domain": "research",
+      "owner": "research",
+      "trigger_hints": [
+        "统计验证",
+        "GRIM测试",
+        "p值验证",
+        "多重比较",
+        "统计检查",
+        "数据验证",
+        "统计正确性",
+        "方法验证",
+        "统计错误",
+        "GRIM test",
+        "p value",
+        "multiple comparison",
+        "统计显著性",
+        "校正检查"
+      ],
+      "host_platforms": [],
+      "mcp_server": "research-harness",
+      "tool_flags": [],
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "check"
+        ],
+        "properties": {
+          "check": {
+            "type": "string",
+            "enum": [
+              "grim",
+              "p_value",
+              "multiple_comparison"
+            ],
+            "description": "检查类型：grim=GRIM测试, p_value=p值验证, multiple_comparison=多重比较校正"
+          },
+          "mean": {
+            "type": "number",
+            "description": "均值（check=grim 时必填）"
+          },
+          "n": {
+            "type": "integer",
+            "description": "样本量（check=grim 时必填）"
+          },
+          "decimals": {
+            "type": "integer",
+            "description": "小数位数（check=grim 时可选，默认 2）"
+          },
+          "observed": {
+            "type": "number",
+            "description": "观测 p 值（check=p_value 时必填）"
+          },
+          "expected": {
+            "type": "number",
+            "description": "期望 p 值（check=p_value 时必填）"
+          },
+          "tolerance": {
+            "type": "number",
+            "description": "容忍度（check=p_value 时可选，默认 0.01）"
+          },
+          "num_tests": {
+            "type": "integer",
+            "description": "检验次数（check=multiple_comparison 时必填）"
+          },
+          "correction_applied": {
+            "type": "boolean",
+            "description": "是否已校正（check=multiple_comparison 时可选）"
+          }
+        }
+      }
+    },
+    {
+      "slug": "research_verification_structure",
+      "display_name": "结构验证",
+      "description": "验证论文结构完整性：LaTeX 可编译性检查和图表引用检查",
+      "layer": "research",
+      "dispatch_domain": "research",
+      "owner": "research",
+      "trigger_hints": [
+        "结构验证",
+        "LaTeX检查",
+        "图表引用",
+        "LaTeX编译",
+        "论文结构",
+        "编译检查",
+        "引用检查",
+        "结构完整性",
+        "公式检查",
+        "表格引用",
+        "latex compilable",
+        "figure reference",
+        "论文格式检查"
+      ],
+      "host_platforms": [],
+      "mcp_server": "research-harness",
+      "tool_flags": [],
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "check"
+        ],
+        "properties": {
+          "check": {
+            "type": "string",
+            "enum": [
+              "latex",
+              "figures"
+            ],
+            "description": "检查类型：latex=LaTeX可编译性检查, figures=图表引用检查"
+          },
+          "path": {
+            "type": "string",
+            "description": ".tex 文件路径"
+          }
+        }
+      }
+    },
+    {
       "display_name": "浏览器标签页",
       "description": "管理浏览器标签页（列出/切换）",
       "layer": "independent",

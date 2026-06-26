@@ -63,6 +63,8 @@ trigger_hints:
 
 Rust 实现：`research_harness::verification::statistical`（通过 MCP tool 或直接调用）
 
+MCP tool: `research_verification_statistical` → `verification_tool_dispatch`（`check` 参数：`grim` / `p_value` / `multiple_comparison`）
+
 ```
 # GRIM 检验：
 research_harness::verification::statistical::grim_test(observed_mean, n)

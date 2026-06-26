@@ -65,6 +65,8 @@ trigger_hints:
 
 Rust 实现：`research_harness::verification::structure`（通过 MCP tool 或直接调用）
 
+MCP tool: `research_verification_structure` → `verification_tool_dispatch`（`check` 参数：`latex` / `figures`）
+
 ```
 # LaTeX 语法检查：
 research_harness::verification::structure::check_latex_compilable(tex_path)

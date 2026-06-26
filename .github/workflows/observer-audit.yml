@@ -1,0 +1,90 @@
+name: Observation Audit
+
+on:
+  schedule:
+    - cron: '0 8 * * 1'  # every Monday 08:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Run observation audit
+        run: |
+          cargo run --manifest-path tools/observer-rs/Cargo.toml -- manifest \
+            --journal skills/.observer_journal.jsonl \
+            --manifest skills/SKILL_MANIFEST.json \
+            > skills/SKILL_HEALTH_MANIFEST.json
+          cargo run --manifest-path tools/observer-rs/Cargo.toml -- audit \
+            --journal skills/.observer_journal.jsonl \
+            --manifest skills/SKILL_MANIFEST.json \
+            --json > /tmp/audit.json
+          cargo run --manifest-path core/router-rs/Cargo.toml -- \
+            framework skills refresh --framework-root "$PWD" --write
+
+      - name: Commit manifest changes
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add \
+            AGENTS.md \
+            .codex/host_entrypoints_sync_manifest.json \
+            configs/framework/FRAMEWORK_SURFACE_POLICY.json \
+            skills/SKILL_HEALTH_MANIFEST.json \
+            skills/SKILL_ROUTING_INDEX.md \
+            skills/SKILL_MANIFEST.json \
+            skills/SKILL_ROUTING_RUNTIME.json \
+            skills/SKILL_APPROVAL_POLICY.json \
+            skills/SKILL_TIERS.json
+          if git diff --cached --quiet; then
+            echo "No automation-generated changes to commit"
+          else
+            git commit -m "[Auto] Update skill health and routing artifacts"
+            git push
+          fi
+
+      - name: Generate report and create issue if needed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          avg_health="$(jq -r '.summary.avg_health // 0' skills/SKILL_HEALTH_MANIFEST.json)"
+          critical_count="$(jq -r '.critical_outliers | length' skills/SKILL_HEALTH_MANIFEST.json)"
+          reroutes="$(jq -r '.reroute_count // 0' /tmp/audit.json)"
+
+          if [ "$critical_count" = "0" ] && [ "$reroutes" = "0" ]; then
+            echo "All clear: no issues to report."
+            exit 0
+          fi
+
+          {
+            echo "## Weekly Observation Audit"
+            echo
+            echo "- Average Health: ${avg_health}/100"
+            echo "- Critical Outliers: ${critical_count}"
+            echo "- Routing Reroutes (last 30d): ${reroutes}"
+            echo
+            echo "### Skills needing attention"
+            jq -r '
+              .critical_outliers[]? as $name
+              | "- `\($name)`: \(.skills[$name].dynamic_score // "?")/100 (Static: \(.skills[$name].static_score // "?"))"
+            ' skills/SKILL_HEALTH_MANIFEST.json
+            echo
+            echo "### Suggested repairs"
+            jq -r '.repair_suggestions[]?.suggestion | "- " + .' /tmp/audit.json
+            echo
+            echo "### Potential new skills"
+            jq -r '.new_skill_candidates[]? | "- **\(.suggested_name)**: \(.phrase) (\(.count)x) - \(.reason)"' /tmp/audit.json
+          } > /tmp/observation-issue.md
+
+          gh issue create \
+            --title "[Auto] Observation audit: ${critical_count} outliers, ${reroutes} reroutes" \
+            --body-file /tmp/observation-issue.md \
+            --label skill-maintenance

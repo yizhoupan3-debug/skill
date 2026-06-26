@@ -65,6 +65,8 @@ trigger_hints:
 
 Rust 实现：`research_harness::verification::prose_qc`（通过 MCP tool 或直接调用）
 
+MCP tool: `research_verification_prose` → `verification_tool_dispatch`（`check` 参数：`terminology` / `slop` / `hedging`）
+
 ```
 # 术语一致性检查：
 research_harness::verification::prose_qc::check_terminology_consistency(text, glossary)
