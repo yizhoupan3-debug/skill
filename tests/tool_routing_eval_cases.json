@@ -1,0 +1,711 @@
+{
+  "schema_version": "tool-routing-eval-cases-v1",
+  "cases": [
+    {
+      "id": "builtin-goal-state-manage",
+      "category": "should-trigger",
+      "task": "帮我暂停当前goal，记录进度并更新任务状态",
+      "expected_tool": "goal_state_manage",
+      "forbidden_tools": [],
+      "notes": "goal状态管理：暂停、更新、进度跟踪"
+    },
+    {
+      "id": "builtin-goal-state-read",
+      "category": "should-trigger",
+      "task": "查看当前goal的状态，有哪些子目标和完成进度",
+      "expected_tool": "goal_state_read",
+      "forbidden_tools": [],
+      "notes": "known: goal_state_read vs manage ambiguity — share most hints"
+    },
+    {
+      "id": "builtin-quality-gate-manage",
+      "category": "should-trigger",
+      "task": "启动quality gate审查，开始review cycle",
+      "expected_tool": "quality_gate_manage",
+      "forbidden_tools": [],
+      "notes": "质量审查门禁管理：启动review cycle"
+    },
+    {
+      "id": "builtin-quality-gate-status",
+      "category": "should-trigger",
+      "task": "看看当前的quality gate审查关卡通过了几个",
+      "expected_tool": "quality_gate_status",
+      "forbidden_tools": [],
+      "notes": "known: quality_gate_status vs manage ambiguity — share most hints"
+    },
+    {
+      "id": "builtin-record-evidence",
+      "category": "should-trigger",
+      "task": "追加一条evidence：API压测QPS达到5000，延迟P99=120ms",
+      "expected_tool": "record_evidence",
+      "forbidden_tools": [],
+      "notes": "证据记录：追加性能测试结果"
+    },
+    {
+      "id": "builtin-session-checkpoint",
+      "category": "should-trigger",
+      "task": "保存一个checkpoint，把当前会话进度做个快照",
+      "expected_tool": "session_checkpoint",
+      "forbidden_tools": [],
+      "notes": "会话检查点：保存进度快照"
+    },
+    {
+      "id": "builtin-closeout-gate",
+      "category": "should-trigger",
+      "task": "检查closeout收尾条件，看看哪些项还没完成",
+      "expected_tool": "closeout_gate",
+      "forbidden_tools": [],
+      "notes": "收尾门禁检查：收尾条件就绪度"
+    },
+    {
+      "id": "builtin-closeout-record-write",
+      "category": "should-trigger",
+      "task": "end task，生成收尾记录归档到closeout report",
+      "expected_tool": "closeout_record_write",
+      "forbidden_tools": [],
+      "notes": "收尾记录写入：归档和完成汇报"
+    },
+    {
+      "id": "builtin-skill-read",
+      "category": "should-trigger",
+      "task": "查看code-review-deep这个skill的文档内容",
+      "expected_tool": "skill_read",
+      "forbidden_tools": [],
+      "notes": "技能文档读取：查看skill文档"
+    },
+    {
+      "id": "builtin-skill-route",
+      "category": "should-trigger",
+      "task": "帮我把这个用户意图路由到正确的技能",
+      "expected_tool": "skill_route",
+      "forbidden_tools": [],
+      "notes": "技能路由：匹配和查询对应skill"
+    },
+    {
+      "id": "builtin-skill-search",
+      "category": "should-trigger",
+      "task": "搜索一下和性能分析相关的skill有哪些",
+      "expected_tool": "skill_search",
+      "forbidden_tools": [],
+      "notes": "技能搜索：查找符合条件的skill"
+    },
+    {
+      "id": "builtin-skill-route-status",
+      "category": "should-trigger",
+      "task": "检查routing health，看skill索引状态是否正常",
+      "expected_tool": "skill_route_status",
+      "forbidden_tools": [],
+      "notes": "路由健康检查：查看索引状态和routing就绪度"
+    },
+    {
+      "id": "builtin-web-fetch",
+      "category": "should-trigger",
+      "task": "帮我抓取这个URL的内容：https://example.com/api/docs",
+      "expected_tool": "web_fetch",
+      "forbidden_tools": [],
+      "notes": "网页抓取：通过HTTP获取URL内容"
+    },
+    {
+      "id": "research-aigc-check",
+      "category": "should-trigger",
+      "task": "检测这篇投稿论文有没有AIGC生成内容的痕迹",
+      "expected_tool": "research_aigc_check",
+      "forbidden_tools": [],
+      "notes": "AIGC检测：检查论文是否存在AI生成内容"
+    },
+    {
+      "id": "research-review-dimensions",
+      "category": "should-trigger",
+      "task": "对抗性review这篇论文，从方法学、数据质量和结论三个维度审",
+      "expected_tool": "research_review_dimensions",
+      "forbidden_tools": [],
+      "notes": "多维审稿：对抗性方法审稿"
+    },
+    {
+      "id": "research-claim-drift",
+      "category": "should-trigger",
+      "task": "检测这篇论文的claim drift，看结论是否被实验数据充分支持",
+      "expected_tool": "research_claim_drift",
+      "forbidden_tools": [],
+      "notes": "声明漂移检测：结论与证据的一致性检查"
+    },
+    {
+      "id": "research-review-loop",
+      "category": "should-trigger",
+      "task": "启动多轮对抗review loop，每轮找不同角度的问题",
+      "expected_tool": "research_review_loop",
+      "forbidden_tools": [],
+      "notes": "循环审稿：多轮对抗review"
+    },
+    {
+      "id": "research-smoke",
+      "category": "should-trigger",
+      "task": "对arXiv和Semantic Scholar数据源做烟雾测试，检查freshness",
+      "expected_tool": "research_smoke",
+      "forbidden_tools": [],
+      "notes": "数据源烟雾测试：检查学术搜索数据源的健康状态"
+    },
+    {
+      "id": "math-prove-inequality",
+      "category": "should-trigger",
+      "task": "用Z3证明这个不等式：对任意正实数x，x + 1/x >= 2",
+      "expected_tool": "math_prove_inequality",
+      "forbidden_tools": [],
+      "notes": "不等式证明：使用Z3进行数学不等式验证"
+    },
+    {
+      "id": "math-backend-available",
+      "category": "should-trigger",
+      "task": "检查Z3、SymPy和Lean这些数学验证后端是否可用",
+      "expected_tool": "math_backend_available",
+      "forbidden_tools": [],
+      "notes": "数学后端可用性检查：验证工具状态"
+    },
+    {
+      "id": "math-asymptotic-estimate",
+      "category": "should-trigger",
+      "task": "给出快速排序的渐近时间复杂度分析，最好情况和最坏情况的O量级",
+      "expected_tool": "math_asymptotic_estimate",
+      "forbidden_tools": [],
+      "notes": "渐近量级估计：算法时间复杂度分析"
+    },
+    {
+      "id": "math-asymptotic-chain",
+      "category": "should-trigger",
+      "task": "验证这条渐近链：log n = o(n^epsilon) 对任意 epsilon > 0",
+      "expected_tool": "math_asymptotic_chain",
+      "forbidden_tools": [],
+      "notes": "known: math_asymptotic_chain vs estimate ambiguity — share most hints"
+    },
+    {
+      "id": "math-proof-dag-init",
+      "category": "should-trigger",
+      "task": "初始化一个proof DAG，把费马大定理的证明蓝图分解成子目标",
+      "expected_tool": "math_proof_dag_init",
+      "forbidden_tools": [],
+      "notes": "证明DAG初始化：创建证明分解蓝图"
+    },
+    {
+      "id": "math-proof-dag-decompose",
+      "category": "should-trigger",
+      "task": "把柯西不等式的证明按DAG分解成可验证的子目标",
+      "expected_tool": "math_proof_dag_decompose",
+      "forbidden_tools": [],
+      "notes": "证明DAG分解：拆分证明为子目标"
+    },
+    {
+      "id": "math-proof-dag-verify",
+      "category": "should-trigger",
+      "task": "验证这个proof DAG的完整性，检查论证链是否有缺口",
+      "expected_tool": "math_proof_dag_verify",
+      "forbidden_tools": [],
+      "notes": "known: math_proof_dag_verify vs init ambiguity — share most hints"
+    },
+    {
+      "id": "math-proof-dag-status",
+      "category": "should-trigger",
+      "task": "查看proof DAG的当前进度，哪些子目标已经验证通过",
+      "expected_tool": "math_proof_dag_status",
+      "forbidden_tools": [],
+      "notes": "证明DAG状态：查看证明进度摘要"
+    },
+    {
+      "id": "math-sympy-verify",
+      "category": "should-trigger",
+      "task": "用SymPy验证这个恒等式：cos(2x) = 2cos^2(x) - 1",
+      "expected_tool": "math_sympy_verify",
+      "forbidden_tools": [],
+      "notes": "SymPy等式验证：代数化简与恒等式验证"
+    },
+    {
+      "id": "math-sympy-simplify",
+      "category": "should-trigger",
+      "task": "用SymPy化简这个分式表达式：(x^3 - 1) / (x - 1)",
+      "expected_tool": "math_sympy_simplify",
+      "forbidden_tools": [],
+      "notes": "SymPy表达式化简：代数化简和简化"
+    },
+    {
+      "id": "math-lean-verify",
+      "category": "should-trigger",
+      "task": "用Lean对这个数论引理做形式化证明验证",
+      "expected_tool": "math_lean_verify",
+      "forbidden_tools": [],
+      "notes": "Lean形式化验证：定理证明和命题验证"
+    },
+    {
+      "id": "browser-tabs",
+      "category": "should-trigger",
+      "task": "列出所有打开的浏览器标签页，帮我切换到github那个",
+      "expected_tool": "browser_tabs",
+      "forbidden_tools": [],
+      "notes": "浏览器标签页管理：列出和切换"
+    },
+    {
+      "id": "browser-open",
+      "category": "should-trigger",
+      "task": "在浏览器里打开https://docs.rs这个页面",
+      "expected_tool": "browser_open",
+      "forbidden_tools": [],
+      "notes": "浏览器打开URL：页面导航"
+    },
+    {
+      "id": "browser-close",
+      "category": "should-trigger",
+      "task": "关闭当前浏览器标签页",
+      "expected_tool": "browser_close",
+      "forbidden_tools": [],
+      "notes": "浏览器关闭标签页：会话管理"
+    },
+    {
+      "id": "browser-click",
+      "category": "should-trigger",
+      "task": "点击页面上的提交按钮，模拟鼠标操作",
+      "expected_tool": "browser_click",
+      "forbidden_tools": [],
+      "notes": "浏览器元素点击：选取并模拟点击"
+    },
+    {
+      "id": "browser-fill",
+      "category": "should-trigger",
+      "task": "在登录表单里填入用户名和密码然后提交",
+      "expected_tool": "browser_fill",
+      "forbidden_tools": [],
+      "notes": "浏览器表单填写：输入文字并提交"
+    },
+    {
+      "id": "browser-press",
+      "category": "should-trigger",
+      "task": "按Esc键关闭当前面板",
+      "expected_tool": "browser_press",
+      "forbidden_tools": [],
+      "notes": "浏览器快捷键操作：键盘事件"
+    },
+    {
+      "id": "browser-screenshot",
+      "category": "should-trigger",
+      "task": "截取当前页面的全屏截图，做视觉验证",
+      "expected_tool": "browser_screenshot",
+      "forbidden_tools": [],
+      "notes": "浏览器截图：页面图像捕获"
+    },
+    {
+      "id": "browser-get-text",
+      "category": "should-trigger",
+      "task": "提取当前页面的正文文本内容",
+      "expected_tool": "browser_get_text",
+      "forbidden_tools": [],
+      "notes": "浏览器文本提取：获取页面内容"
+    },
+    {
+      "id": "browser-get-state",
+      "category": "should-trigger",
+      "task": "获取当前页面的状态摘要，看看加载了什么内容",
+      "expected_tool": "browser_get_state",
+      "forbidden_tools": [],
+      "notes": "浏览器状态获取：页面摘要信息"
+    },
+    {
+      "id": "browser-get-elements",
+      "category": "should-trigger",
+      "task": "查询页面上所有可点击的交互元素",
+      "expected_tool": "browser_get_elements",
+      "forbidden_tools": [],
+      "notes": "浏览器元素查询：获取交互元素列表"
+    },
+    {
+      "id": "browser-wait-for",
+      "category": "should-trigger",
+      "task": "等待页面上的loading动画完成后再操作",
+      "expected_tool": "browser_wait_for",
+      "forbidden_tools": [],
+      "notes": "浏览器等待：等待加载条件满足"
+    },
+    {
+      "id": "browser-get-network",
+      "category": "should-trigger",
+      "task": "查看页面发起的网络请求，找出状态码不是200的API",
+      "expected_tool": "browser_get_network",
+      "forbidden_tools": [],
+      "notes": "浏览器网络请求监控：查看API请求"
+    },
+    {
+      "id": "browser-diagnostics",
+      "category": "should-trigger",
+      "task": "检查浏览器运行时的健康状态和诊断信息",
+      "expected_tool": "browser_diagnostics",
+      "forbidden_tools": [],
+      "notes": "浏览器诊断：运行时健康检查"
+    },
+    {
+      "id": "browser-save-session",
+      "category": "should-trigger",
+      "task": "保存浏览器的当前会话状态到磁盘文件",
+      "expected_tool": "browser_save_session",
+      "forbidden_tools": [],
+      "notes": "浏览器会话保存：持久化状态"
+    },
+    {
+      "id": "browser-restore-session",
+      "category": "should-trigger",
+      "task": "从磁盘恢复之前保存的浏览器会话",
+      "expected_tool": "browser_restore_session",
+      "forbidden_tools": [],
+      "notes": "浏览器会话恢复：加载之前保存的状态"
+    },
+    {
+      "id": "codegraph-search",
+      "category": "should-trigger",
+      "task": "在codegraph中搜索handle_request这个符号的定义和使用",
+      "expected_tool": "codegraph_search",
+      "forbidden_tools": [],
+      "notes": "代码图搜索：查找符号定义"
+    },
+    {
+      "id": "codegraph-callers",
+      "category": "should-trigger",
+      "task": "看看validate_config这个函数被哪些模块调用了",
+      "expected_tool": "codegraph_callees",
+      "forbidden_tools": [],
+      "notes": "代码调用者分析：找出所有引用位置"
+    },
+    {
+      "id": "codegraph-callees",
+      "category": "should-trigger",
+      "task": "分析process_data内部调用了哪些子函数和依赖",
+      "expected_tool": "codegraph_callees",
+      "forbidden_tools": [],
+      "notes": "代码被调用者分析：内部依赖分析"
+    },
+    {
+      "id": "codegraph-impact",
+      "category": "should-trigger",
+      "task": "如果修改了UserService.login方法，评估影响范围",
+      "expected_tool": "codegraph_impact",
+      "forbidden_tools": [],
+      "notes": "代码修改影响分析：波及范围评估"
+    },
+    {
+      "id": "codegraph-node",
+      "category": "should-trigger",
+      "task": "查看codegraph中DatabasePool这个节点的详细信息",
+      "expected_tool": "codegraph_node",
+      "forbidden_tools": [],
+      "notes": "代码图节点详情：查看具体节点信息"
+    },
+    {
+      "id": "codegraph-status",
+      "category": "should-trigger",
+      "task": "查看codegraph索引的统计信息，有多少个符号被索引了",
+      "expected_tool": "codegraph_status",
+      "forbidden_tools": [],
+      "notes": "代码图状态：索引统计信息"
+    },
+    {
+      "id": "codegraph-dead-code",
+      "category": "should-trigger",
+      "task": "检测项目中的僵尸代码，找出未调用的函数",
+      "expected_tool": "codegraph_dead_code",
+      "forbidden_tools": [],
+      "notes": "死代码检测：找出未使用和未调用的代码"
+    },
+    {
+      "id": "codegraph-goto-definition",
+      "category": "should-trigger",
+      "task": "跳转到Config类的定义位置查看源码",
+      "expected_tool": "codegraph_goto_definition",
+      "forbidden_tools": [],
+      "notes": "代码跳转到定义：查找定义位置"
+    },
+    {
+      "id": "pdf-read",
+      "category": "should-trigger",
+      "task": "提取这篇PDF论文的全文文本内容",
+      "expected_tool": "pdf_read",
+      "forbidden_tools": [],
+      "notes": "PDF文本提取：读取文档内容"
+    },
+    {
+      "id": "pdf-info",
+      "category": "should-trigger",
+      "task": "查看这个PDF文件的页数和元数据信息",
+      "expected_tool": "pdf_info",
+      "forbidden_tools": [],
+      "notes": "PDF元数据查看：页数和基本信息"
+    },
+    {
+      "id": "ooxml-parse",
+      "category": "should-trigger",
+      "task": "解析这个docx文档，提取所有表格和段落",
+      "expected_tool": "ooxml_parse",
+      "forbidden_tools": [],
+      "notes": "OOXML文档解析：docx和xlsx文件处理"
+    },
+    {
+      "id": "pptx-parse",
+      "category": "should-trigger",
+      "task": "解析这个PowerPoint文件，提取每张幻灯片的文本和图片",
+      "expected_tool": "pptx_parse",
+      "forbidden_tools": [],
+      "notes": "PPTX解析：幻灯片内容提取"
+    },
+    {
+      "id": "financial-data",
+      "category": "should-trigger",
+      "task": "查一下贵州茅台的实时股价和历史行情数据",
+      "expected_tool": "financial_data",
+      "forbidden_tools": [],
+      "notes": "金融数据查询：股票和基金行情"
+    },
+    {
+      "id": "citation-audit",
+      "category": "should-trigger",
+      "task": "审计这篇论文的学术引用质量，检查是否有误引",
+      "expected_tool": "citation_audit",
+      "forbidden_tools": [],
+      "notes": "引用审计：论文引用准确性检查"
+    },
+    {
+      "id": "citation-lint",
+      "category": "should-trigger",
+      "task": "检查参考文献格式是否一致，做citation lint",
+      "expected_tool": "citation_lint",
+      "forbidden_tools": [],
+      "notes": "引用格式检查：参考文献格式lint"
+    },
+    {
+      "id": "gh-source-gate",
+      "category": "should-trigger",
+      "task": "检查GitHub仓库的源码质量和安全门禁",
+      "expected_tool": "gh_source_gate",
+      "forbidden_tools": [],
+      "notes": "GitHub源码门禁：质量和安全检查"
+    },
+    {
+      "id": "search-research",
+      "category": "should-trigger",
+      "task": "在PubMed和arXiv上搜索关于CRISPR基因编辑的最新论文",
+      "expected_tool": "search_research",
+      "forbidden_tools": [],
+      "notes": "学术论文搜索：PubMed和ArXiv检索"
+    },
+    {
+      "id": "fetch-paper",
+      "category": "should-trigger",
+      "task": "获取这篇论文的摘要和元数据，DOI为10.1038/s41586-024-00000-0",
+      "expected_tool": "fetch_paper",
+      "forbidden_tools": [],
+      "notes": "论文元数据获取：通过DOI获取摘要信息"
+    },
+    {
+      "id": "find-paper-by-title",
+      "category": "should-trigger",
+      "task": "查找标题包含Generative Agents的论文",
+      "expected_tool": "find_paper_by_title",
+      "forbidden_tools": [],
+      "notes": "论文标题搜索：通过标题查找论文"
+    },
+    {
+      "id": "should-not-trigger-translation",
+      "category": "should-not-trigger",
+      "task": "把这份文档翻译成英文",
+      "expected_tool": null,
+      "forbidden_tools": [
+        "web_fetch",
+        "skill_read",
+        "skill_search"
+      ],
+      "notes": "翻译请求不应触发任何tool"
+    },
+    {
+      "id": "should-not-trigger-weather",
+      "category": "should-not-trigger",
+      "task": "今天天气怎么样，适合出门吗",
+      "expected_tool": null,
+      "forbidden_tools": [
+        "web_fetch",
+        "search_research",
+        "browser_open"
+      ],
+      "notes": "天气查询不应触发任何tool"
+    },
+    {
+      "id": "should-not-trigger-trivial-math",
+      "category": "should-not-trigger",
+      "task": "帮我算一下1+1等于几",
+      "expected_tool": null,
+      "forbidden_tools": [
+        "math_prove_inequality",
+        "math_sympy_verify",
+        "math_sympy_simplify"
+      ],
+      "notes": "简单算术不应触发高级数学证明工具"
+    },
+    {
+      "id": "should-not-trigger-recipe",
+      "category": "should-not-trigger",
+      "task": "红烧肉怎么做，给个详细步骤",
+      "expected_tool": null,
+      "forbidden_tools": [
+        "web_fetch",
+        "search_research",
+        "browser_open"
+      ],
+      "notes": "菜谱查询不应触发学术或抓取工具"
+    },
+    {
+      "id": "should-not-trigger-movie",
+      "category": "should-not-trigger",
+      "task": "推荐一部好看的科幻电影",
+      "expected_tool": null,
+      "forbidden_tools": [
+        "browser_open",
+        "browser_search",
+        "web_fetch",
+        "search_research"
+      ],
+      "notes": "电影推荐不应触发浏览器和学术搜索工具"
+    },
+    {
+      "id": "should-not-trigger-code-format",
+      "category": "should-not-trigger",
+      "task": "帮我格式化这段Rust代码，按标准风格排版",
+      "expected_tool": null,
+      "forbidden_tools": [
+        "codegraph_search",
+        "codegraph_dead_code",
+        "codegraph_impact"
+      ],
+      "notes": "代码格式化不应触发代码分析工具"
+    },
+    {
+      "id": "should-not-trigger-db-schema",
+      "category": "should-not-trigger",
+      "task": "设计一个用户表的数据库schema，包含字段和索引",
+      "expected_tool": null,
+      "forbidden_tools": [
+        "codegraph_goto_definition",
+        "codegraph_callers",
+        "codegraph_callees"
+      ],
+      "notes": "数据库设计不应触发代码图工具"
+    },
+    {
+      "id": "should-not-trigger-email",
+      "category": "should-not-trigger",
+      "task": "帮我写一封商务邮件给客户确认会议时间",
+      "expected_tool": null,
+      "forbidden_tools": [
+        "research_aigc_check",
+        "citation_audit",
+        "citation_lint"
+      ],
+      "notes": "邮件撰写不应触发学术研究工具"
+    },
+    {
+      "id": "should-not-trigger-todo",
+      "category": "should-not-trigger",
+      "task": "帮我列一个学习Rust的TODO清单",
+      "expected_tool": null,
+      "forbidden_tools": [
+        "goal_state_manage",
+        "closeout_gate",
+        "closeout_record_write"
+      ],
+      "notes": "简单的TODO清单不应触发goal管理或closeout工具"
+    },
+    {
+      "id": "should-not-trigger-unrelated",
+      "category": "should-not-trigger",
+      "task": "给我讲个笑话，缓解一下工作压力",
+      "expected_tool": null,
+      "forbidden_tools": [
+        "skill_read",
+        "skill_route",
+        "skill_search",
+        "web_fetch"
+      ],
+      "notes": "闲聊请求不应触发任何tool"
+    },
+    {
+      "id": "fuzzy-browser-screenshot",
+      "category": "fuzzy-rescue",
+      "task": "帮我截一个当前页面的screnshot",
+      "expected_tool": "browser_screenshot",
+      "forbidden_tools": [],
+      "notes": "screenshot 拼写为 screnshot，应模糊匹配到 browser_screenshot"
+    },
+    {
+      "id": "fuzzy-financial-data",
+      "category": "fuzzy-rescue",
+      "task": "查一下苹果公司的financal data",
+      "expected_tool": "financial_data",
+      "forbidden_tools": [],
+      "notes": "financial 拼写为 finantial，应模糊匹配到 financial_data"
+    },
+    {
+      "id": "fuzzy-search-research",
+      "category": "fuzzy-rescue",
+      "task": "在arXiv上papper search关于大模型推理的论文",
+      "expected_tool": "search_research",
+      "forbidden_tools": [],
+      "notes": "paper 拼写为 papper，应模糊匹配到 search_research"
+    },
+    {
+      "id": "fuzzy-citation-audit",
+      "category": "fuzzy-rescue",
+      "task": "这篇论文的citeation需要做audit，检查引用准确性",
+      "expected_tool": "citation_audit",
+      "forbidden_tools": [],
+      "notes": "citation 拼写为 citeation，应模糊匹配到 citation_audit"
+    },
+    {
+      "id": "fuzzy-math-sympy-simplify",
+      "category": "fuzzy-rescue",
+      "task": "用SymPy simplfy这个三角函数表达式",
+      "expected_tool": "math_sympy_simplify",
+      "forbidden_tools": [],
+      "notes": "simplify 拼写为 simplfy，应模糊匹配到 math_sympy_simplify"
+    },
+    {
+      "id": "fuzzy-math-prove-inequality",
+      "category": "fuzzy-rescue",
+      "task": "证明这个inequaltiy：AM-GM不等式",
+      "expected_tool": "math_prove_inequality",
+      "forbidden_tools": [],
+      "notes": "inequality 拼写为 inequaltiy，应模糊匹配到 math_prove_inequality"
+    },
+    {
+      "id": "fuzzy-browser-open-url",
+      "category": "fuzzy-rescue",
+      "task": "在broser里打开https://example.com",
+      "expected_tool": "browser_open",
+      "forbidden_tools": [],
+      "notes": "browser 拼写为 broser，应模糊匹配到 browser_open"
+    },
+    {
+      "id": "fuzzy-codegraph-deadcode",
+      "category": "fuzzy-rescue",
+      "task": "检测代码中的deadcode和unused函数",
+      "expected_tool": "codegraph_dead_code",
+      "forbidden_tools": [],
+      "notes": "dead_code 写为 deadcode（缺少下划线），应模糊匹配"
+    },
+    {
+      "id": "fuzzy-skill-search",
+      "category": "fuzzy-rescue",
+      "task": "seearch一下有哪些skill和路由相关",
+      "expected_tool": "skill_search",
+      "forbidden_tools": [],
+      "notes": "search 拼写为 serch，应模糊匹配到 skill_search"
+    },
+    {
+      "id": "fuzzy-browser-get-state",
+      "category": "fuzzy-rescue",
+      "task": "获取当前页面的状态摘",
+      "expected_tool": "browser_get_state",
+      "forbidden_tools": [],
+      "notes": "查询末尾截断，但状态+摘要关键词应仍然匹配 browser_get_state"
+    }
+  ]
+}

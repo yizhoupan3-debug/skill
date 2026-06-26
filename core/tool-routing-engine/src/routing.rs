@@ -16,6 +16,8 @@ use core_state_utils::text_utils::tokenize_cjk_aware as tokenize_text;
 use mcp_tool_registry::McpToolRecord;
 use std::collections::HashSet;
 
+use crate::routing_logger::log_tool_decision;
+
 const DECISION_SCHEMA_VERSION: &str = "1.0.0";
 
 /// Route a natural language query to the best-matching tool.
@@ -98,7 +100,7 @@ pub fn route_tool_from_records(
     })?;
 
     if best.score > 0.0 {
-        return Some(McpToolDecision {
+        let decision = McpToolDecision {
             decision_schema_version: DECISION_SCHEMA_VERSION.to_string(),
             selected_tool: best.record.slug.clone(),
             score: best.score,
@@ -107,7 +109,9 @@ pub fn route_tool_from_records(
             dispatch_domain: best.record.dispatch_domain.clone(),
             mcp_server: best.record.mcp_server.clone(),
             fuzzy_match: false,
-        });
+        };
+        log_tool_decision(&decision, query);
+        return Some(decision);
     }
 
     // Step 8: fuzzy rescue — try trigram matching against trigger hints
@@ -131,7 +135,7 @@ pub fn route_tool_from_records(
 
     let (fuzzy_score, fuzzy_record) = fuzzy_candidates.into_iter().next()?;
 
-    Some(McpToolDecision {
+    let decision = McpToolDecision {
         decision_schema_version: DECISION_SCHEMA_VERSION.to_string(),
         selected_tool: fuzzy_record.slug.clone(),
         score: fuzzy_score,
@@ -140,7 +144,9 @@ pub fn route_tool_from_records(
         dispatch_domain: fuzzy_record.dispatch_domain.clone(),
         mcp_server: fuzzy_record.mcp_server.clone(),
         fuzzy_match: true,
-    })
+    };
+    log_tool_decision(&decision, query);
+    Some(decision)
 }
 
 /// 7-step scoring pipeline. Steps 1-5 produce the primary score;
@@ -153,8 +159,7 @@ pub(crate) fn score_tool(
     query_tokens: &[String],
     weights: &crate::scoring_config::ToolScoringWeights,
 ) -> (f64, Vec<String>, usize) {
-    // Pre-compute routing tokens from the raw record (tool layer no longer
-    // embeds these fields; derivation happens here in the routing layer).
+    // Derive routing tokens from the raw record inline.
     let slug_lower = record.slug.to_lowercase();
     let display_name_lower = record.display_name.to_lowercase();
 
@@ -215,7 +220,6 @@ pub(crate) fn score_tool(
     }
 
     // Step 3: Trigger hint matching
-
     let trigger_match_count = record
         .trigger_hints
         .iter()
@@ -253,10 +257,6 @@ pub(crate) fn score_tool(
         .count();
     if alias_match_count > 0 {
         // Deduplicate against keyword-matched tokens to avoid double-counting.
-        // Instead of the old all-or-nothing lockout (suppress ALL alias scoring
-        // when ANY keyword matched), we subtract overlapping tokens so that
-        // non-overlapping alias tokens (e.g., display_name words not present in
-        // trigger_hints) still contribute.
         let alias_unique_count = query_tokens
             .iter()
             .filter(|qt| alias_tokens.contains(qt.as_str()) && !keyword_tokens.contains(qt.as_str()))
@@ -284,8 +284,6 @@ pub(crate) fn score_tool(
     }
 
     // Step 6: do-not-use penalty (for deprecated tools)
-    // Always applies a base penalty to deprecated tools, plus additional
-    // penalty when the query explicitly contains "deprecated".
     if !do_not_use_tokens.is_empty() && score > 0.0 {
         let base_penalty = weights.do_not_use_penalty_per_hit;
         let additional_hits: Vec<&str> = query_tokens

@@ -90,13 +90,13 @@ fn bench_search_tools(c: &mut Criterion) {
     let mut group = c.benchmark_group("search_tools");
     for (label, query) in queries {
         group.bench_with_input(BenchmarkId::new("20_tools", label), query, |b, q| {
-            b.iter(|| black_box(search_tools(black_box(q), black_box(&records_20), 10)));
+            b.iter(|| black_box(search_tools(black_box(q), black_box(&records_20), 10, None)));
         });
         group.bench_with_input(BenchmarkId::new("50_tools", label), query, |b, q| {
-            b.iter(|| black_box(search_tools(black_box(q), black_box(&records_50), 10)));
+            b.iter(|| black_box(search_tools(black_box(q), black_box(&records_50), 10, None)));
         });
         group.bench_with_input(BenchmarkId::new("100_tools", label), query, |b, q| {
-            b.iter(|| black_box(search_tools(black_box(q), black_box(&records_100), 10)));
+            b.iter(|| black_box(search_tools(black_box(q), black_box(&records_100), 10, None)));
         });
     }
     group.finish();
