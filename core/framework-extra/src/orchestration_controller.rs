@@ -784,8 +784,6 @@ pub fn build_runtime_control_plane_payload() -> Value {
 
 pub fn build_runtime_integrator_payload() -> Value {
     let control_plane = build_runtime_control_plane_payload();
-    // Use references to avoid cloning large sub-trees.
-    // The control_plane value lives for the entire function scope, so borrows are safe.
     let runtime_host = control_plane.get("runtime_host").unwrap_or(&Value::Null);
     let services = control_plane.get("services").unwrap_or(&Value::Null);
     let runtime_status = control_plane.get("runtime_status").unwrap_or(&Value::Null);

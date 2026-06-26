@@ -4,6 +4,9 @@ use crate::types::{
 use std::fs;
 use std::path::{Path, PathBuf};
 
+/// Max run history entries kept in state to prevent unbounded file growth.
+const MAX_HISTORY_ENTRIES: usize = 100;
+
 /// Canonical `now_iso` — re-exported from `framework-kernel`.
 pub use framework_kernel::time::now_iso;
 
@@ -85,7 +88,7 @@ pub fn write_loop_state(
     state: &LoopRunState,
 ) -> Result<(), LoopError> {
     let path = loop_state_path(repo_root, loop_id);
-    let text = serde_json::to_string_pretty(state)
+    let text = serde_json::to_string(state)
         .map_err(|e| LoopError::Serde(format!("serialize state: {e}")))?;
     core_state_utils::atomic_write::write_atomic_text(&path, &text).map_err(|e| LoopError::Io(e.to_string()))
 }
@@ -129,6 +132,7 @@ pub fn start_new_run(state: &mut LoopRunState, run_id: &str) {
 }
 
 /// Mark the current run as finished, archiving it to the run history and clearing the current run.
+/// History is capped at MAX_HISTORY_ENTRIES to prevent unbounded state file growth.
 pub fn finish_run(state: &mut LoopRunState, result: &str) {
     if let Some(ref run) = state.current_run {
         state.history.push(RunHistoryEntry {
@@ -136,6 +140,10 @@ pub fn finish_run(state: &mut LoopRunState, result: &str) {
             phase: state.phase.clone(),
             result: result.to_string(),
         });
+        if state.history.len() > MAX_HISTORY_ENTRIES {
+            let drain_count = state.history.len() - MAX_HISTORY_ENTRIES;
+            state.history.drain(..drain_count);
+        }
     }
     state.current_run = None;
 }

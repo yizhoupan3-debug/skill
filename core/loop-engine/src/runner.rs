@@ -727,8 +727,7 @@ fn evaluate_subagent_output(
     output: &SubagentResult,
 ) -> AggregateActionResult {
     let record_path = closeout_path(repo_root, loop_id, run_id, &action.action_id);
-    if record_path.is_file()
-        && let Ok(Some(record)) = read_action_record(repo_root, loop_id, run_id, &action.action_id)
+    if let Ok(Some(record)) = read_action_record(repo_root, loop_id, run_id, &action.action_id)
     {
         let verification =
             verify_closeout_with_evidence(&record.closeout, repo_root, &action.action_id);
