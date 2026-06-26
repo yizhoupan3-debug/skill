@@ -552,7 +552,15 @@ pub fn reap_stale_teams(
                 && let Ok(dead) = chrono::DateTime::parse_from_rfc3339(&deadline) {
                     return dead.signed_duration_since(updated).num_seconds() < retention_seconds;
                 }
-            false
+            // Parse failure: retain the team to be safe rather than silently deleting.
+            // If both timestamps are valid, the retain check above handles the comparison.
+            // If either is unparseable, we keep the team — it's better to leave a stale
+            // entry than to silently lose data. The next reap cycle will retry.
+            tracing::warn!(
+                "[team_manager] reap: cannot parse timestamp for team '{}' (updated_at={}, deadline={}) — retaining to avoid data loss; next reap cycle will retry",
+                t.team_id, t.updated_at, deadline,
+            );
+            true
         });
 
         let reaped = before - registry.teams.len();

@@ -194,7 +194,7 @@ fn run_loop_inner(
     let safety_map = assign_safety_levels(&actions, entry);
     check_budget_preflight(&profile_config)?;
 
-    transition_phase(state, LoopPhase::Dispatching);
+    transition_phase(state, LoopPhase::Running);
     let mut results: Vec<(String, AggregateActionResult)> = Vec::new();
 
     for action in &actions {
@@ -281,8 +281,6 @@ fn run_loop_inner(
         }
     }
 
-    transition_phase(state, LoopPhase::Running);
-
     transition_phase(state, LoopPhase::Verifying);
     let mut aggregate = build_aggregate(run_id, &entry.loop_id, &actions, results);
 
@@ -311,10 +309,19 @@ fn run_loop_inner(
     // Anti-drift check: after each review cycle, increment counter
     // and fire drift check every N cycles (default 3).
     state.anti_drift.review_cycle_count += 1;
-    if crate::drift::should_check_drift(&state.anti_drift)
-        && let Some(current_goal) = read_goal_snapshot(ctx.repo_root, entry)
+    let should_check = crate::drift::should_check_drift(&state.anti_drift);
+    let current_goal = read_goal_snapshot(ctx.repo_root, entry);
+    if current_goal.is_none() && should_check && state.anti_drift.original_goal_snapshot.is_some() {
+        tracing::warn!(
+            "[loop-engine] anti-drift check at cycle {} skipped: cannot read current goal (GOAL_STATE.json not found at artifacts/current/{}/)",
+            state.anti_drift.review_cycle_count,
+            entry.loop_id,
+        );
+    }
+    if should_check
+        && let Some(current_goal_text) = current_goal
     {
-        let result = crate::drift::perform_drift_check(&mut state.anti_drift, &current_goal);
+        let result = crate::drift::perform_drift_check(&mut state.anti_drift, &current_goal_text);
         tracing::warn!(
             "[loop-engine] anti-drift check at cycle {}: drift_detected={}, score={:.2}",
             result.review_cycle,
@@ -342,7 +349,13 @@ fn run_loop_inner(
             .unwrap_or(3);
         if state.circuit_breaker.consecutive_failures >= threshold {
             if entry.research_enabled {
-                let escalation = barrier_escalation(entry, &entry.loop_id, run_id, ctx.repo_root)?;
+                let escalation = barrier_escalation(
+                            entry,
+                            &entry.loop_id,
+                            run_id,
+                            state.circuit_breaker.consecutive_failures,
+                            ctx.repo_root,
+                        )?;
                 if escalation.should_resume() {
                     return Err(LoopError::ResearchEscalation(format!(
                         "barrier={} candidates={}: research complete, auto-resume loop",
@@ -394,18 +407,14 @@ fn barrier_escalation(
     entry: &LoopRegistryEntry,
     loop_id: &str,
     run_id: &str,
+    consecutive_failures: u32,
     repo_root: &Path,
 ) -> Result<BarrierResult, LoopError> {
-    let threshold = entry
-        .research
-        .as_ref()
-        .map(|r| r.barrier_threshold)
-        .unwrap_or(3);
     let problem = format!(
         "loop={} run={} consecutive_failures={} skill={}",
         loop_id,
         run_id,
-        threshold,
+        consecutive_failures,
         entry.skill.as_deref().unwrap_or("none"),
     );
 
@@ -539,7 +548,6 @@ fn discover_actions(
 ) -> Result<Vec<LoopAction>, LoopError> {
     let skill_name = entry.skill.as_deref().unwrap_or(&entry.loop_id);
     let default_safety = entry.default_safety.as_deref().unwrap_or("L1");
-    let _schedule_info = entry.trigger.schedule.as_deref().unwrap_or("manual");
 
     // Use static actions if configured in the registry entry.
     // Static actions allow loops to define their action set declaratively
@@ -803,6 +811,9 @@ fn read_goal_snapshot(repo_root: &Path, entry: &LoopRegistryEntry) -> Option<Str
         .join("current")
         .join(&entry.loop_id)
         .join("GOAL_STATE.json");
+    if !goal_path.is_file() {
+        return None;
+    }
     let raw = std::fs::read_to_string(&goal_path).ok()?;
     let val: serde_json::Value = serde_json::from_str(&raw).ok()?;
     val.get("goal").and_then(|g| g.as_str()).map(String::from)

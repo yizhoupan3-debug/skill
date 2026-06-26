@@ -87,7 +87,7 @@ pub fn write_loop_state(
     let path = loop_state_path(repo_root, loop_id);
     let text = serde_json::to_string_pretty(state)
         .map_err(|e| LoopError::Serde(format!("serialize state: {e}")))?;
-    core_state_utils::atomic_write::write_atomic_text(&path, &text).map_err(LoopError::Io)
+    core_state_utils::atomic_write::write_atomic_text(&path, &text).map_err(|e| LoopError::Io(e.to_string()))
 }
 
 /// Create a new initial `LoopRunState` with the given loop ID and profile.
@@ -140,14 +140,18 @@ pub fn finish_run(state: &mut LoopRunState, result: &str) {
     state.current_run = None;
 }
 
-/// Generate a unique run ID string in the format `run-{YYYYMMDD}-{HHMM}-{SS}`.
-pub fn generate_run_id(_loop_id: &str) -> String {
+/// Generate a unique run ID string in the format `run-{YYYYMMDD}-{HHMMSSsss}-{loop_id}`.
+/// Uses nanosecond-grain timestamp to avoid collisions between concurrent runs
+/// of the same loop, and includes the loop_id for disambiguation across loops.
+pub fn generate_run_id(loop_id: &str) -> String {
     let now = chrono::Utc::now();
+    let nanos = now.timestamp_subsec_nanos();
     format!(
-        "run-{}-{}-{}",
+        "run-{}-{:06}-{:03}-{}",
         now.format("%Y%m%d"),
-        now.format("%H%M"),
-        now.format("%S")
+        now.format("%H%M%S"),
+        nanos / 1_000_000,
+        loop_id,
     )
 }
 

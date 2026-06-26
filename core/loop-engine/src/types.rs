@@ -10,17 +10,22 @@ use serde::{Deserialize, Serialize};
 /// Phase of the Loop Runner state machine.
 ///
 /// ```text
-/// PENDING → DISCOVERING → PREFLIGHT → DISPATCHING → RUNNING → VERIFYING → COMPLETED
-///                                                              ↘ ESCALATED
+/// PENDING → DISCOVERING → PREFLIGHT → RUNNING → VERIFYING → COMPLETED
+///                                                      ↘ ESCALATED
 /// 任意阶段 → INTERRUPTED（kill/超时）
 /// ```
+/// Phase transitions:
+/// - DISCOVERING: subagent discovers actions
+/// - PREFLIGHT: safety checks, budget validation
+/// - RUNNING: actions are dispatched and executed by subagents
+/// - VERIFYING: closeout verification, RFV convergence, anti-drift
+/// - COMPLETED: report written, lock released
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum LoopPhase {
     Pending,
     Discovering,
     Preflight,
-    Dispatching,
     Running,
     Verifying,
     Completed,
@@ -38,7 +43,6 @@ impl LoopPhase {
             LoopPhase::Pending => "pending",
             LoopPhase::Discovering => "discovering",
             LoopPhase::Preflight => "preflight",
-            LoopPhase::Dispatching => "dispatching",
             LoopPhase::Running => "running",
             LoopPhase::Verifying => "verifying",
             LoopPhase::Completed => "completed",
@@ -524,7 +528,7 @@ mod tests {
         assert!(LoopPhase::Completed.is_terminal());
         assert!(
             !LoopPhase::Escalated.is_terminal(),
-            "Escalated is no longer terminal: auto-resume may transition back to Dispatching"
+            "Escalated is no longer terminal: auto-resume restarts the loop at Discovering"
         );
         assert!(LoopPhase::Interrupted.is_terminal());
         assert!(!LoopPhase::Pending.is_terminal());

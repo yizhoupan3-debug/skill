@@ -476,6 +476,13 @@ impl BackgroundStateStore {
                 .map(|job| (job.updated_at.clone(), job.job_id.clone()))
                 .collect::<Vec<_>>();
             if terminal_jobs.is_empty() {
+                tracing::warn!(
+                    "[background_state] compact_terminal_over_capacity: {}/{} jobs remain after removing all terminal jobs — {} active jobs exceed capacity of {}. No terminal jobs to compact.",
+                    self.jobs.len(),
+                    limit,
+                    self.active_job_count(),
+                    limit,
+                );
                 break; // No more terminal jobs to remove.
             }
             terminal_jobs.sort();

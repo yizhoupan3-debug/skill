@@ -59,7 +59,9 @@ pub(super) fn default_backoff_multiplier() -> f64 {
 }
 
 #[derive(Debug, Clone, Deserialize)]
-#[serde(deny_unknown_fields)]
+// NOTE: Intentionally omitting deny_unknown_fields to allow forward-compatible
+// schema evolution. This struct is consumed via Stdio/socket across binary
+// boundaries — adding a field to a newer producer should not crash an older consumer.
 pub(super) struct BackgroundStateRequestPayload {
     pub(super) schema_version: String,
     pub(super) operation: String,

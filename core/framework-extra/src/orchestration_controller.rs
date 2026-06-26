@@ -1,8 +1,6 @@
 //! Background/worker orchestration policy、runtime control-plane 描述与 observability 契约。
 //!
-//! This file contains static data constructors where `.unwrap()` on provably
-//! infallible calls is intentional (hardcoded parameters).
-#![allow(clippy::unwrap_used)]
+//! This file contains static data constructors with hardcoded parameters.
 
 use std::collections::HashSet;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -266,7 +264,9 @@ fn handle_enqueue(
         return Ok(resp);
     }
     let active_job_count = payload.active_job_count.unwrap_or(0);
-    let capacity_limit = payload.capacity_limit.unwrap_or(0);
+    // When capacity_limit is not provided by the caller, treat it as unlimited
+    // rather than 0, which would incorrectly reject every enqueue with "0/0 capacity".
+    let capacity_limit = payload.capacity_limit.unwrap_or(usize::MAX);
     if active_job_count >= capacity_limit {
         let mut effect_plan = background_effect_plan("reject");
         effect_plan.terminal_status = Some("failed".to_string());
@@ -643,8 +643,7 @@ pub fn build_runtime_control_plane_payload() -> Value {
                 Some("filesystem"),
                 Some("filesystem"),
             )
-            // SAFETY: hardcoded static parameters are always valid
-            .unwrap(),
+            .expect("hardcoded 'filesystem' is a valid built-in backend family"),
         },
         "execution": {
             "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
