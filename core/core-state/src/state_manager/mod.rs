@@ -943,7 +943,6 @@ mod tests {
             "drive_until_done": true,
         }))
         .expect("goal start");
-        assert_eq!(ag["quality_gate_superseded"], json!(true));
 
         let rfv_path = quality_gate_state_path(&repo, "mx-task").expect("rfv path");
         let raw = fs::read_to_string(&rfv_path).expect("read rfv");

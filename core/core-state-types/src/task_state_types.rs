@@ -52,8 +52,6 @@ pub struct DepthCompliance {
 pub enum TaskControlMode {
     Idle,
     GoalDrive,
-    QualityGate,
-    Conflict { reason: String },
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]

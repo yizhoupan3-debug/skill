@@ -164,7 +164,7 @@ pub(crate) mod proptests {
             prop_assert_eq!(goal_state_requests_continuation(&state), expected);
         }
 
-        /// I3: classify_control_mode truth table — 4 input combinations → 4 outputs.
+        /// I3: classify_control_mode truth table — 2 input combinations → 2 outputs.
         #[test]
         fn prop_classify_control_mode_truth_table(
             g_drive in any::<bool>(),
@@ -180,26 +180,15 @@ pub(crate) mod proptests {
             } else {
                 None
             };
-            let qg = if qg_active {
-                Some(json!({"loop_status": "active"}))
-            } else {
-                None
-            };
+            let _ = qg_active; // suppress unused warning — qg input is ignored by classify_control_mode
             let mut notes = Vec::new();
-            let mode = classify_control_mode(goal.as_ref(), qg.as_ref(), &mut notes);
+            let mode = classify_control_mode(goal.as_ref(), None, &mut notes);
 
-            match (goal_state_requests_continuation(goal.as_ref().unwrap_or(&json!(null))), qg_active) {
-                (true, true) => {
-                    let conflict = matches!(mode, TaskControlMode::Conflict { .. });
-                    prop_assert!(conflict);
-                }
-                (true, false) => {
+            match goal_state_requests_continuation(goal.as_ref().unwrap_or(&json!(null))) {
+                true => {
                     prop_assert!(matches!(mode, TaskControlMode::GoalDrive));
                 }
-                (false, true) => {
-                    prop_assert!(matches!(mode, TaskControlMode::QualityGate));
-                }
-                (false, false) => {
+                false => {
                     prop_assert!(matches!(mode, TaskControlMode::Idle));
                 }
             }

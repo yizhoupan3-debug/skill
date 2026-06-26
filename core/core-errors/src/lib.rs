@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 /// Top-level error type for framework operations.
 /// Each variant represents a distinct error domain (I/O, config, hook,
-/// MCP, session, etc.) with a human-readable message via `Display`.
+/// session, etc.) with a human-readable message via `Display`.
 #[derive(Debug, thiserror::Error)]
 pub enum FrameworkError {
     /// Wraps a standard I/O error (file read/write, network, etc.).
@@ -27,10 +27,6 @@ pub enum FrameworkError {
     #[error("Hook error: {message}")]
     Hook { message: String },
 
-    /// An MCP (Model Context Protocol) error (tool invocation, transport, etc.).
-    #[error("MCP error: {message}")]
-    Mcp { message: String },
-
     /// A session-management error (launch, termination, or state error).
     #[error("Session error: {message}")]
     Session { message: String },
@@ -51,21 +47,9 @@ pub enum FrameworkError {
     #[error("Unsupported: {what}")]
     Unsupported { what: String },
 
-    /// A network-related error (DNS resolution, URL fetch, connection failure, etc.).
-    #[error("Network error: {message}")]
-    Network { message: String },
-
-    /// A database/storage backend error (SQLite, etc.).
-    #[error("Database error: {message}")]
-    Database { message: String },
-
     /// A lock acquisition error (mutex poison, file lock contention, etc.).
     #[error("Lock error: {message}")]
     Lock { message: String },
-
-    /// A YAML serialization or deserialization error.
-    #[error("YAML error: {0}")]
-    Yaml(#[from] serde_yml::Error),
 }
 
 impl FrameworkError {
@@ -86,13 +70,6 @@ impl FrameworkError {
     /// Create a `Hook` error from a message string.
     pub fn hook(message: impl Into<String>) -> Self {
         Self::Hook {
-            message: message.into(),
-        }
-    }
-
-    /// Create an `Mcp` error from a message string.
-    pub fn mcp(message: impl Into<String>) -> Self {
-        Self::Mcp {
             message: message.into(),
         }
     }
@@ -129,20 +106,6 @@ impl FrameworkError {
     pub fn unsupported(what: impl Into<String>) -> Self {
         Self::Unsupported {
             what: what.into(),
-        }
-    }
-
-    /// Create a `Network` error from a message string.
-    pub fn network(message: impl Into<String>) -> Self {
-        Self::Network {
-            message: message.into(),
-        }
-    }
-
-    /// Create a `Database` error from a message string.
-    pub fn database(message: impl Into<String>) -> Self {
-        Self::Database {
-            message: message.into(),
         }
     }
 

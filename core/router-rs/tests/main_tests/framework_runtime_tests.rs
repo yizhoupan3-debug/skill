@@ -343,7 +343,6 @@ fn stdio_framework_goal_drive_roundtrip() {
     assert!(response.ok, "{:?}", response.error);
     let body = response.payload.expect("payload");
     assert_eq!(body["ok"], json!(true));
-    assert_eq!(body["quality_gate_superseded"], json!(false));
 
     let path = repo_root.join("artifacts/current/ag-stdio-task/GOAL_STATE.json");
     assert!(path.is_file(), "missing {}", path.display());

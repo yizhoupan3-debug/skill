@@ -381,33 +381,16 @@ pub fn task_view_has_active_goal_focus_mismatch_note(view: &ResolvedTaskView) ->
         .any(|n| n.starts_with(RESOLUTION_NOTE_ACTIVE_GOAL_MISSING_FOCUS_HAS_GOAL))
 }
 
-fn qg_active(state: &Value) -> bool {
-    state
-        .get("loop_status")
-        .and_then(Value::as_str)
-        .is_some_and(|s| s.eq_ignore_ascii_case("active"))
-}
 
 pub(crate) fn classify_control_mode(
     goal: Option<&Value>,
-    qg: Option<&Value>,
-    notes: &mut Vec<String>,
+    _qg: Option<&Value>,
+    _notes: &mut Vec<String>,
 ) -> TaskControlMode {
-    let g_on = goal.is_some_and(goal_state_requests_continuation);
-    let r_on = qg.is_some_and(qg_active);
-    match (g_on, r_on) {
-        (true, true) => {
-            notes.push(
-                "goal macro (drive_until_done+running) and RFV loop_status=active both true; invariant violation expected to be prevented by writers"
-                    .to_string(),
-            );
-            TaskControlMode::Conflict {
-                reason: "goal_drive_and_rfv_loop_both_active".to_string(),
-            }
-        }
-        (true, false) => TaskControlMode::GoalDrive,
-        (false, true) => TaskControlMode::QualityGate,
-        (false, false) => TaskControlMode::Idle,
+    if goal.is_some_and(goal_state_requests_continuation) {
+        TaskControlMode::GoalDrive
+    } else {
+        TaskControlMode::Idle
     }
 }
 
@@ -1015,8 +998,7 @@ mod tests {
         .unwrap();
 
         let v = resolve_task_view(&tmp, Some(tid));
-        assert!(matches!(v.control_mode, TaskControlMode::Conflict { .. }));
-        assert!(!v.resolution_notes.is_empty());
+        assert!(matches!(v.control_mode, TaskControlMode::GoalDrive));
         let _ = fs::remove_dir_all(&tmp);
     }
 

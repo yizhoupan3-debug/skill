@@ -484,7 +484,7 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
             };
             crate::task_ledger::append_transaction_assuming_l1_held(&repo_root, &task_id, tx)
                 .map_err(|e| format!("TASK_LEDGER append failed: {e}"))?;
-            let quality_gate_superseded =
+            let _ =
                 deactivate_quality_gate_for_conflict_with_goal_drive(&repo_root, &task_id)?;
             crate::task_state_aggregate::sync_task_state_aggregate_best_effort(
                 &repo_root, &task_id,
@@ -496,13 +496,12 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
                 "task_id": task_id,
                 "goal_state_path": path.display().to_string(),
                 "status": "running",
-                "quality_gate_superseded": quality_gate_superseded,
             }))
         }
         "checkpoint" => {
             let task_id = resolve_task_id_strict(&payload)?;
             crate::utils::path_guard::validate_task_id_component(&task_id)?;
-            let quality_gate_superseded =
+            let _ =
                 deactivate_quality_gate_for_conflict_with_goal_drive(&repo_root, &task_id)?;
             let note = payload
                 .get("note")
@@ -550,7 +549,6 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
                 "operation": "checkpoint",
                 "task_id": task_id,
                 "goal_state_path": path.display().to_string(),
-                "quality_gate_superseded": quality_gate_superseded,
             }))
         }
         "pause" => set_terminal_flags(
@@ -708,7 +706,7 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
         "continue_review" | "retry" => {
             let task_id = resolve_task_id_strict(&payload)?;
             crate::utils::path_guard::validate_task_id_component(&task_id)?;
-            let quality_gate_superseded =
+            let _ =
                 deactivate_quality_gate_for_conflict_with_goal_drive(&repo_root, &task_id)?;
             let path = goal_state_path_for_task(&repo_root, &task_id)?;
             let mut state = read_goal_state(&repo_root, Some(&task_id))?
@@ -749,7 +747,6 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
                 "operation": "retry",
                 "task_id": task_id,
                 "goal_state_path": path.display().to_string(),
-                "quality_gate_superseded": quality_gate_superseded,
             }))
         }
         "block" => {
@@ -986,7 +983,7 @@ fn resume_goal_running(
     };
     crate::task_ledger::append_transaction_assuming_l1_held(repo_root, &task_id, tx)
         .map_err(|e| format!("TASK_LEDGER append failed: {e}"))?;
-    let quality_gate_superseded = deactivate_quality_gate_for_conflict_with_goal_drive(repo_root, &task_id)?;
+    let _ = deactivate_quality_gate_for_conflict_with_goal_drive(repo_root, &task_id)?;
     crate::task_state_aggregate::sync_task_state_aggregate_best_effort(repo_root, &task_id);
     let goal_label = state
         .get("goal")
@@ -999,7 +996,6 @@ fn resume_goal_running(
         "task_id": task_id,
         "goal_state_path": path.display().to_string(),
         "goal_state": state,
-        "quality_gate_superseded": quality_gate_superseded,
     }))
 }
 

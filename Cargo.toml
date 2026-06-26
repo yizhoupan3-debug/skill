@@ -53,7 +53,15 @@ members = [
     "core/routing-core",
     "core/tool-routing-engine",
     "core/http-util",
-    "core/quality-gate"]
+    "core/quality-gate",
+    "rust_tools/batch-common",
+    "rust_tools/citation_tool_rs",
+    "rust_tools/financial_data_rs",
+    "rust_tools/gh_source_gate_rs",
+    "rust_tools/mcp-stdio-common",
+    "rust_tools/ooxml_parser_rs",
+    "rust_tools/pdf_tool_rs",
+    "rust_tools/pptx_tool_rs"]
 exclude = [
     "codex-aggregator"
 ]
