@@ -10,6 +10,7 @@ use crate::constants;
 use crate::frontmatter::SkillFrontmatter;
 use crate::frontmatter_parser;
 use crate::paths;
+use core_errors::FrameworkError;
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -17,6 +18,8 @@ use std::path::{Path, PathBuf};
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
+
+pub type Result<T> = std::result::Result<T, FrameworkError>;
 
 /// Unified view of a skill across all registry sources.
 #[derive(Debug, Clone)]
@@ -49,42 +52,8 @@ pub enum IssueSeverity {
     Warning,
 }
 
-/// Registry-level errors.
-#[derive(Debug)]
-pub enum RegistryError {
-    Io(std::io::Error),
-    Json(serde_json::Error),
-}
-
-impl std::fmt::Display for RegistryError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Io(e) => write!(f, "I/O error: {e}"),
-            Self::Json(e) => write!(f, "JSON error: {e}"),
-        }
-    }
-}
-
-impl std::error::Error for RegistryError {}
-
-impl From<std::io::Error> for RegistryError {
-    fn from(e: std::io::Error) -> Self {
-        Self::Io(e)
-    }
-}
-
-impl From<serde_json::Error> for RegistryError {
-    fn from(e: serde_json::Error) -> Self {
-        Self::Json(e)
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Internal helpers
-// ---------------------------------------------------------------------------
-
 /// Load columnar rows from a file, returning slug→row mapping.
-fn load_rows(path: &Path) -> Result<HashMap<String, Vec<serde_json::Value>>, RegistryError> {
+fn load_rows(path: &Path) -> Result<HashMap<String, Vec<serde_json::Value>>> {
     let doc: serde_json::Value = serde_json::from_str(&fs::read_to_string(path)?)?;
     Ok(columnar::load_columnar_rows(&doc))
 }
@@ -104,20 +73,20 @@ impl SkillRegistry {
     }
 
     /// List all known skill slugs from the runtime registry.
-    pub fn list_slugs(&self) -> Result<Vec<String>, RegistryError> {
+    pub fn list_slugs(&self) -> Result<Vec<String>> {
         let runtime_path = paths::runtime_json(&self.repo_root);
         let rows = load_rows(&runtime_path)?;
         Ok(rows.into_keys().collect())
     }
 
     /// Get unified entry for a single skill by slug.
-    pub fn get(&self, slug: &str) -> Result<Option<SkillRegistryEntry>, RegistryError> {
+    pub fn get(&self, slug: &str) -> Result<Option<SkillRegistryEntry>> {
         let all = self.all()?;
         Ok(all.into_iter().find(|e| e.slug == slug))
     }
 
     /// Get all entries from the runtime registry.
-    pub fn all(&self) -> Result<Vec<SkillRegistryEntry>, RegistryError> {
+    pub fn all(&self) -> Result<Vec<SkillRegistryEntry>> {
         let runtime_path = paths::runtime_json(&self.repo_root);
         let doc: serde_json::Value = serde_json::from_str(&fs::read_to_string(&runtime_path)?)?;
         let keys = columnar::parse_columnar_keys(&doc);
@@ -161,7 +130,7 @@ impl SkillRegistry {
     }
 
     /// Cross-source consistency validation.
-    pub fn validate_consistency(&self) -> Result<Vec<ConsistencyIssue>, RegistryError> {
+    pub fn validate_consistency(&self) -> Result<Vec<ConsistencyIssue>> {
         let mut issues = Vec::new();
 
         // Load RUNTIME
@@ -186,7 +155,7 @@ impl SkillRegistry {
             if !path.exists() {
                 issues.push(ConsistencyIssue {
                     severity: IssueSeverity::Error,
-                    slug: Some((**slug).clone()),
+                    slug: Some((*slug).to_string()),
                     message: "no SKILL.md on disk".into(),
                 });
             }
@@ -201,7 +170,7 @@ impl SkillRegistry {
                         && fm.name != **slug {
                             issues.push(ConsistencyIssue {
                                 severity: IssueSeverity::Warning,
-                                slug: Some((**slug).clone()),
+                                slug: Some((*slug).to_string()),
                                 message: format!(
                                     "frontmatter name `{}` doesn't match slug `{}`",
                                     fm.name, slug

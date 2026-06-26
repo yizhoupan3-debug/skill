@@ -1,6 +1,6 @@
 //! Skill deletion with safety checks.
 
-use std::fmt;
+use core_errors::FrameworkError;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -36,36 +36,7 @@ pub struct DeleteResult {
 // Errors
 // ---------------------------------------------------------------------------
 
-#[derive(Debug)]
-pub enum DeleteError {
-    SkillNotFound(String),
-    /// Skill appears in one or more loadouts.
-    LoadoutConflict {
-        slug: String,
-        loadouts: Vec<String>,
-    },
-    Io(std::io::Error),
-}
-
-impl fmt::Display for DeleteError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::SkillNotFound(s) => write!(f, "skill not found: {s}"),
-            Self::LoadoutConflict { slug, loadouts } => {
-                write!(f, "cannot delete `{slug}`: referenced in loadouts: {loadouts:?}")
-            }
-            Self::Io(e) => write!(f, "I/O error: {e}"),
-        }
-    }
-}
-
-impl std::error::Error for DeleteError {}
-
-impl From<std::io::Error> for DeleteError {
-    fn from(e: std::io::Error) -> Self {
-        Self::Io(e)
-    }
-}
+pub type Result<T> = std::result::Result<T, FrameworkError>;
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -80,13 +51,13 @@ impl From<std::io::Error> for DeleteError {
 pub fn delete_skill(
     skills_root: &Path,
     opts: &DeleteOptions,
-) -> Result<DeleteResult, DeleteError> {
+) -> Result<DeleteResult> {
     crate::validate::validate_skill_name(&opts.slug).map_err(|e| {
-        DeleteError::Io(std::io::Error::new(std::io::ErrorKind::InvalidInput, e))
+        std::io::Error::new(std::io::ErrorKind::InvalidInput, e)
     })?;
     let skill_dir = skills_root.join(&opts.slug);
     if !skill_dir.exists() {
-        return Err(DeleteError::SkillNotFound(opts.slug.clone()));
+        return Err(FrameworkError::not_found(opts.slug.clone()));
     }
 
     let mut warnings = Vec::new();
@@ -94,8 +65,7 @@ pub fn delete_skill(
     // Check loadout references
     let loadouts_path = skills_root.join("SKILL_LOADOUTS.json");
     if loadouts_path.exists() {
-        let loadouts_text =
-            fs::read_to_string(&loadouts_path).map_err(DeleteError::Io)?;
+        let loadouts_text = fs::read_to_string(&loadouts_path)?;
         if let Ok(loadouts_val) = serde_json::from_str::<serde_json::Value>(&loadouts_text)
             && let Some(loadouts_obj) = loadouts_val.get("loadouts").and_then(|v| v.as_object()) {
                 let referencing: Vec<String> = loadouts_obj
@@ -112,10 +82,10 @@ pub fn delete_skill(
                     .map(|(k, _)| k.clone())
                     .collect();
                 if !referencing.is_empty() {
-                    return Err(DeleteError::LoadoutConflict {
-                        slug: opts.slug.clone(),
-                        loadouts: referencing,
-                    });
+                    return Err(FrameworkError::validation(format!(
+                        "cannot delete `{}`: referenced in loadouts: {:?}",
+                        opts.slug, referencing
+                    )));
                 }
             }
     }
@@ -127,7 +97,7 @@ pub fn delete_skill(
         if opts.dry_run {
             warnings.push(format!("would backup to {}", bak.display()));
         } else {
-            fs::rename(&skill_dir, &bak).map_err(DeleteError::Io)?;
+            fs::rename(&skill_dir, &bak)?;
             backup_path = Some(bak);
         }
     }
@@ -143,7 +113,7 @@ pub fn delete_skill(
     }
 
     // Perform deletion
-    fs::remove_dir_all(&skill_dir).map_err(DeleteError::Io)?;
+    fs::remove_dir_all(&skill_dir)?;
 
     Ok(DeleteResult {
         skill_dir,
@@ -174,7 +144,7 @@ mod tests {
             },
         )
         .unwrap_err();
-        assert!(matches!(err, DeleteError::SkillNotFound(_)));
+        assert!(matches!(err, FrameworkError::NotFound { .. }));
     }
 
     #[test]

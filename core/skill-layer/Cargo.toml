@@ -7,6 +7,7 @@ description = "Skill layer infrastructure: schema, validation, lifecycle, and de
 workspace = true
 
 [dependencies]
+core-errors = { path = "../core-errors" }
 core-state = { path = "../core-state" }
 core-state-utils = { path = "../core-state-utils" }
 serde.workspace = true
