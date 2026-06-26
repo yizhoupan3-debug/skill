@@ -245,7 +245,7 @@ pub fn write_projection_manifest(
                 "managed_key_paths": managed_key_paths,
             }
         }),
-    )
+    ).map_err(|e| e.to_string())
 }
 
 pub fn mcp_config_path(roots: &ResolvedProjectionRoots, host_id: &str, scope: &str) -> std::result::Result<PathBuf, String> {

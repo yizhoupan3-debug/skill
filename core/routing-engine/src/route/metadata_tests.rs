@@ -649,19 +649,19 @@ mod route_metadata_tests {
     }
 
     #[test]
-    fn manifest_paper_writing_row_accepts_plain_slug_literal() {
+    fn manifest_paper_workbench_row_accepts_plain_slug_literal() {
         let runtime_path =
             PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../skills/SKILL_ROUTING_RUNTIME.json");
         let records = load_records_from_runtime(&runtime_path).expect("runtime load");
         let rec = records
             .iter()
-            .find(|r| r.slug == "paper-writing")
-            .expect("paper-writing row");
+            .find(|r| r.slug == "paper-workbench")
+            .expect("paper-workbench row");
         assert!(
             !rec.framework_alias_entrypoints.is_empty(),
             "manifest row should carry framework alias entrypoints"
         );
-        let q = normalize_text("用 paper-writing 做一轮论文改稿");
+        let q = normalize_text("用 paper-workbench 做一轮论文改稿");
         assert!(
             has_literal_framework_alias_call(&q, rec),
             "{:?}",

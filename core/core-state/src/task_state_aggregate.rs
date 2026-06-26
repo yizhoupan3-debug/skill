@@ -6,6 +6,7 @@
 //!
 //! Design: see `task_state.rs` §5 阶段 3.
 
+use core_errors::FrameworkError;
 use crate::state_manager::read_quality_gate_state;
 use crate::state_manager::{read_goal_state, task_evidence_artifacts_summary_for_task};
 use crate::utils::atomic_write::write_atomic_json;
@@ -27,7 +28,7 @@ pub fn task_state_aggregate_path(repo_root: &Path, task_id: &str) -> PathBuf {
 
 /// Refresh `TASK_STATE.json` from canonical per-task files (does **not** acquire `task_write_lock` —
 /// callers must invoke under the same outer serialization as other ledger writes, or single-threaded repair).
-pub fn sync_task_state_aggregate(repo_root: &Path, task_id: &str) -> Result<(), String> {
+pub fn sync_task_state_aggregate(repo_root: &Path, task_id: &str) -> Result<(), FrameworkError> {
     let tid = task_id.trim();
     if tid.is_empty() {
         return Ok(());
@@ -144,7 +145,7 @@ mod tests {
         ));
         let _ = fs::remove_dir_all(&tmp);
         let err = sync_task_state_aggregate(&tmp, "../outside").unwrap_err();
-        assert!(err.contains("safe path component"), "{err}");
+        assert!(err.to_string().contains("safe path component"), "{err}");
         assert!(!tmp.join("artifacts/outside/TASK_STATE.json").exists());
         let _ = fs::remove_dir_all(&tmp);
     }

@@ -1,3 +1,4 @@
+use core_errors::FrameworkError;
 use crate::utils::path_guard::validate_task_id_component;
 use crate::utils::task_write_lock::acquire_task_ledger_repo_lock;
 use crate::utils::task_write_lock::TaskLedgerRepoLockGuard;
@@ -23,7 +24,7 @@ pub struct LedgerTransaction {
     pub schema_version: Option<i64>,
 }
 
-pub fn task_ledger_path(repo_root: &Path, task_id: &str) -> Result<PathBuf, String> {
+pub fn task_ledger_path(repo_root: &Path, task_id: &str) -> Result<PathBuf, FrameworkError> {
     let tid = validate_task_id_component(task_id)?;
     Ok(repo_root
         .join("artifacts")

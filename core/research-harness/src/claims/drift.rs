@@ -159,9 +159,9 @@ fn extract_content_words(text: &str) -> HashSet<String> {
 
 /// Compute the maximum possible ceiling value across all variants.
 fn ceiling_max() -> u8 {
-    // This must return the largest value from ceiling_value.
-    // When adding a new variant to ClaimCeiling, update both functions.
-    3
+    // Derived directly from TopVenue — if a future variant has a higher value,
+    // ceiling_value(TopVenue) must also be updated, keeping this in sync.
+    ceiling_value(&crate::types::ClaimCeiling::TopVenue)
 }
 
 /// Compute distance between two ceiling levels (0.0 - 1.0).

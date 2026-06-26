@@ -53,9 +53,10 @@ pub fn framework_goal_drive(payload: Value) -> Result<Value, String> {
         framework_goal_drive_impl(payload)
     } else {
         let repo_root = resolve_framework_goal_drive_repo(&payload)?;
-        crate::utils::task_write_lock::apply_task_ledger_mutation(&repo_root, || {
-            framework_goal_drive_impl(payload)
-        })
+        crate::utils::task_write_lock::apply_task_ledger_mutation(
+            &repo_root,
+            || framework_goal_drive_impl(payload),
+        ).map_err(|e| e.to_string())
     }
 }
 

@@ -1,6 +1,7 @@
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use core_errors::FrameworkError;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
@@ -199,11 +200,13 @@ pub fn evaluate_hook_policy(
 /// JSON entry point for hook policy evaluation.
 /// Deserializes a `Value` into a `HookPolicyEvaluateRequest`, runs
 /// `evaluate_hook_policy`, and serializes the response back to `Value`.
-pub fn evaluate_hook_policy_value(payload: Value) -> Result<Value, String> {
+pub fn evaluate_hook_policy_value(payload: Value) -> Result<Value, FrameworkError> {
     let request = serde_json::from_value::<HookPolicyEvaluateRequest>(payload)
-        .map_err(|err| format!("parse hook policy input failed: {err}"))?;
-    serde_json::to_value(evaluate_hook_policy(request)?)
-        .map_err(|err| format!("serialize hook policy output failed: {err}"))
+        .map_err(|err| FrameworkError::validation(format!("parse hook policy input failed: {err}")))?;
+    let response = evaluate_hook_policy(request)
+        .map_err(FrameworkError::validation)?;
+    serde_json::to_value(response)
+        .map_err(|err| FrameworkError::validation(format!("serialize hook policy output failed: {err}")))
 }
 
 /// Check a shell command against the dangerous-bash rule set.

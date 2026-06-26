@@ -9,6 +9,7 @@ use crate::frontmatter::{RecordKind, RoutingGate, RoutingOwner};
 use crate::frontmatter_parser;
 use crate::generate::FRONTMATTER_KEYS;
 use crate::paths;
+use core_errors::FrameworkError;
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 use std::fs;
@@ -31,21 +32,21 @@ pub struct ValidationReport {
 // ---------------------------------------------------------------------------
 
 /// Validate a skill name/slug: must be non-empty, no path traversal, no path separators, no control characters.
-pub fn validate_skill_name(name: &str) -> Result<(), String> {
+pub fn validate_skill_name(name: &str) -> Result<(), FrameworkError> {
     if name.is_empty() {
-        return Err("skill name must not be empty".into());
+        return Err(FrameworkError::Validation { message: "skill name must not be empty".into() });
     }
     if name.chars().any(|c| c.is_control()) {
-        return Err(format!("skill name `{name}` must not contain control characters"));
+        return Err(FrameworkError::Validation { message: format!("skill name `{name}` must not contain control characters") });
     }
     if name.contains("..") {
-        return Err(format!("skill name `{name}` must not contain '..' (path traversal)"));
+        return Err(FrameworkError::Validation { message: format!("skill name `{name}` must not contain '..' (path traversal)") });
     }
     if name.contains('/') || name.contains('\\') {
-        return Err(format!("skill name `{name}` must not contain path separators"));
+        return Err(FrameworkError::Validation { message: format!("skill name `{name}` must not contain path separators") });
     }
     if name.starts_with('~') || name.starts_with('/') {
-        return Err(format!("skill name `{name}` must not start with absolute path prefix"));
+        return Err(FrameworkError::Validation { message: format!("skill name `{name}` must not start with absolute path prefix") });
     }
     Ok(())
 }
@@ -59,21 +60,20 @@ pub fn validate_skill_name(name: &str) -> Result<(), String> {
 /// 4. Frontmatter name matches slug
 /// 5. Optional generated files exist (as warnings)
 /// 6. Disk vs runtime slug cross-reference
-pub fn validate_all(repo_root: &Path) -> Result<ValidationReport, String> {
+pub fn validate_all(repo_root: &Path) -> Result<ValidationReport, FrameworkError> {
     let skills_root = paths::skills_root(repo_root);
     let runtime_path = paths::runtime_json(repo_root);
 
     // 1. Check required files exist
     if !runtime_path.is_file() {
-        return Err(format!(
+        return Err(FrameworkError::Validation { message: format!(
             "framework skills validate: missing {}",
             runtime_path.display()
-        ));
+        ) });
     }
 
     let runtime: serde_json::Value =
-        serde_json::from_str(&fs::read_to_string(&runtime_path).map_err(|e| e.to_string())?)
-            .map_err(|e| e.to_string())?;
+        serde_json::from_str(&fs::read_to_string(&runtime_path)?)?;
 
     let mut errors = Vec::new();
     let mut warnings = Vec::new();
@@ -82,8 +82,7 @@ pub fn validate_all(repo_root: &Path) -> Result<ValidationReport, String> {
     collect_missing_skill_paths(repo_root, &runtime, "runtime", &mut errors);
 
     // 4. Disk slug discovery + cross-reference
-    let disk_slugs = discovery::discover_skill_md_slugs(&skills_root)
-        .map_err(|e| e.to_string())?;
+    let disk_slugs = discovery::discover_skill_md_slugs(&skills_root)?;
     let disk_set: HashSet<&String> = disk_slugs.iter().collect();
     let runtime_slugs: HashSet<String> = columnar::extract_slugs(&runtime).into_iter().collect();
 
@@ -215,11 +214,10 @@ fn check_frontmatter_vs_registry(
     repo_root: &Path,
     errors: &mut Vec<String>,
     warnings: &mut Vec<String>,
-) -> Result<(), String> {
+) -> Result<(), FrameworkError> {
     let runtime_path = paths::runtime_json(repo_root);
     let doc: Value =
-        serde_json::from_str(&fs::read_to_string(&runtime_path).map_err(|e| e.to_string())?)
-            .map_err(|e| e.to_string())?;
+        serde_json::from_str(&fs::read_to_string(&runtime_path)?)?;
 
     let keys: Vec<String> = doc["keys"]
         .as_array()
@@ -234,7 +232,7 @@ fn check_frontmatter_vs_registry(
 
     let slug_idx = match col_idx.get("slug") {
         Some(&i) => i,
-        None => return Err("runtime JSON missing slug column".to_string()),
+        None => return Err(FrameworkError::Validation { message: "runtime JSON missing slug column".into() }),
     };
 
     let known_yaml_keys: HashSet<&str> =

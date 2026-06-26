@@ -9,6 +9,7 @@
 //! The only shell-adjacent call is `uv run -m <module>` where `<module>` is a
 //! compile-time constant (inequality_solver, asymptotic_solver), never user input.
 
+use core_policy::error::FrameworkError;
 use serde_json::Value;
 use std::io::Write;
 use std::sync::mpsc;
@@ -21,7 +22,7 @@ const DEFAULT_TIMEOUT_MS: u64 = 15_000;
 const POLL_INTERVAL_MS: u64 = 50;
 
 /// Run `uv run -m <module> --stdin-json` with JSON input, default timeout.
-pub fn run_uv_module(module: &str, input: &Value) -> Result<Value, String> {
+pub fn run_uv_module(module: &str, input: &Value) -> Result<Value, FrameworkError> {
     run_uv_module_with_timeout(module, input, DEFAULT_TIMEOUT_MS)
 }
 
@@ -38,24 +39,21 @@ pub fn run_uv_module_with_timeout(
     module: &str,
     input: &Value,
     timeout_ms: u64,
-) -> Result<Value, String> {
-    let input_str = serde_json::to_string(input).map_err(|e| format!("serialize: {e}"))?;
+) -> Result<Value, FrameworkError> {
+    let input_str = serde_json::to_string(input)?;
 
     let mut child = std::process::Command::new("uv")
         .args(["run", "-m", module, "--stdin-json"])
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
-        .spawn()
-        .map_err(|_| format!("failed to spawn uv '{module}' — is uv installed?"))?;
+        .spawn()?;
 
     let pid = child.id();
 
     // Write stdin and close the pipe (drop stdin handle) to signal EOF to Python
     if let Some(mut stdin) = child.stdin.take() {
-        stdin
-            .write_all(input_str.as_bytes())
-            .map_err(|e| format!("stdin write: {e}"))?;
+        stdin.write_all(input_str.as_bytes())?;
     }
 
     // Background thread: fires a signal once the deadline passes.
@@ -75,8 +73,7 @@ pub fn run_uv_module_with_timeout(
             Ok(Some(status)) => {
                 // Process exited — collect remaining pipe data.
                 let output = child
-                    .wait_with_output()
-                    .map_err(|e| format!("subprocess wait: {e}"))?;
+                    .wait_with_output()?;
 
                 let stderr = String::from_utf8_lossy(&output.stderr).to_string();
 
@@ -88,20 +85,20 @@ pub fn run_uv_module_with_timeout(
                         }
                     }
                     let detail = truncate(&stderr, 500);
-                    return Err(format!(
+                    return Err(FrameworkError::validation(format!(
                         "uv {} failed (exit={:?}): {}",
                         module,
                         output.status.code(),
                         detail
-                    ));
+                    )));
                 }
 
                 return serde_json::from_slice(&output.stdout).map_err(|e| {
-                    format!(
+                    FrameworkError::validation(format!(
                         "parse {} output: {e}, stderr: {}",
                         module,
                         truncate(&stderr, 200)
-                    )
+                    ))
                 });
             }
             Ok(None) => {
@@ -111,13 +108,13 @@ pub fn run_uv_module_with_timeout(
                     let _ = child.kill();
                     // Reap zombie.
                     let _ = child.wait();
-                    return Err(format!(
+                    return Err(FrameworkError::validation(format!(
                         "subprocess timed out after {timeout_ms}ms (pid={pid})"
-                    ));
+                    )));
                 }
                 std::thread::sleep(Duration::from_millis(POLL_INTERVAL_MS));
             }
-            Err(e) => return Err(format!("subprocess wait: {e}")),
+            Err(e) => return Err(FrameworkError::Io(e)),
         }
     }
 }

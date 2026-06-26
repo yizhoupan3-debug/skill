@@ -459,7 +459,7 @@ pub fn ensure_hooks_feature_disabled(config_path: &Path) -> std::result::Result<
         }
         let new_block = format!("{}\n", updated_lines.join("\n"));
         let updated = format!("{}{}{}", &content[..start], new_block, &content[end..]);
-        write_text_if_changed(config_path, &updated)
+        write_text_if_changed(config_path, &updated).map_err(|e| e.to_string())
     } else {
         let mut updated = content.trim_end().to_string();
         if !updated.is_empty() {
@@ -468,7 +468,7 @@ pub fn ensure_hooks_feature_disabled(config_path: &Path) -> std::result::Result<
         updated.push_str("[features]\n");
         updated.push_str(HOOKS_DISABLED_LINE);
         updated.push('\n');
-        write_text_if_changed(config_path, &updated)
+        write_text_if_changed(config_path, &updated).map_err(|e| e.to_string())
     }
 }
 
@@ -509,7 +509,7 @@ pub fn ensure_tui_status_line(config_path: &Path) -> std::result::Result<bool, S
         }
         let new_block = format!("{}\n", updated_lines.join("\n"));
         let updated = format!("{}{}{}", &content[..start], new_block, &content[end..]);
-        return write_text_if_changed(config_path, &updated);
+        return write_text_if_changed(config_path, &updated).map_err(|e| e.to_string());
     }
 
     let mut updated = content.trim_end().to_string();
@@ -519,7 +519,7 @@ pub fn ensure_tui_status_line(config_path: &Path) -> std::result::Result<bool, S
     updated.push_str("[tui]\n");
     updated.push_str(&format_status_line());
     updated.push('\n');
-    write_text_if_changed(config_path, &updated)
+    write_text_if_changed(config_path, &updated).map_err(|e| e.to_string())
 }
 
 pub fn find_tui_block_bounds(content: &str) -> Option<(usize, usize)> {

@@ -3,6 +3,7 @@
 //! These were originally defined in `cli/common.inc` and are extracted here
 //! to break the `cli ↔ framework_runtime` circular dependency.
 
+use core_errors::FrameworkError;
 use fs2::FileExt;
 use std::fs;
 use std::io::Write;
@@ -17,8 +18,9 @@ fn append_io_lock() -> &'static Mutex<()> {
 }
 
 /// Re-export canonicalize from runtime-storage (single source of truth).
-fn canonicalize_existing_ancestors(path: &Path) -> Result<PathBuf, String> {
+fn canonicalize_existing_ancestors(path: &Path) -> Result<PathBuf, FrameworkError> {
     rt_storage::runtime_storage::paths::canonicalize_existing_ancestors(path)
+        .map_err(|e| FrameworkError::Validation { message: e })
 }
 
 /// Unified security guard for all write entry points.
@@ -30,7 +32,7 @@ fn canonicalize_existing_ancestors(path: &Path) -> Result<PathBuf, String> {
 ///      directories of both the root and the target path, then verify the
 ///      target remains under the root (prevents ancestor-directory symlink escape).
 ///   3. Create parent directories if needed (after all validation passes).
-pub fn validate_write_path(path: &Path, allowed_root: Option<&Path>) -> Result<(), String> {
+pub fn validate_write_path(path: &Path, allowed_root: Option<&Path>) -> Result<(), FrameworkError> {
     // 1. Path traversal + symlink check (shared with core_state_utils::path_guard).
     core_state_utils::path_guard::reject_unsafe_path(path)?;
 
@@ -43,21 +45,18 @@ pub fn validate_write_path(path: &Path, allowed_root: Option<&Path>) -> Result<(
         let canonical_root = canonicalize_existing_ancestors(root)?;
         let canonical_path = canonicalize_existing_ancestors(path)?;
         if !canonical_path.starts_with(&canonical_root) {
-            return Err(format!(
-                "write path {} must stay under allowed root {} after symlink resolution",
-                canonical_path.display(),
-                canonical_root.display()
-            ));
+            return Err(FrameworkError::Validation {
+                message: format!(
+                    "write path {} must stay under allowed root {} after symlink resolution",
+                    canonical_path.display(),
+                    canonical_root.display()
+                ),
+            });
         }
     }
     // 4. Create parent directories (after all validation has passed).
     if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).map_err(|err| {
-            format!(
-                "create parent directory for {} failed: {err}",
-                path.display()
-            )
-        })?;
+        fs::create_dir_all(parent)?;
     }
     Ok(())
 }
@@ -82,25 +81,14 @@ fn open_append_nofollow(path: &Path) -> Result<fs::File, std::io::Error> {
         .open(path)
 }
 
-pub fn append_text_with_process_lock(path: &Path, payload: &str, context: &str) -> Result<(), String> {
+pub fn append_text_with_process_lock(path: &Path, payload: &str, context: &str) -> Result<(), FrameworkError> {
     validate_write_path(path, None)?;
     let _guard = append_io_lock()
         .lock()
-        .map_err(|_| format!("{context} append lock poisoned"))?;
-    let mut file = open_append_nofollow(path)
-        .map_err(|err| format!("open {context} append failed for {}: {err}", path.display()))?;
-    file.lock_exclusive()
-        .map_err(|err| format!("lock {context} append failed for {}: {err}", path.display()))?;
-    file.write_all(payload.as_bytes()).map_err(|err| {
-        format!(
-            "write {context} append failed for {}: {err}",
-            path.display()
-        )
-    })?;
-    file.sync_data().map_err(|err| {
-        format!(
-            "sync {context} append failed for {}: {err}",
-            path.display()
-        )
-    })
+        .map_err(|_| FrameworkError::Lock { message: format!("{context} append lock poisoned") })?;
+    let mut file = open_append_nofollow(path)?;
+    file.lock_exclusive()?;
+    file.write_all(payload.as_bytes())?;
+    file.sync_data()?;
+    Ok(())
 }

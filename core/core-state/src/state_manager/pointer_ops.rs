@@ -211,7 +211,7 @@ pub fn write_active_task_pointer(repo_root: &Path, task_id: &str) -> Result<(), 
     write_atomic_json(
         &repo_root.join("artifacts/current/TASK_POINTERS.json"),
         &pointers,
-    )
+    ).map_err(|e| e.to_string())
 }
 
 fn write_focus_task_pointer_minimal(
@@ -230,7 +230,7 @@ fn write_focus_task_pointer_minimal(
     write_atomic_json(
         &repo_root.join("artifacts/current/TASK_POINTERS.json"),
         &pointers,
-    )
+    ).map_err(|e| e.to_string())
 }
 
 /// Atomically write both `active_task_id` and `focus_task_id` in one operation,
@@ -253,7 +253,7 @@ pub fn set_task_focus(
     write_atomic_json(
         &repo_root.join("artifacts/current/TASK_POINTERS.json"),
         &pointers,
-    )
+    ).map_err(|e| e.to_string())
 }
 
 fn goal_drive_set_focus_from_payload(payload: &Value) -> bool {

@@ -37,7 +37,7 @@ pub struct ToolScoringWeights {
 }
 
 fn default_fuzzy_min() -> f64 {
-    0.35
+    0.25
 }
 
 /// Parse weights from a JSON string. Returns `None` on parse error.
@@ -66,9 +66,13 @@ fn resolve_runtime_weights_path() -> Option<String> {
 static WEIGHTS: LazyLock<ToolScoringWeights> = LazyLock::new(|| {
     // Try runtime config first (hook or FRAMEWORK_ROOT)
     if let Some(runtime_path) = resolve_runtime_weights_path()
-        && let Ok(content) = std::fs::read_to_string(&runtime_path)
-            && let Some(w) = parse_weights(&content) {
+        && let Ok(content) = std::fs::read_to_string(&runtime_path) {
+            if let Some(w) = parse_weights(&content) {
                 return w;
+            }
+            tracing::warn!(
+                "tool scoring weights file exists but failed to parse: {runtime_path}; using embedded defaults"
+            );
             }
     // Fallback to compile-time embedded defaults
     parse_weights(DEFAULTS_JSON).expect("embedded tool_scoring_weights.json is invalid")
@@ -121,6 +125,6 @@ mod tests {
             "layer_penalties": {"builtin": 0.0, "external": -2.0}
         }"#;
         let w: ToolScoringWeights = serde_json::from_str(v1_json).expect("v1 JSON with defaults");
-        assert!((w.fuzzy_min_similarity - 0.35).abs() < f64::EPSILON);
+        assert!((w.fuzzy_min_similarity - 0.25).abs() < f64::EPSILON);
     }
 }

@@ -7,6 +7,7 @@ description = "Skill routing engine: 16-step scoring pipeline, routing, search, 
 workspace = true
 
 [dependencies]
+core-errors = { path = "../core-errors" }
 core-state-utils = { path = "../core-state-utils" }
 routing-core = { path = "../routing-core" }
 notify.workspace = true

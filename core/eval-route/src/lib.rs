@@ -1,5 +1,6 @@
 #![deny(clippy::unwrap_used, clippy::expect_used)]
 
+use core_errors::FrameworkError;
 use routing_engine::route::{
     ROUTE_AUTHORITY, ROUTE_DECISION_SCHEMA_VERSION, filter_records_for_host, load_records,
 };
@@ -71,11 +72,9 @@ pub struct EvalRouteReport {
     pub failures: Vec<EvalCaseFailure>,
 }
 
-pub fn load_eval_cases(path: &Path) -> Result<EvalCasesPayload, String> {
-    let raw = std::fs::read_to_string(path)
-        .map_err(|err| format!("failed to read eval cases file {}: {err}", path.display()))?;
-    let payload: EvalCasesPayload = serde_json::from_str(&raw)
-        .map_err(|err| format!("failed to parse eval cases {}: {err}", path.display()))?;
+pub fn load_eval_cases(path: &Path) -> Result<EvalCasesPayload, FrameworkError> {
+    let raw = std::fs::read_to_string(path)?;
+    let payload: EvalCasesPayload = serde_json::from_str(&raw)?;
     Ok(payload)
 }
 

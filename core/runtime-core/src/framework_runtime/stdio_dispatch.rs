@@ -577,6 +577,7 @@ fn dispatch_stdio_route_snapshot(payload: Value) -> Result<Value, String> {
         &request.layer,
         request.score,
         &request.reasons,
+        0,
     );
     serialize_payload(
         RouteSnapshotEnvelopePayload {

@@ -25,7 +25,7 @@ use std::path::Path;
 use std::time::Duration;
 
 use fr_utils::constants::{
-    CONTENT_STORE_DIR, FRAMEWORK_PROMPT_COMPRESSION_AUTHORITY,
+    FRAMEWORK_PROMPT_COMPRESSION_AUTHORITY,
     FRAMEWORK_PROMPT_COMPRESSION_SCHEMA_VERSION,
 };
 use fr_utils::json_value::value_text;

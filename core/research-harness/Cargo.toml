@@ -19,18 +19,9 @@ framework-kernel = { path = "../framework-kernel" }
 host-projection = { path = "../host-projection" }
 fr-utils = { path = "../fr-utils" }
 
-# LaTeX (RaTeX)
-ratex-lexer = "0.1.11"
-ratex-font = "0.1.11"
-unicode-normalization = "0.1"
-fancy-regex = "0.14"
-thiserror = "2"
-regex-lite = "0.1"
-
 # common
 anyhow.workspace = true
 chrono.workspace = true
-html-escape = "0.2"
 reqwest.workspace = true
 rusqlite.workspace = true
 serde.workspace = true

@@ -1,41 +1,40 @@
-//! Trigram-based fuzzy matching fallback for skill routing.
+//! N-gram fuzzy matching fallback for skill routing.
 //!
-//! Wraps `routing-core` trigram primitives with skill-record-specific logic.
-//! The core trigram extraction and Jaccard similarity live in `routing-core`;
-//! this module adds CJK-aware normalization and the `SkillRecord`-specific
-//! `fuzzy_fallback_score` function.
+//! Wraps `routing-core` character n-gram primitives with skill-record-specific logic.
+//! Uses weighted character n-gram cosine similarity (unigram+bigram+trigram)
+//! instead of trigram Jaccard for better CJK cross-language matching.
+//!
+//! The core scoring pipeline has its own n-gram step (via `NgramCache` in
+//! `route::ngram`); this module is the **fuzzy rescue** path, invoked when
+//! no skill scored above zero.  The `fuzzy_fallback_score` function reuses
+//! `NgramCache` so that the weight formula (0.5 unigram + 0.3 bigram + 0.2
+//! trigram) is defined in a single location.
 
 use super::text::normalize_text;
 use super::types::SkillRecord;
+use crate::route::ngram::NgramCache;
 
-/// Minimum trigram similarity required for a fuzzy match to be accepted.
-pub const FUZZY_MIN_SIMILARITY: f64 = 0.4;
-
-/// Re-export core trigram primitives from routing-core.
-pub use routing_core::fuzzy::{extract_trigrams, jaccard_similarity, trigram_similarity};
+/// Minimum n-gram similarity required for a fuzzy match to be accepted.
+/// Lower than the old trigram Jaccard threshold (0.4) because n-gram
+/// vectors are higher-dimensional and cosine similarity produces smaller
+/// raw values for partial matches.
+pub const FUZZY_MIN_SIMILARITY: f64 = 0.25;
 
 /// Compute the best fuzzy fallback score for a query against a single
 /// skill record by comparing against all its `trigger_hints`.
 ///
-/// Returns the maximum trigram similarity across all hints, or 0.0
-/// if the record has no hints.
+/// Reuses `NgramCache` (same weighted formula as the pipeline n-gram step)
+/// to avoid code duplication.  Returns the maximum similarity across all
+/// hints, or 0.0 if the record has no hints.
 pub fn fuzzy_fallback_score(query: &str, record: &SkillRecord) -> f64 {
     if record.trigger_hints.is_empty() {
         return 0.0;
     }
-    let normalized_query = normalize_text(query);
-    let query_trigrams = extract_trigrams(&normalized_query);
-    if query_trigrams.is_empty() {
-        return 0.0;
-    }
+    let cache = NgramCache::new(query);
     record
         .trigger_hints
         .iter()
-        .map(|hint| {
-            let norm_hint = normalize_text(hint);
-            let hint_trigrams = extract_trigrams(&norm_hint);
-            jaccard_similarity(&query_trigrams, &hint_trigrams)
-        })
+        .map(|hint| cache.similarity_to(&normalize_text(hint)))
         .fold(0.0f64, f64::max)
 }
 
@@ -48,7 +47,10 @@ mod tests {
     fn test_fuzzy_fallback_score_with_hints() {
         let record = make_test_record(vec!["code review".to_string(), "review code".to_string()]);
         let score = fuzzy_fallback_score("help me review code", &record);
-        assert!(score > 0.0, "expected positive score, got {score}");
+        assert!(
+            score > 0.0,
+            "expected positive n-gram score for 'help me review code' vs 'code review', got {score}"
+        );
     }
 
     #[test]
@@ -64,7 +66,10 @@ mod tests {
             "code review".to_string(),
         ]);
         let score = fuzzy_fallback_score("code review", &record);
-        assert!(score > 0.3, "expected >0.3, got {score}");
+        assert!(
+            score > 0.2,
+            "expected >0.2 weighted n-gram similarity for exact match 'code review', got {score}"
+        );
     }
 
     fn make_test_record(trigger_hints: Vec<String>) -> SkillRecord {

@@ -7,10 +7,6 @@ use serde_json::{Value, json};
 use std::path::Path;
 use std::time::Instant;
 
-const PROTOCOL_VERSION: &str = "2024-11-05";
-const SERVER_NAME: &str = "mcp-codegraph";
-const SERVER_VERSION: &str = "0.2.0";
-
 /// Open index, run incremental sync, and spawn filesystem watcher (W3).
 pub fn prepare_index(
     repo_root: &Path,

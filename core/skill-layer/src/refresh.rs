@@ -6,6 +6,7 @@
 
 use crate::constants;
 use crate::paths;
+use core_errors::FrameworkError;
 use serde_json::{Value, json};
 use std::fs;
 use std::path::Path;
@@ -30,8 +31,8 @@ pub struct SkillsCommand {
 
 /// Run full skill validation: frontmatter schema, registry consistency,
 /// path integrity, and print results.
-pub fn validate_skills(repo_root: &Path) -> Result<(), String> {
-    let report = crate::validate::validate_all(repo_root).map_err(|e| e.to_string())?;
+pub fn validate_skills(repo_root: &Path) -> Result<(), FrameworkError> {
+    let report = crate::validate::validate_all(repo_root)?;
     if report.errors.is_empty() {
         tracing::info!(
             "framework skills validate: ok ({} on-disk SKILL.md, {} runtime rows, {} warnings)",
@@ -44,7 +45,7 @@ pub fn validate_skills(repo_root: &Path) -> Result<(), String> {
         }
         Ok(())
     } else {
-        Err(report.errors.join("\n"))
+        Err(FrameworkError::Validation { message: report.errors.join("\n") })
     }
 }
 
@@ -53,7 +54,7 @@ pub fn validate_skills(repo_root: &Path) -> Result<(), String> {
 // ---------------------------------------------------------------------------
 
 /// Full refresh: write tiers, companion stubs, health manifest, approval policy.
-pub fn refresh_skills(cmd: &SkillsCommand) -> Result<(), String> {
+pub fn refresh_skills(cmd: &SkillsCommand) -> Result<(), FrameworkError> {
     if !cmd.write && !cmd.backfill && cmd.generate.is_none() {
         return validate_skills(&cmd.repo_root);
     }
@@ -88,7 +89,8 @@ pub fn refresh_skills(cmd: &SkillsCommand) -> Result<(), String> {
     }
     if let Some(ref generate_target) = cmd.generate {
         let slug = if generate_target == "all" { None } else { Some(generate_target.as_str()) };
-        let report = crate::generate::generate_frontmatter(&cmd.repo_root, slug, cmd.dry_run)?;
+        let report = crate::generate::generate_frontmatter(&cmd.repo_root, slug, cmd.dry_run)
+            .map_err(FrameworkError::validation)?;
         if cmd.dry_run {
             tracing::info!(
                 "framework skills generate{slug_msg}: {}/{} generated, {}/{} skipped (--dry-run)",
@@ -121,19 +123,18 @@ pub fn refresh_skills(cmd: &SkillsCommand) -> Result<(), String> {
 }
 
 /// Generate health manifest and approval policy.
-pub fn generate_health_manifest(repo_root: &Path) -> Result<(), String> {
-    crate::health::generate_health_manifest(repo_root).map_err(|e| e.to_string())
+pub fn generate_health_manifest(repo_root: &Path) -> Result<(), FrameworkError> {
+    crate::health::generate_health_manifest(repo_root)
 }
 
 // ---------------------------------------------------------------------------
 // write_skill_tiers
 // ---------------------------------------------------------------------------
 
-fn write_skill_tiers_from_surface_policy(repo_root: &Path) -> Result<(), String> {
+fn write_skill_tiers_from_surface_policy(repo_root: &Path) -> Result<(), FrameworkError> {
     let policy_path = paths::surface_policy_json(repo_root);
     let policy: Value =
-        serde_json::from_str(&fs::read_to_string(&policy_path).map_err(|e| e.to_string())?)
-            .map_err(|e| e.to_string())?;
+        serde_json::from_str(&fs::read_to_string(&policy_path)?)?;
     let activation_counts = policy
         .pointer("/skill_system/activation_counts")
         .cloned()
@@ -153,7 +154,7 @@ fn write_skill_tiers_from_surface_policy(repo_root: &Path) -> Result<(), String>
         }
     });
     let dest = paths::tiers_json(repo_root);
-    core_state_utils::atomic_write::write_atomic_json(&dest, &out).map_err(|e| e.to_string())
+    core_state_utils::atomic_write::write_atomic_json(&dest, &out)
 }
 
 

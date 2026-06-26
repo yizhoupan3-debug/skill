@@ -3,6 +3,7 @@
 //! ADR-010 §9: `core_state_utils::json_io` is the single source of truth.
 //! This module re-exports for backward compatibility and adds CLI-specific helpers.
 
+use core_errors::FrameworkError;
 use serde::Serialize;
 
 
@@ -14,17 +15,21 @@ pub use core_state_utils::json_io::{
 
 // ── CLI-specific helpers (not B0 — depend on stdout) ──
 
-pub fn print_json_value<T: Serialize>(payload: &T) -> Result<(), String> {
+pub fn print_json_value<T: Serialize>(payload: &T) -> Result<(), FrameworkError> {
     println!(
         "{}",
-        serde_json::to_string(payload).map_err(|err| format!("serialize output failed: {err}"))?
+        serde_json::to_string(payload)?
     );
     Ok(())
 }
 
-pub fn parse_json_input<T>(raw: &str, context: &str) -> Result<T, String>
+pub fn parse_json_input<T>(raw: &str, context: &str) -> Result<T, FrameworkError>
 where
     T: serde::de::DeserializeOwned,
 {
-    serde_json::from_str(raw).map_err(|err| format!("parse {context} input failed: {err}"))
+    serde_json::from_str(raw).map_err(|err| {
+        FrameworkError::Validation {
+            message: format!("parse {context} input failed: {err}"),
+        }
+    })
 }

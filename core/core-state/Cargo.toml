@@ -7,6 +7,7 @@ description = "L4 task state machine: Goal/RFV/Evidence, ledger, and cross-sessi
 workspace = true
 
 [dependencies]
+core-errors = { path = "../core-errors" }
 chrono.workspace = true
 core-state-types = { path = "../core-state-types" }
 core-state-utils = { path = "../core-state-utils" }

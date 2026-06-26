@@ -190,7 +190,7 @@ fn tool_math_proof_dag_verify(arguments: &Value) -> Result<String, FrameworkErro
         let summary = bp.status_summary();
         return serde_json::to_string_pretty(&json!({
             "result": summary,
-            "manual_prose_warning": warning,
+            "manual_prose_warning": warning.to_string(),
         }))
         .map_err(FrameworkError::Json);
     }

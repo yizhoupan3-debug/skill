@@ -11,4 +11,5 @@ workspace = true
 name = "framework_runtime_hooks"
 
 [dependencies]
+core-errors = { path = "../core-errors" }
 serde_json.workspace = true

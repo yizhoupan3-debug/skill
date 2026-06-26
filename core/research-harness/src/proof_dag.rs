@@ -9,6 +9,7 @@
 //! FEATURE layer only. MCP dispatch functions belong in `mcp_tools.rs`.
 
 use crate::types::VerificationStatus;
+use core_policy::error::FrameworkError;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -158,18 +159,20 @@ impl Blueprint {
     /// # AND constraint
     ///
     /// At least one child must be non-ManualProse.
-    pub fn decompose(&mut self, parent_id: &str, children: Vec<DagNode>, and: bool) -> Result<(), String> {
+    pub fn decompose(&mut self, parent_id: &str, children: Vec<DagNode>, and: bool) -> Result<(), FrameworkError> {
         // Verify parent exists and is not a leaf
         let parent = self.nodes.get(parent_id)
-            .ok_or_else(|| format!("node {parent_id} not found"))?;
+            .ok_or_else(|| FrameworkError::not_found(format!("node {parent_id}")))?;
         if parent.is_leaf() {
-            return Err(format!("cannot decompose leaf node {parent_id}"));
+            return Err(FrameworkError::validation(format!("cannot decompose leaf node {parent_id}")));
         }
         let parent_label = parent.label().to_string();
 
         // AND constraint: at least one child must be non-ManualProse
         if and && children.iter().all(|c| matches!(c.backend(), Some(VerificationBackend::ManualProse))) {
-            return Err("AND node must have at least one non-ManualProse child".into());
+            return Err(FrameworkError::validation(
+                "AND node must have at least one non-ManualProse child",
+            ));
         }
 
         // Collect child IDs and insert children
@@ -197,7 +200,7 @@ impl Blueprint {
     /// 1. Increments round
     /// 2. Marks previous results as stale
     /// 3. Traverses and updates status
-    pub fn verify(&mut self) -> Result<(), String> {
+    pub fn verify(&mut self) -> Result<(), FrameworkError> {
         self.round += 1;
         let current_round = self.round;
 
@@ -213,11 +216,11 @@ impl Blueprint {
         Ok(())
     }
 
-    fn verify_node(&mut self, node_id: &str, round: u64) -> Result<VerificationResultExt, String> {
+    fn verify_node(&mut self, node_id: &str, round: u64) -> Result<VerificationResultExt, FrameworkError> {
         // Extract all data from self.nodes before any mutation to avoid borrow conflicts
         let (node_children, node_is_leaf, node_backend, is_or) = {
             let node = self.nodes.get(node_id)
-                .ok_or_else(|| format!("node {node_id} not found"))?;
+                .ok_or_else(|| FrameworkError::not_found(format!("node {node_id}")))?;
             (
                 node.children().to_vec(),
                 node.is_leaf(),
@@ -275,12 +278,12 @@ impl Blueprint {
     }
 
     /// Backtrack: remove all children of a node, turning it back into a leaf-like OR node.
-    pub fn backtrack(&mut self, node_id: &str) -> Result<(), String> {
+    pub fn backtrack(&mut self, node_id: &str) -> Result<(), FrameworkError> {
         // Capture children and label BEFORE any mutable operations on self.nodes
         // (avoids holding an immutable borrow across mutable HashMap operations).
         let (children, label) = {
             let node = self.nodes.get(node_id)
-                .ok_or_else(|| format!("node {node_id} not found"))?;
+                .ok_or_else(|| FrameworkError::not_found(format!("node {node_id}")))?;
             (node.children().to_vec(), node.label().to_string())
         };
 
@@ -348,14 +351,14 @@ impl Blueprint {
     }
 
     /// Validate that ManualProse ratio does not exceed max_pct (default 0.30).
-    pub fn validate_manual_prose_ratio(&self, max_pct: f64) -> Result<(), String> {
+    pub fn validate_manual_prose_ratio(&self, max_pct: f64) -> Result<(), FrameworkError> {
         let ratio = self.manual_prose_ratio();
         if ratio > max_pct {
-            Err(format!(
+            Err(FrameworkError::validation(format!(
                 "ManualProse ratio {:.1}% exceeds cap of {:.0}% ({} manual / {} total leaves)",
                 ratio * 100.0, max_pct * 100.0,
                 self.leaf_counts().1, self.leaf_counts().0,
-            ))
+            )))
         } else {
             Ok(())
         }
@@ -432,7 +435,7 @@ mod tests {
         ];
         let result = bp.decompose("root", children, true);
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("non-ManualProse"));
+        assert!(result.unwrap_err().to_string().contains("non-ManualProse"));
     }
 
     #[test]

@@ -21,7 +21,7 @@ metadata:
   - correctness
   - delegation
   - adversarial-review
-  version: '2.1.0'
+  version: '2.2.0'
 name: code-review-deep
 risk: medium
 routing_gate: none
@@ -50,7 +50,7 @@ trigger_hints:
 ---
 ## Quick Ref
 - **Purpose**: 深度对抗式代码审查（review-only），默认输出 severity-sorted findings 紧凑列表
-- **Key Rules**: 默认只审不改；hostile-but-fair 立场；P0/P1 须有 evidence；lens 可扩展目录选型；broad review a single serial spawned reviewer lane
+- **Key Rules**: 默认只审不改；hostile-but-fair 立场；pipeline 五阶段（Scope 评估 → 静态分析预扫描 → Review lanes → Factcheck → 对抗性验证）；P0/P1 须有 evidence；lens 可扩展目录选型；broad review 可 spawn 多 reviewer lane；对抗验证并发 ≤3
 - **Trigger**: "review"、"代码审查"、"帮我 review"、"deep code review"、"$code-review-deep"
 <!-- full content below; load on demand -->
 
@@ -64,6 +64,53 @@ Judgment-focused review for code and change sets **without** rewriting by defaul
 - Assume a **hostile but fair** reviewer: maximize plausible failure under real abuse, regressions, flaky ops, closest prior API expectations, dependency churn, or incomplete tests.
 - **Compact default output = less prose, not shallower reasoning.** Analysis standard is unchanged: choose lenses internally, exhaust findings **within each selected lens**, apply the severity evidence gate.
 - **Lens catalog, not a fixed runway**: choose lenses from [`references/review-dimensions.md`](references/review-dimensions.md). When the user asks to **cover all dimensions** / **全维度**, apply the full catalog **and** use the **full report profile**.
+
+## Review pipeline (phases)
+
+Deep review runs these phases in order. Earlier phases inform later ones; the output is the consolidated result of all phases.
+
+### Phase 1: Scope assessment & adaptive depth
+
+Diff scope determines review depth. Assess before spawning any reviewer:
+
+| Dimension | Narrow | Moderate | Broad |
+|-----------|--------|----------|-------|
+| **Scope** | Single-file，<50 lines changed, `small_task` | 2-5 files，同模块内跨文件 | PR-level，>5 files，跨模块/跨 crate |
+| **Lenses** | 1-2 core，surface scan | 3-4 core lenses | All core + optional |
+| **Factcheck** | Recommended | Required | Required |
+| **Adversarial verify** | Optional | Recommended | Required |
+
+**Depth escalation** (any trigger → escalate one tier, e.g. narrow→moderate, moderate→broad):
+- `unsafe` blocks / FFI / raw pointer manipulation
+- Network I/O / file system / process spawning
+- Public API signature changes or trait additions
+- Dependency additions or version bumps
+- Security-sensitive domains (auth, crypto, secrets, access control)
+- Configuration / credential handling changes
+
+Also consider **diff entropy**: a small diff touching security infrastructure or `unsafe` blocks is _not_ narrow.
+
+### Phase 2: Static analysis pre-scan
+
+Before review lanes run, gather objective signal channels. Results become context for reviewer lanes — not a replacement for judgment.
+
+- **`cargo check` / `cargo clippy`** (or language equivalent): emit warnings as objective signals. Each clippy warning in a diff-touched area → reviewer increases scrutiny there. Warnings outside the diff → note as `Caveat:` for the project's tech debt, not a finding against the diff.
+- **`cargo deny advisories`** (or `cargo audit`): flag known-vulnerability dependencies. Results feed into the Deps/Supply-chain lens.
+- **`cargo miri`** (when diff contains `unsafe` blocks): detect undefined behavior. If miri passes, unsafe findings from review require stronger evidence.
+- **Non-Rust projects**: use analogous tooling (`pylint`/`mypy` for Python, `eslint` for JS/TS, `gosec` for Go, etc.).
+
+Static analysis output is **advisory**, not authoritative. A clean clippy run does not mean the diff is correct; a clippy warning does not always indicate a bug. Reviewer lanes make the final call.
+
+### Phase 3: Regression-aware git context
+
+Before review lanes, inspect git history for churn signals:
+
+- For each modified file, check `git log --oneline -10 <file>` — frequent recent edits suggest unstable code.
+- For suspicious regions, `git blame <file> -L <start>,<end>` to see if the same lines were recently modified for related reasons.
+- If the diff reverts or bypasses a prior fix (detect via `git log -S <symbol> -- <file>`), flag as P0/P1 with the prior fix commit cited.
+- For broad reviews, `git diff --stat <base>...HEAD` establishes total change surface area.
+
+Regression signals are **context** for reviewer lanes, not standalone findings (unless a confirmed revert of a prior fix, which is P0).
 
 ## Output format — compact (default)
 
@@ -88,7 +135,7 @@ Then: preamble (Scope / Lenses / Omitted), verdict, findings grouped by lens, te
 
 ### Spawn-first pairing
 
-For broad/deep/PR-level review, spawn **a single serial** read-only reviewer (`fork_context=false`, lane in `reviewer_lanes`; Cursor 可选 `Task` + `subagent_type=deep-reviewer`). Explore lanes **do not count** as review evidence. For breadth/PR/cross-module prompts that require disparate-domain coverage, use `pipeline()` or `for...of` to run reviewers serially; only use `parallel()` when the user explicitly requests cross-domain broad review across clearly disjoint scope paths.
+For broad/deep/PR-level review, LLM 根据 scope 自行决定串行或并行 spawn reviewer lane（`fork_context=false`, lane in `reviewer_lanes`; Cursor 可选 `Task` + `subagent_type=deep-reviewer`）。Explore lanes **do not count** as review evidence。跨 domain 的宽范围时优先并行减少延迟，同区域多透镜需避免冲突时串行。LLM 自主权衡。
 
 **Narrow scope** (single-file, `small_task`, or explicit「不用子代理」): no multi-lane requirement; hosts skip arming `review_required`.
 
@@ -113,6 +160,50 @@ Deep review 在 Merge 和 Verify 之间插入独立 **Factcheck 阶段**，专�
   ```json
   { "name": "factcheck-verifier", "tools": ["Read", "Bash"], "prompt": "仅核查事实——代码是否存在、evidence 是否原文引用、行号是否准确、行为描述是否与代码一致。不做判断（是否是 bug、severity 如何）。" }
   ```
+
+## Adversarial verification workflow（Workflow 强制执行）
+
+Deep review 在 Factcheck 之后插入 **对抗性验证（Adversarial verification）**阶段，使用 Workflow 形式强制执行（不可跳过）。目标：对整合后的 findings 进行敌意反驳，只有 survived 的 finding 进入最终输出。
+
+### 流程
+
+```
+Review lanes → Factcheck → [Findings consolidation] → Adversarial verification → Output
+```
+
+### 整合（Consolidation）
+
+所有 reviewer lane 产出的 finding（已通过 Factcheck）先**整合去重**：
+- 同一位置同一类发现 → 合并为一条 finding，保留最严重 severity
+- 跨 lane 矛盾发现（如 Correctness 说安全、Security 说危险）→ 标记为争议项
+- 去重后形成 **FindingsSet**（每个 finding 含：severity、位置、根因、影响、证据链、来自哪些 lane）
+
+### 对抗验证（Adversarial verification）
+
+整合后的 FindingsSet 逐条 spawn 验证 agent，**目标是反驳**——尝试证明该 finding 不可触发、不可重现、有缓解因素、或基于错误前提。
+
+- **每轮最多 3 个并发验证 agent**（硬约束：`max_concurrent=3`）。若 FindingsSet 超过 3 条，分 batch 执行，每 batch ≤3，全部完成后进入下一 batch。
+- 验证 agent 使用**不同模型族**（利用 I7 多样性），避免同族自洽确认。
+- 验证 agent 只读（工具限制 Read + Bash + CodeGraph query），不允许修改代码。
+- 验证 agent 的 prompt 模板：
+  > 「你的任务：**反驳**以下代码审查 finding。尝试证明它不可触发、有缓解因素、或基于对代码的误读。如果无法反驳，说明为什么维持原判。给出结论：REFUTE、DOWNGRADE（降到P2/caveat）或 SUSTAIN。」
+- **Schema**：`{ verdict: "REFUTE" | "DOWNGRADE" | "SUSTAIN", reasoning: string, counterevidence: [{ location, description }] }`
+
+### 结果处置
+
+| Verdict | 处置 |
+|---------|------|
+| `SUSTAIN` (n个验证 agent 中 ≥多数) | 保留原 severity |
+| `DOWNGRADE` (n个验证 agent 中 ≥多数) | P0/P1 → 降为 P2/caveat；P2 → 移除或转为 Open question |
+| `REFUTE` (n个验证 agent 中 ≥多数) | **从输出中移除**，不进最终 finding 列表 |
+
+**争议处理**：3 agent 各执一词（无多数）→ 保留 finding 但标注 `[adversarial:split]`，用户自行裁决。
+
+### 适用范围
+
+- **Broad/moderate scope**：强制执行。验证 agent 可 spawn，数量受 max_concurrent=3 约束。
+- **Narrow scope**：推荐但不强制。如果执行，同样受 max_concurrent=3 约束。
+- **用户显式要求 /fast / 快速 review**：可跳过（在发现列表末尾标注 `[adversarial:skipped]`）。
 
 ## CodeGraph 增强分析
 

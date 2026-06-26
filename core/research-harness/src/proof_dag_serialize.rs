@@ -5,53 +5,55 @@
 //! FEATURE layer — serialization format belongs with the data model.
 
 use crate::proof_dag::Blueprint;
+use core_policy::error::FrameworkError;
 
 /// Schema version string written into every serialized DAG.
 pub const SERIALIZATION_SCHEMA_VERSION: &str = "proof-dag-v1";
 
 /// Serialize a Blueprint to a pretty-printed JSON string.
-pub fn serialize_blueprint(bp: &Blueprint) -> Result<String, String> {
+pub fn serialize_blueprint(bp: &Blueprint) -> Result<String, FrameworkError> {
     let wrapper = serde_json::json!({
         "schema_version": SERIALIZATION_SCHEMA_VERSION,
         "blueprint": bp,
     });
-    serde_json::to_string_pretty(&wrapper).map_err(|e| format!("serialize: {e}"))
+    Ok(serde_json::to_string_pretty(&wrapper)?)
 }
 
 /// Deserialize a Blueprint from a JSON string.
-pub fn deserialize_blueprint(json: &str) -> Result<Blueprint, String> {
-    let wrapper: serde_json::Value = serde_json::from_str(json).map_err(|e| format!("parse: {e}"))?;
+pub fn deserialize_blueprint(json: &str) -> Result<Blueprint, FrameworkError> {
+    let wrapper: serde_json::Value = serde_json::from_str(json)?;
 
     let schema = wrapper.get("schema_version").and_then(|v| v.as_str()).unwrap_or("unknown");
     if schema != SERIALIZATION_SCHEMA_VERSION {
-        return Err(format!(
+        return Err(FrameworkError::validation(format!(
             "schema version mismatch: expected {SERIALIZATION_SCHEMA_VERSION}, got {schema}"
-        ));
+        )));
     }
 
-    let bp: Blueprint = serde_json::from_value(
-        wrapper.get("blueprint").ok_or("missing 'blueprint' field")?.clone()
-    ).map_err(|e| format!("deserialize blueprint: {e}"))?;
+    let bp_val = wrapper.get("blueprint")
+        .cloned()
+        .ok_or_else(|| FrameworkError::validation("missing 'blueprint' field"))?;
+    let bp: Blueprint = serde_json::from_value(bp_val)?;
 
     Ok(bp)
 }
 
 /// Apply a JSON patch update to a Blueprint (round payload from an orchestration loop).
-pub fn apply_update(bp: &mut Blueprint, update: &serde_json::Value) -> Result<(), String> {
+pub fn apply_update(bp: &mut Blueprint, update: &serde_json::Value) -> Result<(), FrameworkError> {
     // The update is expected to be a partial Blueprint or a round payload
     // Currently only re-verify is supported
     if let Some(action) = update.get("action").and_then(|v| v.as_str()) {
         match action {
-            "verify" => bp.verify().map_err(|e| format!("verify: {e}")),
+            "verify" => bp.verify(),
             "backtrack" => {
                 let node_id = update.get("node_id").and_then(|v| v.as_str())
-                    .ok_or("backtrack requires 'node_id'")?;
-                bp.backtrack(node_id).map_err(|e| format!("backtrack: {e}"))
+                    .ok_or(FrameworkError::validation("backtrack requires 'node_id'"))?;
+                bp.backtrack(node_id)
             }
-            _ => Err(format!("unknown action: {action}")),
+            _ => Err(FrameworkError::validation(format!("unknown action: {action}"))),
         }
     } else {
-        Err("update requires 'action' field".into())
+        Err(FrameworkError::validation("update requires 'action' field"))
     }
 }
 
@@ -81,7 +83,7 @@ mod tests {
         let bad_json = r#"{"schema_version": "proof-dag-v0", "blueprint": {}}"#;
         let result = deserialize_blueprint(bad_json);
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("schema version mismatch"));
+        assert!(result.unwrap_err().to_string().contains("schema version mismatch"));
     }
 
     #[test]

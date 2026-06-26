@@ -40,7 +40,7 @@ pub fn compact_jsonl_if_needed(path: &Path, max_lines: usize) -> Result<bool, Fr
         return Ok(false);
     }
     let content = fs::read_to_string(path)
-        .map_err(|err| FrameworkError::validation(format!("compact_jsonl: read {}: {err}", path.display()))?;
+        .map_err(|err| FrameworkError::validation(format!("compact_jsonl: read {}: {err}", path.display())))?;
     compact_jsonl_with_content(path, &content, max_lines)
 }
 
@@ -130,7 +130,7 @@ pub fn truncate_corrupt_tail(path: &Path) -> Result<bool, FrameworkError> {
     }
 
     let content = fs::read_to_string(path)
-        .map_err(|err| FrameworkError::validation(format!("truncate_corrupt_tail: read {}: {err}", path.display()))?;
+        .map_err(|err| FrameworkError::validation(format!("truncate_corrupt_tail: read {}: {err}", path.display())))?;
 
     if content.is_empty() {
         return Ok(false);
@@ -183,7 +183,7 @@ pub fn truncate_and_compact(path: &Path, max_lines: usize) -> Result<bool, Frame
     }
 
     let content = fs::read_to_string(path)
-        .map_err(|err| FrameworkError::validation(format!("truncate_and_compact: read {}: {err}", path.display()))?;
+        .map_err(|err| FrameworkError::validation(format!("truncate_and_compact: read {}: {err}", path.display())))?;
 
     if content.is_empty() {
         return Ok(false);
@@ -353,7 +353,7 @@ fn atomic_write_jsonl(path: &Path, payload: &str) -> Result<(), FrameworkError> 
         .parent()
         .ok_or_else(|| FrameworkError::validation(format!("compact_jsonl: no parent for {}", path.display())))?;
     fs::create_dir_all(parent)
-        .map_err(|err| FrameworkError::validation(format!("compact_jsonl: mkdir {}: {err}", parent.display()))?;
+        .map_err(|err| FrameworkError::validation(format!("compact_jsonl: mkdir {}: {err}", parent.display())))?;
 
     {
         let mut tmp_file = fs::OpenOptions::new()

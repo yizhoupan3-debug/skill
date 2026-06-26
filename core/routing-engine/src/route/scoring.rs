@@ -95,14 +95,13 @@ fn score_agent_swarm_signals(
 #[inline]
 fn check_framework_alias_suppression<'a>(
     record: &'a SkillRecord,
-    query_text: &str,
-    query_token_list: &[String],
+    _query_text: &str,
+    _query_token_list: &[String],
     explicit_framework_alias: bool,
 ) -> Option<RouteCandidate<'a>> {
     if framework_alias_requires_explicit_call(record) && !explicit_framework_alias {
-        let ci_gate_nl_routing =
-            has_skill_flag(record, "behavior:nl_exempt_framework_alias") && should_route_to_gh_fix_ci(query_text, query_token_list);
-        if !ci_gate_nl_routing {
+        let nl_exempt = has_skill_flag(record, "behavior:nl_exempt_framework_alias");
+        if !nl_exempt {
             return Some(RouteCandidate {
                 record,
                 score: 0.0,
@@ -557,6 +556,17 @@ pub fn score_route_candidate<'a>(
     score += gate_delta;
     matched_token_count += gate_count;
 
+    // --- n-gram semantic similarity signal (step 7.5) ---
+    let ngram_delta = {
+        let cache = super::ngram::NgramCache::new(query_text);
+        super::ngram::score_ngram_signal(&cache, record, w)
+    };
+    if ngram_delta > 0.0 {
+        score += ngram_delta;
+        matched_token_count += 1;
+        reasons.push(format!("ngram_similarity:{ngram_delta:.1}"));
+    }
+
     // --- metadata-trigger / keyword / alias signals ---
     let (meta_delta, meta_count) =
         score_metadata_trigger_signals(record, query_tokens, query_token_list, w, &mut reasons);
@@ -580,6 +590,12 @@ pub fn score_route_candidate<'a>(
     if has_slides_design_contract_flag && has_design_ctx && !has_design_neg {
         score = 0.0;
         reasons.push("Design contract override: suppressed artifact-gate skill when design contract context detected.".to_string());
+        return RouteCandidate {
+            record,
+            score,
+            reasons,
+            matched_token_count,
+        };
     }
 
     if !record.do_not_use_tokens.is_empty() && score > 0.0 {
@@ -1133,8 +1149,9 @@ mod snapshot_scoring_edge_cases {
             // Codegraph query should score at least codegraph_boost (12.0) higher
             let has_codegraph_reason = r.reasons.iter().any(|s| s.contains("CodeGraph boost"));
             if has_codegraph_reason {
+                let min_delta = w.codegraph_boost - w.ngram_similarity_max;
                 assert!(
-                    (r.score - r_plain.score) >= 12.0,
+                    (r.score - r_plain.score) >= min_delta,
                     "codegraph boost missing for {}: codegraph={:.1} plain={:.1}",
                     rec.slug, r.score, r_plain.score
                 );

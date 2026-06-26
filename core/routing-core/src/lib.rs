@@ -14,4 +14,7 @@
 pub mod config_hooks;
 pub mod fuzzy;
 
-pub use fuzzy::{best_fuzzy_jaccard, extract_trigrams, jaccard_similarity};
+pub use fuzzy::{
+    best_fuzzy_jaccard, character_ngrams, cosine_similarity, extract_trigrams,
+    jaccard_similarity, weighted_ngram_similarity,
+};

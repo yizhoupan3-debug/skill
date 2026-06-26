@@ -18,5 +18,5 @@
     "external": -2.0,
     "independent": -1.0
   },
-  "fuzzy_min_similarity": 0.35
+  "fuzzy_min_similarity": 0.25
 }

@@ -79,6 +79,9 @@ pub struct ScoringWeights {
     pub codegraph_boost: f64,
     pub overlay_suppression_factor: f64,
 
+    // -- score_route_candidate: n-gram semantic similarity --
+    pub ngram_similarity_max: f64,
+
     // -- pick_owner thresholds --
     pub agent_swarm_candidate_threshold: f64,
     pub top_owner_score_threshold: f64,
@@ -103,6 +106,13 @@ impl ScoringWeights {
             "L2" | "L3" => self.layer_threshold_l2_l3,
             _ => self.layer_threshold_default,
         }
+    }
+}
+
+impl Default for ScoringWeights {
+    fn default() -> Self {
+        serde_json::from_str(DEFAULTS_JSON)
+            .expect("BUG: embedded scoring_weights.json failed to deserialize")
     }
 }
 

@@ -561,7 +561,7 @@ fn eval_when_expr(
 /// **Cross-reference**: If [`super::scoring_config::ScoringWeights`] weight values change
 /// significantly (e.g. max score doubles from ~100 to ~200), this constant must be
 /// re-evaluated to prevent NL adjustments from dominating or being capped too early.
-const MAX_NL_BOOST_ACCUMULATION: f64 = 90.0;
+const MAX_NL_BOOST_ACCUMULATION: f64 = 150.0;
 
 fn apply_rule_list<'a>(
     rules: &[CompiledRule],

@@ -5,7 +5,6 @@
 
 use anyhow::Result;
 use sha2::{Digest, Sha256};
-use std::collections::HashSet;
 use std::path::Path;
 
 /// 检查结果封装。
@@ -127,7 +126,7 @@ fn sha256_hash(path: &Path) -> Result<String> {
     }
 
     let result = hasher.finalize();
-    Ok(format!("{result:x}"))
+    Ok(result.iter().map(|b| format!("{b:02x}")).collect::<String>())
 }
 
 /// 检查 #2: 确定性重跑。
@@ -258,7 +257,7 @@ pub fn check_checkpoint_recoverable(experiment_dir: &Path) -> Result<CheckResult
 
     if let Ok(entries) = walk_dir(experiment_dir, 2) {
         for entry in entries {
-            let fname = entry.file_name().to_string_lossy().to_lowercase();
+            let fname = entry.file_name().map(|n| n.to_string_lossy().to_lowercase()).unwrap_or_default();
             if CHECKPOINT_PATTERNS.iter().any(|p| fname.contains(p)) {
                 match std::fs::metadata(&entry) {
                     Ok(meta) if meta.len() > 0 => {

@@ -12,7 +12,7 @@ pub mod scoring_config;
 pub mod text;
 pub mod types;
 
-pub use fuzzy::{FUZZY_MIN_SIMILARITY, fuzzy_fallback_score, trigram_similarity};
+pub use fuzzy::{FUZZY_MIN_SIMILARITY, fuzzy_fallback_score};
 pub use runtime_watch::{
     RoutingRuntimeWatch, RoutingTableSnapshot, default_skill_routing_runtime_path,
     routing_runtime_watch,

@@ -122,7 +122,7 @@ fn flush_to_disk(repo_root: &Path) -> Result<(), String> {
         return Ok(());
     }
 
-    apply_task_ledger_mutation(repo_root, || {
+    Ok(apply_task_ledger_mutation(repo_root, || {
         let mut payload = load_or_init_tracker(&path)?;
 
         payload["total_calls"] = json!(payload["total_calls"].as_u64().unwrap_or(0) + total);
@@ -182,7 +182,7 @@ fn flush_to_disk(repo_root: &Path) -> Result<(), String> {
         *guard = Some(Instant::now());
 
         Ok(())
-    })
+    })?)
 }
 
 // ── Public API ───────────────────────────────────────────────────────
@@ -235,9 +235,9 @@ pub fn check_anomalies(repo_root: &Path) -> Result<Vec<String>, String> {
     // Flush in-memory accumulators so anomaly check sees up-to-date data.
     flush_to_disk(repo_root)?;
 
-    apply_task_ledger_mutation(repo_root, || {
+    Ok(apply_task_ledger_mutation(repo_root, || {
         let path = tracker_path(repo_root);
-        let mut payload = load_or_init_tracker(&path)?;
+        let payload = load_or_init_tracker(&path)?;
         let mut warnings: Vec<String> = vec![];
 
         let total = payload["total_calls"].as_u64().unwrap_or(0);
@@ -317,7 +317,7 @@ pub fn check_anomalies(repo_root: &Path) -> Result<Vec<String>, String> {
         write_tracker(&path, &payload)?;
 
         Ok(warnings)
-    })
+    })?)
 }
 
 /// Read the current tracker state as JSON (for MCP resource).

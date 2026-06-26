@@ -280,6 +280,7 @@ pub(crate) fn score_tool(
             (weights.description_per_match * (desc_match_count as f64)).min(weights.description_max);
         score += desc_score;
         reasons.push(format!("description:{desc_match_count}"));
+        matched_token_count += desc_match_count;
     }
 
     // Step 6: do-not-use penalty (for deprecated tools)

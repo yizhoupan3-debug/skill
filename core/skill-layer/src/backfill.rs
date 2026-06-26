@@ -14,6 +14,7 @@
 use crate::frontmatter::RecordKind;
 use crate::frontmatter_parser;
 use crate::paths;
+use core_errors::FrameworkError;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::fs;
@@ -101,16 +102,15 @@ fn frontmatter_field_to_value(
 /// Run a null-only backfill from SKILL.md frontmatter into the registry JSON.
 ///
 /// `dry_run=true` only scans and reports — no files are modified.
-pub fn backfill_registry(repo_root: &Path, dry_run: bool) -> Result<BackfillReport, String> {
+pub fn backfill_registry(repo_root: &Path, dry_run: bool) -> Result<BackfillReport, FrameworkError> {
     let runtime_path = paths::runtime_json(repo_root);
     let mut doc: Value =
-        serde_json::from_str(&fs::read_to_string(&runtime_path).map_err(|e| e.to_string())?)
-            .map_err(|e| e.to_string())?;
+        serde_json::from_str(&fs::read_to_string(&runtime_path)?)?;
 
     let keys: Vec<String> = doc["keys"]
         .as_array()
         .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
-        .ok_or_else(|| "runtime JSON missing keys array".to_string())?;
+        .ok_or_else(|| FrameworkError::Validation { message: "runtime JSON missing keys array".into() })?;
 
     // Build column index lookup
     let col_idx: HashMap<&str, usize> = keys
@@ -122,7 +122,7 @@ pub fn backfill_registry(repo_root: &Path, dry_run: bool) -> Result<BackfillRepo
     // Verify required columns exist
     let slug_idx = *col_idx
         .get("slug")
-        .ok_or_else(|| "runtime JSON missing slug column".to_string())?;
+        .ok_or_else(|| FrameworkError::Validation { message: "runtime JSON missing slug column".into() })?;
 
     let mut report = BackfillReport {
         total_skills: 0,
@@ -187,8 +187,7 @@ pub fn backfill_registry(repo_root: &Path, dry_run: bool) -> Result<BackfillRepo
 
     // Write the updated JSON (if not dry-run and any changes were made)
     if !dry_run && report.cells_filled > 0 {
-        core_state_utils::atomic_write::write_atomic_json(&runtime_path, &doc)
-            .map_err(|e| format!("failed to write backfilled registry: {e}"))?;
+        core_state_utils::atomic_write::write_atomic_json(&runtime_path, &doc)?;
     }
 
     Ok(report)

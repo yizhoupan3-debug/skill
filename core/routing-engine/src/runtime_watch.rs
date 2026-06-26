@@ -3,6 +3,7 @@
 //! Full record parsing stays in `router-rs` `route::records`; this module only tracks the raw JSON
 //! snapshot so callers can invalidate caches when the file changes on disk.
 
+use core_errors::FrameworkError;
 use notify::{Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, OnceLock};
@@ -22,9 +23,8 @@ pub fn default_skill_routing_runtime_path() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../skills/SKILL_ROUTING_RUNTIME.json")
 }
 
-fn load_snapshot(path: &Path) -> Result<RoutingTableSnapshot, String> {
-    let raw_json = std::fs::read_to_string(path)
-        .map_err(|err| format!("failed reading {}: {err}", path.display()))?;
+fn load_snapshot(path: &Path) -> Result<RoutingTableSnapshot, FrameworkError> {
+    let raw_json = std::fs::read_to_string(path)?;
     Ok(RoutingTableSnapshot {
         path: path.to_path_buf(),
         raw_json,
@@ -45,7 +45,7 @@ pub struct RoutingRuntimeWatch {
 
 impl RoutingRuntimeWatch {
     /// Bootstrap from `path` (or [`default_skill_routing_runtime_path`] when `None`).
-    pub fn bootstrap(path: Option<PathBuf>) -> Result<Self, String> {
+    pub fn bootstrap(path: Option<PathBuf>) -> Result<Self, FrameworkError> {
         let path = path.unwrap_or_else(default_skill_routing_runtime_path);
         let initial = if path.is_file() {
             load_snapshot(&path)?

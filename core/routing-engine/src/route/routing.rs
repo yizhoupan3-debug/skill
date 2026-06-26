@@ -6,6 +6,7 @@ use super::constants::{
     ROUTE_AUTHORITY, ROUTE_DECISION_SCHEMA_VERSION, SEARCH_RESULTS_SCHEMA_VERSION,
 };
 use super::fuzzy::{FUZZY_MIN_SIMILARITY, fuzzy_fallback_score};
+use super::routing_logger;
 use super::scoring::{
     compact_route_reasons, pick_overlay, pick_owner, reasons_class, round2, score_bucket,
     score_route_candidate,
@@ -68,6 +69,7 @@ fn make_no_hit_decision(
         "runtime",
         0.0,
         &decision.reasons,
+        0,
     );
     decision
 }
@@ -349,7 +351,7 @@ pub fn route_task(
         let fallback_reasons = compact_route_reasons(&[
             "Retired framework slash command; native runtime should proceed without loading a skill.",
         ]);
-        return Ok(make_no_hit_decision(query, session_id, route_context, fallback_reasons));
+        return Ok(log_decision(make_no_hit_decision(query, session_id, route_context, fallback_reasons), query, session_id));
     }
     let primary_query = primary_owner_query_text(query, records, allow_overlay);
     let normalized_query = normalize_text(&primary_query);
@@ -364,7 +366,7 @@ pub fn route_task(
     let overlay_query_tokens = tokenize_route_text(query);
 
     if let Some(decision) = literal_framework_alias_decision(records, query, &normalized_query, &query_token_list, session_id) {
-        return Ok(decision);
+        return Ok(log_decision(decision, query, session_id));
     }
 
     let w = scoring_weights();
@@ -395,7 +397,7 @@ pub fn route_task(
     if viable.is_empty() {
         // --- Fuzzy fallback: try trigram similarity against all records ---
         if let Some((record, sim)) = fuzzy_rescue_primary_record(records, &primary_query) {
-            return Ok(build_fuzzy_rescue_decision(
+            return Ok(log_decision(build_fuzzy_rescue_decision(
                 records,
                 record,
                 sim,
@@ -407,13 +409,13 @@ pub fn route_task(
                 allow_overlay,
                 &format!("Fuzzy trigram fallback rescued match (similarity={sim:.3})."),
                 None,
-            ));
+            ), query, session_id));
         }
         tracing::debug!(query, session_id, "route: no skill hit");
         let fallback_reasons = compact_route_reasons(&[
             "No explicit skill hit; native runtime should proceed without loading a skill.",
         ]);
-        return Ok(make_no_hit_decision(query, session_id, route_context, fallback_reasons));
+        return Ok(log_decision(make_no_hit_decision(query, session_id, route_context, fallback_reasons), query, session_id));
     }
     // 所有候选（含仅 1 个）全部是 overlay 且 caller 未允许 overlay 时返回 no-hit
     if !viable.is_empty()
@@ -425,7 +427,7 @@ pub fn route_task(
         let fallback_reasons = compact_route_reasons(&[
             "Only overlay signals matched; native runtime should proceed without loading a primary skill.",
         ]);
-        return Ok(make_no_hit_decision(query, session_id, route_context, fallback_reasons));
+        return Ok(log_decision(make_no_hit_decision(query, session_id, route_context, fallback_reasons), query, session_id));
     }
 
     // Log: all-overlay candidates allowed through by caller
@@ -444,7 +446,7 @@ pub fn route_task(
     if selected.score < w.layer_threshold(&selected.record.layer) {
         // --- Fuzzy fallback: try trigram similarity before giving up ---
         if let Some((record, sim)) = fuzzy_rescue_primary_record(records, &primary_query) {
-            return Ok(build_fuzzy_rescue_decision(
+            return Ok(log_decision(build_fuzzy_rescue_decision(
                 records,
                 record,
                 sim,
@@ -459,7 +461,7 @@ pub fn route_task(
                     selected.score
                 ),
                 Some(selected.score),
-            ));
+            ), query, session_id));
         }
         tracing::debug!(
             query,
@@ -471,7 +473,7 @@ pub fn route_task(
         let fallback_reasons = compact_route_reasons(&[
             "No explicit skill hit; native runtime should proceed without loading a skill.",
         ]);
-        return Ok(make_no_hit_decision(query, session_id, route_context, fallback_reasons));
+        return Ok(log_decision(make_no_hit_decision(query, session_id, route_context, fallback_reasons), query, session_id));
     }
     let overlay = if allow_overlay {
         pick_overlay(
@@ -497,9 +499,10 @@ pub fn route_task(
         &selected.record.layer,
         round2(selected.score),
         &compact_reasons,
+        selected.matched_token_count,
     );
     let skeleton = route_decision_skeleton(query, session_id, route_context, compact_reasons.clone());
-    Ok(RouteDecision {
+    Ok(log_decision(RouteDecision {
         selected_skill: selected.record.slug.clone(),
         selected_skill_path: selected.record.skill_path.clone(),
                 overlay_skill: filtered_overlay.clone(),
@@ -509,7 +512,7 @@ pub fn route_task(
         route_snapshot,
         reasons: compact_reasons,
         ..skeleton
-    })
+    }, query, session_id))
 }
 
 /// Strip overlay-related trigger terms from the query text so the
@@ -605,6 +608,9 @@ fn fuzzy_rescue_best_match<'a>(
             (record, effective)
         })
         .filter(|(_, sim)| *sim >= FUZZY_MIN_SIMILARITY)
+        // partial_cmp returns None for NaN; unwrap_or(Ordering::Equal) handles
+        // the hypothetical case gracefully — fuzzy_fallback_score never produces NaN
+        // for normal inputs (no division by zero, no sqrt of negative numbers).
         .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(Ordering::Equal))
         
 }
@@ -685,6 +691,7 @@ fn build_fuzzy_rescue_decision(
             &record.layer,
             round2(sim * 100.0),
             &fuzzy_reasons,
+            0,
         ),
         reasons: fuzzy_reasons,
         ..skeleton
@@ -723,6 +730,7 @@ pub fn literal_framework_alias_decision(
             &record.layer,
             100.0,
             &reasons,
+            0,
         ),
         reasons,
         matched_token_count: 0,
@@ -737,6 +745,7 @@ pub fn build_route_snapshot(
     layer: &str,
     score: f64,
     reasons: &[String],
+    matched_token_count: usize,
 ) -> RouteDecisionSnapshotPayload {
     RouteDecisionSnapshotPayload {
         engine: engine.to_string(),
@@ -747,7 +756,7 @@ pub fn build_route_snapshot(
         score_bucket: score_bucket(score),
         reasons: reasons.to_vec(),
         reasons_class: reasons_class(reasons),
-        matched_token_count: 0,
+        matched_token_count,
     }
 }
 
@@ -1006,6 +1015,15 @@ pub fn should_accept_manifest_fallback(
     full_decision.score > hot_decision.score
         || (full_decision.score == hot_decision.score
             && full_decision.selected_skill != hot_decision.selected_skill)
+}
+
+/// Wrapper that logs every routing decision and records zero-score queries.
+fn log_decision(decision: RouteDecision, query: &str, session_id: &str) -> RouteDecision {
+    routing_logger::log_routing_decision(&decision, query, session_id);
+    if decision.score <= 0.0 || decision.selected_skill == NO_SKILL_SELECTED {
+        super::zero_match_collector::record_zero_match(query);
+    }
+    decision
 }
 
 #[cfg(test)]

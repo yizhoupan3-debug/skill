@@ -446,7 +446,12 @@
         "/deepinterview",
         "先问清楚",
         "深度采访",
-        "澄清需求"
+        "澄清需求",
+        "需求分析",
+        "需求澄清",
+        "clarify requirements",
+        "访谈",
+        "深入理解"
       ],
       "runtime",
       "skills/deepinterview/SKILL.md",
@@ -1022,7 +1027,16 @@
       "n/a",
       [
         "/gitx",
-        "gitx"
+        "gitx",
+        "提交代码",
+        "代码提交",
+        "commit",
+        "git commit",
+        "代码推送",
+        "push",
+        "合并",
+        "merge",
+        "提交"
       ],
       "runtime",
       "skills/gitx/SKILL.md",
@@ -1342,7 +1356,8 @@
         "section rewrite",
         "story card",
         "润色落笔",
-        "论文改稿"
+        "论文改稿",
+        "$paper-workbench"
       ],
       "project",
       "skills/paper-workbench/SKILL.md",
@@ -1355,7 +1370,8 @@
       "skill",
       [
         "scoring:paper_workbench",
-        "behavior:paper_workbench_scored"
+        "behavior:paper_workbench_scored",
+        "behavior:nl_exempt_framework_alias"
       ],
       "论文全流程：审稿、返修、rebuttal、写作、投稿",
       null,
@@ -1975,7 +1991,12 @@
         "incident debugging",
         "production errors",
         "sentry",
-        "triage"
+        "triage",
+        "生产错误",
+        "线上异常",
+        "错误监控",
+        "异常排查",
+        "线上问题"
       ],
       "project",
       "skills/sentry/SKILL.md",
@@ -2292,7 +2313,11 @@
         "xls",
         "xlsx",
         "spreadsheets",
-        "/spreadsheets"
+        "/spreadsheets",
+        "表格",
+        "电子表格",
+        "excel 表格",
+        "工作簿"
       ],
       "project",
       "skills/primary-runtime/spreadsheets/SKILL.md",

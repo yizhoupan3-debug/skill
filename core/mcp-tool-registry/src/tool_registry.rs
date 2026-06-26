@@ -13,6 +13,8 @@ use serde_json::Value;
 
 use crate::tool_types::McpToolRecord;
 
+use core_errors::FrameworkError;
+
 pub const EXPECTED_SCHEMA: &str = "mcp-tool-registry-v1";
 const EXPECTED_SCHEMA_V2: &str = "mcp-tool-registry-v2";
 
@@ -22,26 +24,24 @@ const CACHE_TTL_SECS: u64 = 60;
 /// Load tool records from MCP_TOOL_REGISTRY.json.
 /// Supports both v1 (columnar array) and v2 (object) formats — auto-detected
 /// by checking whether the first tool entry is an array or object.
-pub fn load_tool_records(registry_path: &Path) -> Result<Vec<McpToolRecord>, String> {
-    let content = fs::read_to_string(registry_path)
-        .map_err(|e| format!("failed to read {}: {e}", registry_path.display()))?;
-    let root: Value = serde_json::from_str(&content)
-        .map_err(|e| format!("failed to parse {}: {e}", registry_path.display()))?;
+pub fn load_tool_records(registry_path: &Path) -> Result<Vec<McpToolRecord>, FrameworkError> {
+    let content = fs::read_to_string(registry_path)?;
+    let root: Value = serde_json::from_str(&content)?;
 
     let schema = root
         .get("schema_version")
         .and_then(|v| v.as_str())
         .unwrap_or("");
     if schema != EXPECTED_SCHEMA && schema != EXPECTED_SCHEMA_V2 {
-        return Err(format!(
+        return Err(FrameworkError::validation(format!(
             "MCP_TOOL_REGISTRY.json schema mismatch: expected {EXPECTED_SCHEMA} or {EXPECTED_SCHEMA_V2}, got {schema}"
-        ));
+        )));
     }
 
     let tools = root
         .get("tools")
         .and_then(|v| v.as_array())
-        .ok_or("MCP_TOOL_REGISTRY.json missing 'tools' array")?;
+        .ok_or(FrameworkError::validation("MCP_TOOL_REGISTRY.json missing 'tools' array"))?;
 
     if tools.is_empty() {
         return Ok(Vec::new());
@@ -52,21 +52,21 @@ pub fn load_tool_records(registry_path: &Path) -> Result<Vec<McpToolRecord>, Str
         Value::Object(_) => tools
             .iter()
             .enumerate()
-            .map(|(idx, tool)| {
+            .map(|(_idx, tool)| {
                 serde_json::from_value::<McpToolRecord>(tool.clone())
-                    .map_err(|e| format!("tool record at index {idx} is invalid: {e}"))
+                    .map_err(|e| FrameworkError::Json(e))
             })
             .collect(),
         Value::Array(_) => {
             let keys: Vec<String> = root
                 .get("keys")
                 .and_then(|v| v.as_array())
-                .ok_or("MCP_TOOL_REGISTRY.json missing 'keys' array")?
+                .ok_or(FrameworkError::validation("MCP_TOOL_REGISTRY.json missing 'keys' array"))?
                 .iter()
                 .filter_map(|v| v.as_str().map(|s| s.to_string()))
                 .collect();
             if keys.is_empty() {
-                return Err("MCP_TOOL_REGISTRY.json has empty 'keys' array".to_string());
+                return Err(FrameworkError::validation("MCP_TOOL_REGISTRY.json has empty 'keys' array"));
             }
             tools
                 .iter()
@@ -74,9 +74,9 @@ pub fn load_tool_records(registry_path: &Path) -> Result<Vec<McpToolRecord>, Str
                 .map(|(idx, tool)| parse_tool_record(tool, &keys, idx))
                 .collect::<Result<Vec<_>, _>>()
         }
-        _ => Err(
-            "MCP_TOOL_REGISTRY.json 'tools' entries must be arrays or objects".to_string(),
-        ),
+        _ => Err(FrameworkError::validation(
+            "MCP_TOOL_REGISTRY.json 'tools' entries must be arrays or objects",
+        )),
     }
 }
 
@@ -99,7 +99,7 @@ fn cache() -> &'static std::sync::RwLock<Option<CacheEntry>> {
 /// the cached result. After the TTL expires, the next call reloads from disk.
 /// On reload failure, returns stale cache data (with a warning) instead of
 /// propagating the error, so transient I/O issues don't disrupt routing.
-pub fn load_tool_records_cached(registry_path: &Path) -> Result<Vec<McpToolRecord>, String> {
+pub fn load_tool_records_cached(registry_path: &Path) -> Result<Vec<McpToolRecord>, FrameworkError> {
     let now = Instant::now();
 
     // Fast path: check cache (read lock)
@@ -113,7 +113,7 @@ pub fn load_tool_records_cached(registry_path: &Path) -> Result<Vec<McpToolRecor
 
     // TTL expired or cache empty: reload from disk (write lock)
     {
-        let mut guard = cache().write().map_err(|_| "cache poisoned".to_string())?;
+        let mut guard = cache().write().map_err(|_| FrameworkError::lock("cache poisoned"))?;
         // Double-check after acquiring write lock (another thread may have reloaded)
         if let Some(entry) = guard.as_ref()
             && now.duration_since(entry.loaded_at) < Duration::from_secs(CACHE_TTL_SECS) {
@@ -150,10 +150,10 @@ pub fn invalidate_tool_cache() {
     }
 }
 
-fn parse_tool_record(row: &Value, keys: &[String], index: usize) -> Result<McpToolRecord, String> {
+fn parse_tool_record(row: &Value, keys: &[String], index: usize) -> Result<McpToolRecord, FrameworkError> {
     let arr = row
         .as_array()
-        .ok_or_else(|| format!("tool record at index {index} is not an array"))?;
+        .ok_or_else(|| FrameworkError::validation(format!("tool record at index {index} is not an array")))?;
 
     let mut record = McpToolRecord {
         slug: String::new(),
@@ -236,7 +236,7 @@ fn parse_tool_record(row: &Value, keys: &[String], index: usize) -> Result<McpTo
     }
 
     if record.slug.is_empty() {
-        return Err(format!("tool record at index {index} missing slug"));
+        return Err(FrameworkError::validation(format!("tool record at index {index} missing slug")));
     }
 
     Ok(record)

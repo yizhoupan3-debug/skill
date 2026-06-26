@@ -1,3 +1,4 @@
+use core_errors::FrameworkError;
 use crate::utils::path_guard::{safe_task_id_component, validate_task_id_component};
 
 use serde_json::{Map, Value, json};
@@ -22,13 +23,13 @@ pub fn step_ledger_path_for_task(repo_root: &Path, task_id: &str) -> PathBuf {
         .join(STEP_LEDGER_FILENAME)
 }
 
-pub fn handle_step_ledger_operation(payload: Value) -> Result<Value, String> {
+pub fn handle_step_ledger_operation(payload: Value) -> Result<Value, FrameworkError> {
     let operation = required_non_empty_string(&payload, "operation", "step ledger")?;
     match operation.as_str() {
         "append" => append_step_ledger_entry(payload),
         "summary" => summarize_step_ledger_operation(payload),
         "contract" => Ok(step_ledger_contract()),
-        other => Err(format!("unknown step ledger operation: {other}")),
+        other => Err(FrameworkError::Validation { message: format!("unknown step ledger operation: {other}") }),
     }
 }
 
@@ -60,7 +61,7 @@ pub fn step_ledger_contract() -> Value {
     })
 }
 
-fn append_step_ledger_entry(payload: Value) -> Result<Value, String> {
+fn append_step_ledger_entry(payload: Value) -> Result<Value, FrameworkError> {
     let repo_root = resolve_repo_root_from_payload(&payload)?;
     let task_id = resolve_task_id_from_payload(&repo_root, &payload)?;
     let step_id = required_non_empty_string(&payload, "step_id", "step ledger append")?;
@@ -166,7 +167,7 @@ fn append_step_ledger_entry(payload: Value) -> Result<Value, String> {
     }))
 }
 
-fn summarize_step_ledger_operation(payload: Value) -> Result<Value, String> {
+fn summarize_step_ledger_operation(payload: Value) -> Result<Value, FrameworkError> {
     let repo_root = resolve_repo_root_from_payload(&payload)?;
     let task_id = resolve_task_id_from_payload(&repo_root, &payload)?;
     Ok(summarize_step_ledger_for_task(&repo_root, &task_id))
@@ -505,7 +506,7 @@ fn chars_eq(chars: &mut std::iter::Peekable<std::str::Chars<'_>>, expected: &str
     true
 }
 
-fn resolve_repo_root_from_payload(payload: &Value) -> Result<PathBuf, String> {
+fn resolve_repo_root_from_payload(payload: &Value) -> Result<PathBuf, FrameworkError> {
     let explicit = payload.get("repo_root").and_then(|v| {
         let s = value_text(Some(v));
         if s.is_empty() {
@@ -517,12 +518,12 @@ fn resolve_repo_root_from_payload(payload: &Value) -> Result<PathBuf, String> {
     Ok(explicit.unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))))
 }
 
-fn resolve_task_id_from_payload(repo_root: &Path, payload: &Value) -> Result<String, String> {
+fn resolve_task_id_from_payload(repo_root: &Path, payload: &Value) -> Result<String, FrameworkError> {
     let task_id = optional_non_empty_string(payload, "task_id")
         .or_else(|| crate::state_manager::read_active_task_id(repo_root))
         .or_else(|| crate::state_manager::read_focus_task_id(repo_root))
         .ok_or_else(|| {
-            "step ledger requires task_id or active_task.json/focus_task.json".to_string()
+            FrameworkError::Validation { message: "step ledger requires task_id or active_task.json/focus_task.json".to_string() }
         })?;
     validate_task_id_component(&task_id).map(str::to_string)
 }
@@ -588,7 +589,7 @@ mod tests {
             "step_id": "s1"
         });
         let err = handle_step_ledger_operation(payload).unwrap_err();
-        assert!(err.contains("safe path component"), "{err}");
+        assert!(err.to_string().contains("safe path component"), "{err}");
         assert!(!repo.join("artifacts/outside/STEP_LEDGER.jsonl").exists());
         let _ = fs::remove_dir_all(repo);
     }

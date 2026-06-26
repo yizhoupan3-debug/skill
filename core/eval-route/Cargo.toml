@@ -7,6 +7,7 @@ description = "Routing evaluation framework: validate routing decisions against 
 workspace = true
 
 [dependencies]
+core-errors = { path = "../core-errors" }
 framework-extra = { path = "../framework-extra" }
 routing-engine = { path = "../routing-engine" }
 serde.workspace = true

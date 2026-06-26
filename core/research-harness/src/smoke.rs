@@ -267,6 +267,8 @@ pub fn load_previous_results(path: &Path) -> Result<HashMap<String, SmokeResult>
         }
         if let Ok(val) = serde_json::from_str::<SmokeResult>(trimmed) {
             results.insert(val.id.clone(), val);
+        } else {
+            tracing::warn!("[smoke] skipping unparseable line in {}: {trimmed}", path.display());
         }
     }
     Ok(results)

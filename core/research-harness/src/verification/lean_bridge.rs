@@ -78,7 +78,9 @@ pub fn verify_lean_theorem(script: &str) -> VerificationResult {
 
     // Write script to temp file and run lean
     let temp_dir = std::env::temp_dir().join(format!("lean_verify_{}", std::process::id()));
-    let _ = std::fs::create_dir_all(&temp_dir);
+    if let Err(e) = std::fs::create_dir_all(&temp_dir) {
+        tracing::warn!("[lean_bridge] failed to create temp dir: {e}");
+    }
     let script_path = temp_dir.join("verify.lean");
 
     // Drop guard ensures cleanup even if the process panics mid-execution.

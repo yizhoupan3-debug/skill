@@ -284,7 +284,16 @@ pub fn research_all_claims(
         }
     }
     for handle in handles {
-        handle.join().ok();
+        if let Err(e) = handle.join() {
+            let msg = if let Some(s) = e.downcast_ref::<&str>() {
+                s.to_string()
+            } else if let Some(s) = e.downcast_ref::<String>() {
+                s.clone()
+            } else {
+                "worker thread panicked (unreachable — catch_unwind should cover)".to_string()
+            };
+            tracing::warn!("[research-harness] join failed for worker thread: {msg}");
+        }
     }
     if !errors.is_empty() && arr(&next_state, "external_research").is_empty() {
         bail!("External research failed: {}", errors.join("; "));

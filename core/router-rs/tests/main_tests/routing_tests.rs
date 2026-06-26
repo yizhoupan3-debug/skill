@@ -804,6 +804,7 @@ fn route_diff_report_matches_shadow_compare_contract() {
         "L2",
         39.0,
         &["Trigger phrase matched: 直接做代码.".to_string()],
+        0,
     );
 
     let report = build_route_diff_report("shadow", rust_snapshot, None).expect("shadow report");
@@ -864,6 +865,7 @@ fn route_snapshot_builder_normalizes_score_bucket_and_reasons_class() {
                 " Trigger phrase matched: 直接做代码. ".to_string(),
                 "trigger phrase matched: 直接做代码.".to_string(),
             ],
+            0,
         ),
     };
 

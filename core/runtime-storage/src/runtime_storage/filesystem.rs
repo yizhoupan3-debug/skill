@@ -157,7 +157,7 @@ pub fn filesystem_write_text_inner(
     filesystem_reject_symlink_write_target(path)?;
 
     // Delegate to core-state-utils's canonical atomic write (temp + write + fsync + rename + fsync_parent_dir).
-    core_state_utils::atomic_write::write_atomic_text(path, payload_text)
+    core_state_utils::atomic_write::write_atomic_text(path, payload_text).map_err(|e| e.to_string())
 }
 
 #[tracing::instrument(level = "debug", skip_all)]

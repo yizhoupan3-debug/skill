@@ -1125,10 +1125,15 @@ mod tests {
 
     // ── E2E chain tests: JSON-RPC tools/call → dispatch → research handler ──
 
+    #[cfg(test)]
     use std::sync::Once;
+    #[cfg(test)]
     use core_policy::error::FrameworkError;
+    #[cfg(test)]
+    use serde_json::{json, Value};
 
     /// Test research tool dispatch that mimics the real handler at a high level.
+    #[cfg(test)]
     fn test_research_dispatch(name: &str, arguments: &Value) -> Result<String, FrameworkError> {
         match name {
             "research_review_loop" => {
@@ -1170,8 +1175,10 @@ mod tests {
         }
     }
 
+    #[cfg(test)]
     static E2E_INIT: Once = Once::new();
 
+    #[cfg(test)]
     fn ensure_test_research_dispatch() {
         E2E_INIT.call_once(|| {
             crate::hooks::register_research_tool_dispatch(test_research_dispatch);

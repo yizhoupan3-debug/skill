@@ -377,6 +377,7 @@ checksum = "773648b94d0e5d620f64f280777445740e61fe701025087ec8b57f45c791888b"
 name = "core-policy"
 version = "0.1.0"
 dependencies = [
+ "core-errors",
  "core-state-utils",
  "framework-kernel",
  "insta",
@@ -385,7 +386,6 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.11.0",
- "thiserror 2.0.18",
  "tokio",
  "tracing",
 ]
@@ -395,6 +395,7 @@ name = "core-state"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "core-errors",
  "core-state-types",
  "core-state-utils",
  "framework-kernel",
@@ -420,6 +421,7 @@ dependencies = [
 name = "core-state-utils"
 version = "0.2.0"
 dependencies = [
+ "core-errors",
  "criterion",
  "fs2",
  "insta",
@@ -619,6 +621,7 @@ dependencies = [
 name = "eval-route"
 version = "0.1.0"
 dependencies = [
+ "core-errors",
  "framework-extra",
  "routing-engine",
  "serde",
@@ -654,17 +657,6 @@ name = "fallible-streaming-iterator"
 version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7360491ce676a36bf9bb3c56c1aa791658183a54d2744120f27285738d90465a"
-
-[[package]]
-name = "fancy-regex"
-version = "0.14.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6e24cb5a94bcae1e5408b0effca5cd7172ea3c5755049c5f3af4cd283a165298"
-dependencies = [
- "bit-set",
- "regex-automata",
- "regex-syntax",
-]
 
 [[package]]
 name = "fastrand"
@@ -748,6 +740,7 @@ dependencies = [
 name = "fr-utils"
 version = "0.1.0"
 dependencies = [
+ "core-errors",
  "core-state-utils",
  "criterion",
  "framework-kernel",
@@ -819,6 +812,7 @@ dependencies = [
 name = "framework-maint"
 version = "0.1.0"
 dependencies = [
+ "core-errors",
  "core-state",
  "core-state-utils",
  "framework-extra",
@@ -832,6 +826,7 @@ dependencies = [
 name = "framework-runtime-hooks"
 version = "0.1.0"
 dependencies = [
+ "core-errors",
  "serde_json",
 ]
 
@@ -1041,15 +1036,6 @@ dependencies = [
  "tool-routing-engine",
  "tracing",
  "which",
-]
-
-[[package]]
-name = "html-escape"
-version = "0.2.13"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6d1ad449764d627e22bfd7cd5e8868264fc9236e07c752972b4080cd351cb476"
-dependencies = [
- "utf8-width",
 ]
 
 [[package]]
@@ -1488,6 +1474,7 @@ name = "loop-engine"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "core-errors",
  "core-state",
  "core-state-utils",
  "fr-contracts",
@@ -1540,6 +1527,7 @@ dependencies = [
 name = "mcp-tool-registry"
 version = "0.1.0"
 dependencies = [
+ "core-errors",
  "routing-core",
  "serde",
  "serde_json",
@@ -1743,48 +1731,6 @@ name = "percent-encoding"
 version = "2.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
-
-[[package]]
-name = "phf"
-version = "0.11.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1fd6780a80ae0c52cc120a26a1a42c1ae51b247a253e4e06113d23d2c2edd078"
-dependencies = [
- "phf_macros",
- "phf_shared",
-]
-
-[[package]]
-name = "phf_generator"
-version = "0.11.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3c80231409c20246a13fddb31776fb942c38553c51e871f8cbd687a4cfb5843d"
-dependencies = [
- "phf_shared",
- "rand 0.8.6",
-]
-
-[[package]]
-name = "phf_macros"
-version = "0.11.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f84ac04429c13a7ff43785d75ad27569f2951ce0ffd30a3321230db2fc727216"
-dependencies = [
- "phf_generator",
- "phf_shared",
- "proc-macro2",
- "quote",
- "syn",
-]
-
-[[package]]
-name = "phf_shared"
-version = "0.11.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "67eabc2ef2a60eb7faa00097bd1ffdb5bd28e62bf39990626a582201b7a754e5"
-dependencies = [
- "siphasher",
-]
 
 [[package]]
 name = "pin-project-lite"
@@ -2049,36 +1995,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ratex-font"
-version = "0.1.12"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "03059293a2a4cdeab32f348fbf2eb649e696a6a8c88b8142de7d016ab84f0013"
-dependencies = [
- "phf",
- "ratex-types",
-]
-
-[[package]]
-name = "ratex-lexer"
-version = "0.1.12"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6af24235c2700f21a80620885bb3de96efe884726ac89937abb8c27e4683ff28"
-dependencies = [
- "ratex-types",
- "serde",
- "thiserror 1.0.69",
-]
-
-[[package]]
-name = "ratex-types"
-version = "0.1.12"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "43de9e079b1056b08fd89143cb905e47bcb459510141c5dd702b290e18447054"
-dependencies = [
- "serde",
-]
-
-[[package]]
 name = "rawpointer"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2137,12 +2053,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "regex-lite"
-version = "0.1.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cab834c73d247e67f4fae452806d17d3c7501756d98c8808d7c9c7aa7d18f973"
-
-[[package]]
 name = "regex-syntax"
 version = "0.8.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2198,16 +2108,11 @@ dependencies = [
  "core-policy",
  "core-state",
  "core-state-utils",
- "fancy-regex",
  "fr-utils",
  "framework-kernel",
  "host-projection",
- "html-escape",
  "minilp",
- "ratex-font",
- "ratex-lexer",
  "regex",
- "regex-lite",
  "reqwest",
  "rusqlite",
  "serde",
@@ -2215,9 +2120,7 @@ dependencies = [
  "serde_yml",
  "sha2 0.11.0",
  "tempfile",
- "thiserror 2.0.18",
  "tracing",
- "unicode-normalization",
 ]
 
 [[package]]
@@ -2289,6 +2192,7 @@ dependencies = [
 name = "routing-engine"
 version = "0.1.0"
 dependencies = [
+ "core-errors",
  "core-state-utils",
  "criterion",
  "insta",
@@ -2711,12 +2615,6 @@ name = "similar"
 version = "2.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bbbb5d9659141646ae647b42fe094daf6c6192d1620870b449d9557f748b2daa"
-
-[[package]]
-name = "siphasher"
-version = "1.0.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8ee5873ec9cce0195efcb7a4e9507a04cd49aec9c83d0389df45b1ef7ba2e649"
 
 [[package]]
 name = "skill-layer"
@@ -3270,15 +3168,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e6e4313cd5fcd3dad5cafa179702e2b244f760991f45397d14d4ebf38247da75"
 
 [[package]]
-name = "unicode-normalization"
-version = "0.1.25"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5fd4f6878c9cb28d874b009da9e8d183b5abc80117c40bbd187a1fde336be6e8"
-dependencies = [
- "tinyvec",
-]
-
-[[package]]
 name = "untrusted"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3301,12 +3190,6 @@ name = "utf-8"
 version = "0.7.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "09cc8ee72d2a9becf2f2febe0205bbed8fc6615b7cb429ad062dc7b7ddd036a9"
-
-[[package]]
-name = "utf8-width"
-version = "0.1.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1292c0d970b54115d14f2492fe0170adf21d68a1de108eebc51c1df4f346a091"
 
 [[package]]
 name = "utf8_iter"

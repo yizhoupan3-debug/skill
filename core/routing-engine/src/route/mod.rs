@@ -9,13 +9,16 @@ mod constants;
 mod eval;
 pub mod gate_hints;
 pub mod nl_route_adjustments;
+pub(crate) mod ngram;
 mod policy;
 pub mod records;
 pub mod routing;
+pub(crate) mod routing_logger; // structured routing audit log
 mod scoring;
 mod signal_cache;
 pub(crate) mod signals;
 pub mod skill_record;
+pub(crate) mod zero_match_collector;
 
 // Re-export parent-level modules for `super::` compatibility within this module.
 // These are the leaf modules that were migrated to routing-engine earlier.
@@ -26,7 +29,7 @@ pub use crate::types;
 
 // ── public re-exports (API surface preserved for downstream crates) ──
 
-pub use fuzzy::{FUZZY_MIN_SIMILARITY, fuzzy_fallback_score, trigram_similarity};
+pub use fuzzy::{FUZZY_MIN_SIMILARITY, fuzzy_fallback_score};
 pub use scoring_config::scoring_weights;
 
 pub use constants::{

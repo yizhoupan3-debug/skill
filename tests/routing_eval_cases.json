@@ -601,7 +601,6 @@
             "focus_skill": "research-discovery",
             "expected_owner": "none",
             "expected_overlay": null,
-            "expected_layer": "runtime",
             "first_turn": true,
             "notes": "日常查论文用语；当前路由无匹配触发词，期望为 none"
         },
@@ -659,6 +658,318 @@
             "expected_layer": "L2",
             "first_turn": true,
             "notes": "实验设计触发 research-execution experiment_design lane"
+        },
+        {
+            "id": "eval-algo-trading-backtest",
+            "category": "should-trigger",
+            "task": "帮我写一个A股均值回归量化回测策略，计算夏普比率和最大回撤",
+            "focus_skill": "algo-trading",
+            "expected_owner": "algo-trading",
+            "expected_overlay": null,
+            "first_turn": true,
+            "notes": "新覆盖 algo-trading 冷表技能"
+        },
+        {
+            "id": "eval-citation-management-bibtex",
+            "category": "should-trigger",
+            "task": "按GB/T 7714格式整理参考文献，输出BibTeX格式，检查文中引用对应",
+            "focus_skill": "citation-management",
+            "expected_owner": "citation-management",
+            "expected_overlay": null,
+            "first_turn": true,
+            "notes": "新覆盖 citation-management 冷表技能"
+        },
+        {
+            "id": "eval-deep-research-rag-report",
+            "category": "should-trigger",
+            "task": "帮我查一下RAG技术的最新进展，做多源验证和网络信息收集后给一份有引用的报告",
+            "focus_skill": "deep-research",
+            "expected_owner": "deep-research",
+            "expected_overlay": null,
+            "first_turn": true,
+            "notes": "新覆盖 deep-research 技能"
+        },
+        {
+            "id": "eval-deepinterview-clarify",
+            "category": "should-trigger",
+            "task": "需求还不清楚，先做深度采访把需求和边界问清楚再开始做",
+            "focus_skill": "deepinterview",
+            "expected_owner": "deepinterview",
+            "expected_overlay": null,
+            "first_turn": true,
+            "notes": "新覆盖 deepinterview 框架命令技能"
+        },
+        {
+            "id": "eval-email-template-newsletter",
+            "category": "should-trigger",
+            "task": "帮我做一个产品周报的HTML邮件模板，兼容Outlook和Gmail客户端",
+            "focus_skill": "email-template",
+            "expected_owner": "email-template",
+            "expected_overlay": null,
+            "first_turn": true,
+            "notes": "新覆盖 email-template 冷表技能"
+        },
+        {
+            "id": "eval-formal-verification-smt",
+            "category": "should-trigger",
+            "task": "对这个公式做CAS验证和SMT检查，确认形式验证通过",
+            "focus_skill": "formal-verification",
+            "expected_owner": "formal-verification",
+            "expected_overlay": null,
+            "first_turn": true,
+            "notes": "新覆盖 formal-verification 冷表技能"
+        },
+        {
+            "id": "eval-gh-address-comments-pr",
+            "category": "should-trigger",
+            "task": "/gh-address-comments 帮我在GitHub PR上逐条处理review comments",
+            "focus_skill": "gh-address-comments",
+            "expected_owner": "gh-address-comments",
+            "expected_overlay": null,
+            "first_turn": true,
+            "notes": "新覆盖 gh-address-comments 技能"
+        },
+        {
+            "id": "eval-infographic-knowledge-card",
+            "category": "should-trigger",
+            "task": "把这篇技术文档做成一张知识卡片信息图，一图读懂核心内容",
+            "focus_skill": "infographic",
+            "expected_owner": "infographic",
+            "expected_overlay": null,
+            "first_turn": true,
+            "notes": "新覆盖 infographic 冷表技能"
+        },
+        {
+            "id": "eval-literature-verification-doi",
+            "category": "should-trigger",
+            "task": "做literature-verification：引用审查和DOI验证，检查论文引用准确性",
+            "focus_skill": "literature-verification",
+            "expected_owner": "literature-verification",
+            "expected_overlay": null,
+            "first_turn": true,
+            "notes": "新覆盖 literature-verification 冷表技能"
+        },
+        {
+            "id": "eval-mcp-server-create",
+            "category": "should-trigger",
+            "task": "帮我把这个天气预报API封装成一个MCP server，用Python FastMCP实现",
+            "focus_skill": "mcp-server-management",
+            "expected_owner": "mcp-server-management",
+            "expected_overlay": null,
+            "first_turn": true,
+            "notes": "新覆盖 mcp-server-management 技能"
+        },
+        {
+            "id": "eval-prose-verification-terminology",
+            "category": "should-trigger",
+            "task": "检查论文的文体验证：术语一致性和风格检查，看有没有claim drift",
+            "focus_skill": "prose-verification",
+            "expected_owner": "prose-verification",
+            "expected_overlay": null,
+            "first_turn": true,
+            "notes": "新覆盖 prose-verification 冷表技能"
+        },
+        {
+            "id": "eval-reproducibility-verification-seed",
+            "category": "should-trigger",
+            "task": "做可复现性验证：确定性种子检查和环境复现验证",
+            "focus_skill": "reproducibility-verification",
+            "expected_owner": "reproducibility-verification",
+            "expected_overlay": null,
+            "first_turn": true,
+            "notes": "新覆盖 reproducibility-verification 冷表技能"
+        },
+        {
+            "id": "eval-research-knowledge-graph-viz",
+            "category": "should-trigger",
+            "task": "查看research-knowledge-graph，帮我导航研究方向间的连接和障碍路径",
+            "focus_skill": "research-knowledge-graph",
+            "expected_owner": "research-knowledge-graph",
+            "expected_overlay": null,
+            "first_turn": true,
+            "notes": "新覆盖 research-knowledge-graph 技能"
+        },
+        {
+            "id": "eval-sentry-production-error",
+            "category": "should-trigger",
+            "task": "Sentry上报了生产错误，帮我排查根因和影响范围",
+            "focus_skill": "sentry",
+            "expected_owner": "sentry",
+            "expected_overlay": null,
+            "first_turn": true,
+            "notes": "新覆盖 sentry 技能"
+        },
+        {
+            "id": "eval-simplify-code-cleanup",
+            "category": "should-trigger",
+            "task": "不用找bug，帮我简化这段代码消除重复和过度工程",
+            "focus_skill": "simplify",
+            "expected_owner": "simplify",
+            "expected_overlay": null,
+            "first_turn": true,
+            "notes": "新覆盖 simplify 技能"
+        },
+        {
+            "id": "eval-systematic-debugging-crash",
+            "category": "should-trigger",
+            "task": "这个测试偶发失败，先做根因分析定位问题来源",
+            "focus_skill": "systematic-debugging",
+            "expected_owner": "systematic-debugging",
+            "expected_overlay": null,
+            "first_turn": true,
+            "notes": "新覆盖 systematic-debugging 技能"
+        },
+        {
+            "id": "eval-spreadsheets-excel-analysis",
+            "category": "should-trigger",
+            "task": "帮我分析这个Excel工作簿里的销售数据趋势和工作表结构",
+            "focus_skill": "spreadsheets",
+            "expected_owner": "spreadsheets",
+            "expected_overlay": null,
+            "first_turn": true,
+            "notes": "新覆盖 spreadsheets 技能"
+        },
+        {
+            "id": "eval-statistical-analysis-test-choice",
+            "category": "should-trigger",
+            "task": "两组对照实验前测后测数据，该用什么统计检验方法，效应量怎么报",
+            "focus_skill": "statistical-analysis",
+            "expected_owner": "statistical-analysis",
+            "expected_overlay": null,
+            "first_turn": true,
+            "notes": "新覆盖 statistical-analysis 技能"
+        },
+        {
+            "id": "eval-statistical-verification-pvalue",
+            "category": "should-trigger",
+            "task": "做统计审查：p值验证和GRIM test，检查统计报告",
+            "focus_skill": "statistical-verification",
+            "expected_owner": "statistical-verification",
+            "expected_overlay": null,
+            "first_turn": true,
+            "notes": "新覆盖 statistical-verification 冷表技能"
+        },
+        {
+            "id": "eval-structure-verification-latex",
+            "category": "should-trigger",
+            "task": "做结构验证：检查LaTeX编译、cross-reference和图表引用检查",
+            "focus_skill": "structure-verification",
+            "expected_owner": "structure-verification",
+            "expected_overlay": null,
+            "first_turn": true,
+            "notes": "新覆盖 structure-verification 冷表技能"
+        },
+        {
+            "id": "eval-tikz-paper-figure-convert",
+            "category": "should-trigger",
+            "task": "把这张架构截图转换为论文级别的TikZ独立配图",
+            "focus_skill": "tikz-paper-figure",
+            "expected_owner": "tikz-paper-figure",
+            "expected_overlay": null,
+            "first_turn": true,
+            "notes": "新覆盖 tikz-paper-figure 技能"
+        },
+        {
+            "id": "eval-goalx-create-goal",
+            "category": "should-trigger",
+            "task": "/goalx 帮我创建一个新goal：2026年下半年全面审计",
+            "focus_skill": "goalx",
+            "expected_owner": "goalx",
+            "expected_overlay": null,
+            "first_turn": true,
+            "notes": "新覆盖 goalx 框架命令技能"
+        },
+        {
+            "id": "eval-code-review-deep-direct-owner",
+            "category": "should-trigger",
+            "task": "做深度代码审查，只允许审不改，帮我 review 这段Rust并发代码",
+            "focus_skill": "code-review-deep",
+            "expected_owner": "code-review-deep",
+            "expected_overlay": null,
+            "forbidden_owners": [],
+            "first_turn": true,
+            "notes": "code-review-deep 作为 owner 的直接触发覆盖"
+        },
+        {
+            "id": "eval-deep-research-fact-check",
+            "category": "should-trigger",
+            "task": "帮我查一下这个科学声称是否有可靠的多源证据支持",
+            "focus_skill": "deep-research",
+            "expected_owner": "deep-research",
+            "expected_overlay": null,
+            "first_turn": true,
+            "notes": "deep-research 附加 case：多源事实核验场景"
+        },
+        {
+            "id": "eval-systematic-debugging-root-cause-first",
+            "category": "gate-vs-owner-conflict",
+            "task": "这个crash先做root cause分析，用systematic-debugging方法定位根因",
+            "focus_skill": "systematic-debugging",
+            "expected_owner": "systematic-debugging",
+            "expected_overlay": null,
+            "first_turn": true,
+            "notes": "验证 root-cause 分析优先于 hotfix 快速修复"
+        },
+        {
+            "id": "eval-statistical-analysis-ab-power",
+            "category": "should-trigger",
+            "task": "A/B测试的统计功效怎么算，需要多少样本量才能达到80%统计功效",
+            "focus_skill": "statistical-analysis",
+            "expected_owner": "statistical-analysis",
+            "expected_overlay": null,
+            "first_turn": true,
+            "notes": "statistical-analysis 附加 case：样本量与统计功效"
+        },
+        {
+            "id": "eval-sentry-error-context",
+            "category": "gate-vs-owner-conflict",
+            "task": "生产环境有个500错误，先在Sentry上看看上下文和调用栈",
+            "focus_skill": "sentry",
+            "expected_owner": "sentry",
+            "expected_overlay": null,
+            "first_turn": true,
+            "notes": "测试 sentry 在错误排查场景优先于通用调试"
+        },
+        {
+            "id": "eval-mcp-server-debug-connectivity",
+            "category": "gate-vs-owner-conflict",
+            "task": "我的MCP server连不上了，帮我排查stdio传输模式的连接问题",
+            "focus_skill": "mcp-server-management",
+            "expected_owner": "mcp-server-management",
+            "expected_overlay": null,
+            "first_turn": true,
+            "notes": "mcp-server-management 附加 case：连接调试排查场景"
+        },
+        {
+            "id": "eval-spreadsheets-csv-cleanup",
+            "category": "should-trigger",
+            "task": "用spreadsheets把这个CSV导入电子表格，做数据清洗后导出xlsx",
+            "focus_skill": "spreadsheets",
+            "expected_owner": "spreadsheets",
+            "expected_overlay": null,
+            "first_turn": true,
+            "notes": "spreadsheets 附加 case：CSV导入与清洗场景"
+        },
+        {
+            "id": "eval-simplify-vs-review",
+            "category": "gate-vs-owner-conflict",
+            "task": "/simplify 不需要找bug，做代码简化清理消除过度工程",
+            "focus_skill": "simplify",
+            "expected_owner": "simplify",
+            "expected_overlay": null,
+            "forbidden_owners": ["code-review-deep"],
+            "first_turn": true,
+            "notes": "测试 simplify 在简化场景优先于 code-review-deep"
+        },
+        {
+            "id": "eval-research-knowledge-graph-entity",
+            "category": "should-trigger",
+            "task": "在研究知识图谱中搜一下与attention机制相关的所有实体和连接",
+            "focus_skill": "research-knowledge-graph",
+            "expected_owner": "research-knowledge-graph",
+            "expected_overlay": null,
+            "first_turn": true,
+            "notes": "research-knowledge-graph 附加 case：实体搜索场景"
         }
     ]
 }

@@ -4,6 +4,8 @@
 //! They do not depend on any other framework_runtime submodule.
 
 
+use core_errors::FrameworkError;
+
 use crate::constants::TASK_REGISTRY_SCHEMA_VERSION;
 
 use crate::json_value::{
@@ -19,14 +21,13 @@ use std::path::Path;
 /// Write text content to a path only if it differs from the existing content.
 /// Returns `true` when the file was actually written.
 /// Delegates to core_state_utils::json_io (ADR §9 canonical).
-pub fn write_text_if_changed_unlocked(path: &Path, content: &str) -> Result<bool, String> {
+pub fn write_text_if_changed_unlocked(path: &Path, content: &str) -> Result<bool, FrameworkError> {
     core_state_utils::json_io::write_text_if_changed(path, content)
 }
 
 /// Compute SHA-256 hex digest of a file (used by integration tests across crates).
-pub fn hash_file_for_test(path: &Path) -> Result<String, String> {
-    let bytes =
-        fs::read(path).map_err(|err| format!("read file failed for {}: {err}", path.display()))?;
+pub fn hash_file_for_test(path: &Path) -> Result<String, FrameworkError> {
+    let bytes = fs::read(path)?;
     let mut hasher = Sha256::new();
     hasher.update(bytes);
     Ok(hex::encode(hasher.finalize()))
@@ -34,7 +35,7 @@ pub fn hash_file_for_test(path: &Path) -> Result<String, String> {
 
 /// Write a JSON value to a path, serializing to pretty-printed text first.
 /// Delegates to core_state_utils::json_io (ADR §9 canonical).
-pub fn write_json_if_changed_unlocked(path: &Path, payload: &Value) -> Result<bool, String> {
+pub fn write_json_if_changed_unlocked(path: &Path, payload: &Value) -> Result<bool, FrameworkError> {
     core_state_utils::json_io::write_json_if_changed(path, payload)
 }
 
@@ -42,13 +43,13 @@ pub fn write_json_if_changed_unlocked(path: &Path, payload: &Value) -> Result<bo
 pub use framework_kernel::time::current_local_timestamp;
 
 /// Extract and validate a required text field from a JSON payload.
-pub fn required_payload_text(payload: &Value, key: &str, context: &str) -> Result<String, String> {
+pub fn required_payload_text(payload: &Value, key: &str, context: &str) -> Result<String, FrameworkError> {
     let Some(v) = payload.get(key) else {
-        return Err(format!("{context}: missing required field {key:?}"));
+        return Err(FrameworkError::Validation { message: format!("{context}: missing required field {key:?}") });
     };
     let s = value_text(Some(v));
     if s.trim().is_empty() {
-        return Err(format!("{context}: required field {key:?} is empty"));
+        return Err(FrameworkError::Validation { message: format!("{context}: required field {key:?} is empty") });
     }
     Ok(s)
 }

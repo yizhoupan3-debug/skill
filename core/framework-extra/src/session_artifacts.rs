@@ -58,7 +58,7 @@ pub fn write_framework_session_artifacts(payload: Value) -> Result<Value, String
         Ok(response)
     };
     match resolve_session_repo_root_for_task_ledger(&payload)? {
-        Some(resolved) => core_state_utils::task_write_lock::apply_task_ledger_mutation(&resolved, run),
+        Some(resolved) => core_state_utils::task_write_lock::apply_task_ledger_mutation(&resolved, run).map_err(|e| e.to_string()),
         None => run(),
     }
 }
@@ -430,7 +430,7 @@ fn write_task_pointers_entry(
             obj.insert("tasks".to_string(), tasks.clone());
         }
     }
-    write_json_if_changed(&mirror_root.join(TASK_POINTERS_FILENAME), &out)
+    write_json_if_changed(&mirror_root.join(TASK_POINTERS_FILENAME), &out).map_err(|e| e.to_string())
 }
 
 fn write_session_artifact_set(

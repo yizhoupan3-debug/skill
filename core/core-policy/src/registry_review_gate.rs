@@ -2,6 +2,7 @@
 
 use crate::lane_normalize::normalize_subagent_lane;
 use serde_json::Value;
+use core_errors::FrameworkError;
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -326,9 +327,9 @@ pub fn spawn_first_includes_model_inherit_for_host(
 }
 
 /// Operator/doctor probe: returns `Err` when disk registry lane snapshot cannot load.
-pub fn check_review_gate_registry_snapshot(repo_root: &Path) -> Result<(), String> {
+pub fn check_review_gate_registry_snapshot(repo_root: &Path) -> Result<(), FrameworkError> {
     let path = registry_json_path(Some(repo_root));
-    load_snapshot_from_disk(&path).map(|_| ())
+    load_snapshot_from_disk(&path).map(|_| ()).map_err(FrameworkError::validation)
 }
 
 fn load_registry_root(repo_root: Option<&Path>) -> Result<Value, String> {
