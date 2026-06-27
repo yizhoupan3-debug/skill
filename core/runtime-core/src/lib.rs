@@ -3,7 +3,7 @@
 
 //! runtime-core: extracted runtime modules from router-rs.
 //!
-//! Single source of truth for framework_runtime, agent_orchestrator, and supporting modules.
+//! Single source of truth for framework_runtime, session_supervisor, and supporting modules.
 
 // ── original four (flattened from runtime-storage) ──
 pub use rt_storage::{runtime_envelope_ids, runtime_storage};
@@ -12,9 +12,10 @@ pub use rt_storage::background_state;
 pub use trace_runtime;
 
 // ── migrated modules (B3) ──
+pub use core_state::closeout_validation as closeout_enforcement;
 pub use fr_contracts::execution_contract;
 pub mod framework_runtime;
-pub use agent_orchestrator;
+pub use session_supervisor;
 pub use framework_kernel::framework_profile;
 
 // ── QG Route: scene-dispatched CheckerRegistry bridge ──
@@ -47,7 +48,7 @@ pub use fr_exec::router_env_flags::{
     router_rs_task_ledger_flock_enabled, router_rs_hook_timing_enabled,
     router_rs_continuity_post_tool_evidence_enabled,
     router_rs_review_gate_stop_max_nudges_cap, router_rs_qg_max_rounds_cap,
-    router_rs_orchestrator_real_process_smoke_enabled,
+    router_rs_session_supervisor_real_process_smoke_enabled,
 };
 
 // ── re-exports from rt_core_contracts (remaining pure contract modules) ──
@@ -146,12 +147,12 @@ pub fn init_hooks() {
                 extract_post_tool_duration_ms: framework_extra::evidence::extract_post_tool_duration_ms,
                 post_tool_call_succeeded: framework_extra::evidence::post_tool_call_succeeded,
                 closeout_stop_followup_for_completion_text: framework_extra::closeout::closeout_stop_followup_for_completion_text,
-                // paper hooks (4 fields) — defaults; research-harness overrides via modify_runtime_hooks
+                // paper hooks (4 fields) — defaults; research-harness overrides via individual OnceLock
                 maybe_append_paper_prose_context: |_, _, _, _| {},
                 maybe_merge_paper_prose_before_submit: |_, _, _, _, _| {},
                 maybe_append_paper_adversarial_context: |_, _, _, _| {},
                 maybe_merge_paper_adversarial_before_submit: |_, _, _, _, _| {},
-                // research activity (1 field) — default; research-harness overrides via modify_runtime_hooks
+                // research activity (1 field) — default; research-harness overrides via OnceLock
                 maybe_record_research_activity: |_, _, _| {},
                 // kernel bootstrap (1 field)
                 ensure_kernel_bootstrap: kernel_bootstrap::ensure_kernel_bootstrap,
@@ -175,7 +176,7 @@ pub fn init_hooks() {
                 },
                 build_automatic_continuity_checkpoint_payload: framework_runtime::build_automatic_continuity_checkpoint_payload_with_task_id,
                 append_evidence_index: framework_extra::evidence::append_evidence_index_merged_row,
-                closeout_record_schema_version: || core_state::closeout_validation::CLOSEOUT_RECORD_SCHEMA_VERSION,
+                closeout_record_schema_version: || closeout_enforcement::CLOSEOUT_RECORD_SCHEMA_VERSION,
                 // web_fetch_guard (3 fields)
                 validate_and_resolve_web_fetch_url: |url| {
                     web_fetch_guard::validate_and_resolve_web_fetch_url(url).map(|(u, addrs)| {
@@ -200,8 +201,8 @@ pub fn init_hooks() {
                         reason: v.reason,
                     }
                 },
-                // research_tool_dispatch (1 field) — default; research-harness overrides via modify_runtime_hooks
-                research_tool_dispatch: |_, _| Err(core_errors::FrameworkError::validation("research_tool_dispatch not registered")),
+                // research_tool_dispatch (1 field) — default; research-harness overrides via OnceLock
+                research_tool_dispatch: |_, _| Err(core_policy::error::FrameworkError::validation("research_tool_dispatch not registered")),
                 // mcp_tool_routing (2 fields)
                 mcp_tool_skill_route: |query: &str, host_id: &str, first_turn: bool, repo_root: &str| {
                     let repo_root = std::path::Path::new(repo_root);
@@ -256,8 +257,8 @@ pub fn init_hooks() {
                 tool_goal_state_manage_dispatch: framework_runtime::tool_handlers::goal_state_manage_dispatch,
                 tool_closeout_record_write_dispatch: framework_runtime::tool_handlers::closeout_record_write_dispatch,
                 tool_closeout_gate_evaluate: framework_runtime::tool_handlers::closeout_gate_evaluate,
-                // browser_dispatch (1 field) — default; modify_runtime_hooks overrides in router-rs-cli
-                browser_dispatch: |_| Err(core_errors::FrameworkError::validation("browser-mcp dispatch not registered")),
+                // browser_dispatch (1 field) — default; set_browser_dispatch overrides via OnceLock
+                browser_dispatch: |_| Err(core_policy::error::FrameworkError::validation("browser-mcp dispatch not registered")),
                 // runtime_trace_transport (2 fields)
                 attach_runtime_event_transport: |payload| fr_exec::trace_attach::attach_runtime_event_transport(payload).map_err(Into::into),
                 inspect_trace_stream: |payload| fr_exec::trace_stream_io::inspect_trace_stream(payload).map_err(Into::into),
@@ -282,7 +283,10 @@ pub fn init_hooks() {
                 },
             },
             framework_goal_drive: core_state::state_manager::framework_goal_drive,
-            handle_orchestrator_operation: agent_orchestrator::handle_orchestrator_operation,
+            handle_session_supervisor_operation: |payload| {
+                session_supervisor::handle_session_supervisor_operation(payload)
+                    .map_err(|e| e.to_string())
+            },
             #[cfg(feature = "l5-state")]
             handle_background_state_operation: rt_storage::background_state::handle_background_state_operation,
             #[cfg(not(feature = "l5-state"))]

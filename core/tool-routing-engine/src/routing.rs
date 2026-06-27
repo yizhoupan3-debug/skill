@@ -11,6 +11,7 @@
 use crate::fuzzy::best_fuzzy_score;
 use crate::scoring_config::tool_scoring_weights;
 use crate::types::{McpToolDecision, ToolCandidate};
+use core_errors::FrameworkError;
 use core_state_utils::text_utils::is_ascii_word;
 use core_state_utils::text_utils::tokenize_cjk_aware as tokenize_text;
 use mcp_tool_registry::McpToolRecord;
@@ -28,13 +29,13 @@ pub fn route_tool(
     query: &str,
     registry_path: &std::path::Path,
     host_id: Option<&str>,
-) -> Result<Option<McpToolDecision>, String> {
+) -> Result<Option<McpToolDecision>, FrameworkError> {
     if query.len() > crate::MAX_QUERY_LEN {
-        return Err(format!(
+        return Err(FrameworkError::validation(format!(
             "query too long: {} bytes (max {})",
             query.len(),
             crate::MAX_QUERY_LEN,
-        ));
+        )));
     }
     let records = mcp_tool_registry::load_tool_records_cached(registry_path)?;
     Ok(route_tool_from_records(query, &records, host_id))

@@ -1,6 +1,7 @@
 #![deny(clippy::unwrap_used, clippy::expect_used)]
-//! Agent orchestrator: native-process worker lifecycle, team management, and agent health.
+//! Session supervisor: native-process worker lifecycle for long-running CLI hosts.
 
+use core_policy::error::FrameworkError;
 use rt_storage::runtime_storage::acquire_runtime_path_lock;
 use serde_json::{Value, json};
 use tracing::{debug, instrument};
@@ -19,7 +20,7 @@ mod tests;
 pub mod hooks;
 pub mod router_env_flags;
 
-pub use types::{ORCHESTRATOR_AUTHORITY, ORCHESTRATOR_SCHEMA_VERSION};
+pub use types::{SESSION_SUPERVISOR_AUTHORITY, SESSION_SUPERVISOR_SCHEMA_VERSION};
 pub use types::WorkerSessionRecord;
 pub use types::AgentHealthEntry;
 pub use types::AgentHealthStore;
@@ -49,19 +50,22 @@ fn idle_observation_side_effect(payload: &Value, workers: &[types::WorkerSession
 }
 
 #[instrument(level = "info", skip_all, fields(operation))]
-pub fn handle_orchestrator_operation(payload: Value) -> Result<Value, String> {
-    let operation = required_non_empty_string(&payload, "operation", "orchestrator")?;
-    debug!(%operation, "orchestrator operation");
+pub fn handle_session_supervisor_operation(payload: Value) -> Result<Value, FrameworkError> {
+    let operation = required_non_empty_string(&payload, "operation", "session supervisor")
+        .map_err(FrameworkError::validation)?;
+    debug!(%operation, "session supervisor operation");
     let state_path = resolve_state_path(&payload)?;
 
     if operation == "classify_block" {
-        let host = required_non_empty_string(&payload, "host", "orchestrator")?;
+        let host = required_non_empty_string(&payload, "host", "session supervisor")
+            .map_err(FrameworkError::validation)?;
         let evidence_text =
-            required_non_empty_string(&payload, "evidence_text", "orchestrator")?;
+            required_non_empty_string(&payload, "evidence_text", "session supervisor")
+                .map_err(FrameworkError::validation)?;
         let classification = classify_rate_limit_block(&host, &evidence_text)?;
         return Ok(json!({
-            "schema_version": ORCHESTRATOR_SCHEMA_VERSION,
-            "authority": ORCHESTRATOR_AUTHORITY,
+            "schema_version": SESSION_SUPERVISOR_SCHEMA_VERSION,
+            "authority": SESSION_SUPERVISOR_AUTHORITY,
             "operation": operation,
             "state_path": state_path.display().to_string(),
             "changed": false,
@@ -80,8 +84,8 @@ pub fn handle_orchestrator_operation(payload: Value) -> Result<Value, String> {
             let worker = launch_worker(&payload, &mut store, &state_path, dry_run, &now)?;
             save_store(&state_path, &store)?;
             Ok(json!({
-                "schema_version": ORCHESTRATOR_SCHEMA_VERSION,
-                "authority": ORCHESTRATOR_AUTHORITY,
+                "schema_version": SESSION_SUPERVISOR_SCHEMA_VERSION,
+                "authority": SESSION_SUPERVISOR_AUTHORITY,
                 "operation": operation,
                 "state_path": state_path.display().to_string(),
                 "changed": true,
@@ -90,20 +94,21 @@ pub fn handle_orchestrator_operation(payload: Value) -> Result<Value, String> {
             }))
         }
         "inspect" => {
-            let worker_id = required_non_empty_string(&payload, "worker_id", "orchestrator")?;
+            let worker_id = required_non_empty_string(&payload, "worker_id", "session supervisor")
+                .map_err(FrameworkError::validation)?;
             let worker_snapshot = {
                 let worker = store
                     .workers
                     .iter_mut()
                     .find(|worker| worker.worker_id == worker_id)
-                    .ok_or_else(|| format!("Unknown orchestrator worker_id: {worker_id}"))?;
+                    .ok_or_else(|| FrameworkError::not_found(format!("Unknown supervisor worker_id: {worker_id}")))?;
                 reconcile_process_state(worker);
                 worker.clone()
             };
             save_store(&state_path, &store)?;
             Ok(json!({
-                "schema_version": ORCHESTRATOR_SCHEMA_VERSION,
-                "authority": ORCHESTRATOR_AUTHORITY,
+                "schema_version": SESSION_SUPERVISOR_SCHEMA_VERSION,
+                "authority": SESSION_SUPERVISOR_AUTHORITY,
                 "operation": operation,
                 "state_path": state_path.display().to_string(),
                 "changed": true,
@@ -124,8 +129,8 @@ pub fn handle_orchestrator_operation(payload: Value) -> Result<Value, String> {
             }
             let idle_observation = idle_observation_side_effect(&payload, &store.workers);
             Ok(json!({
-                "schema_version": ORCHESTRATOR_SCHEMA_VERSION,
-                "authority": ORCHESTRATOR_AUTHORITY,
+                "schema_version": SESSION_SUPERVISOR_SCHEMA_VERSION,
+                "authority": SESSION_SUPERVISOR_AUTHORITY,
                 "operation": operation,
                 "state_path": state_path.display().to_string(),
                 "changed": true,
@@ -134,20 +139,21 @@ pub fn handle_orchestrator_operation(payload: Value) -> Result<Value, String> {
             }))
         }
         "terminate" => {
-            let worker_id = required_non_empty_string(&payload, "worker_id", "orchestrator")?;
+            let worker_id = required_non_empty_string(&payload, "worker_id", "session supervisor")
+                .map_err(FrameworkError::validation)?;
             let (worker_snapshot, terminated) = {
                 let worker = store
                     .workers
                     .iter_mut()
                     .find(|worker| worker.worker_id == worker_id)
-                    .ok_or_else(|| format!("Unknown orchestrator worker_id: {worker_id}"))?;
+                    .ok_or_else(|| FrameworkError::not_found(format!("Unknown supervisor worker_id: {worker_id}")))?;
                 let terminated = terminate_worker(worker, dry_run, &now)?;
                 (worker.clone(), terminated)
             };
             save_store(&state_path, &store)?;
             Ok(json!({
-                "schema_version": ORCHESTRATOR_SCHEMA_VERSION,
-                "authority": ORCHESTRATOR_AUTHORITY,
+                "schema_version": SESSION_SUPERVISOR_SCHEMA_VERSION,
+                "authority": SESSION_SUPERVISOR_AUTHORITY,
                 "operation": operation,
                 "state_path": state_path.display().to_string(),
                 "changed": true,
@@ -157,20 +163,21 @@ pub fn handle_orchestrator_operation(payload: Value) -> Result<Value, String> {
             }))
         }
         "mark_blocked" => {
-            let worker_id = required_non_empty_string(&payload, "worker_id", "orchestrator")?;
+            let worker_id = required_non_empty_string(&payload, "worker_id", "session supervisor")
+                .map_err(FrameworkError::validation)?;
             let (worker_snapshot, classification) = {
                 let worker = store
                     .workers
                     .iter_mut()
                     .find(|worker| worker.worker_id == worker_id)
-                    .ok_or_else(|| format!("Unknown orchestrator worker_id: {worker_id}"))?;
+                    .ok_or_else(|| FrameworkError::not_found(format!("Unknown supervisor worker_id: {worker_id}")))?;
                 let classification = mark_worker_blocked(worker, &payload, &now)?;
                 (worker.clone(), classification)
             };
             save_store(&state_path, &store)?;
             Ok(json!({
-                "schema_version": ORCHESTRATOR_SCHEMA_VERSION,
-                "authority": ORCHESTRATOR_AUTHORITY,
+                "schema_version": SESSION_SUPERVISOR_SCHEMA_VERSION,
+                "authority": SESSION_SUPERVISOR_AUTHORITY,
                 "operation": operation,
                 "state_path": state_path.display().to_string(),
                 "changed": true,
@@ -215,8 +222,8 @@ pub fn handle_orchestrator_operation(payload: Value) -> Result<Value, String> {
             save_store(&state_path, &store)?;
             let idle_observation = idle_observation_side_effect(&payload, &store.workers);
             Ok(json!({
-                "schema_version": ORCHESTRATOR_SCHEMA_VERSION,
-                "authority": ORCHESTRATOR_AUTHORITY,
+                "schema_version": SESSION_SUPERVISOR_SCHEMA_VERSION,
+                "authority": SESSION_SUPERVISOR_AUTHORITY,
                 "operation": operation,
                 "state_path": state_path.display().to_string(),
                 "changed": true,
@@ -229,14 +236,15 @@ pub fn handle_orchestrator_operation(payload: Value) -> Result<Value, String> {
 
         // ═══ Agent health operations ═══
         "agent_register" => {
-            let agent_id = required_non_empty_string(&payload, "agent_id", "agent health")?;
-            let host_id = required_non_empty_string(&payload, "host_id", "agent health")?;
+            let agent_id = required_non_empty_string(&payload, "agent_id", "agent health")
+                .map_err(FrameworkError::validation)?;
+            let host_id = required_non_empty_string(&payload, "host_id", "agent health")
+                .map_err(FrameworkError::validation)?;
             let tool_type = required_non_empty_string(&payload, "tool_type", "agent health").unwrap_or_else(|_| {
                 tracing::warn!("agent_register missing tool_type, defaulting to 'agent'");
                 "agent".to_string()
             });
-            let cwd = std::env::current_dir()
-                .map_err(|e| format!("read cwd failed: {e}"))?;
+            let cwd = std::env::current_dir()?;
             process::register_agent_alive(&cwd, &agent_id, &host_id, &tool_type, &now)?;
             Ok(json!({
                 "operation": operation,
@@ -245,7 +253,8 @@ pub fn handle_orchestrator_operation(payload: Value) -> Result<Value, String> {
             }))
         }
         "agent_unregister" => {
-            let agent_id = required_non_empty_string(&payload, "agent_id", "agent health")?;
+            let agent_id = required_non_empty_string(&payload, "agent_id", "agent health")
+                .map_err(FrameworkError::validation)?;
             let terminal_status = payload.get("terminal_status")
                 .and_then(|v| v.as_str())
                 .filter(|s| !s.is_empty())
@@ -255,8 +264,7 @@ pub fn handle_orchestrator_operation(payload: Value) -> Result<Value, String> {
                 .and_then(|v| v.as_str())
                 .filter(|s| !s.is_empty())
                 .map(String::from);
-            let cwd = std::env::current_dir()
-                .map_err(|e| format!("read cwd failed: {e}"))?;
+            let cwd = std::env::current_dir()?;
             process::unregister_agent(&cwd, &agent_id, &terminal_status, error.as_deref(), &now)?;
             Ok(json!({
                 "operation": operation,
@@ -265,8 +273,7 @@ pub fn handle_orchestrator_operation(payload: Value) -> Result<Value, String> {
             }))
         }
         "agent_list_running" => {
-            let cwd = std::env::current_dir()
-                .map_err(|e| format!("read cwd failed: {e}"))?;
+            let cwd = std::env::current_dir()?;
             let agents = process::list_running_agents(&cwd)?;
             Ok(json!({
                 "operation": operation,
@@ -276,8 +283,7 @@ pub fn handle_orchestrator_operation(payload: Value) -> Result<Value, String> {
         }
         "agent_reap_stale" => {
             let retention_secs = runtime::optional_i64(&payload, "retention_seconds").unwrap_or(0);
-            let cwd = std::env::current_dir()
-                .map_err(|e| format!("read cwd failed: {e}"))?;
+            let cwd = std::env::current_dir()?;
             let reaped = process::reap_stale_agents(&cwd, retention_secs)?;
             Ok(json!({
                 "operation": operation,
@@ -287,7 +293,8 @@ pub fn handle_orchestrator_operation(payload: Value) -> Result<Value, String> {
 
         // ═══ Team operations ═══
         "team_create" => {
-            let team_id = required_non_empty_string(&payload, "team_id", "team")?;
+            let team_id = required_non_empty_string(&payload, "team_id", "team")
+                .map_err(FrameworkError::validation)?;
             let name = payload.get("name")
                 .and_then(|v| v.as_str())
                 .filter(|s| !s.is_empty())
@@ -297,8 +304,7 @@ pub fn handle_orchestrator_operation(payload: Value) -> Result<Value, String> {
                 .and_then(|v| v.as_str())
                 .filter(|s| !s.is_empty())
                 .map(String::from);
-            let cwd = std::env::current_dir()
-                .map_err(|e| format!("read cwd failed: {e}"))?;
+            let cwd = std::env::current_dir()?;
             let team = team_manager::create_team(&cwd, &team_id, &name, supervisor.as_deref(), &now)?;
             Ok(json!({
                 "operation": operation,
@@ -307,16 +313,18 @@ pub fn handle_orchestrator_operation(payload: Value) -> Result<Value, String> {
             }))
         }
         "team_add_member" => {
-            let team_id = required_non_empty_string(&payload, "team_id", "team")?;
-            let agent_id = required_non_empty_string(&payload, "agent_id", "team")?;
+            let team_id = required_non_empty_string(&payload, "team_id", "team")
+                .map_err(FrameworkError::validation)?;
+            let agent_id = required_non_empty_string(&payload, "agent_id", "team")
+                .map_err(FrameworkError::validation)?;
             let role = payload.get("role")
                 .and_then(|v| v.as_str())
                 .filter(|s| !s.is_empty())
                 .map(String::from)
                 .unwrap_or_else(|| "worker".to_string());
-            let host_id = required_non_empty_string(&payload, "host_id", "team")?;
-            let cwd = std::env::current_dir()
-                .map_err(|e| format!("read cwd failed: {e}"))?;
+            let host_id = required_non_empty_string(&payload, "host_id", "team")
+                .map_err(FrameworkError::validation)?;
+            let cwd = std::env::current_dir()?;
             let member = team_manager::add_team_member(&cwd, &team_id, &agent_id, &role, &host_id, &now)?;
             Ok(json!({
                 "operation": operation,
@@ -326,8 +334,10 @@ pub fn handle_orchestrator_operation(payload: Value) -> Result<Value, String> {
             }))
         }
         "team_remove_member" => {
-            let team_id = required_non_empty_string(&payload, "team_id", "team")?;
-            let agent_id = required_non_empty_string(&payload, "agent_id", "team")?;
+            let team_id = required_non_empty_string(&payload, "team_id", "team")
+                .map_err(FrameworkError::validation)?;
+            let agent_id = required_non_empty_string(&payload, "agent_id", "team")
+                .map_err(FrameworkError::validation)?;
             let terminal_status = payload.get("terminal_status")
                 .and_then(|v| v.as_str())
                 .filter(|s| !s.is_empty())
@@ -337,8 +347,7 @@ pub fn handle_orchestrator_operation(payload: Value) -> Result<Value, String> {
                 .and_then(|v| v.as_str())
                 .filter(|s| !s.is_empty())
                 .map(String::from);
-            let cwd = std::env::current_dir()
-                .map_err(|e| format!("read cwd failed: {e}"))?;
+            let cwd = std::env::current_dir()?;
             team_manager::remove_team_member(&cwd, &team_id, &agent_id, &terminal_status, error.as_deref(), &now)?;
             Ok(json!({
                 "operation": operation,
@@ -348,9 +357,9 @@ pub fn handle_orchestrator_operation(payload: Value) -> Result<Value, String> {
             }))
         }
         "team_complete" => {
-            let team_id = required_non_empty_string(&payload, "team_id", "team")?;
-            let cwd = std::env::current_dir()
-                .map_err(|e| format!("read cwd failed: {e}"))?;
+            let team_id = required_non_empty_string(&payload, "team_id", "team")
+                .map_err(FrameworkError::validation)?;
+            let cwd = std::env::current_dir()?;
             let team = team_manager::complete_team(&cwd, &team_id, &now)?;
             Ok(json!({
                 "operation": operation,
@@ -359,8 +368,10 @@ pub fn handle_orchestrator_operation(payload: Value) -> Result<Value, String> {
             }))
         }
         "team_send_message" => {
-            let team_id = required_non_empty_string(&payload, "team_id", "team")?;
-            let from_agent = required_non_empty_string(&payload, "from_agent", "team")?;
+            let team_id = required_non_empty_string(&payload, "team_id", "team")
+                .map_err(FrameworkError::validation)?;
+            let from_agent = required_non_empty_string(&payload, "from_agent", "team")
+                .map_err(FrameworkError::validation)?;
             let to_agent = payload.get("to_agent")
                 .and_then(|v| v.as_str())
                 .filter(|s| !s.is_empty())
@@ -371,8 +382,7 @@ pub fn handle_orchestrator_operation(payload: Value) -> Result<Value, String> {
                 .map(String::from)
                 .unwrap_or_else(|| "command".to_string());
             let msg_payload = payload.get("payload").cloned().unwrap_or_default();
-            let cwd = std::env::current_dir()
-                .map_err(|e| format!("read cwd failed: {e}"))?;
+            let cwd = std::env::current_dir()?;
             let msg = team_manager::send_message(&cwd, &team_id, &from_agent, to_agent.as_deref(), &msg_kind, msg_payload, &now)?;
             Ok(json!({
                 "operation": operation,
@@ -381,10 +391,11 @@ pub fn handle_orchestrator_operation(payload: Value) -> Result<Value, String> {
             }))
         }
         "team_read_messages" => {
-            let team_id = required_non_empty_string(&payload, "team_id", "team")?;
-            let agent_id = required_non_empty_string(&payload, "agent_id", "team")?;
-            let cwd = std::env::current_dir()
-                .map_err(|e| format!("read cwd failed: {e}"))?;
+            let team_id = required_non_empty_string(&payload, "team_id", "team")
+                .map_err(FrameworkError::validation)?;
+            let agent_id = required_non_empty_string(&payload, "agent_id", "team")
+                .map_err(FrameworkError::validation)?;
+            let cwd = std::env::current_dir()?;
             let messages = team_manager::read_my_messages(&cwd, &team_id, &agent_id)?;
             Ok(json!({
                 "operation": operation,
@@ -395,9 +406,9 @@ pub fn handle_orchestrator_operation(payload: Value) -> Result<Value, String> {
             }))
         }
         "team_alive_members" => {
-            let team_id = required_non_empty_string(&payload, "team_id", "team")?;
-            let cwd = std::env::current_dir()
-                .map_err(|e| format!("read cwd failed: {e}"))?;
+            let team_id = required_non_empty_string(&payload, "team_id", "team")
+                .map_err(FrameworkError::validation)?;
+            let cwd = std::env::current_dir()?;
             let alive = team_manager::team_alive_members(&cwd, &team_id)?;
             Ok(json!({
                 "operation": operation,
@@ -406,8 +417,7 @@ pub fn handle_orchestrator_operation(payload: Value) -> Result<Value, String> {
             }))
         }
         "team_list" => {
-            let cwd = std::env::current_dir()
-                .map_err(|e| format!("read cwd failed: {e}"))?;
+            let cwd = std::env::current_dir()?;
             let team_id_filter = payload.get("team_id")
                 .and_then(|v| v.as_str())
                 .filter(|s| !s.is_empty());
@@ -420,8 +430,7 @@ pub fn handle_orchestrator_operation(payload: Value) -> Result<Value, String> {
         }
         "team_reap_stale" => {
             let retention_secs = runtime::optional_i64(&payload, "retention_seconds").unwrap_or(0);
-            let cwd = std::env::current_dir()
-                .map_err(|e| format!("read cwd failed: {e}"))?;
+            let cwd = std::env::current_dir()?;
             let reaped = team_manager::reap_stale_teams(&cwd, retention_secs)?;
             Ok(json!({
                 "operation": operation,
@@ -429,6 +438,6 @@ pub fn handle_orchestrator_operation(payload: Value) -> Result<Value, String> {
             }))
         }
 
-        other => Err(format!("Unsupported orchestrator operation: {other}")),
+        other => Err(FrameworkError::unsupported(format!("Unsupported session supervisor operation: {other}"))),
     }
 }

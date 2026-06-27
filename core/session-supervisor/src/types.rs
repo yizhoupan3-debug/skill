@@ -1,9 +1,9 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-pub const ORCHESTRATOR_SCHEMA_VERSION: &str = "router-rs-orchestrator-response-v1";
-pub const ORCHESTRATOR_STORE_SCHEMA_VERSION: &str = "router-rs-orchestrator-store-v1";
-pub const ORCHESTRATOR_AUTHORITY: &str = "rust-agent-orchestrator";
+pub const SESSION_SUPERVISOR_SCHEMA_VERSION: &str = "router-rs-session-supervisor-response-v1";
+pub const SESSION_SUPERVISOR_STORE_SCHEMA_VERSION: &str = "router-rs-session-supervisor-store-v1";
+pub const SESSION_SUPERVISOR_AUTHORITY: &str = "rust-session-supervisor";
 pub(crate) const DEFAULT_BACKOFF_SECONDS: i64 = 300;
 /// Workers without a live process that stay in active statuses longer than this are reaped on `list`.
 pub(crate) const DEFAULT_WORKER_STALE_AFTER_SECS: i64 = 60;
@@ -37,7 +37,7 @@ pub struct AgentHealthStore {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct OrchestratorStore {
+pub struct SessionSupervisorStore {
     pub schema_version: String,
     pub version: u64,
     pub workers: Vec<WorkerSessionRecord>,

@@ -5,7 +5,7 @@ use std::process::{Command, Stdio};
 use std::thread;
 use std::time::Duration;
 
-use core_errors::FrameworkError;
+use core_policy::error::FrameworkError;
 
 use crate::types::{AgentHealthEntry, AgentHealthStore, DriverCommandSpec, WorkerSessionRecord};
 

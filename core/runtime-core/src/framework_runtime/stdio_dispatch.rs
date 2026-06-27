@@ -22,7 +22,7 @@ use fr_utils::stdio_op_registry::{
 use fr_exec::trace_transport::{
     write_checkpoint_resume_manifest_payload, write_transport_binding_payload,
 };
-use core_state::closeout_validation::{
+use crate::closeout_enforcement::{
     CloseoutEvidenceContext, closeout_enforcement_contract, evaluate_closeout_record_value,
     evaluate_closeout_record_value_with_context,
 };
@@ -50,7 +50,7 @@ use crate::runtime_storage::{
     RuntimeStorageRequestPayload, build_checkpoint_control_plane_compiler_payload,
     runtime_storage_operation,
 };
-use crate::agent_orchestrator::handle_orchestrator_operation;
+use crate::session_supervisor::handle_session_supervisor_operation;
 use crate::stdio_payload_types::{
     BackgroundControlRequestPayload, ExecuteRequestPayload,
     TraceCompactionDeltaWriteRequestPayload, TraceMetadataWriteRequestPayload,
@@ -271,7 +271,7 @@ fn dispatch_runtime_stdio_request(op: &str, payload: Value) -> Result<Value, Str
         "background_state" => handle_background_state_operation(payload),
         #[cfg(not(feature = "l5-state"))]
         "background_state" => Err("background_state requires l5-state feature".to_string()),
-        "orchestrator" => handle_orchestrator_operation(payload),
+        "session_supervisor" => handle_session_supervisor_operation(payload).map_err(|e| e.to_string()),
         "describe_transport" => build_trace_transport_descriptor(payload).map_err(|e| e.to_string()),
         "describe_handoff" => build_trace_handoff_descriptor(payload).map_err(|e| e.to_string()),
         "checkpoint_resume_manifest" => build_checkpoint_resume_manifest(payload).map_err(|e| e.to_string()),
@@ -357,34 +357,7 @@ fn dispatch_framework_stdio_request(op: &str, payload: Value) -> Result<Value, S
         "framework_session_artifact_write" => write_framework_session_artifacts(payload).map_err(|e| e.to_string()),
         "framework_hook_evidence_append" => Ok(framework_hook_evidence_append(payload)?),
         "framework_goal_drive" => {
-            let result = runtime_infra::kernel_utils::framework_goal_drive(payload.clone())?;
-            // After iteration_completed, run the QGEntry two-stage exit gate
-            // (anti-fraud Stage 1 + quality gate Stage 2) as specified in
-            // ROADMAP-v10 §2.2: GoalEngine → QGEntry.trigger() → QGRoute.evaluate().
-            if result.get("operation").and_then(|v| v.as_str()) == Some("iteration_completed") {
-                let repo_root = std::path::Path::new(
-                    payload.get("repo_root").and_then(|v| v.as_str()).unwrap_or(".")
-                );
-                let task_id = payload.get("task_id").and_then(|v| v.as_str()).unwrap_or("");
-                let goal = payload.get("goal").and_then(|v| v.as_str()).unwrap_or("");
-                let round = payload.get("round").and_then(|v| v.as_u64()).unwrap_or(1);
-                let scene = payload.get("scene")
-                    .and_then(|v| v.as_str())
-                    .filter(|s| !s.is_empty())
-                    .unwrap_or(quality_gate::scene::GENERAL);
-                let sub_scene = payload.get("sub_scene")
-                    .and_then(|v| v.as_str())
-                    .filter(|s| !s.is_empty());
-                if !task_id.is_empty() {
-                    let verdict = crate::qg_entry::trigger(
-                        repo_root, task_id, scene, goal, sub_scene, round, None
-                    );
-                    let mut result_map = result.as_object().cloned().unwrap_or_default();
-                    result_map.insert("qg_verdict".to_string(), serde_json::to_value(&verdict).unwrap_or_default());
-                    return Ok(serde_json::Value::Object(result_map));
-                }
-            }
-            Ok(result)
+            runtime_infra::kernel_utils::framework_goal_drive(payload)
         }
         "framework_rfv_loop" => {
             let repo_root = std::path::Path::new(
@@ -393,14 +366,7 @@ fn dispatch_framework_stdio_request(op: &str, payload: Value) -> Result<Value, S
             let task_id = payload.get("task_id").and_then(|v| v.as_str()).unwrap_or("");
             let goal = payload.get("goal").and_then(|v| v.as_str()).unwrap_or("");
             let round = payload.get("round").and_then(|v| v.as_u64()).unwrap_or(1);
-            let scene = payload.get("scene")
-                .and_then(|v| v.as_str())
-                .filter(|s| !s.is_empty())
-                .unwrap_or(quality_gate::scene::GENERAL);
-            let sub_scene = payload.get("sub_scene")
-                .and_then(|v| v.as_str())
-                .filter(|s| !s.is_empty());
-            let verdict = crate::qg_entry::trigger(repo_root, task_id, scene, goal, sub_scene, round, None);
+            let verdict = crate::qg_entry::trigger(repo_root, task_id, quality_gate::scene::GENERAL, goal, None, round, None);
             serde_json::to_value(&verdict).map_err(|e| e.to_string())
         }
         "framework_alias" => dispatch_stdio_framework_alias(payload),

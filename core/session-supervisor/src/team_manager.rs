@@ -15,7 +15,7 @@ use serde_json::Value;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use core_errors::FrameworkError;
+use core_policy::error::FrameworkError;
 
 use crate::process::{
     register_agent_alive,

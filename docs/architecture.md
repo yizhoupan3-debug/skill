@@ -194,15 +194,25 @@ CheckerRegistry (quality-gate, L5)
     │   ├── CorrectnessChecker (CODE_REVIEW)
     │   ├── SecurityChecker (CODE_REVIEW)
     │   ├── ScreenshotLayoutChecker (VISUAL)
-    │   └── OverflowChecker (SLIDES)
+    │   ├── OverflowChecker (SLIDES)
+    │   ├── ProseQcChecker (RESEARCH)
+    │   ├── LiteratureGateChecker (RESEARCH)
+    │   ├── StatisticalGateChecker (RESEARCH)
+    │   ├── ReproducibilityChecker (RESEARCH)
+    │   ├── StructureGateChecker (RESEARCH)
+    │   └── FormalGateChecker (RESEARCH)
     │
     └── Extern checkers (research-harness, L4, feature-gate=research)
-        ├── Reproducibility (real: runs reproducibility audit on repo)
-        ├── Structure (real: validates LaTeX compilability + cross-references)
-        ├── ProseQC (real: slop detection, hedging analysis on paper text)
-        ├── Literature (real: DOI extraction + reachability verification)
-        └── 6 skeletal (Asymptotic, DimensionalConsistency, Inequality,
-            Statistical, Symbolic, SympyBridge — await extended CheckContext)
+        ├── Asymptotic (RESEARCH)
+        ├── DimensionalConsistency (RESEARCH)
+        ├── Inequality (RESEARCH)
+        ├── Literature (RESEARCH)
+        ├── ProseQCChecker (RESEARCH)
+        ├── Reproducibility (RESEARCH)
+        ├── StatisticalChecker (RESEARCH)
+        ├── Structure (RESEARCH)
+        ├── Symbolic (RESEARCH)
+        └── SympyBridge (RESEARCH)
 ```
 
 ### 7.2 架构组件
@@ -227,7 +237,7 @@ runtime_core::init_hooks()
     ▼
 qg_route::init_qg_route()
     ├── CheckerRegistry::new()
-    ├── register_checkers(&mut registry)    ← 6 in-place checkers
+    ├── register_checkers(&mut registry)    ← 12 in-place checkers
     └── EXTERN_CHECKERS.get()(registry)      ← 10 research checkers
 ```
 
@@ -239,7 +249,7 @@ qg_route::init_qg_route()
 
 | 严重度 | 门结果 |
 |--------|--------|
-| P0 / P1 / AdvisoryP3 / AdvisoryP4 (Critical/High) | ❌ Gate 失败（硬阻断） |
+| P0 / A / B (Critical/High) | ❌ Gate 失败（硬阻断） |
 | Warning / C (Medium/Low/Info) | ✅ Advisory 仅 |
 | 无违规 | ✅ 通过 |
 | QG_ROUTE 未初始化 | ✅ 通过（fallback no-op，符合 P10） |

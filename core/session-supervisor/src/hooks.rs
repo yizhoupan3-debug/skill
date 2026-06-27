@@ -1,27 +1,27 @@
 //! RuntimeCore hooks: callback-based indirection for host-provider dependencies.
 //!
-//! The runtime-core crate must call `register()` before any orchestrator operations
+//! The runtime-core crate must call `register()` before any session-supervisor operations
 
 use std::sync::OnceLock;
 
-static HOOKS: OnceLock<OrchestratorHooks> = OnceLock::new();
+static HOOKS: OnceLock<SessionSupervisorHooks> = OnceLock::new();
 
 /// Access the registered hooks, if any.
-pub fn hooks() -> Option<&'static OrchestratorHooks> {
+pub fn hooks() -> Option<&'static SessionSupervisorHooks> {
     HOOKS.get()
 }
 
-/// Register hooks. Must be called before any orchestrator operations that
+/// Register hooks. Must be called before any session-supervisor operations that
 /// need host-provider lookups (build_driver_command, driver_id_for_host).
 /// Safe to call multiple times; only the first call takes effect.
-pub fn register(h: OrchestratorHooks) {
+pub fn register(h: SessionSupervisorHooks) {
     HOOKS.get_or_init(|| h);
 }
 
 use crate::types::DriverCommandSpec;
 
 /// Hooks into runtime-core for host-provider dependencies.
-pub struct OrchestratorHooks {
+pub struct SessionSupervisorHooks {
     /// Build a driver command for the given host via the provider registry.
     ///
     /// `cwd` is the **effective** working directory (worktree-resolved).

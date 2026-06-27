@@ -33,10 +33,12 @@ fn resolve_session_repo_root_for_task_ledger(payload: &Value) -> Result<Option<P
 /// TRACE_METADATA.json, .supervisor_state.json, active_task.json, focus_task.json,
 /// and task_registry.json. All removed per v10 Wave 2c.
 pub fn write_framework_session_artifacts(payload: Value) -> Result<Value, FrameworkError> {
-    let run = || -> Result<Value, String> {
+    let run = || -> Result<Value, FrameworkError> {
         let output_dir = value_text(payload.get("output_dir"));
         if output_dir.is_empty() {
-            return Err("framework session artifact writer requires output_dir".to_string());
+            return Err(FrameworkError::validation(
+                "framework session artifact writer requires output_dir",
+            ));
         }
         let task = required_payload_text(&payload, "task", "framework session artifact writer")?;
         let phase = defaulted_payload_text(&payload, "phase", "implementation");
@@ -59,7 +61,7 @@ pub fn write_framework_session_artifacts(payload: Value) -> Result<Value, Framew
         if let Some(evidence_items) = payload.get("evidence").and_then(Value::as_array) {
             let evidence_payload = build_evidence_index_payload(evidence_items);
             if let Some(parent) = evidence_path.parent() {
-                fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+                fs::create_dir_all(parent)?;
             }
             write_json_if_changed(&evidence_path, &evidence_payload)?;
             changed_paths.push(evidence_path.display().to_string());
@@ -104,8 +106,14 @@ pub fn write_framework_session_artifacts(payload: Value) -> Result<Value, Framew
         }))
     };
     match resolve_session_repo_root_for_task_ledger(&payload)? {
-        Some(resolved) => apply_task_ledger_mutation(&resolved, run).map_err(FrameworkError::validation),
-        None => run().map_err(FrameworkError::validation),
+        Some(resolved) => {
+            let _guard = core_state_utils::task_write_lock::acquire_task_ledger_repo_lock(
+                &resolved,
+                std::time::Duration::from_secs(30),
+            )?;
+            run()
+        }
+        None => run(),
     }
 }
 
@@ -151,7 +159,7 @@ fn task_id_known_in_task_pointers(mirror_root: &Path, task_id: &str) -> bool {
 fn write_task_pointers_entry(
     mirror_root: &Path,
     entry: TaskRegistryEntry<'_>,
-) -> Result<bool, String> {
+) -> Result<bool, FrameworkError> {
     let existing =
         read_json_strict(&mirror_root.join(TASK_POINTERS_FILENAME)).unwrap_or_else(|_| json!({}));
     let focus_task = entry.focus_task_id.map_or_else(
@@ -214,8 +222,7 @@ fn write_task_pointers_entry(
             obj.insert("tasks".to_string(), tasks.clone());
         }
     }
-    write_json_if_changed(&mirror_root.join(TASK_POINTERS_FILENAME), &out).map_err(|e| e.to_string())
+    write_json_if_changed(&mirror_root.join(TASK_POINTERS_FILENAME), &out)
 }
 
 pub(super) use core_state_utils::json_io::write_json_if_changed;
-pub(super) use core_state_utils::task_write_lock::apply_task_ledger_mutation;

@@ -7,6 +7,7 @@ description = "Tool routing engine: scoring pipeline, routing, and search for MC
 workspace = true
 
 [dependencies]
+core-errors = { path = "../core-errors" }
 core-state-utils = { path = "../core-state-utils" }
 routing-core = { path = "../routing-core" }
 mcp-tool-registry = { path = "../mcp-tool-registry" }

@@ -1,19 +1,18 @@
 [package]
-name = "agent-orchestrator"
+name = "session-supervisor"
 version = "0.1.0"
 edition = "2024"
-description = "L8 agent orchestration engine: team management, worker lifecycle, agent health"
+description = "L6 multi-agent supervisor with RFV closeout loop"
 [lints]
 workspace = true
 
 [lib]
-name = "agent_orchestrator"
+name = "session_supervisor"
 path = "src/lib.rs"
 
 [dependencies]
 core-state-utils = { path = "../core-state-utils" }
 core-policy = { path = "../core-policy" }
-core-errors = { path = "../core-errors" }
 core-state = { path = "../core-state" }
 framework-kernel = { path = "../framework-kernel" }
 runtime-storage = { path = "../runtime-storage" }
