@@ -29,8 +29,6 @@ configs/codex/sub_accounts.state.json
 .codebuddy/
 .serena/
 .opencode/
-.rtk/*
-!.rtk/filters.toml
 .agents/plugins/marketplace.json
 skill/
 tmp/

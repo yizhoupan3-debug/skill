@@ -18,6 +18,7 @@ metadata:
   - push
   version: '1.0.3'
 name: gitx
+scene: general
 network_access: conditional
 risk: medium
 routing_gate: none
@@ -115,9 +116,9 @@ trigger_hints:
    - 只读审计可以并行看：status / worktree / stash / hooks / reflog
    - 验证命令可以并行跑，但提交、merge、push 必须串行
    - 真正改 Git 状态的临界区仍保持串行，不要并发提交、并发 merge
-6. 高输出验证默认优先走 repo 里的 RTK 规则：
-   - `cargo test` / `npm test` / `git diff` 这类噪声命令，允许自动加 `rtk`
-   - 若需要原始输出，不加 `rtk` 前缀直接运行原始命令
+6. 高输出验证时压缩噪声输出：
+   - `cargo test` / `npm test` / `git diff` 等高输出命令，优先用 `--quiet`/`-q` 或管道 `tail -n 50` 压缩
+   - 需要完整输出时直接运行原始命令
 7. 自动化覆盖低风险分支合并：
    - 目标分支和源分支可由用户请求、当前分支、upstream 或 worktree 上下文明确推断时，可以继续执行
    - merge 前确认 `git status --short --branch` 干净或只有本次已纳入提交面的改动
