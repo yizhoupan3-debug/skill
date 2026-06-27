@@ -283,7 +283,10 @@ pub fn init_hooks() {
                 },
             },
             framework_goal_drive: core_state::state_manager::framework_goal_drive,
-            handle_session_supervisor_operation: session_supervisor::handle_session_supervisor_operation,
+            handle_session_supervisor_operation: |payload| {
+                session_supervisor::handle_session_supervisor_operation(payload)
+                    .map_err(|e| e.to_string())
+            },
             #[cfg(feature = "l5-state")]
             handle_background_state_operation: rt_storage::background_state::handle_background_state_operation,
             #[cfg(not(feature = "l5-state"))]

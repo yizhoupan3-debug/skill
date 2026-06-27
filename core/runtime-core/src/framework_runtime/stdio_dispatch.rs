@@ -271,7 +271,7 @@ fn dispatch_runtime_stdio_request(op: &str, payload: Value) -> Result<Value, Str
         "background_state" => handle_background_state_operation(payload),
         #[cfg(not(feature = "l5-state"))]
         "background_state" => Err("background_state requires l5-state feature".to_string()),
-        "session_supervisor" => handle_session_supervisor_operation(payload),
+        "session_supervisor" => handle_session_supervisor_operation(payload).map_err(|e| e.to_string()),
         "describe_transport" => build_trace_transport_descriptor(payload).map_err(|e| e.to_string()),
         "describe_handoff" => build_trace_handoff_descriptor(payload).map_err(|e| e.to_string()),
         "checkpoint_resume_manifest" => build_checkpoint_resume_manifest(payload).map_err(|e| e.to_string()),

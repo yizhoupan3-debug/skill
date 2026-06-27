@@ -4039,6 +4039,7 @@ dependencies = [
 name = "tool-routing-engine"
 version = "0.1.0"
 dependencies = [
+ "core-errors",
  "core-state-utils",
  "criterion",
  "insta",

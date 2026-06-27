@@ -2,6 +2,7 @@
 //!
 //! Parallel to `routing-engine/src/route/eval.rs`.
 
+use core_errors::FrameworkError;
 use core_state_utils::json_io::read_json_strict;
 
 use std::collections::HashSet;
@@ -18,15 +19,16 @@ const TOOL_ROUTING_EVAL_CASES_SCHEMA_VERSION: &str = "tool-routing-eval-cases-v1
 const TOOL_ROUTING_EVAL_REPORT_SCHEMA_VERSION: &str = "tool-routing-eval-v1";
 
 /// Load tool routing eval cases from a JSON file.
-pub fn load_tool_routing_eval_cases(path: &Path) -> Result<ToolRoutingEvalCasesPayload, String> {
-    let payload = read_json_strict(path)?;
+pub fn load_tool_routing_eval_cases(path: &Path) -> Result<ToolRoutingEvalCasesPayload, FrameworkError> {
+    let payload = read_json_strict(path)
+        .map_err(|e| FrameworkError::registry(format!("failed reading {}: {e}", path.display())))?;
     let cases = serde_json::from_value::<ToolRoutingEvalCasesPayload>(payload)
-        .map_err(|err| format!("failed parsing {}: {err}", path.display()))?;
+        .map_err(|err| FrameworkError::validation(format!("failed parsing {}: {err}", path.display())))?;
     if cases.schema_version != TOOL_ROUTING_EVAL_CASES_SCHEMA_VERSION {
-        return Err(format!(
+        return Err(FrameworkError::validation(format!(
             "tool routing eval case file returned an unknown schema: {:?}",
             cases.schema_version
-        ));
+        )));
     }
     Ok(cases)
 }
@@ -38,7 +40,7 @@ pub fn load_tool_routing_eval_cases(path: &Path) -> Result<ToolRoutingEvalCasesP
 pub fn evaluate_tool_routing_cases(
     records: &[McpToolRecord],
     cases_payload: ToolRoutingEvalCasesPayload,
-) -> Result<ToolRoutingEvalReportPayload, String> {
+) -> Result<ToolRoutingEvalReportPayload, FrameworkError> {
     let mut metrics = ToolRoutingEvalMetricsPayload::default();
     let cases = cases_payload.cases;
 

@@ -1,8 +1,8 @@
 {
   "schema_version": "mcp-tool-registry-v2",
   "scope": {
-    "total_count": 68,
-    "builtin_count": 14,
+    "total_count": 66,
+    "builtin_count": 11,
     "research_count": 21,
     "independent_count": 23,
     "external_count": 11
@@ -1441,6 +1441,7 @@
       }
     },
     {
+      "slug": "browser_tabs",
       "display_name": "浏览器标签页",
       "description": "管理浏览器标签页（列出/切换）",
       "layer": "independent",

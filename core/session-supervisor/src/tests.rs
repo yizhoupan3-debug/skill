@@ -1198,7 +1198,7 @@ fn inspect_unknown_worker_returns_error() {
         "now": "2026-06-06T10:00:00Z",
     }))
     .expect_err("should reject unknown worker_id");
-    assert!(err.contains("Unknown supervisor worker_id"), "error: {err}");
+    assert!(err.to_string().contains("Unknown supervisor worker_id"), "error: {err}");
     let _ = fs::remove_file(state_path);
 }
 
@@ -1217,7 +1217,7 @@ fn terminate_unknown_worker_returns_error() {
         "now": "2026-06-06T10:00:00Z",
     }))
     .expect_err("should reject unknown worker_id");
-    assert!(err.contains("Unknown supervisor worker_id"), "error: {err}");
+    assert!(err.to_string().contains("Unknown supervisor worker_id"), "error: {err}");
     let _ = fs::remove_file(state_path);
 }
 
@@ -1237,7 +1237,7 @@ fn mark_blocked_unknown_worker_returns_error() {
         "now": "2026-06-06T10:00:00Z",
     }))
     .expect_err("should reject unknown worker_id");
-    assert!(err.contains("Unknown supervisor worker_id"), "error: {err}");
+    assert!(err.to_string().contains("Unknown supervisor worker_id"), "error: {err}");
     let _ = fs::remove_file(state_path);
 }
 
@@ -1269,7 +1269,7 @@ fn launch_missing_host_returns_error() {
         "now": "2026-06-06T10:00:00Z",
     }))
     .expect_err("should reject missing host");
-    assert!(err.contains("host"), "error: {err}");
+    assert!(err.to_string().contains("host"), "error: {err}");
     let _ = fs::remove_file(state_path);
 }
 
@@ -1284,7 +1284,7 @@ fn launch_missing_cwd_returns_error() {
         "now": "2026-06-06T10:00:00Z",
     }))
     .expect_err("should reject missing cwd");
-    assert!(err.contains("cwd"), "error: {err}");
+    assert!(err.to_string().contains("cwd"), "error: {err}");
     let _ = fs::remove_file(state_path);
 }
 

@@ -544,7 +544,6 @@
       "expected_tool": null,
       "forbidden_tools": [
         "browser_open",
-        "browser_search",
         "web_fetch",
         "search_research"
       ],
