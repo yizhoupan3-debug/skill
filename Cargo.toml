@@ -34,7 +34,6 @@ members = [
     "core/runtime-storage",
     "core/runtime-core",
     "core/runtime-core-contracts",
-    "core/agent-orchestrator",
     "core/trace-runtime",
     "core/browser-mcp-dispatch",
     "tools/browser-mcp",
@@ -59,9 +58,6 @@ members = [
     "rust_tools/ooxml_parser_rs",
     "rust_tools/pdf_tool_rs",
     "rust_tools/pptx_tool_rs"]
-exclude = [
-    "codex-aggregator"
-]
 resolver = "2"
 
 [workspace.lints.rust]

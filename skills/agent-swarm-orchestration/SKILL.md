@@ -215,7 +215,7 @@ Allow bounded sidecars when at least one condition is true:
 
 For these allowed cases, the supervisor should spawn sidecars promptly and keep local ownership of integration and final verification.
 
-Parallel **review / external research** lanes must stay **read-biased**; **verifier** (or supervisor-run commands) owns **executable** pass/fail. **推理深度**见 [推理深度契约](../../docs/architecture.md)（分工 + `EVIDENCE_INDEX`，非单模型长 CoT）。Without at least one bounded `verify_commands` (or equivalent hook-visible checks), treat as **`verification_missing`** for write-heavy spawns.
+Parallel **review / external research** lanes must stay **read-biased**; **verifier** (or supervisor-run commands) owns **executable** pass/fail. Without at least one bounded `verify_commands` (or equivalent hook-visible checks), treat as **`verification_missing`** for write-heavy spawns.
 
 Reject spawning with an explicit reason:
 
@@ -317,4 +317,3 @@ If the discussion touches current-session execution:
 | [references/detailed-guide.md](./references/detailed-guide.md) | 拓扑、handoff、spawn 细节 |
 | `core/agent-orchestrator/src/team_manager.rs` | Rust 层 team 编排实现真源 |
 | `core/agent-orchestrator/src/process.rs` | Agent 生命周期跟踪实现 |
-| `./framework-health.md` | Agent 健康检查命令 |
