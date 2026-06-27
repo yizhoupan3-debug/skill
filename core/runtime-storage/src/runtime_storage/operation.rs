@@ -1,3 +1,4 @@
+use core_errors::FrameworkError;
 use crate::runtime_envelope_ids::{
     RUNTIME_CONTROL_PLANE_AUTHORITY, RUNTIME_STORAGE_AUTHORITY, RUNTIME_STORAGE_SCHEMA_VERSION,
 };
@@ -686,13 +687,13 @@ pub fn build_checkpoint_control_plane_compiler_payload(payload: Value) -> Result
             "background_state_path",
             "runtime checkpoint control plane",
         )
-        .map_err(|e| e.to_string())?,
+        .map_err(|e| FrameworkError::Validation { message: e.to_string() })?,
         "event_transport_dir": required_non_empty_string(
             &Value::Object(paths.clone()),
             "event_transport_dir",
             "runtime checkpoint control plane",
         )
-        .map_err(|e| e.to_string())?,
+        .map_err(|e| FrameworkError::Validation { message: e.to_string() })?,
     });
 
     Ok(json!({

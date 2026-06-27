@@ -1,3 +1,4 @@
+use core_errors::FrameworkError;
 use super::types::*;
 use chrono::{DateTime, Utc};
 
@@ -26,7 +27,7 @@ pub(super) fn is_terminal_status(status: &str) -> bool {
 pub(super) fn validate_transition(
     previous_status: Option<&str>,
     next_status: &str,
-) -> Result<(), String> {
+) -> Result<(), FrameworkError> {
     let allowed = match previous_status {
         None => matches!(
             next_status,

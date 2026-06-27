@@ -23,6 +23,7 @@ skill-layer = { path = "../skill-layer" }
 runtime-core = { path = "../runtime-core", features = ["test-support"] }
 host-projection = { path = "../host-projection" }
 framework-extra = { path = "../framework-extra" }
+core-errors = { path = "../core-errors" }
 fr-utils = { path = "../fr-utils" }
 fr-exec = { path = "../fr-exec" }
 goal-engine = { path = "../goal-engine" }

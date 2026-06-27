@@ -1,3 +1,4 @@
+use core_errors::FrameworkError;
 use super::types::BACKGROUND_STATE_CONTROL_PLANE_SCHEMA_VERSION;
 use crate::{
     DEFAULT_STATE_SERVICE_AUTHORITY, DEFAULT_STATE_SERVICE_PROJECTION, DEFAULT_STATE_SERVICE_ROLE,
@@ -9,7 +10,7 @@ use std::path::Path;
 
 pub(super) fn backend_capabilities(
     backend_family: &str,
-) -> Result<RuntimeBackendCapabilities, String> {
+) -> Result<RuntimeBackendCapabilities, FrameworkError> {
     runtime_backend_capabilities(backend_family).map_err(|err| {
         format!("Unsupported durable background-state backend family: {err}")
     })
@@ -30,7 +31,7 @@ pub(super) fn build_state_control_plane(
     control_plane_descriptor: Option<&Value>,
     backend_family: &str,
     state_path: &Path,
-) -> Result<Value, String> {
+) -> Result<Value, FrameworkError> {
     let normalized_backend = normalized_backend_family(backend_family);
     let capabilities = backend_capabilities(&normalized_backend)?;
     let runtime_caps = runtime_backend_capabilities(&normalized_backend)?;

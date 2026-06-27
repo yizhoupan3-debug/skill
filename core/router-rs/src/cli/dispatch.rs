@@ -1,3 +1,4 @@
+use core_errors::FrameworkError;
 //! 子命令薄分发壳：解析后的 `RouterCommand` → `cli::router_command_dispatch`。
 
 use super::args::*;
@@ -19,7 +20,7 @@ use runtime_core::route::{
 use runtime_core::router_self;
 
 #[tracing::instrument(name = "dispatch", skip_all, ret)]
-pub fn dispatch_router_command(command: RouterCommand) -> Result<(), String> {
+pub fn dispatch_router_command(command: RouterCommand) -> Result<(), FrameworkError> {
     match command {
         RouterCommand::Route(command) => {
             let records = load_records(command.runtime.as_deref())?;
@@ -32,7 +33,7 @@ pub fn dispatch_router_command(command: RouterCommand) -> Result<(), String> {
                 command.allow_overlay,
                 command.first_turn,
             )?;
-            print_json_value(&decision).map_err(|e| e.to_string())
+            print_json_value(&decision)?; Ok(())
         }
         RouterCommand::Search(command) => {
             let records = load_records_cached_for_stdio(
@@ -44,7 +45,7 @@ pub fn dispatch_router_command(command: RouterCommand) -> Result<(), String> {
                 search_skills_subset(&records, Some(&host_indices), &command.query, command.limit);
             let payload = build_search_results_payload(&command.query, rows.clone());
             if command.json {
-                return print_json_value(&payload).map_err(|e| e.to_string());
+                print_json_value(&payload)?; return Ok(());
             }
             print_search_results(&command.query, &payload, rows);
             Ok(())
@@ -60,7 +61,7 @@ pub fn dispatch_router_command(command: RouterCommand) -> Result<(), String> {
         #[cfg(feature = "codegraph")]
         RouterCommand::Codegraph { command } => dispatch_codegraph_command(command),
         #[cfg(not(feature = "codegraph"))]
-        RouterCommand::Codegraph { .. } => Err("codegraph feature not enabled; rebuild with --features codegraph".to_string()),
+        RouterCommand::Codegraph { .. } => Err(FrameworkError::validation("codegraph feature not enabled; rebuild with --features codegraph")),
         RouterCommand::Diagnose { command } => dispatch_diagnose_command(command),
         RouterCommand::Migrate { command } => dispatch_migrate_command(command),
         RouterCommand::HookPolicy { command } => dispatch_hook_policy_command(command),
@@ -68,7 +69,7 @@ pub fn dispatch_router_command(command: RouterCommand) -> Result<(), String> {
         RouterCommand::Loop { command } => dispatch_loop_command(command),
         RouterCommand::Eval { command } => dispatch_eval_command(command),
         RouterCommand::SchemaDrift { command } => dispatch_schema_drift_command(command),
-        RouterCommand::RouterSelf { command } => router_self::dispatch(command).map_err(|e| e.to_string()),
+        RouterCommand::RouterSelf { command } => router_self::dispatch(command).map_err(FrameworkError::Validation),
     }
 }
 

@@ -1,3 +1,4 @@
+use core_errors::FrameworkError;
 use super::control_plane::{build_state_control_plane, normalized_backend_family};
 use super::persist::{read_persisted_state, write_persisted_state};
 use super::status::{
@@ -11,11 +12,11 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 impl BackgroundStateStore {
-    pub(super) fn load(request: &BackgroundStateRequestPayload) -> Result<Self, String> {
+    pub(super) fn load(request: &BackgroundStateRequestPayload) -> Result<Self, FrameworkError> {
         let state_path = request
             .state_path
             .as_ref()
-            .ok_or_else(|| "Background state request is missing state_path.".to_string())
+            .ok_or_else(|| FrameworkError::validation("Background state request is missing state_path."))
             .map(PathBuf::from)?;
         let backend_family = request
             .backend_family
@@ -276,7 +277,7 @@ impl BackgroundStateStore {
         rebuilt
     }
 
-    pub(super) fn serialized_payload(&self) -> Result<String, String> {
+    pub(super) fn serialized_payload(&self) -> Result<String, FrameworkError> {
         let persisted = PersistedBackgroundState {
             version: 2,
             schema_version: BACKGROUND_STATE_SCHEMA_VERSION.to_string(),
@@ -296,10 +297,10 @@ impl BackgroundStateStore {
         };
         serde_json::to_string_pretty(&persisted)
             .map(|payload| payload + "\n")
-            .map_err(|err| err.to_string())
+            .map_err(FrameworkError::Json)
     }
 
-    pub(super) fn persist(&self) -> Result<Option<String>, String> {
+    pub(super) fn persist(&self) -> Result<Option<String>, FrameworkError> {
         let payload = self.serialized_payload()?;
         if self.backend_family == "memory" {
             return Ok(Some(payload));

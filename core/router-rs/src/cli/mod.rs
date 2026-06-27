@@ -1,3 +1,4 @@
+use core_errors::FrameworkError;
 //! CLI 子命令、stdio 与 live execute 控制面（从 `main.rs` 拆分，阶段 1）。
 
 pub mod args;
@@ -22,16 +23,16 @@ pub use fr_utils::stdio_op_registry::{
 };
 
 #[tracing::instrument(name = "router-rs", skip_all, ret)]
-pub fn run(args: &args::Cli) -> Result<(), String> {
+pub fn run(args: &args::Cli) -> Result<(), FrameworkError> {
     runtime_core::kernel_bootstrap::ensure_kernel_bootstrap();
     configure_compute_parallelism(args.compute_threads)?;
     if let Some(command) = args.command.clone() {
-        return dispatch::dispatch_router_command(command);
+        return dispatch::dispatch_router_command(command).map_err(FrameworkError::Validation);
     }
     if args.stdio_json {
-        return Ok(runtime_core::stdio_transport::run_stdio_json_loop(args.stdio_max_concurrency)?);
+        return Ok(runtime_core::stdio_transport::run_stdio_json_loop(args.stdio_max_concurrency).map_err(|e| FrameworkError::Validation { message: e })?);
     }
-    Err("missing router-rs command; use `router-rs-cli --help` for canonical subcommands".to_string())
+    Err(FrameworkError::validation("missing router-rs command; use `router-rs-cli --help` for canonical subcommands"))
 }
 
 pub use args::Cli;

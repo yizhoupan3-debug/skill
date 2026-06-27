@@ -1,3 +1,4 @@
+use core_errors::FrameworkError;
 use serde_json::{Value, json};
 
 const RUNTIME_BACKEND_FAMILY_CATALOG_SCHEMA_VERSION: &str =
@@ -21,7 +22,7 @@ pub struct RuntimeBackendCapabilities {
 #[tracing::instrument(level = "debug", skip_all)]
 pub fn runtime_backend_capabilities(
     backend_family: &str,
-) -> Result<RuntimeBackendCapabilities, String> {
+) -> Result<RuntimeBackendCapabilities, FrameworkError> {
     match normalized_backend_family(backend_family).as_str() {
         "filesystem" | "file" => Ok(RuntimeBackendCapabilities {
             backend_family: "filesystem",
@@ -52,7 +53,7 @@ pub fn runtime_backend_capabilities(
                 supports_sqlite_wal: false,
             })
         }
-        other => Err(format!("unsupported runtime backend family: {other:?}")),
+        other => Err(FrameworkError::unsupported(format!("unsupported runtime backend family: {other:?}"))),
     }
 }
 
@@ -95,7 +96,7 @@ pub fn runtime_backend_family_parity_payload(
     checkpointer_backend_family: Option<&str>,
     trace_backend_family: Option<&str>,
     state_backend_family: Option<&str>,
-) -> Result<Value, String> {
+) -> Result<Value, FrameworkError> {
     let store = store_backend_family.unwrap_or("filesystem");
     let checkpointer = checkpointer_backend_family.unwrap_or(store);
     let trace = trace_backend_family.unwrap_or(checkpointer);
