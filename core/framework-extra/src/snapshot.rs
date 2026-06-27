@@ -1,7 +1,7 @@
 //! Framework runtime snapshot building.
 //!
-//! Functions for building the runtime snapshot envelope (`build_framework_runtime_snapshot_envelope`
-//! and `build_framework_runtime_snapshot_envelope_with_level`) as well as internal helpers.
+//! Builds the runtime snapshot envelope via `build_framework_runtime_snapshot_envelope_with_level`
+//! and internal helpers.
 
 use fr_utils::constants::{
     FRAMEWORK_RUNTIME_AUTHORITY, FRAMEWORK_RUNTIME_SNAPSHOT_SCHEMA_VERSION,
@@ -14,20 +14,6 @@ use std::path::Path;
 use tracing::instrument;
 
 use crate::util::{count_evidence_rows, truncate_utf8_chars};
-
-#[instrument(level = "debug", skip_all)]
-pub fn build_framework_runtime_snapshot_envelope(
-    repo_root: &Path,
-    artifact_root_override: Option<&Path>,
-    task_id_override: Option<&str>,
-) -> Result<Value, String> {
-    build_framework_runtime_snapshot_envelope_with_level(
-        repo_root,
-        artifact_root_override,
-        task_id_override,
-        "summary",
-    )
-}
 
 /// Detail level for snapshot output: "summary" (compact, default) or "full".
 #[instrument(level = "debug", skip_all, fields(detail_level))]

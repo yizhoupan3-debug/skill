@@ -363,7 +363,7 @@
           "delegation",
           "adversarial-review"
         ],
-        "version": "2.1.0"
+        "version": "2.2.0"
       },
       "medium",
       [
@@ -2403,7 +2403,8 @@
       null,
       null,
       {
-        "alias_for": "primary-runtime/spreadsheets"
+        "alias_for": "primary-runtime/spreadsheets",
+        "version": "2.0.0"
       },
       "low",
       [
@@ -2852,6 +2853,99 @@
       null,
       "local",
       [],
+      null,
+      null
+    ],
+    [
+      "observer-rs",
+      "L0",
+      "none",
+      "none",
+      "P3",
+      "Framework-operational reference: analyze telemetry, audit usage journal, compute per-skill health scores, inspect integrity, snapshot registry state.",
+      "n/a",
+      [],
+      "framework",
+      "skills/observer-rs/SKILL.md",
+      ["claude", "codex", "cursor", "opencode"],
+      "reference",
+      [],
+      "Framework-operational reference for observability and audit",
+      null,
+      null,
+      null,
+      {
+        "platforms": ["supported"],
+        "tags": ["observability", "audit", "health"],
+        "category": "framework",
+        "version": "1.0.0"
+      },
+      "medium",
+      ["Read", "Bash", "WebFetch"],
+      null,
+      "local",
+      null,
+      null,
+      null
+    ],
+    [
+      "primary-runtime",
+      "L0",
+      "none",
+      "none",
+      "P1",
+      "Primary runtime entry point — framework lifecycle orchestration. Spawned by the host to handle goal drive, quality gate, and session supervision.",
+      "n/a",
+      [],
+      "framework",
+      "skills/primary-runtime/SKILL.md",
+      ["claude", "codex", "cursor", "opencode"],
+      "runtime",
+      [],
+      "Framework lifecycle orchestration: goal drive, quality gate, session supervision",
+      null,
+      null,
+      null,
+      {
+        "platforms": ["supported"],
+        "version": "1.0.0"
+      },
+      "medium",
+      ["Read", "Bash", "Agent"],
+      null,
+      "local",
+      null,
+      null,
+      null
+    ],
+    [
+      "shared-references",
+      "L0",
+      "none",
+      "none",
+      "P3",
+      "Shared reference library — cross-skill lookup tables, glossary, domain constants, and reference data. Not a standalone skill; consumed by other skills.",
+      "n/a",
+      [],
+      "framework",
+      "skills/shared-references/SKILL.md",
+      ["claude", "codex", "cursor", "opencode"],
+      "reference",
+      [],
+      "Cross-skill reference data: lookup tables, glossary, domain constants",
+      null,
+      null,
+      null,
+      {
+        "platforms": ["supported"],
+        "tags": ["reference", "glossary", "constants"],
+        "version": "1.0.0"
+      },
+      "low",
+      ["Read", "Bash", "WebFetch"],
+      null,
+      "local",
+      null,
       null,
       null
     ]

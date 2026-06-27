@@ -98,7 +98,7 @@ fn framework_snapshot_missing_recovery_anchors_is_not_resumable() {
     );
 
     let snapshot =
-        build_framework_runtime_snapshot_envelope(&repo_root, None, None).expect("snapshot");
+        build_framework_runtime_snapshot_envelope_with_level(&repo_root, None, None, "summary").expect("snapshot");
     let continuity = &snapshot["runtime_snapshot"]["continuity"];
     let missing_anchors = continuity["missing_recovery_anchors"]
         .as_array()
@@ -157,7 +157,7 @@ fn framework_session_writer_materializes_complete_focus_continuity() {
     }
 
     let snapshot =
-        build_framework_runtime_snapshot_envelope(&repo_root, None, None).expect("snapshot");
+        build_framework_runtime_snapshot_envelope_with_level(&repo_root, None, None, "summary").expect("snapshot");
     let runtime = &snapshot["runtime_snapshot"];
     assert_eq!(runtime["active_task_id"], json!(task_id));
     assert_eq!(runtime["continuity"]["state"], json!("active"));
@@ -293,7 +293,7 @@ fn runtime_view_active_task_id_matches_resolve_task_view() {
     .expect("write registry");
 
     let snapshot =
-        build_framework_runtime_snapshot_envelope(&repo_root, None, None).expect("snapshot");
+        build_framework_runtime_snapshot_envelope_with_level(&repo_root, None, None, "summary").expect("snapshot");
     let resolved = resolve_task_view(&repo_root, None);
     assert_eq!(
         snapshot["runtime_snapshot"]["active_task_id"],
@@ -393,182 +393,6 @@ fn stdio_framework_rfv_loop_roundtrip() {
     let _ = fs::remove_dir_all(&repo_root);
 }
 
-
-#[test]
-fn runtime_control_plane_payload_is_rust_owned() {
-    let payload = build_runtime_control_plane_payload();
-
-    assert_eq!(
-        payload["schema_version"],
-        Value::String(RUNTIME_CONTROL_PLANE_SCHEMA_VERSION.to_string())
-    );
-    assert_eq!(
-        payload["authority"],
-        Value::String(RUNTIME_CONTROL_PLANE_AUTHORITY.to_string())
-    );
-    assert_eq!(
-        payload["default_route_mode"],
-        Value::String("rust".to_string())
-    );
-    assert_eq!(
-        payload["default_route_authority"],
-        Value::String(ROUTE_AUTHORITY.to_string())
-    );
-    assert_eq!(
-        payload["runtime_status"]["runtime_primary_owner"],
-        Value::String("rust-control-plane".to_string())
-    );
-    assert_eq!(
-        payload["runtime_status"]["hot_path_projection_mode"],
-        Value::String("descriptor-driven".to_string())
-    );
-    assert!(payload["runtime_status"]
-        .get("framework_runtime_package_status")
-        .is_none());
-    assert_eq!(
-        payload["runtime_status"]["framework_runtime_replacement"],
-        Value::String("router-rs::framework_runtime".to_string())
-    );
-    assert_eq!(
-        payload["runtime_host"]["role"],
-        Value::String("runtime-orchestration".to_string())
-    );
-    assert_eq!(
-        payload["runtime_host"]["startup_order"][0],
-        Value::String("router".to_string())
-    );
-    assert_eq!(
-        payload["runtime_host"]["concurrency_contract"]["router_stdio_pool_default_size"],
-        json!(DEFAULT_ROUTER_STDIO_POOL_SIZE)
-    );
-    assert_eq!(
-        payload["runtime_host"]["concurrency_contract"]["router_stdio_pool_max_size"],
-        json!(MAX_ROUTER_STDIO_POOL_SIZE)
-    );
-    assert_eq!(
-        payload["services"]["middleware"]["subagent_limit_contract"]
-            ["max_concurrent_subagents_limit"],
-        json!(framework_kernel::stdio_payload_types::MAX_CONCURRENT_SUBAGENTS_LIMIT_LOCAL)
-    );
-    assert_eq!(
-        payload["runtime_host"]["shutdown_order"][0],
-        Value::String("background".to_string())
-    );
-    assert_eq!(
-        payload["services"]["execution"]["delegate_kind"],
-        Value::String("rust-execution-kernel-slice".to_string())
-    );
-    assert_eq!(
-        payload["services"]["execution"]["kernel_live_backend_impl"],
-        Value::String("router-rs".to_string())
-    );
-    assert_eq!(
-        payload["services"]["execution"]["kernel_contract"]["execution_kernel_delegate_impl"],
-        Value::String("router-rs".to_string())
-    );
-    assert_eq!(
-        payload["services"]["execution"]["kernel_contract"]
-            ["execution_kernel_metadata_schema_version"],
-        Value::String(EXECUTION_METADATA_SCHEMA_VERSION.to_string())
-    );
-    assert_eq!(
-        payload["services"]["execution"]["kernel_contract"]["execution_kernel_fallback_policy"],
-        Value::String(EXECUTION_KERNEL_FALLBACK_POLICY.to_string())
-    );
-    assert_eq!(
-        payload["services"]["execution"]["kernel_contract"]["execution_kernel_response_shape"],
-        Value::String(EXECUTION_RESPONSE_SHAPE_LIVE_PRIMARY.to_string())
-    );
-    assert_eq!(
-        payload["services"]["execution"]["kernel_contract_by_mode"]
-            [EXECUTION_RESPONSE_SHAPE_DRY_RUN]["execution_kernel_response_shape"],
-        Value::String(EXECUTION_RESPONSE_SHAPE_DRY_RUN.to_string())
-    );
-    assert_eq!(
-        payload["services"]["execution"]["kernel_contract_by_mode"]
-            [EXECUTION_RESPONSE_SHAPE_DRY_RUN]["execution_kernel_prompt_preview_owner"],
-        Value::String(EXECUTION_PROMPT_PREVIEW_OWNER.to_string())
-    );
-    assert_eq!(
-        payload["services"]["execution"]["kernel_metadata_contract"]["schema_version"],
-        Value::String(EXECUTION_METADATA_CONTRACT_SCHEMA_VERSION.to_string())
-    );
-    assert_eq!(
-        payload["services"]["execution"]["kernel_metadata_contract"]["authority"],
-        Value::String(EXECUTION_KERNEL_AUTHORITY.to_string())
-    );
-    assert_eq!(
-        payload["services"]["execution"]["kernel_metadata_contract"]["runtime_fields"]
-            ["live_primary_required"][2],
-        Value::String("execution_mode".to_string())
-    );
-    assert_eq!(
-        payload["services"]["execution"]["kernel_metadata_contract"]["runtime_fields"]
-            ["live_primary_passthrough"][1],
-        Value::String("diagnostic_route_mode".to_string())
-    );
-    assert_eq!(
-        payload["services"]["execution"]["kernel_metadata_contract"]["defaults"]
-            ["live_primary_model_id_source"],
-        Value::String(EXECUTION_MODEL_ID_SOURCE.to_string())
-    );
-    assert_eq!(
-        payload["services"]["execution"]["kernel_live_delegate_authority"],
-        Value::String("rust-execution-cli".to_string())
-    );
-    assert_eq!(
-        payload["services"]["checkpoint"]["delegate_kind"],
-        Value::String("filesystem-checkpointer".to_string())
-    );
-    assert_eq!(
-        payload["services"]["checkpoint"]["backend_family_catalog"]
-            ["strongest_local_backend_family"],
-        Value::String("sqlite".to_string())
-    );
-    assert!(
-        !payload["services"]["checkpoint"]["backend_family_catalog"]["families"]
-            .as_array()
-            .expect("backend family catalog")
-            .iter()
-            .any(|family| family["backend_family"] == "memory")
-    );
-    assert_eq!(
-        payload["services"]["checkpoint"]["backend_family_catalog"]["test_only_backend_families"]
-            [0],
-        Value::String("memory".to_string())
-    );
-    assert_eq!(
-        payload["services"]["checkpoint"]["backend_family_parity"]["aligned"],
-        Value::Bool(true)
-    );
-    assert_eq!(
-        payload["services"]["background"]["authority"],
-        Value::String(RUNTIME_CONTROL_PLANE_AUTHORITY.to_string())
-    );
-    assert_eq!(
-        payload["services"]["background"]["delegate_kind"],
-        Value::String("rust-background-control-policy".to_string())
-    );
-    assert_eq!(
-        payload["services"]["background"]["orchestration_contract"]["policy_schema_version"],
-        Value::String(BACKGROUND_CONTROL_SCHEMA_VERSION.to_string())
-    );
-    assert_eq!(
-        payload["services"]["background"]["orchestration_contract"]["active_statuses"][4],
-        Value::String("retry_claimed".to_string())
-    );
-    assert_eq!(
-        payload["services"]["background"]["orchestration_contract"]["policy_operations"][0],
-        Value::String("batch-plan".to_string())
-    );
-    assert_eq!(
-        payload["services"]["background"]["orchestration_contract"]["policy_operations"][5],
-        Value::String("retry".to_string())
-    );
-    assert!(payload["services"].get("agent_factory").is_none());
-}
-
-
 #[test]
 fn runtime_observability_exporter_descriptor_is_rust_owned() {
     let payload = build_runtime_observability_exporter_descriptor();
@@ -596,117 +420,6 @@ fn runtime_observability_exporter_descriptor_is_rust_owned() {
     assert_eq!(
         payload["export_path"],
         Value::String("jsonl-plus-otel".to_string())
-    );
-}
-
-
-#[test]
-fn runtime_observability_dashboard_and_metric_record_follow_contract() {
-    let catalog = build_runtime_observability_metric_catalog_payload();
-    let metrics = catalog["metrics"].as_array().expect("metric catalog array");
-    assert_eq!(
-        catalog["schema_version"],
-        Value::String(RUNTIME_OBSERVABILITY_METRIC_CATALOG_SCHEMA_VERSION.to_string())
-    );
-    assert_eq!(
-        catalog["metric_catalog_version"],
-        Value::String(RUNTIME_OBSERVABILITY_METRIC_CATALOG_VERSION.to_string())
-    );
-    assert!(metrics
-        .iter()
-        .all(|metric| metric.get("dimensions").is_some()));
-    assert!(metrics
-        .iter()
-        .all(|metric| metric.get("base_dimensions").is_none()));
-
-    let dashboard = runtime_observability_dashboard_schema();
-    let resource_dimensions = dashboard["resource_dimensions"]
-        .as_array()
-        .expect("resource dimensions array");
-    assert_eq!(
-        dashboard["schema_version"],
-        Value::String(RUNTIME_OBSERVABILITY_DASHBOARD_SCHEMA_VERSION.to_string())
-    );
-    assert!(resource_dimensions
-        .iter()
-        .any(|value| value == "service.name"));
-    assert!(resource_dimensions
-        .iter()
-        .any(|value| value == "runtime.generation"));
-    assert!(resource_dimensions
-        .iter()
-        .any(|value| value == "runtime.schema_version"));
-
-    let record = build_runtime_metric_record(json!({
-        "metric_name": "runtime.route_mismatch_total",
-        "value": 3,
-        "service_name": "codex-runtime",
-        "service_version": "v1",
-        "runtime_instance_id": "runtime-123",
-        "route_engine_mode": "rust",
-        "job_id": "job-1",
-        "session_id": "session-1",
-        "attempt": 2,
-        "worker_id": "worker-7",
-        "generation": "gen-a",
-    }))
-    .expect("metric record");
-    assert_eq!(
-        record["schema_version"],
-        Value::String(RUNTIME_OBSERVABILITY_METRIC_RECORD_SCHEMA_VERSION.to_string())
-    );
-    assert_eq!(record["metric_type"], Value::String("counter".to_string()));
-    assert_eq!(record["unit"], Value::String("1".to_string()));
-    assert_eq!(
-        record["dimensions"]["runtime.stage"],
-        Value::String("runtime.metric".to_string())
-    );
-    assert_eq!(
-        record["dimensions"]["runtime.status"],
-        Value::String("ok".to_string())
-    );
-    assert_eq!(
-        record["dimensions"]["runtime.schema_version"],
-        Value::String(RUNTIME_OBSERVABILITY_METRIC_RECORD_SCHEMA_VERSION.to_string())
-    );
-    assert_eq!(
-        record["ownership"]["exporter_authority"],
-        Value::String(RUNTIME_CONTROL_PLANE_AUTHORITY.to_string())
-    );
-
-    let err = build_runtime_metric_record(json!({
-        "metric_name": "runtime.unknown_total",
-        "value": 1,
-        "service_name": "codex-runtime",
-        "service_version": "v1",
-        "runtime_instance_id": "runtime-123",
-        "route_engine_mode": "rust",
-        "job_id": "job-1",
-        "session_id": "session-1",
-        "attempt": 1,
-        "worker_id": "worker-7",
-        "generation": "gen-a",
-    }))
-    .expect_err("unknown metric should fail closed");
-    assert_eq!(err, "unsupported runtime metric: runtime.unknown_total");
-
-    let err = build_runtime_metric_record(json!({
-        "metric_name": "runtime.route_mismatch_total",
-        "value": 1,
-        "service_name": "codex-runtime",
-        "service_version": "v1",
-        "runtime_instance_id": "runtime-123",
-        "route_engine_mode": "rust",
-        "job_id": "job-1",
-        "session_id": "session-1",
-        "attempt": -1,
-        "worker_id": "worker-7",
-        "generation": "gen-a",
-    }))
-    .expect_err("negative attempts should fail closed");
-    assert_eq!(
-        err,
-        "runtime metric record requires non-negative integer field attempt"
     );
 }
 

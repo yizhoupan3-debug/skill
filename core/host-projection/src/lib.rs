@@ -3,7 +3,7 @@
 //!
 //! Physical migration from runtime-core:
 //! - hosts/host_provider.rs: HostProvider trait + registry
-//! - hosts/host_state.rs: AgentDiskState, TouchState, review gate state
+//! - hosts/host_state.rs: review gate state, evidence recording
 //! - hosts/generic_config.rs: GenericHostConfig (data-driven, no host names)
 //! - host_integration/ → migrated to runtime-core (B layer)
 //! - host_entrypoint_sync.rs: host entrypoint sync

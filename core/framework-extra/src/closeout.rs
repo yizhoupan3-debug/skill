@@ -8,11 +8,9 @@
 
 use core_errors::FrameworkError;
 use core_state::closeout_validation::{
-    evaluate_closeout_record_value, evaluate_closeout_record_value_with_context,
+    evaluate_closeout_record_value_with_context,
     CloseoutEvidenceContext,
 };
-use fr_utils::constants::CLOSEOUT_COMPLETION_STATUSES;
-use fr_utils::json_value::value_text;
 use serde_json::Value;
 use std::fs;
 use std::path::{Path, PathBuf};

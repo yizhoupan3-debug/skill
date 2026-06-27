@@ -28,7 +28,7 @@ pub use runtime_core::{
 // framework-runtime 原 re-export items — 现直接用原始 crate
 pub use fr_utils::types::FrameworkAliasBuildOptions;
 pub use framework_extra::alias::build_framework_alias_envelope;
-pub use framework_extra::snapshot::build_framework_runtime_snapshot_envelope;
+pub use framework_extra::snapshot::build_framework_runtime_snapshot_envelope_with_level;
 pub use framework_extra::statusline::build_framework_statusline;
 pub use framework_extra::evidence::framework_hook_evidence_append;
 pub use framework_extra::framework_doctor::run_continuity_audit;
@@ -85,7 +85,7 @@ pub use runtime_core::trace_runtime::{TraceRecordEventRequestPayload, record_tra
 
 // observability/control-plane re-exports (from framework-extra)
 pub use framework_extra::orchestration_controller::{
-    build_background_control_response, build_runtime_control_plane_payload, build_runtime_metric_record,
+    build_background_control_response,
     build_runtime_observability_exporter_descriptor,
     build_runtime_observability_health_snapshot,
     build_runtime_observability_metric_catalog_payload,

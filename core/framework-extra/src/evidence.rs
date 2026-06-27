@@ -24,10 +24,7 @@ type Result<T> = std::result::Result<T, FrameworkError>;
 
 const MAX_POST_TOOL_EVIDENCE_ARTIFACTS: usize = 120;
 
-fn continuity_post_tool_evidence_env_enabled() -> bool {
-    fr_exec::router_env_flags::router_rs_continuity_post_tool_evidence_enabled()
-}
-
+#[allow(dead_code)]
 fn extract_shell_command_preview(event: &Value) -> Option<String> {
     let input = event.get("tool_input").and_then(Value::as_object)?;
     let cmd = input
@@ -379,6 +376,7 @@ pub fn framework_hook_evidence_append(payload: Value) -> Result<Value> {
     }))
 }
 
+#[allow(dead_code)]
 fn tool_name_normalized(event: &Value) -> String {
     event
         .get("tool_name")
@@ -389,6 +387,7 @@ fn tool_name_normalized(event: &Value) -> String {
         .to_string()
 }
 
+#[allow(dead_code)]
 fn tool_name_is_shell_like(name: &str) -> bool {
     let n = name.trim().to_ascii_lowercase();
     n == "bash"
@@ -585,67 +584,6 @@ fn is_modified_recently(path: &std::path::Path, max_delta_secs: u64) -> bool {
             }
         }
     false
-}
-
-/// 在宿主 `PostToolUse` 中追加一条「终端类验证命令」到 `EVIDENCE_INDEX.json`（与 session 写入共用锁）。
-///
-/// `kind` 用于区分来源（如 `codex_post_tool_verification` / `cursor_post_tool_verification`）。
-/// 仅在连续性已初始化且命令启发式匹配验证类时写入。默认关；`ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE=1` 开启。
-pub fn try_append_post_tool_shell_evidence(
-    repo_root: &Path,
-    event: &Value,
-    kind: &str,
-) -> Result<()> {
-    if !continuity_post_tool_evidence_env_enabled() {
-        return Ok(());
-    }
-    let tool_name = tool_name_normalized(event);
-    if !tool_name_is_shell_like(&tool_name) {
-        return Ok(());
-    }
-    let Some(command_preview) = extract_shell_command_preview(event) else {
-        return Ok(());
-    };
-    let command_lower = command_preview.to_ascii_lowercase();
-    if !shell_command_looks_like_verification(&command_lower) {
-        return Ok(());
-    }
-
-    let session_id = event
-        .get("session_id")
-        .and_then(Value::as_str)
-        .unwrap_or_default()
-        .to_string();
-    let exit_hint = extract_tool_exit_hint(event);
-    let mut entry = Map::new();
-    entry.insert("kind".to_string(), json!(kind));
-    entry.insert("tool_name".to_string(), json!(tool_name));
-    entry.insert("command_preview".to_string(), json!(command_preview));
-    entry.insert("recorded_at".to_string(), json!(current_local_timestamp()));
-    if !session_id.is_empty() {
-        entry.insert("session_id".to_string(), json!(session_id));
-    }
-
-    // Programmatic verification of physical artifact association (L1 Truthfulness)
-    let artifact_ok = detect_and_verify_physical_artifact(repo_root, &command_lower);
-    if !artifact_ok {
-        entry.insert("artifact_verification_failed".to_string(), json!(true));
-    }
-
-    if let Some(ec) = exit_hint {
-        entry.insert("exit_code".to_string(), json!(ec));
-        entry.insert("success".to_string(), json!(ec == 0 && artifact_ok));
-    } else {
-        entry.insert("success".to_string(), json!(artifact_ok));
-    }
-    // Pointer 机制已移除：从 event 中提取 task_id 显式传递
-    let task_id_from_event = event
-        .get("task_id")
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|s| !s.is_empty());
-    append_evidence_index_merged_row(repo_root, task_id_from_event, entry)?;
-    Ok(())
 }
 
 pub(super) fn normalize_evidence_index(payload: &Value) -> Vec<Map<String, Value>> {

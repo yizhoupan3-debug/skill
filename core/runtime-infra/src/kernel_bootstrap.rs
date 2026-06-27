@@ -1,7 +1,6 @@
 //! B0 kernel DI: TokenizerProvider (B1→B0), review context probes, and route cache invalidator.
 //!
 //! Telemetry bootstrap (LogAggregator, TelemetryObserver) removed per v10 Wave 2d.
-use framework_kernel::install_tokenizer_provider;
 use routing_engine::routing_runtime_watch;
 use std::sync::Once;
 use std::thread;
@@ -26,16 +25,6 @@ pub fn ensure_kernel_bootstrap() {
     BOOTSTRAP_ONCE.call_once(|| {
         bootstrap_core();        // tokenizer + probes (all modes need these)
         spawn_routing_runtime_cache_invalidator();
-    });
-}
-
-/// Light bootstrap for short-lived CLI subprocesses (hook events, etc.).
-///
-/// Skips route cache poller thread — a hook subprocess (~30ms lifetime) doesn't
-/// need it and the thread would be killed before doing useful work.
-pub fn ensure_kernel_bootstrap_light() {
-    BOOTSTRAP_ONCE.call_once(|| {
-        bootstrap_core();        // only tokenizer + probes — no thread
     });
 }
 

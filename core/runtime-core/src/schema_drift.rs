@@ -61,8 +61,6 @@ pub struct ContractVersionsSnapshot {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SchemaDriftBaseline {
-    pub schema_version: String,
-    pub recorded_at: String,
     pub task_id: String,
     /// Host-specific hooks snapshot (opaque JSON blob from L0 host extension).
     pub host_hooks: Value,
@@ -230,8 +228,6 @@ pub fn snapshot_task_artifacts(repo_root: &Path, task_id: &str) -> TaskArtifacts
 
 pub fn build_baseline(repo_root: &Path, task_id: &str) -> Result<SchemaDriftBaseline> {
     Ok(SchemaDriftBaseline {
-        schema_version: SCHEMA_DRIFT_BASELINE_SCHEMA_VERSION.to_string(),
-        recorded_at: framework_kernel::time::now_iso(),
         task_id: task_id.to_string(),
         host_hooks: snapshot_all_host_hooks(repo_root),
         task_artifacts: snapshot_task_artifacts(repo_root, task_id),

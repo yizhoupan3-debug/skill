@@ -29,7 +29,7 @@ routing-engine = { path = "../routing-engine" }
 runtime-core-contracts = { path = "../runtime-core-contracts" }
 runtime-infra = { path = "../runtime-infra" }
 runtime-storage = { path = "../runtime-storage" }
-agent-orchestrator = { path = "../agent-orchestrator" }
+# agent-orchestrator = { path = "../agent-orchestrator" }
 trace-runtime = { path = "../trace-runtime" }
 chrono.workspace = true
 clap.workspace = true

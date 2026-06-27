@@ -22,8 +22,6 @@ use std::env;
 
 const ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE_ENV: &str = "ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE";
 const ROUTER_RS_HOOK_TIMING_ENV: &str = "ROUTER_RS_HOOK_TIMING";
-const ROUTER_RS_ORCHESTRATOR_REAL_PROCESS_SMOKE_ENV: &str =
-    "ROUTER_RS_ORCHESTRATOR_REAL_PROCESS_SMOKE";
 
 pub use core_policy::env_flags::{
     router_rs_subagent_model_inherit_nudge_enabled,
@@ -89,32 +87,6 @@ pub fn router_rs_review_gate_stop_max_nudges_cap() -> Option<u32> {
     core_policy::env_flags::router_rs_review_gate_stop_max_nudges_cap()
 }
 
-fn parse_router_rs_usize_clamped(
-    env_key: &'static str,
-    default_val: usize,
-    min_allowed: usize,
-    max_allowed: usize,
-) -> usize {
-    match env::var(env_key) {
-        Err(_) => default_val,
-        Ok(raw) => {
-            let trimmed = raw.trim();
-            if trimmed.is_empty() {
-                return default_val;
-            }
-            match trimmed.parse::<usize>() {
-                Ok(n) => n.clamp(min_allowed, max_allowed),
-                Err(_) => {
-                    tracing::warn!(
-                        "[router-rs] invalid {env_key}={raw:?}; using default {default_val} (clamp {min_allowed}..{max_allowed})"
-                    );
-                    default_val
-                }
-            }
-        }
-    }
-}
-
 /// `ROUTER_RS_QG_MAX_ROUNDS_CAP`: Quality Gate 循环最大轮次硬上限。
 pub fn router_rs_qg_max_rounds_cap() -> u64 {
     const MAX_CAP: u64 = 10000;
@@ -137,11 +109,6 @@ pub fn router_rs_qg_max_rounds_cap() -> u64 {
         })
         .map(|n| n.min(MAX_CAP))
         .unwrap_or(DEFAULT)
-}
-
-/// §6.4 cat.1 real-process spawn/terminate smoke (`sleep 1` via `smoke-shell` host). Opt-in for CI.
-pub fn router_rs_orchestrator_real_process_smoke_enabled() -> bool {
-    router_rs_env_enabled_default_false(ROUTER_RS_ORCHESTRATOR_REAL_PROCESS_SMOKE_ENV)
 }
 
 #[cfg(test)]

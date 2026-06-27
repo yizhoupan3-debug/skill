@@ -3,7 +3,7 @@
 
 //! runtime-core: extracted runtime modules from router-rs.
 //!
-//! Single source of truth for framework_runtime, session_supervisor, and supporting modules.
+//! Single source of truth for framework_runtime and supporting modules.
 
 // ── original four (flattened from runtime-storage) ──
 pub use rt_storage::{runtime_envelope_ids, runtime_storage};
@@ -15,7 +15,6 @@ pub use trace_runtime;
 pub use core_state::closeout_validation as closeout_enforcement;
 pub use fr_contracts::execution_contract;
 pub mod framework_runtime;
-pub use session_supervisor;
 pub use framework_kernel::framework_profile;
 
 // ── QG Route: scene-dispatched CheckerRegistry bridge ──
@@ -48,7 +47,6 @@ pub use fr_exec::router_env_flags::{
     router_rs_task_ledger_flock_enabled, router_rs_hook_timing_enabled,
     router_rs_continuity_post_tool_evidence_enabled,
     router_rs_review_gate_stop_max_nudges_cap, router_rs_qg_max_rounds_cap,
-    router_rs_session_supervisor_real_process_smoke_enabled,
 };
 
 // ── re-exports from rt_core_contracts (remaining pure contract modules) ──
@@ -202,7 +200,7 @@ pub fn init_hooks() {
                     }
                 },
                 // research_tool_dispatch (1 field) — default; research-harness overrides via OnceLock
-                research_tool_dispatch: |_, _| Err(core_policy::error::FrameworkError::validation("research_tool_dispatch not registered")),
+                research_tool_dispatch: |_, _| Err(core_errors::FrameworkError::validation("research_tool_dispatch not registered")),
                 // mcp_tool_routing (2 fields)
                 mcp_tool_skill_route: |query: &str, host_id: &str, first_turn: bool, repo_root: &str| {
                     let repo_root = std::path::Path::new(repo_root);
@@ -258,7 +256,7 @@ pub fn init_hooks() {
                 tool_closeout_record_write_dispatch: framework_runtime::tool_handlers::closeout_record_write_dispatch,
                 tool_closeout_gate_evaluate: framework_runtime::tool_handlers::closeout_gate_evaluate,
                 // browser_dispatch (1 field) — default; set_browser_dispatch overrides via OnceLock
-                browser_dispatch: |_| Err(core_policy::error::FrameworkError::validation("browser-mcp dispatch not registered")),
+                browser_dispatch: |_| Err(core_errors::FrameworkError::validation("browser-mcp dispatch not registered")),
                 // runtime_trace_transport (2 fields)
                 attach_runtime_event_transport: |payload| fr_exec::trace_attach::attach_runtime_event_transport(payload).map_err(Into::into),
                 inspect_trace_stream: |payload| fr_exec::trace_stream_io::inspect_trace_stream(payload).map_err(Into::into),
@@ -283,9 +281,8 @@ pub fn init_hooks() {
                 },
             },
             framework_goal_drive: core_state::state_manager::framework_goal_drive,
-            handle_session_supervisor_operation: |payload| {
-                session_supervisor::handle_session_supervisor_operation(payload)
-                    .map_err(|e| e.to_string())
+            handle_orchestrator_operation: |_payload| {
+                Err("orchestrator operation not registered".to_string())
             },
             #[cfg(feature = "l5-state")]
             handle_background_state_operation: rt_storage::background_state::handle_background_state_operation,

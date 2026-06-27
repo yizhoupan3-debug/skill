@@ -150,8 +150,8 @@ mod tests {
         let verdict = trigger(
             Path::new("/nonexistent"),
             "no-such-task",
-            quality_gate::scene::RESEARCH,
-            "research goal",
+            quality_gate::scene::GENERAL,
+            "test goal",
             None,
             2,
             None,

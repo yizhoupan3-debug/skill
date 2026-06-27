@@ -325,39 +325,6 @@ pub fn host_telemetry_for_id(host_id: &str) -> Option<&'static dyn HostTelemetry
     host_provider_for_id(host_id).map(|provider| provider as &dyn HostTelemetry)
 }
 
-/// Find a provider whose `observation_host_id()` matches, then extract surfaces.
-/// Returns `None` if no provider matches the observation host id.
-pub fn extract_observation_surfaces_for_host(
-    host_id: &str,
-    output: &serde_json::Value,
-) -> Option<(Option<String>, Option<String>)> {
-    let provider = host_provider_registry()
-        .iter()
-        .find(|p| p.observation_host_id() == Some(host_id))?;
-    Some(provider.extract_observation_surfaces(output))
-}
-
-pub fn validate_host_providers_against_registry(
-    supported_host_ids: &[String],
-) -> std::result::Result<(), String> {
-    for provider in host_provider_registry() {
-        let host_id = provider.host_id();
-        if !supported_host_ids.iter().any(|id| id == host_id) {
-            return Err(format!(
-                "HostProvider `{host_id}` is not listed in RUNTIME_REGISTRY.host_targets.supported"
-            ));
-        }
-    }
-    for host_id in supported_host_ids {
-        if host_provider_for_id(host_id).is_none() {
-            return Err(format!(
-                "RUNTIME_REGISTRY supported host `{host_id}` has no HostProvider registration"
-            ));
-        }
-    }
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

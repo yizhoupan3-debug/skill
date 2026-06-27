@@ -572,18 +572,3 @@ pub use core_state_utils::json_io::{write_json_if_changed, write_text_if_changed
 pub fn read_json_if_exists(path: &Path) -> std::result::Result<Option<Value>, String> {
     Ok(Some(core_state_utils::json_io::read_json_if_exists(path)))
 }
-
-pub fn remove_path(path: &Path) -> io::Result<()> {
-    let metadata = fs::symlink_metadata(path)?;
-    if metadata.file_type().is_dir() && !metadata.file_type().is_symlink() {
-        fs::remove_dir_all(path)
-    } else {
-        fs::remove_file(path)
-    }
-}
-
-pub fn symlink_exists(path: &Path) -> bool {
-    fs::symlink_metadata(path)
-        .map(|metadata| metadata.file_type().is_symlink())
-        .unwrap_or(false)
-}

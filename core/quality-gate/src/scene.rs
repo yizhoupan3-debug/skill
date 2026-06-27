@@ -15,14 +15,14 @@ pub const SLIDES: &str = "slides";
 pub const VISUAL: &str = "visual";
 
 /// All valid scene values, for validation.
-pub const ALL: &[&str] = &[GENERAL, RESEARCH, CODE_REVIEW, SLIDES, VISUAL];
+pub(crate) const ALL: &[&str] = &[GENERAL, RESEARCH, CODE_REVIEW, SLIDES, VISUAL];
 
 /// Return true if `s` is a valid scene constant.
-pub fn is_valid(s: &str) -> bool {
+pub(crate) fn is_valid(s: &str) -> bool {
     ALL.contains(&s)
 }
 
 /// Return `s` if valid, otherwise `GENERAL`. Never panics.
-pub fn normalize(s: &str) -> &str {
+pub(crate) fn normalize(s: &str) -> &str {
     if is_valid(s) { s } else { GENERAL }
 }

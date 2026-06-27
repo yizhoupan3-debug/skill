@@ -70,46 +70,6 @@ pub enum HookOutput {
     Raw(Value),
 }
 
-/// Unified input for Stop event orchestration (`evaluate_stop_decision_full`).
-///
-/// Aggregates all context needed by the 8-step Stop pipeline:
-/// closeout → override → goal gate → verification gate → quality gate
-/// → review gate → goal followup → cleanup.
-pub struct StopOrchestrationInput<'a> {
-    /// Repository root path.
-    pub repo_root: &'a Path,
-    /// Host identifier (from RUNTIME_REGISTRY.json).
-    pub host_id: &'a str,
-    /// Raw event payload from the host.
-    pub payload: &'a Value,
-    /// Extracted prompt text (user prompt / last user message).
-    pub prompt: String,
-    /// Extracted response/assistant text from the event.
-    pub response_text: String,
-    /// Extracted completion text (tail of assistant message for closeout matching).
-    pub completion_text: String,
-    /// Optional stop signal reason from the host.
-    pub stop_signal: Option<String>,
-}
-
-/// Unified result from Stop event orchestration.
-///
-/// Each host consumes these fields to produce its own JSON response.
-pub struct StopOrchestrationResult {
-    /// Advisory review nudge message (if review gate produced one).
-    pub review_nudge: Option<String>,
-    /// Goal followup injection (if active Goal with uncovered done_when conditions).
-    pub goal_followup: Option<String>,
-    /// Verification gate advisory (if gate failed or produced warnings).
-    pub verification_advisory: Option<String>,
-    /// Quality gate advisory (if gate not closed).
-    pub quality_advisory: Option<String>,
-    /// Updated state to persist (JSON value).
-    pub updated_state: Option<Value>,
-    /// Whether the stop handler should clear runtime state.
-    pub should_clear_state: bool,
-}
-
 /// Host-specific configuration parameters.
 pub trait HostHookConfig: Send + Sync {
     /// Host identifier for env flag resolution.
@@ -220,7 +180,7 @@ pub trait HostHookDispatcher: HostHookConfig {
                 .unwrap_or_else(|| format!("agent-{}", std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_nanos()));
             let now = framework_kernel::time::now_iso();
-            let payload = serde_json::json!({
+            let _payload = serde_json::json!({
                 "operation": "agent_register",
                 "agent_id": agent_id,
                 "host_id": self.host_id(),
@@ -305,7 +265,7 @@ pub trait HostHookDispatcher: HostHookConfig {
                 .duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_nanos()));
         let host_id = self.host_id();
         let now = framework_kernel::time::now_iso();
-        let payload = serde_json::json!({
+        let _payload = serde_json::json!({
             "operation": "agent_register",
             "agent_id": agent_id,
             "host_id": host_id,
@@ -328,7 +288,7 @@ pub trait HostHookDispatcher: HostHookConfig {
             "completed"
         };
         let error = extract_subagent_error_from_payload(event.payload);
-        let payload = serde_json::json!({
+        let _payload = serde_json::json!({
             "operation": "agent_unregister",
             "agent_id": agent_id,
             "terminal_status": terminal_status,
@@ -376,8 +336,5 @@ pub use core_policy::session_key::TOOL_INPUT_METADATA_SESSION_ID_FIELDS;
 
 pub use crate::hosts::generic_config::GenericHostConfig;
 pub use crate::hosts::host_state::{
-    auto_record_research_activity, auto_record_verification_evidence, closeout_check_shared,
-    ensure_dispatch_bootstrap_shared, load_touch_state_from_path, read_review_gate_file,
-    should_sync_review_gate_on_user_prompt, write_review_state_unlocked, AgentDiskState,
-    TouchState,
+    auto_record_research_activity, auto_record_verification_evidence,
 };

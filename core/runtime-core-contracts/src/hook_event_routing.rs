@@ -1,7 +1,6 @@
 //! Cross-host hook lifecycle event routing contract.
 
 use serde_json::{Value, json};
-use std::borrow::Cow;
 
 pub const HOOK_EVENT_ROUTING_SCHEMA_VERSION: &str = "router-rs-hook-event-routing-v1";
 pub const HOOK_EVENT_ROUTING_AUTHORITY: &str = "rust-hook-event-routing";
@@ -35,74 +34,7 @@ pub fn hook_event_routing_contract() -> Value {
     })
 }
 
-fn normalized_event_key(raw: &str) -> Cow<'_, str> {
-    if raw.bytes().all(|b| b.is_ascii_alphanumeric()) {
-        Cow::Owned(raw.to_ascii_lowercase())
-    } else {
-        Cow::Owned(
-            raw.chars()
-                .filter(|c| c.is_ascii_alphanumeric())
-                .map(|c| c.to_ascii_lowercase())
-                .collect(),
-        )
-    }
-}
-
-/// Map a host-native hook event name to the shared canonical (or extended) lifecycle id.
-pub fn canonical_hook_event(raw: &str) -> Option<&'static str> {
-    match &*normalized_event_key(raw) {
-        "sessionstart" => Some("SessionStart"),
-        "pretooluse" | "toolexecutebefore" => Some("PreToolUse"),
-        "toolexecuteafter" | "posttooluse" => Some("PostToolUse"),
-        "userpromptsubmit" | "beforesubmitprompt" => Some("UserPromptSubmit"),
-        "sessionend" | "sessiondeleted" => Some("SessionEnd"),
-        "sessionidle" => Some("Stop"),
-        "stop" => Some("Stop"),
-        "subagentstart" => Some("SubagentStart"),
-        "subagentstop" => Some("SubagentStop"),
-        "sessioncreated" => Some("SessionStart"),
-        "permissionasked" | "permissionreplied" => Some("PreToolUse"),
-        "fileedited" | "shellenv" => Some("PostToolUse"),
-        _ => None,
-    }
-}
-
-pub fn routable_lifecycle_events() -> impl Iterator<Item = &'static str> {
-    CANONICAL_LIFECYCLE_EVENTS
-        .iter()
-        .copied()
-        .chain(EXTENDED_LIFECYCLE_EVENTS.iter().copied())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn canonical_hook_event_maps_cursor_and_codex_spellings() {
-        assert_eq!(
-            canonical_hook_event("beforeSubmitPrompt"),
-            Some("UserPromptSubmit")
-        );
-        assert_eq!(
-            canonical_hook_event("UserPromptSubmit"),
-            Some("UserPromptSubmit")
-        );
-        assert_eq!(canonical_hook_event("post-tool-use"), Some("PostToolUse"));
-        assert_eq!(canonical_hook_event("sessionEnd"), Some("SessionEnd"));
-        assert!(canonical_hook_event("unknown-event").is_none());
-    }
-
-    #[test]
-    fn canonical_hook_event_maps_opencode_session_events() {
-        // session.idle = Stop (session ending/idle = equivalent of Stop)
-        assert_eq!(canonical_hook_event("sessionidle"), Some("Stop"));
-        assert_eq!(canonical_hook_event("session.idle"), Some("Stop"));
-        // session.created = SessionStart
-        assert_eq!(canonical_hook_event("sessioncreated"), Some("SessionStart"));
-        assert_eq!(canonical_hook_event("session.created"), Some("SessionStart"));
-        // session.deleted = SessionEnd
-        assert_eq!(canonical_hook_event("sessiondeleted"), Some("SessionEnd"));
-        assert_eq!(canonical_hook_event("session.deleted"), Some("SessionEnd"));
-    }
 }

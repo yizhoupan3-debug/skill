@@ -18,19 +18,6 @@ pub fn mark_hook_start() {
     HOOK_STARTED.with(|c| c.set(Some(Instant::now())));
 }
 
-pub fn add_lock_wait_ms(ms: u64) {
-    if ms == 0 || !router_rs_hook_timing_enabled() {
-        return;
-    }
-    LOCK_WAIT_MS.with(|c| c.set(c.get().saturating_add(ms)));
-}
-
-pub fn add_cargo_check_ms(ms: u64) {
-    if ms == 0 || !router_rs_hook_timing_enabled() {
-        return;
-    }
-    CARGO_CHECK_MS.with(|c| c.set(c.get().saturating_add(ms)));
-}
 
 pub fn emit_hook_timing_line(event: &str) {
     if !router_rs_hook_timing_enabled() {

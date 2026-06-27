@@ -11,27 +11,6 @@ type Result<T> = std::result::Result<T, FrameworkError>;
 
 const BLOCKED_HOST_SUFFIXES: &[&str] = &[".localhost", ".local", ".internal"];
 
-#[deprecated(note = "use validate_and_resolve_web_fetch_url for DNS pinning (TOCTOU safety)")]
-pub fn validate_web_fetch_url(url: &str) -> Result<()> {
-    let parsed = reqwest::Url::parse(url.trim())
-        .map_err(|e| FrameworkError::validation(format!("web_fetch invalid URL: {url}: {e}")))?;
-    if !matches!(parsed.scheme(), "http" | "https") {
-        return Err(FrameworkError::validation(format!(
-            "web_fetch only supports http(s) URLs: {url}"
-        )));
-    }
-    let Some(host) = parsed.host_str() else {
-        return Err(FrameworkError::validation(format!(
-            "web_fetch URL missing host: {url}"
-        )));
-    };
-    validate_web_fetch_host(host)?;
-    if let Some(port) = parsed.port() {
-        validate_web_fetch_port(port)?;
-    }
-    Ok(())
-}
-
 /// Validates `url` AND resolves+pins DNS in one pass — single DNS lookup, no TOCTOU window.
 /// Returns the parsed URL and resolved addresses for DNS pinning to prevent rebinding TOCTOU.
 pub fn validate_and_resolve_web_fetch_url(
@@ -245,63 +224,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn rejects_loopback_literal_and_name() {
-        assert!(validate_web_fetch_url("http://127.0.0.1/").is_err());
-        assert!(validate_web_fetch_url("http://localhost/").is_err());
-    }
-
-    #[test]
-    fn accepts_public_https_url_shape() {
-        // Use a literal public IP: some dev DNS proxies map example.com to RFC 2544 ranges.
-        assert!(validate_web_fetch_url("https://8.8.8.8/").is_ok());
-    }
-
-    #[test]
-    fn rejects_cgnat_range() {
-        assert!(validate_web_fetch_url("http://100.64.0.1/").is_err());
-        assert!(validate_web_fetch_url("http://100.127.255.255/").is_err());
-        // 100.63.x.x and 100.128.x.x are NOT in CGNAT range
-        assert!(validate_web_fetch_url("http://100.63.0.1/").is_ok());
-    }
-
-    #[test]
-    fn rejects_benchmarking_range() {
-        assert!(validate_web_fetch_url("http://198.18.0.1/").is_err());
-        assert!(validate_web_fetch_url("http://198.19.255.255/").is_err());
-    }
-
-    #[test]
-    fn rejects_ipv6_multicast() {
-        assert!(validate_web_fetch_url("http://[ff02::1]/").is_err());
-    }
-
-    #[test]
-    fn rejects_ipv6_loopback() {
-        assert!(validate_web_fetch_url("http://[::1]/").is_err());
-    }
-
-    #[test]
-    fn rejects_ipv4_mapped_loopback() {
-        assert!(validate_web_fetch_url("http://[::ffff:127.0.0.1]/").is_err());
-    }
-
-    #[test]
-    fn rejects_metadata_endpoint() {
-        assert!(validate_web_fetch_url("http://169.254.169.254/").is_err());
-    }
-
-    #[test]
-    fn rejects_zero_prefix() {
-        assert!(validate_web_fetch_url("http://0.0.0.1/").is_err());
-    }
-
-    #[test]
-    fn rejects_blocked_suffixes() {
-        assert!(validate_web_fetch_url("http://foo.local/").is_err());
-        assert!(validate_web_fetch_url("http://bar.internal/").is_err());
-    }
-
-    #[test]
     fn resolve_addresses_rejects_loopback() {
         // 127.0.0.1 should be blocked
         assert!(resolve_web_fetch_addresses("127.0.0.1", 80).is_err());
@@ -363,56 +285,6 @@ mod tests {
     }
 
     // --- Additional coverage tests ---
-
-    #[test]
-    fn rejects_private_ip_ranges_10_172_192() {
-        assert!(validate_web_fetch_url("http://10.0.0.1/").is_err());
-        assert!(validate_web_fetch_url("http://10.255.255.255/").is_err());
-        assert!(validate_web_fetch_url("http://172.16.0.1/").is_err());
-        assert!(validate_web_fetch_url("http://172.31.255.255/").is_err());
-        assert!(validate_web_fetch_url("http://192.168.1.1/").is_err());
-        assert!(validate_web_fetch_url("http://192.168.255.255/").is_err());
-    }
-
-    #[test]
-    fn rejects_localhost_subdomain() {
-        assert!(validate_web_fetch_url("http://foo.localhost/").is_err());
-        assert!(validate_web_fetch_url("http://bar.localhost/").is_err());
-    }
-
-    #[test]
-    fn rejects_ipv6_unique_local_and_link_local() {
-        assert!(validate_web_fetch_url("http://[fd00::1]/").is_err());
-        assert!(validate_web_fetch_url("http://[fe80::1]/").is_err());
-    }
-
-    #[test]
-    fn rejects_ipv6_unspecified() {
-        assert!(validate_web_fetch_url("http://[::]/").is_err());
-    }
-
-    #[test]
-    fn rejects_ipv6_mapped_private() {
-        assert!(validate_web_fetch_url("http://[::ffff:10.0.0.1]/").is_err());
-        assert!(validate_web_fetch_url("http://[::ffff:192.168.1.1]/").is_err());
-    }
-
-    #[test]
-    fn rejects_port_zero() {
-        assert!(validate_web_fetch_url("http://example.com:0/").is_err());
-    }
-
-    #[test]
-    fn rejects_trailing_dot_localhost() {
-        assert!(validate_web_fetch_url("http://localhost./").is_err());
-    }
-
-    #[test]
-    fn rejects_case_variants() {
-        assert!(validate_web_fetch_url("http://LOCALHOST/").is_err());
-        assert!(validate_web_fetch_url("http://Foo.Local/").is_err());
-        assert!(validate_web_fetch_url("http://Bar.Internal/").is_err());
-    }
 
     #[test]
     fn browser_open_rejects_ipv6_variants() {

@@ -42,15 +42,6 @@ pub struct HostHooksSnapshot {
     pub hooks_template_parity_issues: Vec<String>,
 }
 
-/// Check whether a hooks snapshot is "ok" (no issues).
-pub fn host_hooks_snapshot_ok(s: &HostHooksSnapshot) -> bool {
-    s.forbidden_still_registered.is_empty()
-        && s.missing_required.is_empty()
-        && s.hook_command_issues.is_empty()
-        && s.gate_timeout_issues.is_empty()
-        && s.hooks_template_parity_issues.is_empty()
-}
-
 // ---------------------------------------------------------------------------
 // Gate timeout expectations (shared across all hosts that use the same format)
 // ---------------------------------------------------------------------------

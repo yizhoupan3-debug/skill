@@ -5,71 +5,6 @@
 use serde_json::Value;
 use std::path::Path;
 
-/// Generic disk state indicator for hook state files.
-pub enum AgentDiskState<T> {
-    Absent,
-    Ok(T),
-    Unreadable,
-}
-
-/// Shared touch state tracking (settings/framework file modifications).
-#[derive(Default, serde::Serialize, serde::Deserialize)]
-pub struct TouchState {
-    pub settings: bool,
-    pub framework: bool,
-    pub settings_validated: bool,
-    pub framework_tested: bool,
-}
-
-/// Write HookReviewDiskCore to disk with version bump.
-pub fn write_review_state_unlocked(path: &Path, state: &core_policy::HookReviewDiskCore) -> Result<(), String> {
-    let mut to_write = state.clone();
-    to_write.bump_version_for_save();
-    let mut body = serde_json::to_string(&to_write).map_err(|e| e.to_string())?;
-    body.push('\n');
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-    }
-    std::fs::write(path, &body).map_err(|e| e.to_string())
-}
-
-/// Read HookReviewDiskCore from disk with migration support.
-pub fn read_review_gate_file(path: &Path) -> AgentDiskState<core_policy::HookReviewDiskCore> {
-    let raw = match std::fs::read_to_string(path) {
-        Ok(s) => s,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return AgentDiskState::Absent,
-        Err(_) => return AgentDiskState::Unreadable,
-    };
-    if raw.trim().is_empty() {
-        return AgentDiskState::Unreadable;
-    }
-    let value: Value = match serde_json::from_str(&raw) {
-        Ok(v) => v,
-        Err(_) => return AgentDiskState::Unreadable,
-    };
-    AgentDiskState::Ok(core_policy::migrate_hook_review_disk_core(&value))
-}
-
-/// Read TouchState from disk.
-pub fn load_touch_state_from_path(touch_path: &Path) -> AgentDiskState<TouchState> {
-    match std::fs::read_to_string(touch_path) {
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return AgentDiskState::Absent,
-        Ok(text) => match serde_json::from_str(&text) {
-            Ok(state) => AgentDiskState::Ok(state),
-            Err(_) => AgentDiskState::Unreadable,
-        },
-        Err(_) => AgentDiskState::Unreadable,
-    }
-}
-
-/// Determine if review gate should sync on UserPromptSubmit.
-pub fn should_sync_review_gate_on_user_prompt(repo_root: &Path, prompt: &str) -> bool {
-    core_policy::hook_common::is_task_profile(Some(repo_root), prompt)
-        || core_policy::hook_common::is_narrow_review_prompt(prompt)
-        || core_policy::hook_common::is_review_prompt(prompt)
-        || core_policy::hook_common::has_override(prompt)
-}
-
 /// Auto-record verification evidence from a Bash tool call.
 pub fn auto_record_verification_evidence(repo_root: &Path, payload: &Value) {
     let tool_name = payload.get("tool_name").and_then(Value::as_str).unwrap_or_default();
@@ -109,14 +44,4 @@ pub fn auto_record_research_activity(repo_root: &Path, payload: &Value) {
     };
     if summary.is_empty() || summary == tool_name { return; }
     crate::hooks::maybe_record_research_activity(repo_root, tool_name, &summary);
-}
-
-/// Standard closeout check (delegates to hooks proxy).
-pub fn closeout_check_shared(repo_root: &Path, text: &str) -> Option<String> {
-    crate::hooks::closeout_stop_followup_for_completion_text(repo_root, text)
-}
-
-/// Standard dispatch bootstrap.
-pub fn ensure_dispatch_bootstrap_shared() {
-    crate::hooks::ensure_kernel_bootstrap();
 }

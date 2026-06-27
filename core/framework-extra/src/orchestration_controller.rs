@@ -2,43 +2,28 @@
 //!
 //! This file contains static data constructors with hardcoded parameters.
 
-use core_errors::FrameworkError;
 use std::collections::HashSet;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde_json::{Value, json};
 
-use fr_contracts::execution_contract::{
-    EXECUTION_RESPONSE_SHAPE_LIVE_PRIMARY, EXECUTION_SCHEMA_VERSION,
-    build_execution_kernel_contracts_by_mode, build_execution_kernel_metadata_contract,
-    build_steady_state_execution_kernel_metadata,
-};
-use routing_engine::route::ROUTE_AUTHORITY;
 use fr_utils::constants::{
-    FRAMEWORK_RUNTIME_AUTHORITY, RUNTIME_BACKGROUND_ORCHESTRATION_SCHEMA_VERSION,
     RUNTIME_EVENT_HANDOFF_SCHEMA_VERSION, RUNTIME_EVENT_SINK_SCHEMA_VERSION,
     RUNTIME_EVENT_STREAM_SCHEMA_VERSION,
 };
 use rt_storage::runtime_envelope_ids::{
     BACKGROUND_CONTROL_AUTHORITY, BACKGROUND_CONTROL_SCHEMA_VERSION,
-    RUNTIME_CONTROL_PLANE_AUTHORITY, RUNTIME_CONTROL_PLANE_SCHEMA_VERSION,
-    RUNTIME_INTEGRATOR_AUTHORITY, RUNTIME_INTEGRATOR_SCHEMA_VERSION,
+    RUNTIME_CONTROL_PLANE_AUTHORITY,
     RUNTIME_OBSERVABILITY_DASHBOARD_SCHEMA_VERSION, RUNTIME_OBSERVABILITY_EXPORTER_SCHEMA_VERSION,
     RUNTIME_OBSERVABILITY_HEALTH_SNAPSHOT_SCHEMA_VERSION,
     RUNTIME_OBSERVABILITY_METRIC_CATALOG_SCHEMA_VERSION,
-    RUNTIME_OBSERVABILITY_METRIC_CATALOG_VERSION,
-    RUNTIME_OBSERVABILITY_METRIC_RECORD_SCHEMA_VERSION, RUNTIME_OBSERVABILITY_SIGNAL_VOCABULARY,
-};
-use rt_storage::runtime_storage::{
-    runtime_backend_family_catalog_payload, runtime_backend_family_parity_payload,
+    RUNTIME_OBSERVABILITY_METRIC_CATALOG_VERSION, RUNTIME_OBSERVABILITY_SIGNAL_VOCABULARY,
 };
 use framework_kernel::stdio_payload_types::{
     BackgroundControlEffectPlanPayload, BackgroundControlRequestPayload,
     BackgroundControlResponsePayload,
 };
-use framework_kernel::stdio_payload_types::runtime_concurrency_defaults_payload;
 
-use fr_utils::json_value::required_non_empty_string;
 
 fn background_effect_plan(next_step: &str) -> BackgroundControlEffectPlanPayload {
     BackgroundControlEffectPlanPayload {
@@ -582,265 +567,6 @@ pub fn build_background_control_response(
         other => Err(format!("unsupported background control operation: {other}")),
     }
 }
-
-pub fn build_runtime_control_plane_payload() -> Value {
-    let concurrency_defaults = runtime_concurrency_defaults_payload();
-    let services = serde_json::json!({
-        "router": {
-            "authority": ROUTE_AUTHORITY,
-            "role": "route-selection",
-            "projection": "rust-owned-live-route",
-            "delegate_kind": "rust-route-core",
-        },
-        "skill_loader": {
-            "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
-            "role": "skill-registry-projection",
-            "projection": "rust-native-projection",
-            "delegate_kind": "rust-runtime-control-plane",
-        },
-        "prompt_builder": {
-            "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
-            "role": "prompt-contract-projection",
-            "projection": "rust-native-projection",
-            "delegate_kind": "rust-execution-cli",
-        },
-        "middleware": {
-            "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
-            "role": "middleware-policy-projection",
-            "projection": "rust-native-projection",
-            "delegate_kind": "rust-runtime-control-plane",
-            "subagent_limit_contract": {
-                "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
-                "owner": "rust-runtime-control-plane",
-                "projection": "rust-native-projection",
-                "limit_owner": "rust-control-plane",
-                "max_concurrent_subagents": concurrency_defaults.max_concurrent_subagents,
-                "max_concurrent_subagents_limit": concurrency_defaults.max_concurrent_subagents_limit,
-                "timeout_seconds": concurrency_defaults.subagent_timeout_seconds,
-                "enforcement_mode": "rust-owned-policy-native-enforced",
-            },
-        },
-        "state": {
-            "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
-            "role": "durable-background-state",
-            "projection": "rust-native-projection",
-            "delegate_kind": "filesystem-state-store",
-        },
-        "trace": {
-            "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
-            "role": "trace-and-handoff",
-            "projection": "rust-native-projection",
-            "delegate_kind": "filesystem-trace-store",
-        },
-        "checkpoint": {
-            "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
-            "role": "checkpoint-artifact-projection",
-            "projection": "rust-native-projection",
-            "delegate_kind": "filesystem-checkpointer",
-            "backend_family_catalog": runtime_backend_family_catalog_payload(),
-            "backend_family_parity": runtime_backend_family_parity_payload(
-                Some("filesystem"),
-                Some("filesystem"),
-                Some("filesystem"),
-                Some("filesystem"),
-            )
-            .expect("hardcoded 'filesystem' is a valid built-in backend family"),
-        },
-        "execution": {
-            "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
-            "role": "execution-kernel-control",
-            "projection": "rust-native-projection",
-            "delegate_kind": "rust-execution-kernel-slice",
-            "kernel_contract": Value::Object(build_steady_state_execution_kernel_metadata(
-                EXECUTION_RESPONSE_SHAPE_LIVE_PRIMARY,
-            )),
-            "kernel_contract_by_mode": Value::Object(build_execution_kernel_contracts_by_mode()),
-            "kernel_metadata_contract": build_execution_kernel_metadata_contract(),
-            "kernel_adapter_kind": "rust-execution-kernel-slice",
-            "kernel_authority": "rust-execution-kernel-authority",
-            "kernel_owner_family": "rust",
-            "kernel_owner_impl": "execution-kernel-slice",
-            "kernel_contract_mode": "rust-live-primary",
-            "kernel_replace_ready": true,
-            "kernel_in_process_replacement_complete": true,
-            "kernel_live_backend_family": "rust-cli",
-            "kernel_live_backend_impl": "router-rs",
-            "kernel_live_delegate_kind": "router-rs",
-            "kernel_live_delegate_authority": "rust-execution-cli",
-            "kernel_live_delegate_family": "rust-cli",
-            "kernel_live_delegate_impl": "router-rs",
-            "kernel_live_delegate_mode": "rust-primary",
-            "kernel_mode_support": ["dry_run", "live"],
-            "execution_schema_version": EXECUTION_SCHEMA_VERSION,
-        },
-        "background": {
-            "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
-            "role": "background-orchestration",
-            "projection": "rust-native-projection",
-            "delegate_kind": "rust-background-control-policy",
-            "orchestration_contract": {
-                "schema_version": RUNTIME_BACKGROUND_ORCHESTRATION_SCHEMA_VERSION,
-                "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
-                "role": "background-orchestration-control",
-                "projection": "rust-native-projection",
-                "delegate_kind": "rust-background-control-policy",
-                "policy_schema_version": BACKGROUND_CONTROL_SCHEMA_VERSION,
-                "queue_model": "bounded-async-host",
-                "session_takeover_model": "state-store-lease-arbitration",
-                "state_artifact": "runtime_background_jobs.json",
-                "active_statuses": [
-                    "queued",
-                    "running",
-                    "interrupt_requested",
-                    "retry_scheduled",
-                    "retry_claimed"
-                ],
-                "terminal_statuses": [
-                    "completed",
-                    "failed",
-                    "interrupted",
-                    "retry_exhausted"
-                ],
-                "policy_operations": [
-                    "batch-plan",
-                    "enqueue",
-                    "claim",
-                    "interrupt",
-                    "interrupt-finalize",
-                    "retry",
-                    "retry-claim",
-                    "complete",
-                    "completion-race",
-                    "session-release"
-                ],
-                "max_background_jobs": concurrency_defaults.max_background_jobs,
-                "max_background_jobs_limit": concurrency_defaults.max_background_jobs_limit,
-                "background_job_timeout_seconds": concurrency_defaults.background_job_timeout_seconds,
-                "admission_owner": "rust-background-control-policy",
-                "queue_concurrency_owner": "rust-control-plane",
-            },
-        },
-    });
-    let rust_owned_service_count = services
-        .as_object()
-        .map(|service_map| service_map.len())
-        .unwrap_or(0);
-
-    serde_json::json!({
-        "schema_version": RUNTIME_CONTROL_PLANE_SCHEMA_VERSION,
-        "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
-        "default_route_mode": "rust",
-        "default_route_authority": ROUTE_AUTHORITY,
-        "runtime_status": {
-            "runtime_primary_owner": "rust-control-plane",
-            "runtime_primary_owner_authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
-            "hot_path_projection_mode": "descriptor-driven",
-            "framework_runtime_replacement": "router-rs::framework_runtime",
-            "framework_runtime_replacement_authority": FRAMEWORK_RUNTIME_AUTHORITY,
-        },
-        "runtime_host": {
-            "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
-            "role": "runtime-orchestration",
-            "projection": "rust-native-projection",
-            "delegate_kind": "rust-runtime-control-plane",
-            "startup_order": ["router", "state", "trace", "execution", "background"],
-            "shutdown_order": ["background", "execution", "trace", "state", "router"],
-            "health_sections": [
-                "router",
-                "state",
-                "trace",
-                "execution_environment",
-                "background",
-                "checkpoint"
-            ],
-            "rust_owned_service_count": rust_owned_service_count,
-            "concurrency_contract": {
-                "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
-                "owner": "rust-control-plane",
-                "router_stdio_pool_owner": "rust-control-plane",
-                "router_stdio_pool_default_size": concurrency_defaults.router_stdio.default_pool_size,
-                "router_stdio_pool_max_size": concurrency_defaults.router_stdio.max_pool_size,
-                "router_stdio_pool_env_keys": concurrency_defaults.router_stdio.env_keys,
-                "router_stdio_pool_scheduling": concurrency_defaults.router_stdio.scheduling,
-                "router_stdio_backpressure": concurrency_defaults.router_stdio.backpressure,
-                "stdio_max_concurrency_arg": concurrency_defaults.router_stdio.stdio_max_concurrency_arg,
-                "request_concurrency_field": concurrency_defaults.router_stdio.request_concurrency_field,
-                "compute_threads_owner": "rust-control-plane",
-                "compute_threads_default": concurrency_defaults.compute.default_threads,
-                "compute_threads_max": concurrency_defaults.compute.max_threads,
-                "compute_threads_env_keys": concurrency_defaults.compute.env_keys,
-                "compute_threads_arg": concurrency_defaults.compute.cli_arg,
-                "compute_threads_scheduling": concurrency_defaults.compute.scheduling,
-                "max_background_jobs": concurrency_defaults.max_background_jobs,
-                "max_background_jobs_limit": concurrency_defaults.max_background_jobs_limit,
-                "max_concurrent_subagents": concurrency_defaults.max_concurrent_subagents,
-                "max_concurrent_subagents_limit": concurrency_defaults.max_concurrent_subagents_limit,
-                "background_job_timeout_seconds": concurrency_defaults.background_job_timeout_seconds,
-                "subagent_timeout_seconds": concurrency_defaults.subagent_timeout_seconds,
-            },
-        },
-        "services": services,
-    })
-}
-
-pub fn build_runtime_integrator_payload() -> Value {
-    let control_plane = build_runtime_control_plane_payload();
-    let runtime_host = control_plane.get("runtime_host").unwrap_or(&Value::Null);
-    let services = control_plane.get("services").unwrap_or(&Value::Null);
-    let runtime_status = control_plane.get("runtime_status").unwrap_or(&Value::Null);
-    let concurrency_contract = runtime_host
-        .get("concurrency_contract")
-        .unwrap_or(&Value::Null);
-    let subagent_limit_contract = services
-        .get("middleware")
-        .and_then(Value::as_object)
-        .and_then(|middleware| middleware.get("subagent_limit_contract"))
-        .unwrap_or(&Value::Null);
-    let observability_exporter = build_runtime_observability_exporter_descriptor();
-    let observability_metric_catalog = build_runtime_observability_metric_catalog_payload();
-    let observability_dashboard = runtime_observability_dashboard_schema();
-    let metric_names = observability_metric_catalog["metrics"]
-        .as_array()
-        .map(|metrics| {
-            metrics
-                .iter()
-                .filter_map(|metric| metric.get("metric_name").cloned())
-                .collect::<Vec<Value>>()
-        })
-        .unwrap_or_default();
-    let dashboard_panel_count = observability_dashboard["panels"]
-        .as_array()
-        .map(|items| items.len())
-        .unwrap_or(0);
-    let dashboard_alert_count = observability_dashboard["alerts"]
-        .as_array()
-        .map(|items| items.len())
-        .unwrap_or(0);
-    json!({
-        "schema_version": RUNTIME_INTEGRATOR_SCHEMA_VERSION,
-        "authority": RUNTIME_INTEGRATOR_AUTHORITY,
-        "mode": "rust-owned-thin-orchestration",
-        "control_plane": control_plane,
-        "runtime_host": runtime_host,
-        "services": services,
-        "runtime_status": runtime_status,
-        "concurrency_contract": concurrency_contract,
-        "subagent_limit_contract": subagent_limit_contract,
-        "observability": {
-            "schema_version": RUNTIME_OBSERVABILITY_HEALTH_SNAPSHOT_SCHEMA_VERSION,
-            "ownership_lane": observability_exporter["ownership_lane"],
-            "metric_catalog_version": observability_exporter["metric_catalog_version"],
-            "dashboard_schema_version": observability_dashboard["schema_version"],
-            "resource_dimensions": observability_dashboard["resource_dimensions"],
-            "metric_catalog_schema_version": observability_metric_catalog["schema_version"],
-            "metric_names": metric_names,
-            "dashboard_panel_count": dashboard_panel_count,
-            "dashboard_alert_count": dashboard_alert_count,
-            "exporter": observability_exporter,
-        },
-    })
-}
-
 fn runtime_observability_resource_dimensions() -> Vec<&'static str> {
     vec![
         "service.name",
@@ -1047,70 +773,3 @@ pub fn runtime_observability_dashboard_schema() -> Value {
     })
 }
 
-pub fn build_runtime_metric_record(payload: Value) -> Result<Value, FrameworkError> {
-    let metric_name = required_non_empty_string(&payload, "metric_name", "runtime metric record")?;
-    let spec = runtime_observability_metric_catalog()
-        .into_iter()
-        .find(|entry| {
-            entry.get("metric_name").and_then(Value::as_str) == Some(metric_name.as_str())
-        })
-        .ok_or_else(|| FrameworkError::unsupported(format!("unsupported runtime metric: {metric_name}")))?;
-
-    let value = payload
-        .get("value")
-        .cloned()
-        .ok_or_else(|| FrameworkError::validation("runtime metric record requires a numeric value".to_string()))?;
-    let numeric_value = value
-        .as_f64()
-        .ok_or_else(|| FrameworkError::validation("runtime metric record requires a numeric value".to_string()))?;
-    if !numeric_value.is_finite() {
-        return Err(FrameworkError::validation("metric value must be finite".to_string()));
-    }
-
-    let service_name =
-        required_non_empty_string(&payload, "service_name", "runtime metric record")?;
-    let service_version =
-        required_non_empty_string(&payload, "service_version", "runtime metric record")?;
-    let runtime_instance_id =
-        required_non_empty_string(&payload, "runtime_instance_id", "runtime metric record")?;
-    let route_engine_mode =
-        required_non_empty_string(&payload, "route_engine_mode", "runtime metric record")?;
-    let job_id = required_non_empty_string(&payload, "job_id", "runtime metric record")?;
-    let session_id = required_non_empty_string(&payload, "session_id", "runtime metric record")?;
-    let worker_id = required_non_empty_string(&payload, "worker_id", "runtime metric record")?;
-    let generation = required_non_empty_string(&payload, "generation", "runtime metric record")?;
-    let attempt = payload
-        .get("attempt")
-        .and_then(Value::as_i64)
-        .ok_or_else(|| FrameworkError::validation("runtime metric record requires integer field attempt".to_string()))?;
-    if attempt < 0 {
-        return Err(
-            FrameworkError::validation("runtime metric record requires non-negative integer field attempt".to_string()),
-        );
-    }
-
-    Ok(json!({
-        "schema_version": RUNTIME_OBSERVABILITY_METRIC_RECORD_SCHEMA_VERSION,
-        "metric_name": metric_name,
-        "metric_type": spec.get("metric_type").cloned().unwrap_or(Value::Null),
-        "unit": spec.get("unit").cloned().unwrap_or(Value::Null),
-        "value": value,
-        "resource_attributes": {
-            "service.name": service_name,
-            "service.version": service_version,
-            "runtime.instance.id": runtime_instance_id,
-            "route_engine_mode": route_engine_mode,
-        },
-        "dimensions": {
-            "runtime.job_id": job_id,
-            "runtime.session_id": session_id,
-            "runtime.attempt": attempt,
-            "runtime.worker_id": worker_id,
-            "runtime.generation": generation,
-            "runtime.schema_version": RUNTIME_OBSERVABILITY_METRIC_RECORD_SCHEMA_VERSION,
-            "runtime.stage": "runtime.metric",
-            "runtime.status": "ok",
-        },
-        "ownership": build_runtime_observability_exporter_descriptor(),
-    }))
-}

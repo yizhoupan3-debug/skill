@@ -15,21 +15,11 @@ use std::sync::OnceLock;
 type HookDuplicateCheckFn = fn(repo_root: &Path) -> Vec<String>;
 static HOOK_DUPLICATE_CHECK: OnceLock<HookDuplicateCheckFn> = OnceLock::new();
 
-pub fn register_hook_duplicate_check(f: HookDuplicateCheckFn) {
-    HOOK_DUPLICATE_CHECK.set(f).ok();
-}
-
 pub fn check_hook_duplicates(repo_root: &Path) -> Vec<String> {
     match HOOK_DUPLICATE_CHECK.get() {
         Some(f) => f(repo_root),
         None => vec![],
     }
-}
-
-/// Get a reference to the registered hooks. Returns `None` if not yet registered —
-/// callers should fall back to no-op/default behavior.
-pub fn try_hooks() -> Option<&'static RuntimeCoreHooks> {
-    RUNTIME_CORE_HOOKS.get()
 }
 
 static RUNTIME_CORE_HOOKS: OnceLock<RuntimeCoreHooks> = OnceLock::new();

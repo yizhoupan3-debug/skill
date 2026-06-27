@@ -353,9 +353,8 @@ When lanes require structured verification, load the corresponding skill:
 ### Loop mode 核心流程
 
 ```
-Step 1: 初始化 Quality Gate 账本
-  quality_gate_manage(operation=start,
-    goal="顶刊标准 paper revision — 对抗审稿 → 修复 → 收敛",
+Step 1: 启动对抗审稿循环
+  research_review_loop(operation=start,
     max_rounds=10,
     min_rounds=5,
     consecutive_stable_required=2)
@@ -378,23 +377,25 @@ Step 2: 多轮循环（一次只 spawn 一个 reviewer subagent）
     # 2b: 主会话修复（surgical edit_scope）
     基于 findings 执行改稿
 
-    # 2c: 记录轮次
-    quality_gate_manage(operation=append_round,
+    # 2c: 提交轮次审稿发现
+    research_review_loop(operation=submit_round,
       round=round,
-      review_summary=..., fix_summary=...,
-      adversarial_findings=...,
-      supervisor_decision="continue")
+      findings=[...adversarial_findings],
+      max_rounds=10)
 
     # 2d: 收敛检查
     IF 无新 A/B 级 findings AND round >= min_rounds → stable_count++
     ELSE → stable_count = 0
     IF stable_count >= consecutive_stable_required → BREAK（收敛）
 
-Step 3: 关闭 Quality Gate
-  quality_gate_manage(operation=append_round,
-    round=current_round,
-    supervisor_decision="close",
-    verify_result="PASS")
+Step 3: 关闭 — 检查收尾就绪并写入 Closeout Record
+  closeout_gate(task_id=<task_id>)
+  closeout_record_write(task_id=<task_id>,
+    summary="Paper revision converged after N rounds",
+    verification_status="passed",
+    changed_files=[...],
+    blockers=[],
+    risks=[])
 
 Step 4: 输出收敛报告（verdict + 每轮 findings 摘要 + 改动统计）
 ```

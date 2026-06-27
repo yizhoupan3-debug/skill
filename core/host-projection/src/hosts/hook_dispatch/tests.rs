@@ -79,11 +79,3 @@ fn test_warn_returns_warning_field() {
     let result = hook_output_to_json_value("E", Some(warn));
     assert_eq!(result["warning"], "caution");
 }
-
-#[test]
-fn test_should_sync_review_gate_detects_review_prompt() {
-    crate::hooks::ensure_kernel_bootstrap();
-    let tmp = std::env::temp_dir();
-    assert!(should_sync_review_gate_on_user_prompt(&tmp, "review this code"));
-    assert!(!should_sync_review_gate_on_user_prompt(&tmp, "hello world"));
-}

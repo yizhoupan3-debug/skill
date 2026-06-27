@@ -136,8 +136,6 @@ pub fn validate_mcp_servers_from_json(
 pub enum McpConfigFormat {
     /// JSON config with a named top-level key (e.g. "mcp_servers" or "mcpServers").
     Json { top_level_key: &'static str },
-    /// TOML config with `# managed_by: skill-framework · mcp_servers.<id>` marker sections.
-    Toml,
 }
 
 impl McpConfigFormat {
@@ -158,11 +156,7 @@ pub fn mcp_json_upsert_servers(
     format: McpConfigFormat,
     entries: &[(&str, Value)],
 ) -> Result<bool> {
-    let McpConfigFormat::Json { top_level_key } = format else {
-        return Err(FrameworkError::config(
-            "mcp_json_upsert_servers called with non-JSON format",
-        ));
-    };
+    let McpConfigFormat::Json { top_level_key } = format;
     let mut payload = read_json_if_exists(path)?.unwrap_or_else(|| json!({}));
     if !payload.is_object() {
         payload = json!({});
@@ -197,9 +191,7 @@ pub fn mcp_json_remove_servers(
     framework_root: &Path,
     format: McpConfigFormat,
 ) -> Result<bool> {
-    let McpConfigFormat::Json { top_level_key } = format else {
-        return Err("mcp_json_remove_servers called with non-JSON format".to_string().into());
-    };
+    let McpConfigFormat::Json { top_level_key } = format;
     let Some(mut payload) = read_json_if_exists(path)? else {
         return Ok(false);
     };
@@ -227,9 +219,7 @@ pub fn mcp_json_managed_key_paths(
     framework_root: &Path,
     format: McpConfigFormat,
 ) -> Result<Vec<String>> {
-    let McpConfigFormat::Json { top_level_key } = format else {
-        return Ok(vec![]);
-    };
+    let McpConfigFormat::Json { top_level_key } = format;
     Ok(registry_managed_mcp_server_ids(framework_root)?
         .iter()
         .map(|id| format!("{top_level_key}.{id}"))

@@ -7,7 +7,7 @@ pub use framework_kernel::json_value::*;
 
 use serde_json::Value;
 
-pub fn nested_value<'a>(payload: &'a Value, path: &[&str]) -> Option<&'a Value> {
+fn nested_value<'a>(payload: &'a Value, path: &[&str]) -> Option<&'a Value> {
     let mut current = payload;
     for key in path {
         current = current.get(*key)?;

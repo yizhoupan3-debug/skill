@@ -96,7 +96,7 @@ impl Default for CheckerRegistry {
 ///   - Any finding severity = A/B → gate fails
 ///   - All findings ≤ Warning (or empty) → gate passes
 ///   - Anti-fraud gate (Stage 1) is separate — not handled here.
-pub fn aggregate(results: &[CheckResult]) -> GateVerdict {
+fn aggregate(results: &[CheckResult]) -> GateVerdict {
     let checkers_ran = results.len();
     let mut blockers: Vec<Finding> = Vec::new();
     let mut advisories: Vec<Finding> = Vec::new();

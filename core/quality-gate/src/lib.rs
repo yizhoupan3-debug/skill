@@ -21,5 +21,5 @@ pub mod types;
 
 // Re-exports for convenience.
 pub use checker::GateChecker;
-pub use registry::{CheckerRegistry, aggregate};
+pub use registry::CheckerRegistry;
 pub use types::{CheckContext, CheckResult, Finding, GateVerdict, Severity};

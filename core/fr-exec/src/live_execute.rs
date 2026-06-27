@@ -833,8 +833,6 @@ mod tests {
             layer: "L3".into(), route_engine: None, diagnostic_route_mode: None,
             reasons: vec![], prompt_preview: None, dry_run: false,
             trace_event_count: 0, trace_output_path: None, default_output_tokens: 512,
-            execution_protocol: None,
-            verification_required: None, evidence_required: None,
             model_id: "gpt-4".into(), aggregator_base_url: "".into(), aggregator_api_key: "".into(),
         };
         let prompt = build_live_execute_prompt(&p);
@@ -1157,8 +1155,6 @@ mod tests {
             layer: "L3".into(), route_engine: None, diagnostic_route_mode: None,
             reasons: vec![], prompt_preview: None, dry_run: false,
             trace_event_count: 0, trace_output_path: None, default_output_tokens: 512,
-            execution_protocol: None,
-            verification_required: None, evidence_required: None,
             model_id: "gpt-4".into(), aggregator_base_url: "".into(),
             aggregator_api_key: "".into(),
         }

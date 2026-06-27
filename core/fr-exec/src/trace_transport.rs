@@ -73,7 +73,7 @@ fn build_transport_health_payload(payload: &Value) -> Value {
     })
 }
 
-pub fn build_trace_transport_payload(
+fn build_trace_transport_payload(
     payload: &Value,
     session_id: String,
     job_id: Option<String>,

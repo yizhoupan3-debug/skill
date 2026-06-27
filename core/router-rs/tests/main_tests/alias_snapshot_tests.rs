@@ -286,7 +286,7 @@ fn framework_snapshot_reconciles_stale_supervisor_against_current_pointers() {
     );
 
     let payload =
-        build_framework_runtime_snapshot_envelope(&repo_root, None, None).expect("build snapshot");
+        build_framework_runtime_snapshot_envelope_with_level(&repo_root, None, None, "summary").expect("build snapshot");
     let snapshot = &payload["runtime_snapshot"];
     assert_eq!(snapshot["active_task_id"], json!("fresh-task"));
     assert_eq!(snapshot["continuity"]["state"], json!("inconsistent"));
@@ -311,7 +311,7 @@ fn framework_runtime_snapshot_surfaces_invalid_task_registry_json() {
     fs::create_dir_all(&current_root).unwrap();
     fs::write(current_root.join("task_registry.json"), "{truncated").unwrap();
     let payload =
-        build_framework_runtime_snapshot_envelope(&repo_root, None, None).expect("snapshot");
+        build_framework_runtime_snapshot_envelope_with_level(&repo_root, None, None, "summary").expect("snapshot");
     let reasons = payload["runtime_snapshot"]["control_plane_inconsistency_reasons"]
         .as_array()
         .expect("control plane reasons");

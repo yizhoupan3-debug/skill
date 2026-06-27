@@ -8,7 +8,7 @@ pub mod capability_overrides;
 /// Unified hook dispatch trait + shared utilities for all 4 hosts.
 pub mod hook_dispatch;
 
-/// Shared state management (AgentDiskState, TouchState, review state).
+/// Shared state management (automated evidence, research activity recording).
 pub mod host_state;
 
 /// Generic host configuration (data-driven, no hardcoded host names).

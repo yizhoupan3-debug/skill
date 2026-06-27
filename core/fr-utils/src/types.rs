@@ -1,7 +1,7 @@
 //! Internal value types for the framework runtime read model.
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 #[derive(Debug, Clone, Copy)]
 pub struct TaskRegistryEntry<'a> {

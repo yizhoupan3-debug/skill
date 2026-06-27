@@ -24,12 +24,6 @@ pub struct ExecuteRequestPayload {
     pub trace_event_count: usize,
     pub trace_output_path: Option<String>,
     pub default_output_tokens: usize,
-    #[serde(default)]
-    pub execution_protocol: Option<String>,
-    #[serde(default)]
-    pub verification_required: Option<bool>,
-    #[serde(default)]
-    pub evidence_required: Option<bool>,
     pub model_id: String,
     pub aggregator_base_url: String,
     pub aggregator_api_key: String,
@@ -447,9 +441,6 @@ mod tests {
             trace_event_count: 0,
             trace_output_path: None,
             default_output_tokens: 4096,
-            execution_protocol: None,
-            verification_required: None,
-            evidence_required: None,
             model_id: "claude-sonnet".into(),
             aggregator_base_url: "http://localhost".into(),
             aggregator_api_key: "key".into(),
