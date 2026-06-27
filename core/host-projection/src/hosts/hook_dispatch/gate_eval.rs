@@ -1,5 +1,6 @@
 use serde_json::Value;
 use std::path::Path;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 fn default_subagent_review_types() -> &'static [&'static str] {
     static TYPES: std::sync::OnceLock<Vec<&'static str>> = std::sync::OnceLock::new();
@@ -28,33 +29,6 @@ pub fn subagent_review_types() -> &'static [&'static str] {
     default_subagent_review_types()
 }
 
-/// Extract and normalize subagent type from tool input fields.
-pub fn recognize_subagent_type(tool_input: &Value) -> Option<String> {
-    use core_policy::hook_common::normalize_subagent_type;
-    let review_types = subagent_review_types();
-    let typed_fields = [
-        tool_input.get("subagent_type").and_then(Value::as_str),
-        tool_input.get("agent_type").and_then(Value::as_str),
-        tool_input.get("agentType").and_then(Value::as_str),
-        tool_input.get("type").and_then(Value::as_str),
-    ];
-    typed_fields
-        .into_iter()
-        .map(|field| normalize_subagent_type(field))
-        .find(|normalized| review_types.contains(&normalized.as_str()))
-}
-
-/// Compute review lane and parallel lane bits from subagent kind.
-pub fn subagent_lane_bits(kind: Option<&str>) -> (bool, bool) {
-    let Some(k) = kind else {
-        return (false, false);
-    };
-    let review_types = subagent_review_types();
-    let review_lane = review_types.contains(&k);
-    let parallel_lane = matches!(k, "general-purpose" | "deep-review-agent");
-    (review_lane, parallel_lane)
-}
-
 /// Default review types (used by most hosts).
 pub fn default_review_types() -> &'static [&'static str] {
     subagent_review_types()
@@ -69,14 +43,6 @@ pub fn subagent_lane_bits_with_types(kind: Option<&str>, review_types: &[&str]) 
     (review_lane, parallel_lane)
 }
 
-/// Host-aware subagent lane bits. Uses host-specific review type set.
-pub fn subagent_lane_bits_for_host(kind: Option<&str>, host_id: &str) -> (bool, bool) {
-    let review_types = crate::hosts::host_provider_for_id(host_id)
-        .map(|p| p.subagent_review_types())
-        .unwrap_or_else(default_review_types);
-    subagent_lane_bits_with_types(kind, review_types)
-}
-
 /// Truncate string preserving UTF-8 character boundaries, with optional suffix.
 pub fn truncate_bytes(s: &str, max_bytes: usize, suffix: &str) -> String {
     if s.len() <= max_bytes {
@@ -89,11 +55,6 @@ pub fn truncate_bytes(s: &str, max_bytes: usize, suffix: &str) -> String {
         end -= 1;
     }
     format!("{}{suffix}", &s[..end])
-}
-
-/// Compact multiple context parts: dedup + join + truncate with suffix.
-pub fn compact_contexts(parts: Vec<String>, max_bytes: usize) -> Option<String> {
-    compact_contexts_with_suffix(parts, max_bytes, "...")
 }
 
 /// Compact multiple context parts with configurable truncation suffix.
@@ -185,37 +146,6 @@ pub fn shared_goal_is_satisfied(
     goal_contract_seen && goal_progress_seen && goal_verify_or_block_seen
 }
 
-/// Check if review output lint should be suppressed during Stop.
-/// Shared: skip lint when review gate or goal followup is active.
-pub fn shared_stop_review_output_lint_suppressed(
-    review_advisory_needed: bool,
-    goal_required: bool,
-    goal_drive_entry_active: bool,
-    goal_contract_seen: bool,
-    goal_progress_seen: bool,
-    goal_verify_or_block_seen: bool,
-    review_override: bool,
-    delegation_override: bool,
-) -> bool {
-    if review_advisory_needed {
-        return true;
-    }
-    if shared_tracks_goal(goal_required, goal_drive_entry_active)
-        && !shared_goal_is_satisfied(
-            goal_required,
-            goal_drive_entry_active,
-            goal_contract_seen,
-            goal_progress_seen,
-            goal_verify_or_block_seen,
-            review_override,
-            delegation_override,
-        )
-    {
-        return true;
-    }
-    false
-}
-
 /// Unified goal gate update — **single implementation for all 4 hosts**.
 ///
 /// Call this from each host's Stop/PostTool handler. It:
@@ -274,56 +204,6 @@ pub fn update_goal_gate_with_disk(
     }
 }
 
-
-/// Check if goal gate is satisfied using shared `HookReviewDiskCore` fields.
-pub fn goal_gate_satisfied(core: &core_policy::HookReviewDiskCore) -> bool {
-    shared_goal_is_satisfied(
-        false, // goal_required is Cursor-specific; shared uses goal_drive_entry_active
-        core.goal.goal_drive_entry_active,
-        core.goal.goal_contract_seen,
-        core.goal.goal_progress_seen,
-        core.goal.goal_verify_or_block_seen,
-        core.gate.review_override,
-        core.goal.delegation_override,
-    )
-}
-
-/// Generate the goal stop followup line using shared logic.
-/// Phase-aware: includes short code for goal drive continuation.
-pub fn shared_goal_stop_followup_line(
-    goal_contract_seen: bool,
-    goal_progress_seen: bool,
-    goal_verify_or_block_seen: bool,
-    goal_followup_count: u32,
-) -> String {
-    let missing = {
-        let mut m = Vec::new();
-        if !goal_contract_seen {
-            m.push("contract");
-        }
-        if !goal_progress_seen {
-            m.push("progress");
-        }
-        if !goal_verify_or_block_seen {
-            m.push("verify");
-        }
-        m.join(",")
-    };
-    format!(
-        "router-rs GOAL_FOLLOWUP missing={} nudge={}",
-        missing, goal_followup_count
-    )
-}
-
-/// Shared advisory for settings changed but not validated.
-pub fn shared_settings_validation_advisory() -> String {
-    "Validate Claude hook/settings JSON before ending this turn.".to_string()
-}
-
-/// Shared advisory for framework source changed but not tested.
-pub fn shared_framework_test_advisory() -> String {
-    "Framework source files were modified. Consider running tests.".to_string()
-}
 
 // ════════════════════════════════════════════════════════════════════
 // Shared handler logic (4-host unification)
@@ -497,32 +377,50 @@ pub fn build_user_prompt_context_injection(
         }
     }
 
-    // Goal auto-detect: complex task, no active goal → inject set_goal context.
+    // Goal auto-detect: complex task, no active goal → auto-create lightweight goal.
+    // Check for ANY running non-stale goal (not just driving ones) to avoid
+    // overwriting active_task pointer when the user already has a goal in progress.
     if !is_plan_invocation {
         let has_active_goal = goal_state.as_ref().is_some_and(|g| {
             g.get("status").and_then(Value::as_str) == Some("running")
-                && g.get("drive_until_done").and_then(Value::as_bool) == Some(true)
                 && g.get("stale").and_then(Value::as_bool) != Some(true)
         });
         if !has_active_goal {
             let result = core_policy::goal_auto_detect::analyze_complexity(prompt);
             if result.is_complex {
-                let indicators = result.matched_indicators.join(", ");
-                contexts.push(format!(
-                    "[Goal Auto-Detect] 检测到复杂任务（匹配特征: {indicators}），当前无活跃 Goal 契约。\n\
-                     请执行 set_goal 流程：\n\
-                     ① 调研分析任务范围与约束（允许搜索相关代码、文档或外部信息）\n\
-                     ② 提炼结构化 Goal 契约：\n\
-                     - Goal：不是复述原话，而是分析后提取的核心目标\n\
-                     - Non-goals：明确不做什么\n\
-                     - Done when：可验证的完成条件列表\n\
-                     - Validation commands：验证命令\n\
-                     ③ 调用 goal_state_manage(operation=start, task_id=<task_id>, \
-                     goal=<goal>, done_when=[...], non_goals=[...], \
-                     validation_commands=[...])\n\
-                     （请将 <task_id> 等替换为实际值）\n\
-                     创建后回复用户当前 Goal 状态。"
-                ));
+                let nanos = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_nanos();
+                let task_id = format!("auto-{nanos}");
+                let goal_text = if prompt.len() > 500 {
+                    format!("{}…", &prompt[..prompt.floor_char_boundary(500)])
+                } else {
+                    prompt.to_string()
+                };
+                let create_payload = serde_json::json!({
+                    "repo_root": repo_root.to_string_lossy().to_string(),
+                    "operation": "start",
+                    "task_id": task_id,
+                    "goal": goal_text,
+                });
+                match core_state::state_manager::framework_goal_drive(create_payload) {
+                    Ok(_) => {
+                        let indicators = result.matched_indicators.join(", ");
+                        contexts.push(format!(
+                            "[Goal Auto-Detect] 已自动创建 Goal（匹配特征: {indicators}）\n\
+                             task_id: {task_id}\n\
+                             goal: {goal_text}"
+                        ));
+                    }
+                    Err(e) => {
+                        tracing::warn!(
+                            task_id = %task_id,
+                            error = %e,
+                            "auto-detect goal creation failed"
+                        );
+                    }
+                }
             }
         }
     }
@@ -530,23 +428,3 @@ pub fn build_user_prompt_context_injection(
     contexts
 }
 
-/// Detect reviewer evidence from PostToolUse (fork_context + review lane).
-/// Returns true if independent_reviewer_seen should be armed.
-/// All 4 hosts run this same detection after subagent type recognition.
-pub fn detect_reviewer_evidence(
-    tool_input: &Value,
-    reviewer_lane: bool,
-) -> bool {
-    if !reviewer_lane {
-        return false;
-    }
-    let fork = extract_fork_context(tool_input);
-    core_policy::review_gate_engine::review_independent_reviewer_evidence(fork, reviewer_lane)
-}
-
-/// Extract fork_context from tool input (tries multiple field names).
-/// Delegates to `fork_context_from_values` from core-policy (single source of truth).
-/// Returns `None` if field is absent or unparseable (Claude semantics: absent ≠ false).
-fn extract_fork_context(tool_input: &Value) -> Option<bool> {
-    core_policy::review_gate_engine::fork_context_from_values(tool_input, None)
-}
