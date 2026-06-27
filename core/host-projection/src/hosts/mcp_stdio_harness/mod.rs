@@ -104,42 +104,11 @@ impl RateLimiter {
     }
 }
 
-// Global caches and rate limiter (session-scoped via OnceLock)
-// Caches use RwLock for concurrent reads; rate limiter uses Mutex (read+write in one call).
+// Global rate limiter (session-scoped via OnceLock)
+// TaskViewCache removed: had ~5s TTL with no mtime invalidation.
+// resolve_task_view() is fast enough to call directly.
 
-/// Task view cache entry: (resolved_view, last_access_instant).
-type TaskViewCacheEntry = (core_state::task_state::ResolvedTaskView, Instant);
-
-/// Task view cache: path → (resolved_view, last_access).
-type TaskViewCache = HashMap<PathBuf, TaskViewCacheEntry>;
-
-static TASK_VIEW_CACHE: OnceLock<Arc<std::sync::RwLock<TaskViewCache>>> = OnceLock::new();
 static RATE_LIMITER: OnceLock<Arc<std::sync::Mutex<RateLimiter>>> = OnceLock::new();
-
-/// Poison-safe lock helpers that recover from lock poisoning.
-macro_rules! poison_safe_read_lock {
-    ($lock:expr) => {{
-        match $lock.read() {
-            Ok(guard) => Some(guard),
-            Err(poisoned) => {
-                tracing::warn!("rwlock poisoned (read), recovering");
-                Some(poisoned.into_inner())
-            }
-        }
-    }};
-}
-
-macro_rules! poison_safe_write_lock {
-    ($lock:expr) => {{
-        match $lock.write() {
-            Ok(guard) => Some(guard),
-            Err(poisoned) => {
-                tracing::warn!("rwlock poisoned (write), recovering");
-                Some(poisoned.into_inner())
-            }
-        }
-    }};
-}
 
 macro_rules! poison_safe_lock {
     ($mutex:expr) => {{
@@ -210,89 +179,6 @@ pub(super) fn dispatch_tool(
     }
 }
 
-fn get_task_view_cache() -> &'static Arc<
-    std::sync::RwLock<HashMap<PathBuf, (core_state::task_state::ResolvedTaskView, Instant)>>,
-> {
-    TASK_VIEW_CACHE.get_or_init(|| Arc::new(std::sync::RwLock::new(HashMap::new())))
-}
-
-fn get_rate_limiter() -> &'static Arc<std::sync::Mutex<RateLimiter>> {
-    RATE_LIMITER.get_or_init(|| {
-        // In test mode or when test-support feature is enabled, disable rate limiting
-        let interval = if cfg!(test) || cfg!(feature = "test-support") {
-            0
-        } else {
-            100
-        };
-        Arc::new(std::sync::Mutex::new(RateLimiter::new(interval)))
-    })
-}
-
-/// Reset rate limiter state for integration tests (clears all recorded timestamps).
-pub fn reset_rate_limiter_for_test() {
-    if let Some(limiter) = RATE_LIMITER.get()
-        && let Ok(mut guard) = limiter.lock() {
-            guard.last_call.clear();
-        }
-}
-
-/// Maximum number of entries in the TASK_VIEW_CACHE to prevent unbounded memory growth.
-const TASK_VIEW_CACHE_MAX_ENTRIES: usize = 128;
-
-/// Evict expired entries, then oldest entries if still over capacity.
-fn evict_task_view_cache_if_needed(
-    cache: &mut HashMap<PathBuf, (core_state::task_state::ResolvedTaskView, Instant)>,
-) {
-    let now = Instant::now();
-    // Phase 1: remove expired entries
-    cache.retain(|_, (_, expires_at)| now < *expires_at);
-    // Phase 2: if still over capacity, remove oldest entries by expiration time
-    if cache.len() > TASK_VIEW_CACHE_MAX_ENTRIES {
-        let mut entries: Vec<_> = cache.iter().map(|(k, v)| (k.clone(), v.1)).collect();
-        entries.sort_by_key(|(_, exp)| *exp);
-        let to_remove = cache.len() - TASK_VIEW_CACHE_MAX_ENTRIES;
-        for (key, _) in entries.iter().take(to_remove) {
-            cache.remove(key);
-        }
-    }
-}
-
-/// Get task view cache TTL from environment variable.
-/// Default: 5 seconds. Env: ROUTER_RS_DESKTOP_TASK_VIEW_CACHE_TTL_SECS
-fn task_view_cache_ttl_secs() -> u64 {
-    env_cache_typed!(u64, "ROUTER_RS_DESKTOP_TASK_VIEW_CACHE_TTL_SECS", 5)
-}
-
-/// Get cached task view with configurable TTL (default 5 seconds).
-fn get_cached_task_view(repo_root: &Path) -> core_state::task_state::ResolvedTaskView {
-    let ttl_secs = task_view_cache_ttl_secs();
-    let cache_key = repo_root.to_path_buf();
-    {
-        let cache = get_task_view_cache();
-        if let Some(guard) = poison_safe_read_lock!(cache)
-            && let Some((view, expires_at)) = guard.get(&cache_key)
-                && Instant::now() < *expires_at {
-                    return view.clone();
-                }
-    }
-
-    // Cache miss: recompute
-    let view = resolve_task_view(repo_root, None);
-
-    // Update cache with configurable TTL, evicting stale/overflow entries
-    {
-        let cache = get_task_view_cache();
-        if let Some(mut guard) = poison_safe_write_lock!(cache) {
-            guard.insert(
-                cache_key,
-                (view.clone(), Instant::now() + Duration::from_secs(ttl_secs)),
-            );
-            evict_task_view_cache_if_needed(&mut guard);
-        }
-    }
-
-    view
-}
 
 const PROTOCOL_VERSION: &str = "2024-11-05";
 const SERVER_NAME: &str = "router-rs-framework";
@@ -688,7 +574,7 @@ fn handle_prompts_get(
         }
         "review_gate" => {
             let host_name = mcp_host_display_label(host_id);
-            let task_view = get_cached_task_view(repo_root);
+            let task_view = resolve_task_view(repo_root, None);
             let lifecycle_profile = task_lifecycle_profile(&task_view);
             let gate_mode = if lifecycle_profile == "task" {
                 "task: MCP hard block disabled — closeout_gate reports findings only (advisory).".to_string()
@@ -749,7 +635,7 @@ fn handle_prompts_get(
 }
 
 fn handle_resources_list(id: Option<Value>, repo_root: &Path) -> Value {
-    let task_view = get_cached_task_view(repo_root);
+    let task_view = resolve_task_view(repo_root, None);
 
     let mut resources = vec![
         json!({
@@ -816,7 +702,7 @@ fn handle_resources_read(id: Option<Value>, request: &Value, repo_root: &Path) -
 
     let (text, mime_type) = match uri {
         "framework://active_task" => {
-            let task_view = get_cached_task_view(repo_root);
+            let task_view = resolve_task_view(repo_root, None);
             let content = json!({
                 "active_task_id": task_view.pointers.active_task_id,
                 "focus_task_id": task_view.pointers.focus_task_id,
@@ -828,14 +714,15 @@ fn handle_resources_read(id: Option<Value>, request: &Value, repo_root: &Path) -
             )
         }
         "framework://goal_state" => {
-            let state = core_state::state_manager::read_goal_state(repo_root, None);
+            let state = core_state::state_manager::read_goal_state(repo_root, None)
+                .unwrap_or(None);
             (
                 serde_json::to_string_pretty(&state).unwrap_or_default(),
                 "application/json",
             )
         }
         "framework://evidence_index" => {
-            let task_view = get_cached_task_view(repo_root);
+            let task_view = resolve_task_view(repo_root, None);
             let task_id = task_view
                 .task_id
                 .as_deref()
@@ -849,7 +736,7 @@ fn handle_resources_read(id: Option<Value>, request: &Value, repo_root: &Path) -
             (content, "application/json")
         }
         "framework://session_summary" => {
-            let task_view = get_cached_task_view(repo_root);
+            let task_view = resolve_task_view(repo_root, None);
             let task_id = task_view
                 .task_id
                 .as_deref()
@@ -909,7 +796,7 @@ pub fn tool_closeout_record_write_for_test(
 }
 
 pub fn get_task_view_ttl_for_test() -> u64 {
-    task_view_cache_ttl_secs()
+    0 // cache removed
 }
 
 #[cfg(any(test, feature = "test-support"))]

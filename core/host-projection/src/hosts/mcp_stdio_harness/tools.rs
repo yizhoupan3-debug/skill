@@ -80,12 +80,10 @@ pub(super) fn handle_tools_call(
     }
 }
 
-/// Invalidate evidence-dependent caches (task view).
+/// Invalidate evidence-dependent caches.
+/// TaskViewCache removed — resolve_task_view() is called directly.
 pub(super) fn invalidate_evidence_caches() {
-    // Clear task view cache
-    if let Some(mut guard) = poison_safe_write_lock!(get_task_view_cache()) {
-        guard.clear();
-    }
+    // No-op: TaskViewCache removed to eliminate stale reads.
 }
 
 pub(super) fn tool_skill_route(
@@ -369,7 +367,8 @@ pub(super) fn tool_closeout_record_write(
 
 pub(super) fn tool_goal_state_read(arguments: &Value, repo_root: &Path) -> Result<String, String> {
     let task_id = arguments.get("task_id").and_then(Value::as_str);
-    let state = core_state::state_manager::read_goal_state(repo_root, task_id);
+    let state = core_state::state_manager::read_goal_state(repo_root, task_id)
+        .map_err(|e| e.to_string())?;
     serde_json::to_string_pretty(&state).map_err(|e| e.to_string())
 }
 
@@ -379,7 +378,7 @@ pub(super) fn tool_goal_state_manage(
     connection_session_id: &str,
 ) -> Result<String, String> {
     let result = crate::hooks::tool_goal_state_manage_dispatch(arguments, repo_root, connection_session_id)?;
-    // Cache invalidation stays in MCP layer (SnapshotCache, TaskViewCache).
+    // Invalidate caches so subsequent reads see fresh state.
     invalidate_evidence_caches();
     Ok(result)
 }
