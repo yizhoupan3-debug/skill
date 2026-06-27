@@ -658,11 +658,6 @@ mod cache_ttl_tests {
         assert_eq!(ttl, 30);
     }
 
-    #[test]
-    fn task_view_cache_ttl_defaults_to_5_seconds() {
-        let ttl = crate::mcp_stdio_harness::get_task_view_ttl_for_test();
-        assert_eq!(ttl, 5);
-    }
 }
 
 #[cfg(test)]

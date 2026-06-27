@@ -80,11 +80,6 @@ pub(super) fn handle_tools_call(
     }
 }
 
-/// Invalidate evidence-dependent caches.
-/// TaskViewCache removed — resolve_task_view() is called directly.
-pub(super) fn invalidate_evidence_caches() {
-    // No-op: TaskViewCache removed to eliminate stale reads.
-}
 
 pub(super) fn tool_skill_route(
     arguments: &Value,
@@ -282,8 +277,6 @@ pub(super) fn tool_record_evidence(arguments: &Value, repo_root: &Path) -> Resul
 
     crate::hooks::append_evidence_index(repo_root, None, entry)?;
 
-    // H2 FIX: Invalidate caches after evidence is written to ensure fresh data on next read
-    invalidate_evidence_caches();
 
     let exit_display = exit_code
         .map(|ec| ec.to_string())
@@ -330,8 +323,6 @@ pub(super) fn tool_session_checkpoint(
     crate::hooks::write_framework_session_artifacts(payload)
         .map_err(|e| format!("Checkpoint write failed: {e}"))?;
 
-    // H2 FIX: Invalidate caches after checkpoint is written to ensure fresh data on next read
-    invalidate_evidence_caches();
 
     Ok(json!({"result": format!(
         "Checkpoint written: summary={}, next_actions_count={}",
@@ -378,8 +369,6 @@ pub(super) fn tool_goal_state_manage(
     connection_session_id: &str,
 ) -> Result<String, String> {
     let result = crate::hooks::tool_goal_state_manage_dispatch(arguments, repo_root, connection_session_id)?;
-    // Invalidate caches so subsequent reads see fresh state.
-    invalidate_evidence_caches();
     Ok(result)
 }
 

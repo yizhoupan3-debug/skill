@@ -344,6 +344,7 @@ fn build_task_list_summary_context(repo_root: &Path) -> Option<String> {
                 && !e.file_name().to_string_lossy().starts_with('.')
         })
         .filter_map(|e| e.file_name().into_string().ok())
+        .take(20)
         .collect();
     if task_dirs.is_empty() {
         return None;

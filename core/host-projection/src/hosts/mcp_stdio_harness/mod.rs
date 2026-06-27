@@ -105,8 +105,6 @@ impl RateLimiter {
 }
 
 // Global rate limiter (session-scoped via OnceLock)
-// TaskViewCache removed: had ~5s TTL with no mtime invalidation.
-// resolve_task_view() is fast enough to call directly.
 
 static RATE_LIMITER: OnceLock<Arc<std::sync::Mutex<RateLimiter>>> = OnceLock::new();
 
@@ -801,9 +799,6 @@ pub fn tool_closeout_record_write_for_test(
     tool_closeout_record_write(arguments, repo_path, "opencode")
 }
 
-pub fn get_task_view_ttl_for_test() -> u64 {
-    0 // cache removed
-}
 
 #[cfg(any(test, feature = "test-support"))]
 pub fn read_mcp_message_test_helper<R: std::io::BufRead>(

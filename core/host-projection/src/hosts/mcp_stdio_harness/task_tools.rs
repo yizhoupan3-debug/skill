@@ -161,7 +161,6 @@ pub(crate) fn tool_task_complete(arguments: &Value, repo_root: &Path) -> std::re
             "task_id": &task_id_owned,
         });
         let result = core_state::state_manager::framework_goal_drive(payload)?;
-        invalidate_evidence_caches();
         return Ok(result.to_string());
     }
 
@@ -195,7 +194,6 @@ pub(crate) fn tool_task_complete(arguments: &Value, repo_root: &Path) -> std::re
     })?;
 
     // TASK_STATE.json aggregate was removed in Wave 2b.
-    invalidate_evidence_caches();
 
     Ok(json!({
         "ok": true,
