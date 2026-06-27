@@ -86,7 +86,12 @@ pub fn trigger(
         round,
         repo_root: repo_root.to_path_buf(),
         task_id: task_id.to_string(),
-        evidence_path: Some(repo_root.join("EVIDENCE_INDEX.json")),
+        evidence_path: Some(
+            repo_root
+                .join("artifacts/current")
+                .join(task_id)
+                .join("EVIDENCE_INDEX.json"),
+        ),
         runtime_handle,
     };
 

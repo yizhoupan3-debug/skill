@@ -5,12 +5,11 @@
 //! gate from the v10 architecture: it prevents claiming completion without
 //! verifiable evidence.
 //!
-//! Two integration paths:
+//! Integration path:
 //! - **No-goal path** (`tool_task_complete`): `validate_transition()` as a
 //!   **blocking gate** — returns Err if evidence is incomplete.
 //! - **Goal path** (`framework_goal_drive complete`): `validate_transition()` is the
-//!   **authoritative blocking gate** (Phase B closed). `compare_old_closeout_vs_new_fraud_gate()`
-//!   retains as a standalone comparison utility for stdio_dispatch.
+//!   **authoritative blocking gate**.
 
 #![deny(clippy::unwrap_used, clippy::expect_used)]
 
@@ -101,147 +100,6 @@ fn validate_complete_transition(repo_root: &Path, task_id: &str) -> TransitionVe
     ))
 }
 
-/// Parallel validator: runs old closeout enforcement + new fraud gate, logs
-/// mismatches via `tracing::warn!`.
-///
-/// **Informational only** — this is a side-by-side comparison utility used by
-/// stdio_dispatch for diagnostic logging. The authoritative path in both
-/// `tool_task_complete` and `framework_goal_drive complete` is `validate_transition()`
-/// as a blocking gate (Phase B closed).
-///
-/// Returns both verdicts so callers can inspect them.
-pub fn compare_old_closeout_vs_new_fraud_gate(
-    repo_root: &Path,
-    task_id: &str,
-) -> CompareResult {
-    // New fraud gate verdict
-    let new_verdict = validate_transition(repo_root, task_id, TaskTransition::Complete);
-
-    // Old closeout enforcement: run the closeout validation logic.
-    // The old system returns a JSON response with closeout_allowed.
-    let old_verdict = run_old_closeout_check(repo_root, task_id);
-
-    // Compare and log mismatches
-    if new_verdict.passed != old_verdict.closeout_allowed {
-        tracing::warn!(
-            task_id = %task_id,
-            new_gate_passed = %new_verdict.passed,
-            old_closeout_allowed = %old_verdict.closeout_allowed,
-            "compare_old_closeout_vs_new_fraud_gate: MISMATCH — diagnostic only (Phase B closed)",
-        );
-    }
-
-    if new_verdict.passed {
-        tracing::debug!(
-            task_id = %task_id,
-            "compare_old_closeout_vs_new_fraud_gate: both gates agree — transition allowed",
-        );
-    }
-
-    CompareResult {
-        new_gate: new_verdict,
-        old_closeout: old_verdict,
-    }
-}
-
-/// Summary of the old closeout enforcement check.
-#[derive(Debug, Clone)]
-pub struct OldCloseoutSummary {
-    /// Whether the old closeout enforcement allowed the transition.
-    pub closeout_allowed: bool,
-    /// Number of violations found by the old system.
-    pub violation_count: usize,
-    /// Whether the closeout record exists.
-    pub record_exists: bool,
-}
-
-impl OldCloseoutSummary {
-    fn allowed() -> Self {
-        Self { closeout_allowed: true, violation_count: 0, record_exists: true }
-    }
-
-    fn missing_record() -> Self {
-        Self { closeout_allowed: true, violation_count: 0, record_exists: false }
-    }
-}
-
-/// Result of the parallel comparison.
-#[derive(Debug, Clone)]
-pub struct CompareResult {
-    /// Verdict from the new fraud gate.
-    pub new_gate: TransitionVerdict,
-    /// Summary from the old closeout enforcement.
-    pub old_closeout: OldCloseoutSummary,
-}
-
-/// Run the old closeout enforcement check for comparison purposes.
-///
-/// Reads the closeout record file and evaluates it with evidence context.
-/// Falls back to "allowed" defaults when no closeout record exists (common
-/// for non-closeout workflows).
-fn run_old_closeout_check(repo_root: &Path, task_id: &str) -> OldCloseoutSummary {
-    use crate::closeout_validation::{
-        CloseoutEvidenceContext, evaluate_closeout_record_value_with_context,
-    };
-
-    let tid = task_id.trim();
-    if tid.is_empty() {
-        return OldCloseoutSummary::allowed();
-    }
-
-    // Build the closeout record path
-    let record_path = repo_root
-        .join("artifacts/current")
-        .join(tid)
-        .join("CLOSEOUT_RECORD.json");
-
-    if !record_path.is_file() {
-        // No closeout record — common for goal-driven tasks that don't
-        // produce closeout records. Treat as "no violations" for comparison.
-        return OldCloseoutSummary::missing_record();
-    }
-
-    let raw = match std::fs::read_to_string(&record_path) {
-        Ok(s) => s,
-        Err(_) => return OldCloseoutSummary::allowed(),
-    };
-
-    let value: serde_json::Value = match serde_json::from_str(&raw) {
-        Ok(v) => v,
-        Err(_) => return OldCloseoutSummary::allowed(),
-    };
-
-    // Build evidence context
-    let (has_evidence, evidence_ok) =
-        crate::state_manager::task_evidence_artifacts_summary_for_task(repo_root, tid);
-
-    let ctx = CloseoutEvidenceContext {
-        task_id: Some(tid.to_string()),
-        has_successful_verification: has_evidence && evidence_ok,
-        goal_prediction: None,
-    };
-
-    match evaluate_closeout_record_value_with_context(value, &ctx) {
-        Ok(resp) => {
-            let allowed = resp
-                .get("closeout_allowed")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false);
-            let violations = resp
-                .get("violations")
-                .and_then(|v| v.as_array())
-                .map(|a| a.len())
-                .unwrap_or(0);
-            OldCloseoutSummary {
-                closeout_allowed: allowed,
-                violation_count: violations,
-                record_exists: true,
-            }
-        }
-        Err(_) => OldCloseoutSummary::allowed(),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -317,14 +175,5 @@ mod tests {
         write_evidence(&dir, &[("artifact-1", false), ("artifact-2", false)]);
         let v = validate_transition(&dir, "test-task", TaskTransition::Complete);
         assert!(!v.passed);
-    }
-
-    #[test]
-    fn compare_old_closeout_no_record_no_panic() {
-        let dir = test_dir("compare-no-record");
-        // No closeout record exists — compare should not panic
-        let result = compare_old_closeout_vs_new_fraud_gate(&dir, "test-task");
-        assert!(result.old_closeout.record_exists == false);
-        assert!(!result.new_gate.passed); // No evidence for the task
     }
 }

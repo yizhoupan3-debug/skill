@@ -560,8 +560,7 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
             // Complete = iteration complete, NOT goal termination.
             // Keep status=running, do NOT archive or neutralize pointers.
             let goal_path = goal_state_path_for_task(&repo_root, &task_id)?;
-            let mut loop_state = read_goal_state(&repo_root, Some(&task_id))?
-                .ok_or_else(|| format!("GOAL_STATE missing at {}", goal_path.display()))?;
+            let mut loop_state = state; // reuse the single read from above
             if let Some(obj) = loop_state.as_object_mut() {
                 let count = obj.get("iteration_count").and_then(Value::as_u64).unwrap_or(0);
                 obj.insert("iteration_count".to_string(), json!(count + 1));
@@ -887,6 +886,15 @@ fn set_terminal_flags(
     let obj = state
         .as_object_mut()
         .ok_or_else(|| "GOAL_STATE root must be object".to_string())?;
+
+    // Guard: cannot pause or block a goal in a terminal/review state.
+    // Only running, paused, and blocked are mutable operational states.
+    let current = obj.get("status").and_then(Value::as_str).unwrap_or("");
+    if current == "completed" || current == "review_pending" {
+        return Err(format!(
+            "cannot set status '{status}' on a goal in '{current}' state"
+        ));
+    }
     obj.insert("status".to_string(), json!(status));
     if let Some(d) = drive_until_done {
         obj.insert("drive_until_done".to_string(), json!(d));

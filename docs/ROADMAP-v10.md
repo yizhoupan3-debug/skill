@@ -535,8 +535,8 @@ fn verify_evidence_chain(scaffold: &TaskScaffold) -> bool {
 | 步骤 | 结果 |
 |---|---|
 | **Phase A**: 新建 `validate_transition()` + `closeout_validation.rs` | ✅ `core/core-state/src/closeout_validation.rs` 364 行 |
-| **Phase A**: 并行验证器 (`compare_old_closeout_vs_new_fraud_gate`) | ✅ 过渡期比对，验证新旧两路径结果一致 |
-| **Phase B**: `validate_transition()` 在 goal path 成为阻断门 | ✅ `framework_goal_drive complete` 中 `validate_transition()` 为阻断门权威路径；`compare_old_closeout_vs_new_fraud_gate` 降级为诊断旁路工具 |
+| **Phase A**: 并行验证器 (`compare_old_closeout_vs_new_fraud_gate`) | ✅ 过渡期比对，验证新旧两路径结果一致（Phase C 后已删除） |
+| **Phase B**: `validate_transition()` 在 goal path 成为阻断门 | ✅ `framework_goal_drive complete` 中 `validate_transition()` 为阻断门权威路径 |
 | **Phase C**: 删 `closeout_enforcement` 模块 | ✅ 6 文件 ~1.2K 行已删；逻辑迁至 `closeout_validation.rs` |
 | 双写期 + 旧 closeout_record 删除 | ✅ framework-extra/closeout.rs 清理 |
 | `loop-engine` → `goal-engine` 重命名 | ✅ 目录/workspace/代码/文档全量更新 |
@@ -582,7 +582,7 @@ fn verify_evidence_chain(scaffold: &TaskScaffold) -> bool {
 端到端链路已实现（见 §2.2 DAG 图）：
 - GoalEngine → QGEntry.trigger() → QGRoute.evaluate(scene, ctx) → GateVerdict
 - task_complete 触发防欺诈门作为 blocking gate
-- goal_drive 中防欺诈门为 authoritative blocking gate（`validate_transition()` 在 `framework_goal_drive complete` 中阻断，Phase B 已关闭；`compare_old_closeout_vs_new_fraud_gate()` 保留作为旁路对比工具）
+- goal_drive 中防欺诈门为 authoritative blocking gate（`validate_transition()` 在 `framework_goal_drive complete` 中阻断，Phase B 已关闭）
 - framework_goal_state_manage(complete) 需先过 QGEntry
 
 #### Wave 5b（✅ 已完成）— Skill 解耦
@@ -698,10 +698,11 @@ Wave 6  ~1 天    sub_scene 专项治理     ── ✅
 
 **遗留项**（不在 v10 范围内）：
 - `agent-orchestrator` 重命名 + MCP 工具集成 — ✅ 已于 2026-06-27 完成
-- `Result<_, String>` → `FrameworkError` 全量迁移（单独治理）
+- `doc_registry` / `runtime_registry` / 测试代码中 `architecture.md` 陈旧引用 — ✅ 已于 2026-06-27 修复
+- `Result<_, String>` → `FrameworkError` 全量迁移（~788 处残留，单独治理）
 - 测试覆盖率提升（核心函数覆盖率仍偏低）
 
 **最终架构验证条件**：
 - `cargo test --no-run` 编译通过 ✅
-- `cargo test` 全过 ✅
+- `cargo test` 全过 — ⚠️ 修复 doc_registry 陈旧引用后待验证（此前 4 个测试因 architecture.md 已删但未从活跃列表移除而失败）
 - 运行层 3 概念已收敛：Task + Goal（只 loop）+ QG Route ✅
