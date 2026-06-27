@@ -80,10 +80,6 @@ pub fn goal_state_manage_dispatch(
             if let Some(gt) = arguments.get("goal_type").and_then(Value::as_str) {
                 if gt == "loop" {
                     payload["goal_type"] = json!("loop");
-                    // goal_type=loop without explicit lifecycle_profile → auto-set loop-auto
-                    if arguments.get("lifecycle_profile").is_none() {
-                        payload["lifecycle_profile"] = json!("loop-auto");
-                    }
                 } else if gt == "linear" {
                     return Err(FrameworkError::validation(
                         "goal_type=linear was removed in v10 — all goals follow loop semantics. Remove goal_type or set goal_type=loop."
@@ -92,19 +88,11 @@ pub fn goal_state_manage_dispatch(
                     return Err(FrameworkError::validation(format!("Invalid goal_type: {gt}. Only goal_type=loop is supported in v10.")));
                 }
             }
+            // lifecycle_profile was removed in Wave 2a (v10). Runtime behavior is now
+            // determined by RUNTIME_REGISTRY.json lifecycle_profiles config.
+            // Accept the field for backward compat but log a deprecation notice.
             if let Some(lp) = arguments.get("lifecycle_profile").and_then(Value::as_str) {
-                match lp {
-                    "task" | "loop-auto" => payload["lifecycle_profile"] = json!(lp),
-                    _ => return Err(FrameworkError::validation(format!("Invalid lifecycle_profile: {lp}. Must be one of: task, loop-auto"))),
-                }
-                // Validate consistency: goal_type=loop conflicts with lifecycle_profile=task
-                if let Some(gt) = arguments.get("goal_type").and_then(Value::as_str) {
-                    if gt == "loop" && lp == "task" {
-                        return Err(FrameworkError::validation(
-                            "goal_type=loop 与 lifecycle_profile=task 冲突。循环目标需要 lifecycle_profile=loop-auto。"
-                        ));
-                    }
-                }
+                tracing::warn!(lifecycle_profile = %lp, "lifecycle_profile is deprecated in v10 — use RUNTIME_REGISTRY.json lifecycle_profiles instead");
             }
             if let Some(ch) = arguments.get("current_horizon").and_then(Value::as_str) {
                 payload["current_horizon"] = json!(ch);
@@ -137,7 +125,7 @@ pub fn goal_state_manage_dispatch(
         "append_round" => {
             return Err(FrameworkError::validation(
                 "append_round is not a valid goal_state_manage operation. \
-                 Use quality_gate_manage with operation=append_round instead.",
+                 Use framework_rfv_loop with operation=submit_round instead.",
             ));
         }
         "pause" | "resume" | "complete" | "clear" => {}
@@ -171,12 +159,38 @@ pub fn goal_state_manage_dispatch(
 mod tests {
     use super::*;
 
-    /// goal_type=loop + lifecycle_profile=task must be rejected before
-    /// framework_goal_drive (early validation at the handler boundary).
+    /// goal_type=loop is the only valid type in v10
     #[test]
-    fn rejects_loop_with_task_lifecycle() {
+    fn accepts_loop_goal_type() {
+        let suffix = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        let repo = std::env::temp_dir().join(format!("goal-handler-loop-{suffix}"));
+        let _ = std::fs::remove_dir_all(&repo);
+        std::fs::create_dir_all(repo.join("artifacts/current")).expect("mkdir");
+
+        let result = goal_state_manage_dispatch(
+            &json!({
+                "operation": "start",
+                "goal": "loop task",
+                "task_id": "t-loop",
+                "goal_type": "loop",
+            }),
+            &repo,
+            "test-session",
+        )
+        .expect("loop goal_type should be accepted");
+        assert!(result.contains("\"ok\": true"), "result: {result}");
+
+        let _ = std::fs::remove_dir_all(&repo);
+    }
+
+    /// lifecycle_profile is deprecated in v10 (accepted with warning, not written to GOAL_STATE)
+    #[test]
+    fn accepts_lifecycle_profile_with_warning() {
         let repo = Path::new("/tmp"); // never hit the filesystem — validation is early
-        let err = goal_state_manage_dispatch(
+        let result = goal_state_manage_dispatch(
             &json!({
                 "operation": "start",
                 "goal": "loop task",
@@ -187,36 +201,7 @@ mod tests {
             repo,
             "test-session",
         )
-        .expect_err("loop+task should be rejected");
-        let msg = err.to_string();
-        assert!(msg.contains("冲突"), "err must mention conflict: {msg}");
-    }
-
-    /// goal_type=loop + lifecycle_profile=loop-auto is valid
-    #[test]
-    fn accepts_loop_with_loop_auto_lifecycle() {
-        let suffix = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_nanos())
-            .unwrap_or(0);
-        let repo = std::env::temp_dir().join(format!("goal-handler-loop-auto-{suffix}"));
-        let _ = std::fs::remove_dir_all(&repo);
-        std::fs::create_dir_all(repo.join("artifacts/current")).expect("mkdir");
-
-        let result = goal_state_manage_dispatch(
-            &json!({
-                "operation": "start",
-                "goal": "auto lifecycle",
-                "task_id": "t-auto",
-                "goal_type": "loop",
-                "lifecycle_profile": "loop-auto",
-            }),
-            &repo,
-            "test-session",
-        )
-        .expect("loop+loop-auto should succeed");
+        .expect("lifecycle_profile should be accepted with deprecation warning");
         assert!(result.contains("\"ok\": true"), "result: {result}");
-
-        let _ = std::fs::remove_dir_all(&repo);
     }
 }

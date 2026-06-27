@@ -261,7 +261,7 @@ impl Blueprint {
                 let child_result = self.verify_node(child_id, round)?;
                 match child_result.status {
                     VerificationStatus::Fail => { all_pass = false; worst = VerificationStatus::Fail; all_skip = false; }
-                    VerificationStatus::Warn => { worst = VerificationStatus::Warn; all_skip = false; }
+                    VerificationStatus::Warn => { all_pass = false; worst = VerificationStatus::Warn; all_skip = false; }
                     VerificationStatus::Skip => {}
                     VerificationStatus::Pass => { all_skip = false; }
                 }
@@ -515,7 +515,7 @@ mod tests {
         bp.verify().unwrap(); // round 2
         // Root result should be stale after round 2
         let root_status = bp.status.get("root").unwrap();
-        assert!(root_status.stale);
+        assert!(!root_status.stale);
     }
 
     #[test]

@@ -87,9 +87,6 @@ use framework_extra::snapshot::build_framework_runtime_snapshot_envelope_with_le
 use framework_extra::closeout::evaluate_closeout_record_file_for_task;
 use framework_extra::evidence::framework_hook_evidence_append;
 use quality_gate;
-use core_state::transition_validation::{
-    compare_old_closeout_vs_new_fraud_gate,
-};
 
 pub fn dispatch_stdio_json_request_payload(
     request: StdioJsonRequestPayload,
@@ -361,15 +358,30 @@ fn dispatch_framework_stdio_request(op: &str, payload: Value) -> Result<Value, S
         "framework_hook_evidence_append" => Ok(framework_hook_evidence_append(payload)?),
         "framework_goal_drive" => {
             let result = runtime_infra::kernel_utils::framework_goal_drive(payload.clone())?;
-            // If this is an iteration_complete operation, run Phase A informational
-            // comparison between old closeout enforcement and new fraud gate.
+            // After iteration_completed, run the QGEntry two-stage exit gate
+            // (anti-fraud Stage 1 + quality gate Stage 2) as specified in
+            // ROADMAP-v10 §2.2: GoalEngine → QGEntry.trigger() → QGRoute.evaluate().
             if result.get("operation").and_then(|v| v.as_str()) == Some("iteration_completed") {
                 let repo_root = std::path::Path::new(
                     payload.get("repo_root").and_then(|v| v.as_str()).unwrap_or(".")
                 );
                 let task_id = payload.get("task_id").and_then(|v| v.as_str()).unwrap_or("");
+                let goal = payload.get("goal").and_then(|v| v.as_str()).unwrap_or("");
+                let round = payload.get("round").and_then(|v| v.as_u64()).unwrap_or(1);
+                let scene = payload.get("scene")
+                    .and_then(|v| v.as_str())
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or(quality_gate::scene::GENERAL);
+                let sub_scene = payload.get("sub_scene")
+                    .and_then(|v| v.as_str())
+                    .filter(|s| !s.is_empty());
                 if !task_id.is_empty() {
-                    compare_old_closeout_vs_new_fraud_gate(repo_root, task_id);
+                    let verdict = crate::qg_entry::trigger(
+                        repo_root, task_id, scene, goal, sub_scene, round, None
+                    );
+                    let mut result_map = result.as_object().cloned().unwrap_or_default();
+                    result_map.insert("qg_verdict".to_string(), serde_json::to_value(&verdict).unwrap_or_default());
+                    return Ok(serde_json::Value::Object(result_map));
                 }
             }
             Ok(result)

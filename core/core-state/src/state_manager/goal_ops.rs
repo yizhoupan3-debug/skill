@@ -211,21 +211,21 @@ fn goal_requires_completion_evidence(state: &Value) -> bool {
 }
 
 fn apply_optional_goal_fields_from_payload(obj: &mut Map<String, Value>, payload: &Value) {
-    if let Some(lp) = payload
-        .get("lifecycle_profile")
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-    {
-        obj.insert("lifecycle_profile".to_string(), json!(lp));
-    }
+    // lifecycle_profile was removed in Wave 2a (v10). Runtime profile is now
+    // determined solely by RUNTIME_REGISTRY.json lifecycle_profiles config.
     if let Some(gt) = payload
         .get("goal_type")
         .and_then(Value::as_str)
         .map(str::trim)
         .filter(|s| !s.is_empty())
     {
-        obj.insert("goal_type".to_string(), json!(gt));
+        // v10 only supports "loop" goals. Non-loop values are silently dropped
+        // (the field remains in existing GOAL_STATE files for backward compat).
+        if gt == "loop" {
+            obj.insert("goal_type".to_string(), json!(gt));
+        } else {
+            tracing::warn!(goal_type = %gt, "skipping non-loop goal_type — v10 only supports 'loop'");
+        }
     }
     if let Some(st) = payload
         .get("status")
@@ -532,10 +532,13 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
             let state = read_goal_state(&repo_root, Some(&task_id))?
                 .ok_or_else(|| "GOAL_STATE missing for completion gate check".to_string())?;
             // Phase B: validate_transition is the authoritative blocking anti-fraud gate.
-            // Runs unconditionally before the legacy conditional evidence check.
-            let transition_v = validate_transition(&repo_root, &task_id, TaskTransition::Complete);
-            if !transition_v.passed {
-                return Err(format!("validate_transition blocked: {}", transition_v.reason));
+            // Only applies to goals that require completion evidence (drive_until_done,
+            // validation_commands, done_when, or explicit requires_completion_evidence).
+            if goal_requires_completion_evidence(&state) {
+                let transition_v = validate_transition(&repo_root, &task_id, TaskTransition::Complete);
+                if !transition_v.passed {
+                    return Err(format!("validate_transition blocked: {}", transition_v.reason));
+                }
             }
 
             // Legacy evidence check (dual-write informational — kept for back-compat).
@@ -1294,7 +1297,10 @@ mod tests {
             "task_id": "t-cne",
         }))
         .unwrap_err();
-        assert!(err.contains("EVIDENCE"), "must reject without evidence: {err}");
+        assert!(
+            err.contains("validate_transition blocked"),
+            "must reject without evidence: {err}"
+        );
         let _ = fs::remove_dir_all(&repo);
     }
 
@@ -1733,7 +1739,10 @@ mod tests {
             "task_id": "t-lev",
         }))
         .unwrap_err();
-        assert!(err.contains("EVIDENCE"), "loop drive goal should require evidence: {err}");
+        assert!(
+            err.contains("validate_transition blocked"),
+            "loop drive goal should require evidence: {err}"
+        );
 
         let _ = fs::remove_dir_all(&repo);
     }

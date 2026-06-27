@@ -449,14 +449,14 @@
   "lifecycle_profiles": {
     "task": {
       "disable_spawn_first_nudge": true,
-      "closeout_enforcement": "advisory",
+      "closeout_mode": "advisory",
       "review_gate": "suppressed",
       "goal_continuation": "manual-boards-only",
       "loop_capable": false
     },
     "loop-auto": {
       "disable_spawn_first_nudge": false,
-      "closeout_enforcement": "hard-block",
+      "closeout_mode": "hard-block",
       "review_gate": "mandatory",
       "spawn_first_nudge": true,
       "goal_continuation": "auto-checkpoint",

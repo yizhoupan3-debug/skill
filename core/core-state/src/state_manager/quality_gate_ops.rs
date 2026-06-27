@@ -6,14 +6,14 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use super::pointer_ops::read_active_task_id;
-use super::QUALITY_GATE_STATE_FILENAME;
+use super::RFV_LOOP_STATE_FILENAME;
 
 pub fn quality_gate_state_path(repo_root: &Path, task_id: &str) -> Result<PathBuf, String> {
     let tid = crate::utils::path_guard::validate_task_id_component(task_id)?;
     Ok(repo_root
         .join("artifacts/current")
         .join(tid)
-        .join(QUALITY_GATE_STATE_FILENAME))
+        .join(RFV_LOOP_STATE_FILENAME))
 }
 
 /// 供 Cursor hook / 工具读取当前 task 的 Quality Gate 账本（无覆盖则用 `active_task.json`）。

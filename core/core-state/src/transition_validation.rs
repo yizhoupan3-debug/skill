@@ -1,4 +1,4 @@
-//! Transition validation — evidence-chain anti-fraud gate (Wave 3c-i Phase A).
+//! Transition validation — evidence-chain anti-fraud gate (Wave 3c-i, Phase A→C).
 //!
 //! Validates that task transitions (especially Complete) are backed by real
 //! evidence artifacts before allowing the transition. This is the "anti-fraud"
@@ -8,9 +8,9 @@
 //! Two integration paths:
 //! - **No-goal path** (`tool_task_complete`): `validate_transition()` as a
 //!   **blocking gate** — returns Err if evidence is incomplete.
-//! - **Goal path** (`framework_goal_drive`): `compare_old_closeout_vs_new_fraud_gate()`
-//!   as a **Phase A informational comparison** — never blocks, only traces
-//!   mismatches between old closeout enforcement and new fraud gate.
+//! - **Goal path** (`framework_goal_drive complete`): `validate_transition()` is the
+//!   **authoritative blocking gate** (Phase B closed). `compare_old_closeout_vs_new_fraud_gate()`
+//!   retains as a standalone comparison utility for stdio_dispatch.
 
 #![deny(clippy::unwrap_used, clippy::expect_used)]
 
@@ -104,8 +104,10 @@ fn validate_complete_transition(repo_root: &Path, task_id: &str) -> TransitionVe
 /// Parallel validator: runs old closeout enforcement + new fraud gate, logs
 /// mismatches via `tracing::warn!`.
 ///
-/// **Phase A semantics**: always informational, never blocks. The old closeout
-/// enforcement continues to be authoritative in the goal path until Phase B.
+/// **Informational only** — this is a side-by-side comparison utility used by
+/// stdio_dispatch for diagnostic logging. The authoritative path in both
+/// `tool_task_complete` and `framework_goal_drive complete` is `validate_transition()`
+/// as a blocking gate (Phase B closed).
 ///
 /// Returns both verdicts so callers can inspect them.
 pub fn compare_old_closeout_vs_new_fraud_gate(
@@ -125,7 +127,7 @@ pub fn compare_old_closeout_vs_new_fraud_gate(
             task_id = %task_id,
             new_gate_passed = %new_verdict.passed,
             old_closeout_allowed = %old_verdict.closeout_allowed,
-            "compare_old_closeout_vs_new_fraud_gate: MISMATCH — Phase A informational only",
+            "compare_old_closeout_vs_new_fraud_gate: MISMATCH — diagnostic only (Phase B closed)",
         );
     }
 

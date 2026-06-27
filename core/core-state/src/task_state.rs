@@ -934,7 +934,7 @@ mod tests {
         )
         .unwrap();
         fs::write(
-            task_dir.join(crate::state_manager::QUALITY_GATE_STATE_FILENAME),
+            task_dir.join(crate::state_manager::RFV_LOOP_STATE_FILENAME),
             serde_json::to_string_pretty(&json!({
                 "schema_version": "router-rs-quality-gate-v1",
                 "loop_status": "active",
@@ -959,7 +959,7 @@ mod tests {
         let task_dir = tmp.join("artifacts/current").join(tid);
         fs::create_dir_all(&task_dir).unwrap();
         fs::write(
-            task_dir.join(crate::state_manager::QUALITY_GATE_STATE_FILENAME),
+            task_dir.join(crate::state_manager::RFV_LOOP_STATE_FILENAME),
             serde_json::to_string_pretty(&json!({
                 "schema_version": "router-rs-quality-gate-v1",
                 "loop_status": "active",
@@ -1009,7 +1009,7 @@ mod tests {
         let task_dir = tmp.join("artifacts/current").join(tid);
         fs::create_dir_all(&task_dir).unwrap();
         fs::write(
-            task_dir.join(crate::state_manager::QUALITY_GATE_STATE_FILENAME),
+            task_dir.join(crate::state_manager::RFV_LOOP_STATE_FILENAME),
             serde_json::to_string_pretty(&json!({
                 "schema_version": "router-rs-quality-gate-v1",
                 "loop_status": "active",
@@ -1064,7 +1064,7 @@ mod tests {
         let task_dir = tmp.join("artifacts/current").join(tid);
         fs::create_dir_all(&task_dir).unwrap();
         fs::write(
-            task_dir.join(crate::state_manager::QUALITY_GATE_STATE_FILENAME),
+            task_dir.join(crate::state_manager::RFV_LOOP_STATE_FILENAME),
             serde_json::to_string_pretty(&json!({
                 "schema_version": "router-rs-quality-gate-v1",
                 "loop_status": "active",
@@ -1104,7 +1104,7 @@ mod tests {
         let task_dir = tmp.join("artifacts/current").join(tid);
         fs::create_dir_all(&task_dir).unwrap();
         fs::write(
-            task_dir.join(crate::state_manager::QUALITY_GATE_STATE_FILENAME),
+            task_dir.join(crate::state_manager::RFV_LOOP_STATE_FILENAME),
             serde_json::to_string_pretty(&json!({
                 "schema_version": "router-rs-quality-gate-v1",
                 "loop_status": "active",
@@ -1164,7 +1164,7 @@ mod tests {
         fs::create_dir_all(&task_dir).unwrap();
         let t40 = "0123456789012345678901234567890123456789";
         fs::write(
-            task_dir.join(crate::state_manager::QUALITY_GATE_STATE_FILENAME),
+            task_dir.join(crate::state_manager::RFV_LOOP_STATE_FILENAME),
             serde_json::to_string_pretty(&json!({
                 "schema_version": "router-rs-quality-gate-v1",
                 "external_research_strict": true,
@@ -1212,7 +1212,7 @@ mod tests {
         fs::create_dir_all(&task_dir).unwrap();
         let t40 = "0123456789012345678901234567890123456789";
         fs::write(
-            task_dir.join(crate::state_manager::QUALITY_GATE_STATE_FILENAME),
+            task_dir.join(crate::state_manager::RFV_LOOP_STATE_FILENAME),
             serde_json::to_string_pretty(&json!({
                 "schema_version": "router-rs-quality-gate-v1",
                 "external_research_strict": false,
@@ -1303,7 +1303,7 @@ mod tests {
         .unwrap();
         // RFV with PASS round + UNKNOWN round + a no_evidence_window flag.
         fs::write(
-            task_dir.join(crate::state_manager::QUALITY_GATE_STATE_FILENAME),
+            task_dir.join(crate::state_manager::RFV_LOOP_STATE_FILENAME),
             serde_json::to_string_pretty(&json!({
                 "schema_version": "router-rs-quality-gate-v1",
                 "loop_status": "active",

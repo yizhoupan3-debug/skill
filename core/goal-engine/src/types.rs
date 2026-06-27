@@ -87,8 +87,8 @@ pub struct LoopProfileConfig {
     pub profile: String,
     /// 是否可被循环调度器调度
     pub loop_capable: bool,
-    /// closeout 强制模式
-    pub closeout_enforcement: String,
+    /// closeout 模式（hard-block / advisory）
+    pub closeout_mode: String,
     /// review_gate 模式
     pub review_gate: String,
     /// 是否强制 spawn-first nudge
@@ -118,8 +118,9 @@ impl LoopProfileConfig {
             .get("loop_capable")
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
-        let closeout_enforcement = profile_val
-            .get("closeout_enforcement")
+        let closeout_mode = profile_val
+            .get("closeout_mode")
+            .or_else(|| profile_val.get("closeout_enforcement"))
             .and_then(|v| v.as_str())
             .unwrap_or("advisory")
             .to_string();
@@ -143,7 +144,7 @@ impl LoopProfileConfig {
         Some(LoopProfileConfig {
             profile: profile_name.to_string(),
             loop_capable,
-            closeout_enforcement,
+            closeout_mode,
             review_gate,
             spawn_first_nudge,
             cost_budget,
@@ -152,7 +153,7 @@ impl LoopProfileConfig {
     }
 
     pub fn is_hard_block(&self) -> bool {
-        self.closeout_enforcement == "hard-block"
+        self.closeout_mode == "hard-block"
     }
 }
 

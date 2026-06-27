@@ -6,6 +6,7 @@ use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::sync::OnceLock;
 use std::time::Duration;
 
+use core_errors::FrameworkError;
 use fr_contracts::execution_contract::{
     EXECUTION_AUTHORITY, EXECUTION_MODEL_ID_SOURCE, EXECUTION_RESPONSE_SHAPE_DRY_RUN,
     EXECUTION_RESPONSE_SHAPE_LIVE_PRIMARY, EXECUTION_SCHEMA_VERSION,
@@ -22,14 +23,15 @@ fn normalize_allowlisted_host(host: &str) -> String {
     host.trim().trim_end_matches('.').to_ascii_lowercase()
 }
 
-fn parse_execute_aggregator_host_allowlist() -> Result<Option<HashSet<String>>, String> {
+fn parse_execute_aggregator_host_allowlist(
+) -> Result<Option<HashSet<String>>, FrameworkError> {
     let raw_value = match std::env::var(EXECUTE_AGGREGATOR_HOST_ALLOWLIST_ENV) {
         Ok(value) => value,
         Err(std::env::VarError::NotPresent) => return Ok(None),
         Err(std::env::VarError::NotUnicode(_)) => {
-            return Err(format!(
+            return Err(FrameworkError::validation(format!(
                 "router-rs live execute allowlist env {EXECUTE_AGGREGATOR_HOST_ALLOWLIST_ENV} is not valid UTF-8"
-            ));
+            )));
         }
     };
 
@@ -40,21 +42,21 @@ fn parse_execute_aggregator_host_allowlist() -> Result<Option<HashSet<String>>, 
         .collect::<HashSet<_>>();
 
     if hosts.is_empty() {
-        return Err(format!(
+        return Err(FrameworkError::validation(format!(
             "router-rs live execute allowlist env {EXECUTE_AGGREGATOR_HOST_ALLOWLIST_ENV} is configured but empty"
-        ));
+        )));
     }
 
     for entry in &hosts {
         if entry.eq_ignore_ascii_case("localhost") {
-            return Err(format!(
+            return Err(FrameworkError::validation(format!(
                 "router-rs live execute allowlist env {EXECUTE_AGGREGATOR_HOST_ALLOWLIST_ENV} only accepts domain entries (localhost is forbidden)"
-            ));
+            )));
         }
         if entry.parse::<IpAddr>().is_ok() {
-            return Err(format!(
+            return Err(FrameworkError::validation(format!(
                 "router-rs live execute allowlist env {EXECUTE_AGGREGATOR_HOST_ALLOWLIST_ENV} only accepts domain entries (IP literals are forbidden): {entry}"
-            ));
+            )));
         }
     }
 
@@ -572,7 +574,8 @@ pub fn perform_live_execute(
 /// up a tokio worker thread for up to 30 seconds. A future improvement would be to
 /// use an async `reqwest::Client` and `tokio::task::spawn_blocking` to offload the
 /// blocking I/O, or to gate this path so it only runs outside the stdio hot path.
-pub fn live_execute_http_client() -> Result<&'static reqwest::blocking::Client, String> {
+pub fn live_execute_http_client(
+) -> Result<&'static reqwest::blocking::Client, FrameworkError> {
     static CLIENT: OnceLock<reqwest::blocking::Client> = OnceLock::new();
     if let Some(client) = CLIENT.get() {
         return Ok(client);
@@ -586,11 +589,11 @@ pub fn live_execute_http_client() -> Result<&'static reqwest::blocking::Client, 
         }
     let client = builder
         .build()
-        .map_err(|err| format!("build reqwest client failed: {err}"))?;
+        .map_err(|err| FrameworkError::validation(format!("build reqwest client failed: {err}")))?;
     let _ = CLIENT.set(client);
     CLIENT
         .get()
-        .ok_or_else(|| "build reqwest client failed: client cache was not initialized".to_string())
+        .ok_or_else(|| FrameworkError::validation("build reqwest client failed: client cache was not initialized".to_string()))
 }
 
 pub fn build_live_execute_response(
@@ -674,44 +677,50 @@ pub fn normalize_chat_completions_endpoint(base_url: &str) -> String {
     }
 }
 
-pub fn validate_live_execute_aggregator_base_url(base_url: &str) -> Result<(), String> {
+pub fn validate_live_execute_aggregator_base_url(base_url: &str) -> Result<(), FrameworkError> {
     let parsed = reqwest::Url::parse(base_url).map_err(|err| {
-        format!("router-rs live execute requires valid aggregator_base_url: {err}")
+        FrameworkError::validation(format!(
+            "router-rs live execute requires valid aggregator_base_url: {err}"
+        ))
     })?;
 
     if parsed.scheme() != "https" {
-        return Err(
+        return Err(FrameworkError::validation(
             "router-rs live execute requires https aggregator_base_url (http is not allowed)"
                 .to_string(),
-        );
+        ));
     }
 
     let host = parsed.host_str().ok_or_else(|| {
-        "router-rs live execute requires aggregator_base_url with a host".to_string()
+        FrameworkError::validation(
+            "router-rs live execute requires aggregator_base_url with a host".to_string(),
+        )
     })?;
 
     if host.eq_ignore_ascii_case("localhost") || host.eq_ignore_ascii_case("localhost.") {
-        return Err("router-rs live execute blocks localhost aggregator_base_url".to_string());
+        return Err(FrameworkError::validation(
+            "router-rs live execute blocks localhost aggregator_base_url".to_string(),
+        ));
     }
 
     if let Ok(ip) = host.parse::<IpAddr>() {
         if is_forbidden_live_execute_ip(&ip) {
-            return Err(format!(
+            return Err(FrameworkError::validation(format!(
                 "router-rs live execute blocks unsafe aggregator_base_url host IP: {host}"
-            ));
+            )));
         }
-        return Err(
+        return Err(FrameworkError::validation(
             "router-rs live execute requires domain-based aggregator_base_url (IP literals are not allowed)"
                 .to_string(),
-        );
+        ));
     }
 
     if let Some(allowlisted_hosts) = parse_execute_aggregator_host_allowlist()? {
         let normalized_host = normalize_allowlisted_host(host);
         if !allowlisted_hosts.contains(&normalized_host) {
-            return Err(format!(
+            return Err(FrameworkError::validation(format!(
                 "router-rs live execute blocks aggregator_base_url host not in allowlist: {host}"
-            ));
+            )));
         }
     }
 
@@ -758,7 +767,7 @@ fn truncate_for_error(raw: &str) -> String {
     }
 }
 
-pub fn extract_chat_completion_content(payload: &Value) -> Result<String, String> {
+pub fn extract_chat_completion_content(payload: &Value) -> Result<String, FrameworkError> {
     let message_content = payload
         .get("choices")
         .and_then(Value::as_array)
@@ -766,7 +775,9 @@ pub fn extract_chat_completion_content(payload: &Value) -> Result<String, String
         .and_then(|choice| choice.get("message"))
         .and_then(|message| message.get("content"))
         .ok_or_else(|| {
-            "router-rs live execute response missing choices[0].message.content".to_string()
+            FrameworkError::validation(
+                "router-rs live execute response missing choices[0].message.content".to_string(),
+            )
         })?;
 
     if let Some(content) = message_content.as_str() {
@@ -793,7 +804,9 @@ pub fn extract_chat_completion_content(payload: &Value) -> Result<String, String
         }
     }
 
-    Err("router-rs live execute response content had an unsupported shape".to_string())
+    Err(FrameworkError::validation(
+        "router-rs live execute response content had an unsupported shape".to_string(),
+    ))
 }
 
 fn estimate_tokens(text: &str) -> usize {
@@ -902,21 +915,21 @@ mod tests {
     fn validate_url_rejects_http() {
         let result = validate_live_execute_aggregator_base_url("http://api.example.com");
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("https"));
+        assert!(result.unwrap_err().to_string().contains("https"));
     }
 
     #[test]
     fn validate_url_rejects_localhost() {
         let result = validate_live_execute_aggregator_base_url("https://localhost:8080");
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("localhost"));
+        assert!(result.unwrap_err().to_string().contains("localhost"));
     }
 
     #[test]
     fn validate_url_rejects_ip_literal() {
         let result = validate_live_execute_aggregator_base_url("https://1.2.3.4");
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("IP"));
+        assert!(result.unwrap_err().to_string().contains("IP"));
     }
 
     #[test]

@@ -18,7 +18,7 @@ use std::time::SystemTime;
 pub const GOAL_STATE_FILENAME: &str = "GOAL_STATE.json";
 pub const GOAL_STATE_SCHEMA_VERSION: &str = "router-rs-goal-v1";
 pub const EVIDENCE_INDEX_FILENAME: &str = "EVIDENCE_INDEX.json";
-pub const QUALITY_GATE_STATE_FILENAME: &str = "RFV_LOOP_STATE.json";
+pub const RFV_LOOP_STATE_FILENAME: &str = "RFV_LOOP_STATE.json";
 pub const REQUIRES_COMPLETION_EVIDENCE_KEY: &str = "requires_completion_evidence";
 // LEGACY_GOAL_DRIVE_PARAGRAPH_PREFIX removed — no callers, legacy prefix from retired goal-drive paragraph format.
 pub const CONTINUITY_SESSION_CHECKPOINT_TASK_ID: &str = "continuity-session";
@@ -483,7 +483,7 @@ mod tests {
     }
 
     #[test]
-    fn goal_start_persists_lifecycle_profile() {
+    fn goal_start_ignores_lifecycle_profile() {
         let suffix = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("time")
@@ -505,14 +505,15 @@ mod tests {
         }))
         .expect("start");
         assert_eq!(out["ok"], json!(true));
-        // Verify lifecycle_profile persisted via status read
+        // lifecycle_profile is no longer written to GOAL_STATE (Wave 2a v10).
         let st = framework_goal_drive(json!({
             "repo_root": rr,
             "operation": "status",
             "task_id": "t-lite",
         }))
         .expect("status");
-        assert_eq!(st["goal_state"]["lifecycle_profile"], json!("task"));
+        assert!(!st["goal_state"].get("lifecycle_profile").is_some(),
+            "lifecycle_profile should not be written to GOAL_STATE in v10");
         let _ = fs::remove_dir_all(&repo);
     }
 
@@ -741,7 +742,10 @@ mod tests {
             "task_id": "noev",
         }))
         .expect_err("complete should require evidence");
-        assert!(err.contains("EVIDENCE_INDEX"), "err={err}");
+        assert!(
+            err.contains("validate_transition blocked"),
+            "err={err}"
+        );
         let st = read_goal_state(&repo, Some("noev"))
             .expect("read")
             .expect("state");
@@ -787,7 +791,10 @@ mod tests {
             "task_id": "paused",
         }))
         .expect_err("paused drive goal still requires evidence");
-        assert!(err.contains("EVIDENCE_INDEX"), "err={err}");
+        assert!(
+            err.contains("validate_transition blocked"),
+            "err={err}"
+        );
         let st = read_goal_state(&repo, Some("paused"))
             .expect("read")
             .expect("state");
@@ -821,7 +828,10 @@ mod tests {
             "task_id": "legacy",
         }))
         .expect_err("legacy validation contract requires evidence");
-        assert!(err.contains("EVIDENCE_INDEX"), "err={err}");
+        assert!(
+            err.contains("validate_transition blocked"),
+            "err={err}"
+        );
         let st = read_goal_state(&repo, Some("legacy"))
             .expect("read")
             .expect("state");
@@ -1016,7 +1026,7 @@ fn goal_complete_rejected_when_completion_gates_depth_not_met() {
         )
         .expect("evidence");
         fs::write(
-            repo.join("artifacts/current/gok").join(QUALITY_GATE_STATE_FILENAME),
+            repo.join("artifacts/current/gok").join(RFV_LOOP_STATE_FILENAME),
             r#"{"schema_version":"router-rs-quality-gate-v1","loop_status":"active","goal":"g","max_rounds":3,"current_round":1,"rounds":[{"round":1,"verify_result":"PASS"}]}"#,
         )
         .expect("rfv");

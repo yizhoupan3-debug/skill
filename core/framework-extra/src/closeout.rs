@@ -1,7 +1,10 @@
-//! Closeout enforcement wrappers and task-registry cache.
+//! Closeout evaluation hooks and task-registry cache (Wave 3c-i successor).
 //!
-//! Functions for evaluating closeout records, checking environment-level
-//! enforcement gates, and caching task-registry lookups.
+//! The original closeout_enforcement module was deleted from fr-contracts in
+//! Wave 3c-i Phase C. Validation logic migrated to `core-state/closeout_validation.rs`.
+//! This module provides the active wrapper: closeout record evaluation, environment-level
+//! enforcement gating (env var `ROUTER_RS_CLOSEOUT_ENFORCEMENT`), and task-registry lookups
+//! consumed by the `framework_hook_closeout` MCP tool path.
 
 use core_errors::FrameworkError;
 use core_state::closeout_validation::{

@@ -185,7 +185,7 @@ fn run_loop_inner(
         .unwrap_or_else(|| LoopProfileConfig {
             profile: entry.profile.clone(),
             loop_capable: true,
-            closeout_enforcement: "hard-block".to_string(),
+            closeout_mode: "hard-block".to_string(),
             review_gate: "mandatory".to_string(),
             spawn_first_nudge: true,
             cost_budget: entry.cost_budget.clone(),

@@ -16,43 +16,45 @@
 
 ## Lifecycle
 
-- **无固定阶段 lifecycle**。Task 是运行时底层执行引擎（§Task Engine），Goal/Loop 是 Task 上的策略与可选自动化层。
-- **Lifecycle Profile**：每个 task 通过 `lifecycle_profile` 控制行为（`interactive` 默认 / `loop-auto`），详见 §Task Engine。
+- **无固定阶段 lifecycle**。Task 是运行时底层执行引擎（§Task Engine），Loop Goal 是 Task 上的策略与可选自动化层，QG Route 是可插拔质量门注册表。
+- **Lifecycle Profile 已在 v10 移除**（Wave 2a）。运行时行为由 `RUNTIME_REGISTRY.json` 中的 `lifecycle_profiles` 配置驱动，不写入 GOAL_STATE.json。
 - **Review**：Review findings-only。显式 `$code-review-deep` 或 review 请求仍适用。详见 `skills/code-review-deep/SKILL.md`。
 
 ## Task Engine（底层执行引擎）
 
-Task 是框架的**底层执行引擎**，不是可选组件。用户层表现为：定义 todo → 执行 todo → 完成 todo，以及与各种状态的关联。
+Task 是框架的**底层执行引擎**，不是可选组件。用户层表现为：定义 todo → 执行 todo → 完成 todo。
 
-### 核心机制
+### v10 三核心概念
 
-| 组件 | 路径 | 职责 |
+| 概念 | 路径 | 职责 |
 |------|------|------|
-| 完整 Task 组件描述 | — | 见 [`docs/architecture.md §3`](docs/architecture.md#3-dag-验证矩阵)（此处不重复） |
+| **Task** | `core/core-state/src/task_state.rs` | 轻量脚手架 — task_id + TASK_LEDGER.jsonl + TASK_POINTERS.json |
+| **Loop Goal** | `core/goal-engine/src/` | 可选自动化 — 6 态机 + preflight/dispatch/verify 闭环，只写 GOAL_STATE.json |
+| **QG Route** | `core/quality-gate/src/` | 可插拔质量门 — 6 GateChecker，Scene 分发，GateVerdict |
 
-### Lifecycle Profile
+详细架构见 [`ROADMAP-v10.md §2`](docs/ROADMAP-v10.md#2-架构)。真源是 ROADMAP-v10.md（当前架构），非旧的 architecture.md。
 
-每个 task 的 `GOAL_STATE.json` 中的 `lifecycle_profile` 字段控制行为模式：
-- **`interactive`**（默认）：用户主导执行，loop engine 不可调度，closeout 为 advisory
-- **`loop-auto`**：允许 loop engine 自动调度（discovery → dispatch → verify 闭环）
+### Goal 语义
 
-### Loop Engine — 可选自动化增强层
+- 所有 Goal 都是 **Loop** 语义（`goal_type: "loop"` 唯一合法值）。GoalType::Linear 已在 v10 删除。
+- 每次 `framework_goal_drive complete` = iteration complete。不归档、不 neutralize 指针，`status` 保持 `running`。
 
-Loop engine（L6 Orchestration）运行在 Task 之上，仅对 `loop-auto` profile 的 task 生效：
-- `interactive` task：loop engine 拒绝调度（`preflight_profile_check` 直接报错）
-- `loop-auto` task：自动 discovery → preflight → dispatch → verify → closeout 闭环
-- Loop engine 不改变 task 作为基础执行单元的地位；task 独立于 loop 运行
+### Quality Gate
+
+- 退出门：双阶段防欺诈（Stage 1 evidence check，不区分 scene）+ QGRoute evaluate（Stage 2 scene 分发 checker 链）。
+- MCP 工具：`framework_quality_gate`（stdio 分发）、`closeout_gate`（已在 MCP_TOOL_REGISTRY.json 注册）。
+- **注意**：`quality_gate_manage` MCP 工具**不存在**（可能在旧文档中被引用），不要生成或引导用户调用。
 
 ### 会话级作用域
 
-- Goal state 仅作用于当前对话 session，不做跨对话持久化。新 session 首次 `goal_state_manage operation=start` 创建新 state，不读取旧 session 残留。跨 session 延续需用户显式 `resume`。
-- **MCP harness 自动注入**：MCP stdio 层在连接建立时生成 `connection_session_id`（`{host_id}-{nanos}`），自动注入到 `goal_state_manage` 和 `quality_gate_manage`的 payload 中。宿主无需设置环境变量，无需显式传 `session_id` 参数。
-- **task_id 必填**：`goal_state_manage` 的 `task_id` 为必填参数（schema `required` 与代码双重校验）。`goal_state_read` / `quality_gate_status`的 `task_id` 仍为可选（默认 active task）。
+- **session_id 为必填**：`framework_goal_drive` 的 `session_id` 由 MCP stdio 层自动注入（`connection_session_id`）或通过环境变量 `*_SESSION_ID` 设置。stale 检测依赖 session_id 匹配（见 `annotate_goal_staleness`）。
+- Goal 文件仅作用于当前会话，跨会话延续需显式 `resume`。
+- **task_id 必填**：`framework_goal_drive` 的 `task_id` 为必填。
 
 ### 真源路径
 
 - 真源：`artifacts/current/<task_id>/`；**无** hook 自动 digest / Stop checkpoint 默认路径。
-- Goal 磁盘：`GOAL_STATE.json` / `QUALITY_GATE_STATE.json`；显式 stdio：`framework_goal_drive` / `framework_quality_gate`。
+- Goal 磁盘：`GOAL_STATE.json` / `RFV_LOOP_STATE.json`（旧名，读兼容保留）；显式 stdio：`framework_goal_drive` / `framework_rfv_loop`。
 - 闭集宿主由 `RUNTIME_REGISTRY.json` 驱动。
 
 ## Task Intake

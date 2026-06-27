@@ -91,28 +91,32 @@ fn repo_cache_key(registry_path: &Path) -> PathBuf {
         .unwrap_or_else(|| registry_path.to_path_buf())
 }
 
-fn lane_set(root: &Value, field: &str) -> Result<HashSet<String>, String> {
+fn lane_set(root: &Value, field: &str) -> Result<HashSet<String>, FrameworkError> {
     let lanes = root
         .get("review_gate")
         .and_then(|v| v.get(field))
         .and_then(Value::as_array)
-        .ok_or_else(|| format!("RUNTIME_REGISTRY.review_gate.{field} must be a non-empty array"))?;
+        .ok_or_else(|| {
+            FrameworkError::validation(format!(
+                "RUNTIME_REGISTRY.review_gate.{field} must be a non-empty array"
+            ))
+        })?;
     let mut out = HashSet::new();
     for item in lanes {
-        let s = item
-            .as_str()
-            .ok_or_else(|| format!("review_gate.{field} entry must be string"))?;
+        let s = item.as_str().ok_or_else(|| {
+            FrameworkError::validation(format!("review_gate.{field} entry must be string"))
+        })?;
         out.insert(normalize_subagent_lane(s));
     }
     if out.is_empty() {
-        return Err(format!(
+        return Err(FrameworkError::validation(format!(
             "RUNTIME_REGISTRY.review_gate.{field} must not be empty"
-        ));
+        )));
     }
     Ok(out)
 }
 
-fn reviewer_lanes_from_root(root: &Value) -> Result<HashSet<String>, String> {
+fn reviewer_lanes_from_root(root: &Value) -> Result<HashSet<String>, FrameworkError> {
     lane_set(root, "reviewer_lanes")
 }
 
@@ -140,12 +144,14 @@ fn bool_map_by_host(review_gate: &Value, field: &str) -> HashMap<String, bool> {
     out
 }
 
-fn load_snapshot_from_disk(registry_path: &Path) -> Result<ReviewGateSnapshot, String> {
-    let raw = fs::read_to_string(registry_path).map_err(|e| format!("read registry: {e}"))?;
-    let root: Value = serde_json::from_str(&raw).map_err(|e| format!("parse registry: {e}"))?;
-    let review_gate = root
-        .get("review_gate")
-        .ok_or_else(|| "RUNTIME_REGISTRY.review_gate missing".to_string())?;
+fn load_snapshot_from_disk(registry_path: &Path) -> Result<ReviewGateSnapshot, FrameworkError> {
+    let raw = fs::read_to_string(registry_path)
+        .map_err(|e| FrameworkError::validation(format!("read registry: {e}")))?;
+    let root: Value = serde_json::from_str(&raw)
+        .map_err(|e| FrameworkError::validation(format!("parse registry: {e}")))?;
+    let review_gate = root.get("review_gate").ok_or_else(|| {
+        FrameworkError::validation("RUNTIME_REGISTRY.review_gate missing".to_string())
+    })?;
     let spawn_first_enabled = review_gate
         .get("spawn_first_enabled")
         .and_then(Value::as_bool)
@@ -192,13 +198,13 @@ fn load_snapshot_from_disk(registry_path: &Path) -> Result<ReviewGateSnapshot, S
     })
 }
 
-fn snapshot(repo_root: Option<&Path>) -> Result<ReviewGateSnapshot, String> {
+fn snapshot(repo_root: Option<&Path>) -> Result<ReviewGateSnapshot, FrameworkError> {
     let path = registry_json_path(repo_root);
     let key = repo_cache_key(&path);
     let hit = {
         let guard = cache()
             .lock()
-            .map_err(|e| format!("registry cache lock poisoned: {e}"))?;
+            .map_err(|e| FrameworkError::lock(format!("registry cache lock poisoned: {e}")))?;
         guard.get(&key).cloned()
     };
     if let Some(snapshot) = hit {
@@ -207,7 +213,7 @@ fn snapshot(repo_root: Option<&Path>) -> Result<ReviewGateSnapshot, String> {
     let loaded = load_snapshot_from_disk(&path)?;
     let mut guard = cache()
         .lock()
-        .map_err(|e| format!("registry cache lock poisoned: {e}"))?;
+        .map_err(|e| FrameworkError::lock(format!("registry cache lock poisoned: {e}")))?;
     if guard.len() >= 64 {
         guard.clear();
     }
@@ -329,20 +335,22 @@ pub fn spawn_first_includes_model_inherit_for_host(
 /// Operator/doctor probe: returns `Err` when disk registry lane snapshot cannot load.
 pub fn check_review_gate_registry_snapshot(repo_root: &Path) -> Result<(), FrameworkError> {
     let path = registry_json_path(Some(repo_root));
-    load_snapshot_from_disk(&path).map(|_| ()).map_err(FrameworkError::validation)
+    load_snapshot_from_disk(&path).map(|_| ())
 }
 
-fn load_registry_root(repo_root: Option<&Path>) -> Result<Value, String> {
+fn load_registry_root(repo_root: Option<&Path>) -> Result<Value, FrameworkError> {
     let path = registry_json_path(repo_root);
-    let raw = fs::read_to_string(&path).map_err(|e| format!("read registry: {e}"))?;
-    serde_json::from_str(&raw).map_err(|e| format!("parse registry: {e}"))
+    let raw = fs::read_to_string(&path)
+        .map_err(|e| FrameworkError::validation(format!("read registry: {e}")))?;
+    serde_json::from_str(&raw)
+        .map_err(|e| FrameworkError::validation(format!("parse registry: {e}")))
 }
 
 /// `lifecycle_profiles.<name>.disable_spawn_first_nudge` (default false if missing).
 pub fn lifecycle_profile_disables_spawn_first_nudge(
     repo_root: Option<&Path>,
     profile: &str,
-) -> Result<bool, String> {
+) -> Result<bool, FrameworkError> {
     let root = load_registry_root(repo_root)?;
     Ok(root
         .get("lifecycle_profiles")

@@ -930,7 +930,8 @@ mod tests {
     fn provider_rank_is_not_an_executable_hook_policy_operation() {
         let err = evaluate_hook_policy_value(json!({"operation": "provider-rank"}))
             .expect_err("provider registry is document-only");
-        assert!(err.contains("unsupported hook policy operation"));
+        let msg = err.to_string();
+        assert!(msg.contains("unsupported hook policy operation"));
     }
 
     #[test]

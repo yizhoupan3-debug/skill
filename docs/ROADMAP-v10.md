@@ -233,6 +233,8 @@ BootManager ──init()──→ {GoalEngine, TaskScaffold, QG Route}
   TaskScaffold → GoalEngine（违反，脚手架不知道 goal 存在）
   QG Route → GoalEngine（违反，路由层不持有运行状态）
   GoalEngine 直接调用 QG Route（违反，必须通过 QGEntry 统一入口）
+
+**角色标注**：`runtime-core` 是 QGEntry 和 QGRoute 的集成宿主，提供 `qg_entry::trigger()`（双阶段退出门入口）和 `qg_route::evaluate_qg_route()`（checker 链调度）。
 ```
 
 **v9 → v10 运行层映射：**
@@ -450,6 +452,7 @@ fn verify_evidence_chain(scaffold: &TaskScaffold) -> bool {
 | `fr-contracts` | 3c-i | 精简 | ✅ 完成（closeout_enforcement 模块删除 ~1.2K 行，保留 pre_tool_use_guard + execution_contract）|
 | `agent-orchestrator` | 3c-i++ | 重命名+集成 | ✅ 完成（session-supervisor → agent-orchestrator 重命名 + 14 MCP 工具 + skill 衔接）|
 | `core/quality-gate` | 1/4a | 新建 | ✅ 完成（trait + types + CheckerRegistry + evaluate + 5 个 scene 常量 + 6 个 Checker 适配器）|
+| `fr-utils` | 3c-i | 保留 | ✅ 未变更（constants/utility 保持稳定；CLOSEOUT_COMPLETION_STATUSES 仍被 framework-extra/closeout.rs 使用）|
 
 ---
 
@@ -531,9 +534,10 @@ fn verify_evidence_chain(scaffold: &TaskScaffold) -> bool {
 
 | 步骤 | 结果 |
 |---|---|
-| R1-R8 → `validate_transition()` + `closeout_validation.rs` | ✅ `core/core-state/src/closeout_validation.rs` 364 行 |
-| 并行验证器 build + verify | ✅ `compare_old_closeout_vs_new_fraud_gate()` 在过渡期比对两个结果 |
-| 删 `closeout_enforcement` 模块 | ✅ 6 文件 ~1.2K 行已删 |
+| **Phase A**: 新建 `validate_transition()` + `closeout_validation.rs` | ✅ `core/core-state/src/closeout_validation.rs` 364 行 |
+| **Phase A**: 并行验证器 (`compare_old_closeout_vs_new_fraud_gate`) | ✅ 过渡期比对，验证新旧两路径结果一致 |
+| **Phase B**: `validate_transition()` 在 goal path 成为阻断门 | ✅ `framework_goal_drive complete` 中 `validate_transition()` 为阻断门权威路径；`compare_old_closeout_vs_new_fraud_gate` 降级为诊断旁路工具 |
+| **Phase C**: 删 `closeout_enforcement` 模块 | ✅ 6 文件 ~1.2K 行已删；逻辑迁至 `closeout_validation.rs` |
 | 双写期 + 旧 closeout_record 删除 | ✅ framework-extra/closeout.rs 清理 |
 | `loop-engine` → `goal-engine` 重命名 | ✅ 目录/workspace/代码/文档全量更新 |
 
@@ -578,7 +582,7 @@ fn verify_evidence_chain(scaffold: &TaskScaffold) -> bool {
 端到端链路已实现（见 §2.2 DAG 图）：
 - GoalEngine → QGEntry.trigger() → QGRoute.evaluate(scene, ctx) → GateVerdict
 - task_complete 触发防欺诈门作为 blocking gate
-- goal_drive 中防欺诈门为 parallel Phase A informational comparison
+- goal_drive 中防欺诈门为 authoritative blocking gate（`validate_transition()` 在 `framework_goal_drive complete` 中阻断，Phase B 已关闭；`compare_old_closeout_vs_new_fraud_gate()` 保留作为旁路对比工具）
 - framework_goal_state_manage(complete) 需先过 QGEntry
 
 #### Wave 5b（✅ 已完成）— Skill 解耦

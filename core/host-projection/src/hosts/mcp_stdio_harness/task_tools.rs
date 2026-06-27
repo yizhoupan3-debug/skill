@@ -4,6 +4,7 @@
 
 use super::*;
 use core_state::task_ledger::{append_transaction_assuming_l1_held, LedgerTransaction};
+use core_state::transition_validation::{validate_transition, TaskTransition};
 use core_state_utils::task_write_lock::apply_task_ledger_mutation;
 use serde_json::{json, Value};
 use std::path::Path;
@@ -164,7 +165,11 @@ pub(crate) fn tool_task_complete(arguments: &Value, repo_root: &Path) -> std::re
         return Ok(result.to_string());
     }
 
-    // No GOAL_STATE → direct pointer neutralization + ledger
+    // No GOAL_STATE → evidence check + pointer neutralization + ledger
+    let transition_v = validate_transition(repo_root, &task_id, TaskTransition::Complete);
+    if !transition_v.passed {
+        return Err(format!("task_complete blocked by evidence gate: {}", transition_v.reason));
+    }
     apply_task_ledger_mutation(repo_root, || {
         core_state::state_manager::neutralize_task_pointers_for_task(
             &repo_root_owned,
@@ -501,6 +506,15 @@ mod tests {
         .expect("start loop goal");
 
         // Complete one iteration
+        // Create evidence artifacts for the validate_transition gate
+        let evidence_dir = repo.join("artifacts/current/loop-list");
+        fs::create_dir_all(&evidence_dir).expect("mkdir evidence");
+        fs::write(
+            evidence_dir.join("EVIDENCE_INDEX.json"),
+            r#"{"artifacts":[{"exit_code":0,"command":"test"}]}"#,
+        )
+        .expect("write evidence");
+
         core_state::state_manager::framework_goal_drive(json!({
             "repo_root": repo.display().to_string(),
             "operation": "complete",
