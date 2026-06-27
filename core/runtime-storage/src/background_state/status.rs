@@ -91,10 +91,7 @@ pub(super) fn validate_transition(
     if allowed {
         Ok(())
     } else {
-        Err(format!(
-            "Invalid background job transition: {:?} -> {:?}",
-            previous_status, next_status
-        ))
+        Err(FrameworkError::validation(format!("Invalid background job transition: {:?} -> {:?}", previous_status, next_status)))
     }
 }
 impl BackgroundRunStatus {

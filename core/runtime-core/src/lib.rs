@@ -282,13 +282,13 @@ pub fn init_hooks() {
             },
             framework_goal_drive: core_state::state_manager::framework_goal_drive,
             handle_orchestrator_operation: |_payload| {
-                Err("orchestrator operation not registered".to_string())
+                Err(core_errors::FrameworkError::hook("orchestrator operation not registered"))
             },
             #[cfg(feature = "l5-state")]
             handle_background_state_operation: rt_storage::background_state::handle_background_state_operation,
             #[cfg(not(feature = "l5-state"))]
-            handle_background_state_operation: |_: serde_json::Value| -> Result<serde_json::Value, String> {
-                Err("background_state requires l5-state feature".to_string())
+            handle_background_state_operation: |_: serde_json::Value| -> Result<serde_json::Value, core_errors::FrameworkError> {
+                Err(core_errors::FrameworkError::hook("background_state requires l5-state feature"))
             },
             runtime_concurrency_defaults_payload: || {
                 serde_json::to_value(stdio_transport::runtime_concurrency_defaults_payload())

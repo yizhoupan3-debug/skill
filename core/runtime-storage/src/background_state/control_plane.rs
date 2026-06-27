@@ -11,9 +11,7 @@ use std::path::Path;
 pub(super) fn backend_capabilities(
     backend_family: &str,
 ) -> Result<RuntimeBackendCapabilities, FrameworkError> {
-    runtime_backend_capabilities(backend_family).map_err(|err| {
-        format!("Unsupported durable background-state backend family: {err}")
-    })
+    runtime_backend_capabilities(backend_family)
 }
 
 pub(super) fn normalized_backend_family(value: &str) -> String {

@@ -1,6 +1,7 @@
 //! Stdio JSON request dispatch.
 
 use serde::Serialize;
+use core_errors::FrameworkError;
 use serde::de::DeserializeOwned;
 use serde_json::{Map, Value};
 use std::path::{Path, PathBuf};
@@ -101,18 +102,18 @@ pub fn dispatch_stdio_json_request_payload(
             id: request.id,
             ok: false,
             payload: None,
-            error: Some(error),
+            error: Some(error.to_string()),
         },
     }
 }
 
-pub fn dispatch_stdio_json_request(op: &str, payload: Value) -> Result<Value, String> {
+pub fn dispatch_stdio_json_request(op: &str, payload: Value) -> Result<Value, FrameworkError> {
     crate::kernel_bootstrap::ensure_kernel_bootstrap();
     if handles_runtime_output_stdio_op(op) {
         let Some(result) = dispatch_runtime_output_mode_stdio(op, payload) else {
-            return Err(format!("runtime output mode dispatch drifted for {op}"));
+            return Err(FrameworkError::validation(format!("runtime output mode dispatch drifted for {op}")));
         };
-        return result;
+        return result.map_err(FrameworkError::validation);
     }
     match classify_stdio_op(op) {
         Some(StdioOpDomain::Routing) => dispatch_routing_stdio_request(op, payload),
@@ -124,25 +125,25 @@ pub fn dispatch_stdio_json_request(op: &str, payload: Value) -> Result<Value, St
     }
 }
 
-fn parse_payload<T: DeserializeOwned>(payload: Value, context: &str) -> Result<T, String> {
-    serde_json::from_value(payload).map_err(|err| format!("parse {context} input failed: {err}"))
+fn parse_payload<T: DeserializeOwned>(payload: Value, context: &str) -> Result<T, FrameworkError> {
+    serde_json::from_value(payload).map_err(|err| FrameworkError::validation(format!("parse {context} input failed: {err}")))
 }
 
-fn serialize_payload<T: Serialize>(value: T, context: &str) -> Result<Value, String> {
-    serde_json::to_value(value).map_err(|err| format!("serialize {context} output failed: {err}"))
+fn serialize_payload<T: Serialize>(value: T, context: &str) -> Result<Value, FrameworkError> {
+    serde_json::to_value(value).map_err(|err| FrameworkError::validation(format!("serialize {context} output failed: {err}")))
 }
 
-fn parse_and_dispatch<T, R, F>(payload: Value, context: &str, handler: F) -> Result<Value, String>
+fn parse_and_dispatch<T, R, F>(payload: Value, context: &str, handler: F) -> Result<Value, FrameworkError>
 where
     T: DeserializeOwned,
     R: Serialize,
-    F: FnOnce(T) -> Result<R, String>,
+    F: FnOnce(T) -> Result<R, FrameworkError>,
 {
     let request = parse_payload::<T>(payload, context)?;
     serialize_payload(handler(request)?, context)
 }
 
-fn dispatch_stdio_closeout_evaluate(payload: Value) -> Result<Value, String> {
+fn dispatch_stdio_closeout_evaluate(payload: Value) -> Result<Value, FrameworkError> {
     let repo_root = optional_non_empty_string(&payload, "repo_root");
     let task_id = optional_non_empty_string(&payload, "task_id");
     let result = if let (Some(repo_root), Some(task_id), Some(record_path)) = (
@@ -193,11 +194,11 @@ fn dispatch_stdio_closeout_evaluate(payload: Value) -> Result<Value, String> {
     result
 }
 
-fn dispatch_routing_stdio_request(op: &str, payload: Value) -> Result<Value, String> {
+fn dispatch_routing_stdio_request(op: &str, payload: Value) -> Result<Value, FrameworkError> {
     match op {
         "route" => dispatch_stdio_route(payload),
         "search_skills" => dispatch_stdio_search_skills(payload),
-        "hook_policy" => evaluate_hook_policy_value(payload).map_err(|e| e.to_string()),
+        "hook_policy" => evaluate_hook_policy_value(payload),
         "pre_tool_use_guard" => Ok(evaluate_pre_tool_use_guard_value(payload)?),
         "concurrency_defaults" => serialize_payload(runtime_concurrency_defaults_payload(), "concurrency defaults"),
         "route_report" => dispatch_stdio_route_report(payload),
@@ -213,15 +214,16 @@ fn dispatch_routing_stdio_request(op: &str, payload: Value) -> Result<Value, Str
         "hook_event_routing_contract" => Ok(hook_event_routing_contract()),
         "eval_route" => dispatch_stdio_eval_route(payload),
         "eval_route_contract" => Ok(eval_route_contract()),
-        _ => Err(format!("unsupported routing stdio operation: {op}")),
+        _ => Err(FrameworkError::validation(format!("unsupported routing stdio operation: {op}"))),
     }
 }
 
-fn dispatch_runtime_stdio_request(op: &str, payload: Value) -> Result<Value, String> {
+fn dispatch_runtime_stdio_request(op: &str, payload: Value) -> Result<Value, FrameworkError> {
     match op {
         "execute" => {
             let request = parse_payload::<ExecuteRequestPayload>(payload, "execute")?;
-            serialize_payload(execute_request(request)?, "execute")
+            serialize_payload(execute_request(request)
+                .map_err(FrameworkError::validation)?, "execute")
         }
         "execution_contract_bundle" => Ok(Value::Object(build_execution_contract_bundle())),
         "normalize_execution_kernel_metadata_contract" => {
@@ -264,80 +266,84 @@ fn dispatch_runtime_stdio_request(op: &str, payload: Value) -> Result<Value, Str
         "background_control" => parse_and_dispatch::<BackgroundControlRequestPayload, _, _>(
             payload,
             "background control",
-            framework_extra::orchestration_controller::build_background_control_response,
+            |p| framework_extra::orchestration_controller::build_background_control_response(p)
+                .map_err(FrameworkError::validation),
         ),
         #[cfg(feature = "l5-state")]
-        "background_state" => handle_background_state_operation(payload),
+        "background_state" => handle_background_state_operation(payload)
+            .map_err(FrameworkError::validation),
         #[cfg(not(feature = "l5-state"))]
-        "background_state" => Err("background_state requires l5-state feature".to_string()),
+        "background_state" => Err(FrameworkError::hook("background_state requires l5-state feature")),
         "session_supervisor" => {
             let hooks = framework_kernel::runtime_hooks::hooks();
             hooks.handle_orchestrator_operation(payload)
+                .map_err(FrameworkError::hook)
         },
-        "describe_transport" => build_trace_transport_descriptor(payload).map_err(|e| e.to_string()),
-        "describe_handoff" => build_trace_handoff_descriptor(payload).map_err(|e| e.to_string()),
-        "checkpoint_resume_manifest" => build_checkpoint_resume_manifest(payload).map_err(|e| e.to_string()),
+        "describe_transport" => build_trace_transport_descriptor(payload).map_err(FrameworkError::validation),
+        "describe_handoff" => build_trace_handoff_descriptor(payload).map_err(FrameworkError::validation),
+        "checkpoint_resume_manifest" => build_checkpoint_resume_manifest(payload).map_err(FrameworkError::validation),
         "runtime_checkpoint_control_plane" => {
             build_checkpoint_control_plane_compiler_payload(payload)
+                .map_err(FrameworkError::validation)
         }
-        "write_transport_binding" => write_transport_binding_payload(payload).map_err(|e| e.to_string()),
-        "write_checkpoint_resume_manifest" => write_checkpoint_resume_manifest_payload(payload).map_err(|e| e.to_string()),
-        "attach_runtime_event_transport" => attach_runtime_event_transport(payload).map_err(|e| e.to_string()),
-        "subscribe_attached_runtime_events" => subscribe_attached_runtime_events(payload).map_err(|e| e.to_string()),
+        "write_transport_binding" => write_transport_binding_payload(payload).map_err(FrameworkError::validation),
+        "write_checkpoint_resume_manifest" => write_checkpoint_resume_manifest_payload(payload).map_err(FrameworkError::validation),
+        "attach_runtime_event_transport" => attach_runtime_event_transport(payload).map_err(FrameworkError::validation),
+        "subscribe_attached_runtime_events" => subscribe_attached_runtime_events(payload).map_err(FrameworkError::validation),
         "cleanup_attached_runtime_event_transport" => {
-            cleanup_attached_runtime_event_transport(payload).map_err(|e| e.to_string())
+            cleanup_attached_runtime_event_transport(payload).map_err(FrameworkError::validation)
         }
         "runtime_storage" => parse_and_dispatch::<RuntimeStorageRequestPayload, _, _>(
             payload,
             "runtime storage",
-            runtime_storage_operation,
+            |p| runtime_storage_operation(p).map_err(FrameworkError::validation),
         ),
         "control_plane_contracts" => {
             serialize_payload(build_control_plane_contract_descriptors(), "control plane contracts")
         }
-        _ => Err(format!("unsupported runtime stdio operation: {op}")),
+        _ => Err(FrameworkError::validation(format!("unsupported runtime stdio operation: {op}"))),
     }
 }
 
-fn dispatch_trace_stdio_request(op: &str, payload: Value) -> Result<Value, String> {
+fn dispatch_trace_stdio_request(op: &str, payload: Value) -> Result<Value, FrameworkError> {
     match op {
         "trace_record_event" => parse_and_dispatch::<TraceRecordEventRequestPayload, _, _>(
             payload,
             "trace record event",
-            |p| record_trace_event(p).map_err(|e| e.to_string()),
+            |p| record_trace_event(p).map_err(|e| FrameworkError::validation(e.to_string())),
         ),
         "trace_stream_replay" => parse_and_dispatch::<TraceStreamReplayRequestPayload, _, _>(
             payload,
             "trace stream replay",
-            replay_trace_stream,
+            |p| replay_trace_stream(p).map_err(FrameworkError::validation),
         ),
         "trace_stream_inspect" => parse_and_dispatch::<TraceStreamInspectRequestPayload, _, _>(
             payload,
             "trace stream inspect",
-            inspect_trace_stream,
+            |p| inspect_trace_stream(p).map_err(FrameworkError::validation),
         ),
         "trace_compact" => parse_and_dispatch::<TraceCompactRequestPayload, _, _>(
             payload,
             "trace compact",
-            |p| compact_trace_stream(p).map_err(|e| e.to_string()),
+            |p| compact_trace_stream(p).map_err(|e| FrameworkError::validation(e.to_string())),
         ),
         "write_trace_compaction_delta" => {
             parse_and_dispatch::<TraceCompactionDeltaWriteRequestPayload, _, _>(
                 payload,
                 "trace compaction delta",
-                write_trace_compaction_delta,
+                |p| write_trace_compaction_delta(p).map_err(FrameworkError::validation),
             )
         }
         "write_trace_metadata" => parse_and_dispatch::<TraceMetadataWriteRequestPayload, _, _>(
             payload,
             "trace metadata write",
-            write_trace_metadata,
+            |p| write_trace_metadata(p).map_err(FrameworkError::validation),
         ),
-        _ => Err(format!("unsupported trace stdio operation: {op}")),
+        _ => Err(FrameworkError::validation(format!("unsupported trace stdio operation: {op}"))),
     }
 }
 
-fn dispatch_framework_stdio_request(op: &str, payload: Value) -> Result<Value, String> {
+fn dispatch_framework_stdio_request(op: &str, payload: Value) -> Result<Value, FrameworkError> {
     match op {
         "framework_runtime_snapshot" => dispatch_stdio_framework_runtime_snapshot(payload),
         "framework_contract_summary" => dispatch_stdio_framework_contract_summary(payload),
@@ -347,6 +353,7 @@ fn dispatch_framework_stdio_request(op: &str, payload: Value) -> Result<Value, S
                 .and_then(serde_json::Value::as_u64)
                 .map(|v| v as usize);
             build_framework_prompt_compression_envelope(payload, ctx_size)
+                .map_err(FrameworkError::validation)
         }
         "framework_resolve_content" => {
             let hash = required_non_empty_string(&payload, "hash", "framework_resolve_content")?;
@@ -356,10 +363,13 @@ fn dispatch_framework_stdio_request(op: &str, payload: Value) -> Result<Value, S
             let content = resolver.resolve_one(&hash)?;
             Ok(serde_json::json!({ "content": content }))
         }
-        "framework_session_artifact_write" => write_framework_session_artifacts(payload).map_err(|e| e.to_string()),
-        "framework_hook_evidence_append" => Ok(framework_hook_evidence_append(payload)?),
+        "framework_session_artifact_write" => write_framework_session_artifacts(payload)
+            .map_err(FrameworkError::from),
+        "framework_hook_evidence_append" => framework_hook_evidence_append(payload)
+            .map_err(FrameworkError::from),
         "framework_goal_drive" => {
             runtime_infra::kernel_utils::framework_goal_drive(payload)
+                .map_err(FrameworkError::validation)
         }
         "framework_rfv_loop" => {
             let repo_root = std::path::Path::new(
@@ -369,21 +379,21 @@ fn dispatch_framework_stdio_request(op: &str, payload: Value) -> Result<Value, S
             let goal = payload.get("goal").and_then(|v| v.as_str()).unwrap_or("");
             let round = payload.get("round").and_then(|v| v.as_u64()).unwrap_or(1);
             let verdict = crate::qg_entry::trigger(repo_root, task_id, quality_gate::scene::GENERAL, goal, None, round, None, None);
-            serde_json::to_value(&verdict).map_err(|e| e.to_string())
+            Ok(serde_json::to_value(&verdict)?)
         }
         "framework_alias" => dispatch_stdio_framework_alias(payload),
         "task_ledger_dispatch" => task_command::dispatch_task_ledger_command_envelope(payload),
-        _ => Err(format!("unsupported framework stdio operation: {op}")),
+        _ => Err(FrameworkError::validation(format!("unsupported framework stdio operation: {op}"))),
     }
 }
 
-fn dispatch_tool_stdio_request(op: &str, payload: Value) -> Result<Value, String> {
+fn dispatch_tool_stdio_request(op: &str, payload: Value) -> Result<Value, FrameworkError> {
     match op {
         "route_tool" => {
             let query = required_non_empty_string(&payload, "query", "stdio route_tool")?;
             let registry_path = resolve_tool_registry_path_from_payload(&payload)?;
             let decision = tool_routing_engine::routing::route_tool(&query, &registry_path, None)?
-                .ok_or_else(|| format!("route_tool: no matching tool found for query '{query}'"))?;
+                .ok_or_else(|| FrameworkError::not_found(format!("route_tool: no matching tool found for query '{query}'")))?;
             serde_json::to_value(&decision).map_err(|e| e.to_string())
         }
         "search_tools" => {
@@ -393,14 +403,14 @@ fn dispatch_tool_stdio_request(op: &str, payload: Value) -> Result<Value, String
                 .unwrap_or(5) as usize;
             let registry_path = resolve_tool_registry_path_from_payload(&payload)?;
             let records = mcp_tool_registry::load_tool_records_cached(&registry_path)
-                .map_err(|e| format!("search_tools: {e}"))?;
+                ?;
             let results = tool_routing_engine::search::search_tools(&query, &records, top_k, None);
             serde_json::to_value(&results).map_err(|e| e.to_string())
         }
         "tool_registry_status" => {
             let registry_path = resolve_tool_registry_path_from_payload(&payload)?;
             let records = mcp_tool_registry::load_tool_records_cached(&registry_path)
-                .map_err(|e| format!("tool_registry_status: {e}"))?;
+                ?;
             let status = serde_json::json!({
                 "schema_version": mcp_tool_registry::EXPECTED_SCHEMA,
                 "total_count": records.len(),
@@ -411,12 +421,12 @@ fn dispatch_tool_stdio_request(op: &str, payload: Value) -> Result<Value, String
             });
             Ok(status)
         }
-        _ => Err(format!("unsupported tool stdio operation: {op}")),
+        _ => Err(FrameworkError::validation(format!("unsupported tool stdio operation: {op}"))),
     }
 }
 
 /// Resolve tool registry path from payload, using hooks or falling back to repo_root.
-fn resolve_tool_registry_path_from_payload(payload: &Value) -> Result<std::path::PathBuf, String> {
+fn resolve_tool_registry_path_from_payload(payload: &Value) -> Result<std::path::PathBuf, FrameworkError> {
     if let Some(path) = mcp_tool_registry::resolve_tool_registry_path() {
         return Ok(path);
     }
@@ -433,7 +443,7 @@ fn resolve_tool_registry_path_from_payload(payload: &Value) -> Result<std::path:
 /// 1. `artifact_root` field in the payload (caller-provided override)
 /// 2. `runtime_artifact_root` field in `RUNTIME_REGISTRY.json`
 /// 3. Error — no fallback, host-agnostic
-fn resolve_artifact_root(payload: &Value) -> Result<std::path::PathBuf, String> {
+fn resolve_artifact_root(payload: &Value) -> Result<std::path::PathBuf, FrameworkError> {
     if let Some(root) = payload.get("artifact_root").and_then(Value::as_str) {
         if !root.is_empty() {
             return Ok(std::path::PathBuf::from(root));
@@ -454,13 +464,11 @@ fn resolve_artifact_root(payload: &Value) -> Result<std::path::PathBuf, String> 
         }
     }
     Err(
-        "artifact_root is required — provide in payload or set \
-         RUNTIME_REGISTRY.json::runtime_artifact_root"
-            .to_string(),
+        FrameworkError::validation("artifact_root is required — provide in payload or set RUNTIME_REGISTRY.json::runtime_artifact_root")
     )
 }
 
-fn dispatch_stdio_route(payload: Value) -> Result<Value, String> {
+fn dispatch_stdio_route(payload: Value) -> Result<Value, FrameworkError> {
     let query = required_non_empty_string(&payload, "query", "stdio route")?;
     let session_id = optional_non_empty_string(&payload, "session_id")
         .unwrap_or_else(|| "route-cli".to_string());
@@ -473,7 +481,7 @@ fn dispatch_stdio_route(payload: Value) -> Result<Value, String> {
         .and_then(Value::as_bool)
         .unwrap_or(true);
     let owned_inline_records = if payload.get("skills").is_some() {
-        Some(load_inline_records(&payload)?)
+        Some(load_inline_records(&payload).map_err(FrameworkError::validation)?)
     } else {
         None
     };
@@ -519,7 +527,7 @@ fn dispatch_stdio_route(payload: Value) -> Result<Value, String> {
     serialize_payload(decision, "route")
 }
 
-fn dispatch_stdio_search_skills(payload: Value) -> Result<Value, String> {
+fn dispatch_stdio_search_skills(payload: Value) -> Result<Value, FrameworkError> {
     let query = required_non_empty_string(&payload, "query", "stdio search_skills")?;
     let limit = payload
         .get("limit")
@@ -528,14 +536,14 @@ fn dispatch_stdio_search_skills(payload: Value) -> Result<Value, String> {
         .unwrap_or(5);
     let runtime_path = optional_non_empty_string(&payload, "runtime_path").map(PathBuf::from);
     let host_id = optional_non_empty_string(&payload, "host_id");
-    let records = load_records_cached_for_stdio(runtime_path.as_deref())?;
-    let host_indices = filter_record_indices_for_host(&records, host_id.as_deref())?;
+    let records = load_records_cached_for_stdio(runtime_path.as_deref()).map_err(FrameworkError::validation)?;
+    let host_indices = filter_record_indices_for_host(&records, host_id.as_deref()).map_err(FrameworkError::validation)?;
     let matches = search_skills_subset(&records, Some(&host_indices), &query, limit);
     let resolved = build_search_results_payload(&query, matches);
     serialize_payload(resolved, "search")
 }
 
-fn dispatch_stdio_route_report(payload: Value) -> Result<Value, String> {
+fn dispatch_stdio_route_report(payload: Value) -> Result<Value, FrameworkError> {
     let mode = required_non_empty_string(&payload, "mode", "stdio route report")?;
     let route_decision = payload
         .get("route_decision")
@@ -543,15 +551,15 @@ fn dispatch_stdio_route_report(payload: Value) -> Result<Value, String> {
         .filter(|value| !value.is_null())
         .map(serde_json::from_value::<RouteDecision>)
         .transpose()
-        .map_err(|err| format!("parse route decision contract failed: {err}"))?;
+        .map_err(|err| FrameworkError::validation(format!("parse route decision contract failed: {err}")))?;
     let rust_snapshot = match payload.get("rust_route_snapshot") {
         Some(raw) if !raw.is_null() => serde_json::from_value(raw.clone())
-            .map_err(|err| format!("parse rust route snapshot failed: {err}"))?,
+            .map_err(|err| FrameworkError::validation(format!("parse rust route snapshot failed: {err}")))?,
         _ => route_decision
             .as_ref()
             .map(|decision| decision.route_snapshot.clone())
             .ok_or_else(|| {
-                "route_report requires rust_route_snapshot or route_decision".to_string()
+                FrameworkError::validation("route_report requires rust_route_snapshot or route_decision")
             })?,
     };
     serialize_payload(build_route_diff_report(
@@ -561,25 +569,25 @@ fn dispatch_stdio_route_report(payload: Value) -> Result<Value, String> {
     )?, "route report")
 }
 
-fn dispatch_stdio_route_resolution(payload: Value) -> Result<Value, String> {
+fn dispatch_stdio_route_resolution(payload: Value) -> Result<Value, FrameworkError> {
     let mode = required_non_empty_string(&payload, "mode", "stdio route resolution")?;
     let decision_value = payload
         .get("route_decision")
         .cloned()
-        .ok_or_else(|| "route_resolution requires route_decision".to_string())?;
+        .ok_or_else(|| FrameworkError::validation("route_resolution requires route_decision"))?;
     let decision = serde_json::from_value::<RouteDecision>(decision_value)
-        .map_err(|err| format!("parse route resolution input failed: {err}"))?;
+        .map_err(|err| FrameworkError::validation(format!("parse route resolution input failed: {err}")))?;
     serialize_payload(build_route_resolution(&mode, &decision)?, "route resolution")
 }
 
-fn dispatch_stdio_route_policy(payload: Value) -> Result<Value, String> {
+fn dispatch_stdio_route_policy(payload: Value) -> Result<Value, FrameworkError> {
     let mode = required_non_empty_string(&payload, "mode", "stdio route policy")?;
     serialize_payload(build_route_policy(&mode)?, "route policy")
 }
 
-fn dispatch_stdio_route_snapshot(payload: Value) -> Result<Value, String> {
+fn dispatch_stdio_route_snapshot(payload: Value) -> Result<Value, FrameworkError> {
     let request = serde_json::from_value::<RouteSnapshotRequestPayload>(payload)
-        .map_err(|err| format!("parse route snapshot input failed: {err}"))?;
+        .map_err(|err| FrameworkError::validation(format!("parse route snapshot input failed: {err}")))?;
     let snapshot = build_route_snapshot(
         &request.engine,
         &request.selected_skill,
@@ -599,7 +607,7 @@ fn dispatch_stdio_route_snapshot(payload: Value) -> Result<Value, String> {
     )
 }
 
-fn dispatch_stdio_framework_runtime_snapshot(payload: Value) -> Result<Value, String> {
+fn dispatch_stdio_framework_runtime_snapshot(payload: Value) -> Result<Value, FrameworkError> {
     let repo_root =
         required_non_empty_string(&payload, "repo_root", "stdio framework runtime snapshot")?;
     let repo_root = resolve_repo_root_arg(Some(Path::new(&repo_root)))?;
@@ -618,7 +626,7 @@ fn dispatch_stdio_framework_runtime_snapshot(payload: Value) -> Result<Value, St
     )
 }
 
-fn dispatch_stdio_framework_contract_summary(payload: Value) -> Result<Value, String> {
+fn dispatch_stdio_framework_contract_summary(payload: Value) -> Result<Value, FrameworkError> {
     let repo_root =
         required_non_empty_string(&payload, "repo_root", "stdio framework contract summary")?;
     let repo_root = resolve_repo_root_arg(Some(Path::new(&repo_root)))?;
@@ -628,7 +636,7 @@ fn dispatch_stdio_framework_contract_summary(payload: Value) -> Result<Value, St
     )
 }
 
-fn dispatch_stdio_framework_alias(payload: Value) -> Result<Value, String> {
+fn dispatch_stdio_framework_alias(payload: Value) -> Result<Value, FrameworkError> {
     let repo_root = required_non_empty_string(&payload, "repo_root", "stdio framework alias")?;
     let repo_root = resolve_repo_root_arg(Some(Path::new(&repo_root)))?;
     let alias_name = required_non_empty_string(&payload, "alias", "stdio framework alias")?;
@@ -656,14 +664,14 @@ fn dispatch_stdio_framework_alias(payload: Value) -> Result<Value, String> {
     )
 }
 
-fn dispatch_stdio_compile_profile_bundle(payload: Value) -> Result<Value, String> {
+fn dispatch_stdio_compile_profile_bundle(payload: Value) -> Result<Value, FrameworkError> {
     let profile_path = required_non_empty_string(&payload, "profile_path", "stdio profile bundle")?;
     let profile = load_framework_profile(Path::new(&profile_path))?;
     let bundle = build_profile_bundle(profile)?;
     serialize_payload(bundle, "profile bundle")
 }
 
-fn dispatch_stdio_compile_profile_artifacts(payload: Value) -> Result<Value, String> {
+fn dispatch_stdio_compile_profile_artifacts(payload: Value) -> Result<Value, FrameworkError> {
     let profile_path =
         required_non_empty_string(&payload, "profile_path", "stdio profile artifacts")?;
     let full = optional_bool(&payload, "full").unwrap_or(false);
@@ -672,7 +680,7 @@ fn dispatch_stdio_compile_profile_artifacts(payload: Value) -> Result<Value, Str
     serialize_payload(artifacts, "host profile artifacts")
 }
 
-fn dispatch_stdio_eval_route(payload: Value) -> Result<Value, String> {
+fn dispatch_stdio_eval_route(payload: Value) -> Result<Value, FrameworkError> {
     let cases_path = required_non_empty_string(&payload, "cases", "stdio eval route")?;
     let runtime = optional_non_empty_string(&payload, "runtime");
     let report = run_eval_route(

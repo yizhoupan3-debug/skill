@@ -7,6 +7,7 @@
 //! See `core/core-state/src/task_state.rs` for the unified resolve model.
 
 use serde_json::Value;
+use core_errors::FrameworkError;
 use quality_gate;
 use core_state::transition_validation::{validate_transition, TaskTransition};
 
@@ -21,7 +22,7 @@ pub enum TaskLedgerCommand {
 }
 
 /// Parse `{ schema_version?, kind, payload }` → [`TaskLedgerCommand`].
-pub fn parse_task_ledger_command_envelope(envelope: &Value) -> Result<TaskLedgerCommand, String> {
+pub fn parse_task_ledger_command_envelope(envelope: &Value) -> Result<TaskLedgerCommand, FrameworkError> {
     let schema = envelope
         .get("schema_version")
         .and_then(Value::as_str)
@@ -38,25 +39,26 @@ pub fn parse_task_ledger_command_envelope(envelope: &Value) -> Result<TaskLedger
         .and_then(Value::as_str)
         .map(str::trim)
         .filter(|s| !s.is_empty())
-        .ok_or_else(|| "task_ledger_command: missing kind".to_string())?;
+        .ok_or_else(|| FrameworkError::validation("task_ledger_command: missing kind"))?;
     let payload = envelope
         .get("payload")
         .cloned()
-        .ok_or_else(|| "task_ledger_command: missing payload".to_string())?;
+        .ok_or_else(|| FrameworkError::validation("task_ledger_command: missing payload"))?;
 
     match kind.to_ascii_lowercase().as_str() {
         "goal_drive" => Ok(TaskLedgerCommand::GoalDrive(payload)),
         "rfv_loop" | "quality_gate" => Ok(TaskLedgerCommand::QualityGate(payload)),
         "session_artifacts" => Ok(TaskLedgerCommand::SessionArtifacts(payload)),
         "hook_evidence_append" => Ok(TaskLedgerCommand::HookEvidenceAppend(payload)),
-        _ => Err(format!("task_ledger_command: unknown kind {kind:?}")),
+        _ => Err(FrameworkError::validation(format!("task_ledger_command: unknown kind {kind:?}"))),
     }
 }
 
 /// Dispatch without taking an extra outer lock (`apply_task_ledger_mutation` is invoked inside handlers where needed).
-pub fn dispatch_task_ledger_command(cmd: TaskLedgerCommand) -> Result<Value, String> {
+pub fn dispatch_task_ledger_command(cmd: TaskLedgerCommand) -> Result<Value, FrameworkError> {
     match cmd {
-        TaskLedgerCommand::GoalDrive(p) => runtime_infra::kernel_utils::framework_goal_drive(p),
+        TaskLedgerCommand::GoalDrive(p) => runtime_infra::kernel_utils::framework_goal_drive(p)
+                .map_err(FrameworkError::validation),
         TaskLedgerCommand::QualityGate(p) => {
             let repo_root = std::path::Path::new(
                 p.get("repo_root").and_then(|v| v.as_str()).unwrap_or(".")
@@ -90,7 +92,7 @@ pub fn dispatch_task_ledger_command(cmd: TaskLedgerCommand) -> Result<Value, Str
                         }],
                         advisories: vec![],
                         reason: Some(format!("transition validation blocked: {}", transition_v.reason)),
-                    }).map_err(|e| e.to_string());
+                    }).map_err(FrameworkError::from);
                 }
             }
 
@@ -98,19 +100,20 @@ pub fn dispatch_task_ledger_command(cmd: TaskLedgerCommand) -> Result<Value, Str
 
             // Stage 2: QG Route evaluation
             let verdict = crate::qg_entry::trigger(repo_root, task_id, scene, goal, sub_scene, round, None, output_data);
-            serde_json::to_value(&verdict).map_err(|e| e.to_string())
+            Ok(serde_json::to_value(&verdict)?)
         }
         TaskLedgerCommand::SessionArtifacts(p) => {
             framework_extra::session_artifacts::write_framework_session_artifacts(p)
-                .map_err(|e| e.to_string())
+                .map_err(FrameworkError::from)
         }
         TaskLedgerCommand::HookEvidenceAppend(p) => {
-            Ok(framework_extra::evidence::framework_hook_evidence_append(p)?)
+            framework_extra::evidence::framework_hook_evidence_append(p)
+                .map_err(FrameworkError::from)
         }
     }
 }
 
-pub fn dispatch_task_ledger_command_envelope(envelope: Value) -> Result<Value, String> {
+pub fn dispatch_task_ledger_command_envelope(envelope: Value) -> Result<Value, FrameworkError> {
     let cmd = parse_task_ledger_command_envelope(&envelope)?;
     dispatch_task_ledger_command(cmd)
 }
