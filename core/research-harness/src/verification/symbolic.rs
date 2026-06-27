@@ -68,8 +68,10 @@ impl Parser {
         self.skip_ws();
         match self.next() {
             Some(c) if c == expected => Ok(()),
-            Some(c) => Err(FrameworkError::validation(format!("expected '{expected}', got '{c}'")),
-            None => Err(FrameworkError::validation(format!("expected '{expected}', got end of input")),
+            Some(c) => Err(FrameworkError::validation(format!("expected '{expected}', got '{c}'"))),
+
+            None => Err(FrameworkError::validation(format!("expected '{expected}', got end of input"))),
+
         }
     }
 
@@ -186,7 +188,7 @@ impl Parser {
                     }
                 }
             }
-            Some(c) => Err(FrameworkError::validation(format!("unexpected character: '{c}'")),
+            Some(c) => Err(FrameworkError::validation(format!("unexpected character: '{c}'"))),
             None => Err(FrameworkError::validation("unexpected end of input")),
         }
     }
@@ -205,7 +207,7 @@ impl Parser {
                 break;
             }
         }
-        let val: f64 = s.parse().map_err(|e| format!("bad number '{s}': {e}"))?;
+        let val: f64 = s.parse().map_err(|e| FrameworkError::validation(format!("bad number '{s}': {e}")))?;
         Ok(Expr::Const(val))
     }
 
@@ -229,7 +231,8 @@ pub fn parse(input: &str) -> Result<Expr, FrameworkError> {
     let expr = parser.parse_expr()?;
     parser.skip_ws();
     if parser.peek().is_some() {
-        return Err(FrameworkError::validation(format!("unexpected trailing input at position {}", parser.pos));
+        return Err(FrameworkError::validation(format!("unexpected trailing input at position {}", parser.pos)));
+
     }
     Ok(expr)
 }
@@ -242,7 +245,7 @@ pub fn parse(input: &str) -> Result<Expr, FrameworkError> {
 pub fn eval(expr: &Expr, vars: &HashMap<String, f64>) -> Result<f64, FrameworkError> {
     match expr {
         Expr::Const(c) => Ok(*c),
-        Expr::Var(name) => vars.get(name).copied().ok_or_else(|| format!("undefined variable: {name}")),
+        Expr::Var(name) => vars.get(name).copied().ok_or_else(|| FrameworkError::validation(format!("undefined variable: {name}"))),
         Expr::Neg(x) => Ok(-eval(x, vars)?),
         Expr::Add(a, b) => Ok(eval(a, vars)? + eval(b, vars)?),
         Expr::Sub(a, b) => Ok(eval(a, vars)? - eval(b, vars)?),
@@ -295,7 +298,8 @@ pub fn eval(expr: &Expr, vars: &HashMap<String, f64>) -> Result<f64, FrameworkEr
                     if vals.len() != 1 { return Err(FrameworkError::validation("abs requires 1 argument")); }
                     Ok(vals[0].abs())
                 }
-                _ => Err(FrameworkError::validation(format!("unknown function: {name}")),
+                _ => Err(FrameworkError::validation(format!("unknown function: {name}")),)
+
             }
         }
     }
@@ -1065,7 +1069,8 @@ pub fn compare_growth(f: &str, g: &str, var: &str) -> Result<OrderRelation, Fram
         std::cmp::Ordering::Greater => {
             // f grows strictly faster than g (f = ω(g)).
             // None of the OrderRelation variants (≪, ≲, ≍) hold from f to g.
-            Err(FrameworkError::validation(format!("{f} grows faster than {g}, so no finite OrderRelation holds"))
+            Err(FrameworkError::validation(format!("{f} grows faster than {g}, so no finite OrderRelation holds")))
+
         }
         std::cmp::Ordering::Equal => {
             // Same growth class — check if parameters match
@@ -1077,7 +1082,8 @@ pub fn compare_growth(f: &str, g: &str, var: &str) -> Result<OrderRelation, Fram
                 match compare_growth_classes(&gf, &gg) {
                     std::cmp::Ordering::Less => Ok(OrderRelation::MuchLess),
                     std::cmp::Ordering::Greater => {
-                        Err(FrameworkError::validation(format!("{f} grows faster than {g} in the same class"))
+                        Err(FrameworkError::validation(format!("{f} grows faster than {g} in the same class")))
+
                     }
                     std::cmp::Ordering::Equal => Ok(OrderRelation::Asymp),
                 }
