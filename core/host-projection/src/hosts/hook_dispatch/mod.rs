@@ -17,6 +17,7 @@
 //! ```
 
 use serde_json::Value;
+use std::fs;
 use std::path::Path;
 use tracing::debug;
 
@@ -221,12 +222,17 @@ pub trait HostHookDispatcher: HostHookConfig {
     }
 
     /// SessionStart: context injection.
-    /// Default: operator_inject check + repo context.
+    /// Default: operator_inject check + repo context + task list summary.
     fn handle_session_start(&self, event: &HookEvent) -> Option<HookOutput> {
         let mut contexts = Vec::new();
 
         if core_policy::env_flags::router_rs_operator_inject_globally_enabled() {
             contexts.push(format!("Repo: {}", event.repo_root.display()));
+        }
+
+        // Task list summary for session continuity.
+        if let Some(task_ctx) = build_task_list_summary_context(event.repo_root) {
+            contexts.push(task_ctx);
         }
 
         // Detect stale goals from a previous session and warn the user
@@ -323,6 +329,62 @@ pub trait HostHookDispatcher: HostHookConfig {
             }
         output
     }
+}
+
+/// Build a compact task list summary for SessionStart continuity digest.
+/// Returns `None` if no tasks exist (avoids injecting noise for new repos).
+fn build_task_list_summary_context(repo_root: &Path) -> Option<String> {
+    let current = repo_root.join("artifacts/current");
+    let entries = fs::read_dir(&current).ok()?;
+    let task_dirs: Vec<String> = entries
+        .filter_map(|e| e.ok())
+        .filter(|e| {
+            e.path().is_dir()
+                && e.file_name().to_string_lossy() != "review-lanes"
+                && !e.file_name().to_string_lossy().starts_with('.')
+        })
+        .filter_map(|e| e.file_name().into_string().ok())
+        .collect();
+    if task_dirs.is_empty() {
+        return None;
+    }
+
+    let current_task_id = core_state::state_manager::read_primary_task_id(repo_root);
+    let mut in_progress = 0u32;
+    let mut completed = 0u32;
+    let mut other = 0u32;
+
+    for task_id in &task_dirs {
+        let goal_path = current.join(task_id).join("GOAL_STATE.json");
+        let status = if goal_path.is_file() {
+            fs::read_to_string(&goal_path)
+                .ok()
+                .and_then(|raw| serde_json::from_str::<Value>(&raw).ok())
+                .and_then(|v| v.get("status").and_then(|s| s.as_str()).map(str::to_string))
+                .unwrap_or_else(|| "unknown".to_string())
+        } else {
+            "created".to_string()
+        };
+        match status.as_str() {
+            "in_progress" | "active" | "running" => in_progress += 1,
+            "completed" | "done" | "closed" => completed += 1,
+            _ => other += 1,
+        }
+    }
+
+    let total = task_dirs.len();
+    let current_display = current_task_id.as_deref().unwrap_or("none");
+    let mut out = format!(
+        "[Task state] {total} tasks ({in_progress} in-progress, {completed} completed, {other} other). \
+         Current: {current_display}."
+    );
+    if in_progress == 0 && total > 0 {
+        out.push_str(
+            "\nHint: No active task. For multi-step requests, use task_create to define a todo list, \
+             then task_complete as you finish each step."
+        );
+    }
+    Some(out)
 }
 
 // ── Re-exports from sub-modules (backward compat) ──
