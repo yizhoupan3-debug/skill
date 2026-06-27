@@ -79,11 +79,6 @@ pub fn prompt_signals_prose_work(text: &str) -> bool {
     false
 }
 
-/// Alias used by runtime-core wrappers.
-pub fn prompt_signals_paper_prose_work(text: &str) -> bool {
-    prompt_signals_prose_work(text)
-}
-
 /// Resolve the prose hook block from disk or builtin.
 pub fn resolve_paper_prose_block(repo_root: &Path) -> String {
     BLOCK_CACHE.resolve(repo_root, || BUILTIN_BLOCK.clone())

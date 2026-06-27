@@ -15,16 +15,8 @@ use std::io::Write;
 use std::sync::mpsc;
 use std::time::Duration;
 
-/// Default timeout for all Python subprocess calls (15 seconds).
-const DEFAULT_TIMEOUT_MS: u64 = 15_000;
-
 /// Poll interval for `try_wait` loop. 50ms is negligible vs 15s default timeout.
 const POLL_INTERVAL_MS: u64 = 50;
-
-/// Run `uv run -m <module> --stdin-json` with JSON input, default timeout.
-pub fn run_uv_module(module: &str, input: &Value) -> Result<Value, FrameworkError> {
-    run_uv_module_with_timeout(module, input, DEFAULT_TIMEOUT_MS)
-}
 
 /// Run `uv run -m <module> --stdin-json` with JSON input and custom timeout.
 ///

@@ -91,23 +91,6 @@ pub fn truncate_text(text: &str, max_chars: usize) -> (String, bool) {
     }
 }
 
-/// Emit output as pretty-printed JSON or via a custom text formatter.
-///
-/// When `json_mode` is true, serializes `value` as pretty JSON to stdout.
-/// Otherwise calls `text_fn` for plain-text output.
-pub fn emit_output<T: serde::Serialize>(
-    value: &T,
-    json_mode: bool,
-    text_fn: impl FnOnce(&T),
-) -> anyhow::Result<()> {
-    if json_mode {
-        println!("{}", serde_json::to_string_pretty(value)?);
-    } else {
-        text_fn(value);
-    }
-    Ok(())
-}
-
 /// Run a command to completion, returning error with stderr on failure.
 pub fn run_command(command: &mut Command) -> Result<()> {
     let output = command.output()?;

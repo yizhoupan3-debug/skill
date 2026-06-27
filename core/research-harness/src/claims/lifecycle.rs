@@ -6,7 +6,6 @@
 use anyhow::{anyhow, bail, Result};
 use chrono::{DateTime, Utc};
 use serde_json::{json, Value};
-use std::collections::HashMap;
 use std::path::Path;
 
 use crate::util::{
@@ -155,19 +154,6 @@ pub fn find_hypothesis<'a>(state: &'a Value, hypothesis_id: &str) -> Option<&'a 
 
 pub fn find_hypothesis_index(state: &Value, hypothesis_id: &str) -> Option<usize> {
     arr(state, "hypotheses").iter().position(|h| h.get("id").and_then(Value::as_str) == Some(hypothesis_id))
-}
-
-pub fn choose_backlog_hypothesis(state: &Value) -> Option<&Value> {
-    if arr(state, "hypotheses").is_empty() { return None; }
-    for id in arr(state, "hypothesis_backlog").iter().filter_map(Value::as_str) {
-        if let Some(h) = find_hypothesis(state, id) {
-            if h.get("status").and_then(Value::as_str) != Some("concluded") { return Some(h); }
-        }
-    }
-    let priority_order: HashMap<&str, u8> = [("high", 0), ("medium", 1), ("low", 2)].into();
-    arr(state, "hypotheses").iter().min_by_key(|h| {
-        priority_order.get(h.get("priority").and_then(Value::as_str).unwrap_or("medium")).unwrap_or(&1)
-    })
 }
 
 pub fn next_run_id(state: &Value) -> String {
@@ -325,10 +311,6 @@ pub fn record_run(state: &Value, input: &RecordRunInput<'_>, _workspace: &Path) 
 
 pub fn latest_run_for_hypothesis<'a>(state: &'a Value, hypothesis_id: &str) -> Option<&'a Value> {
     arr(state, "run_history").iter().rev().find(|r| r.get("hypothesis_id").and_then(Value::as_str) == Some(hypothesis_id))
-}
-
-pub fn latest_run_by_id<'a>(state: &'a Value, run_id: &str) -> Option<&'a Value> {
-    arr(state, "run_history").iter().rev().find(|r| r.get("run_id").and_then(Value::as_str) == Some(run_id))
 }
 
 // ── Run 注解 ──

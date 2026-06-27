@@ -347,11 +347,6 @@ pub fn set_env(key: &str, val: &str) {
     unsafe { core_state_utils::env_sync::set_env(key, val) }
 }
 
-/// Remove an environment variable.
-pub fn unset_env(key: &str) {
-    unsafe { core_state_utils::env_sync::remove_env(key) }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

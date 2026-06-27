@@ -31,6 +31,7 @@ use crate::qg_route::evaluate_qg_route;
 /// * `sub_scene` — optional sub-scene for checker filtering (Wave 6)
 /// * `round` — current verification round (1-based)
 /// * `runtime_handle` — optional tokio runtime handle for async checkers
+/// * `output_data` — optional structured task output for checkers (passed through to CheckContext)
 ///
 /// # Returns
 /// `GateVerdict` with Stage 1 (anti-fraud) and Stage 2 (quality gate) combined:
@@ -45,6 +46,7 @@ pub fn trigger(
     sub_scene: Option<&str>,
     round: u64,
     runtime_handle: Option<tokio::runtime::Handle>,
+    output_data: Option<serde_json::Value>,
 ) -> GateVerdict {
     // ═══════════════════════════════════════════════════════════════════
     // Stage 1: Anti-fraud gate (evidence chain verification)
@@ -93,6 +95,7 @@ pub fn trigger(
                 .join("EVIDENCE_INDEX.json"),
         ),
         runtime_handle,
+        output_data,
     };
 
     evaluate_qg_route(scene, &ctx)
@@ -125,6 +128,7 @@ mod tests {
             None,
             1,
             None,
+            None,
         );
         // No evidence → Stage 1 passes (D5: "空 task list = 无欺诈可能").
         // Stage 2 runs with empty repo → checkers produce findings but are advisory.
@@ -143,6 +147,7 @@ mod tests {
             None,
             1,
             None,
+            None,
         );
         // Empty scene normalizes to "general" via scene::normalize.
         assert!(verdict.passed);
@@ -159,6 +164,7 @@ mod tests {
             "test goal",
             None,
             2,
+            None,
             None,
         );
         // Returns proper GateVerdict with all fields populated.

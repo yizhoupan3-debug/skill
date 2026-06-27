@@ -101,13 +101,3 @@ pub fn missing_keys(root: &Path) -> Vec<String> {
         .map(|s| s.to_string())
         .collect()
 }
-
-#[cfg(any(test, feature = "test-sync"))]
-/// 返回所有仍存在的已删除文档路径（回归检测）。
-pub fn stale_deprecated_paths(root: &Path) -> Vec<String> {
-    DEPRECATED
-        .iter()
-        .filter(|key| exists(root, key))
-        .map(|s| s.to_string())
-        .collect()
-}

@@ -115,11 +115,6 @@ pub fn prioritize_claims(records: &[Value]) -> Vec<Value> {
     scored
 }
 
-/// Get the highest-priority claim from a slice of claim records.
-pub fn top_priority_claim_from_records(records: &[Value]) -> Option<Value> {
-    prioritize_claims(records).into_iter().next()
-}
-
 /// 为 axis 生成预期 baselines 列表。
 pub fn expected_baselines_for_axis(axis: &str) -> Vec<String> {
     match axis {

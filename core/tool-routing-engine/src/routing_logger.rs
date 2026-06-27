@@ -68,23 +68,6 @@ impl ToolRoutingLogger {
     }
 }
 
-/// Initialize the tool routing logger.
-///
-/// Called once during routing engine startup.
-/// Uses `FRAMEWORK_ROOT` env var to resolve the log directory; if unset,
-/// falls back to the workspace root.
-pub fn init_tool_routing_logger() {
-    let log_dir = std::env::var("FRAMEWORK_ROOT")
-        .ok()
-        .map(|root| format!("{root}/{LOG_DIR}"))
-        .unwrap_or_else(|| LOG_DIR.to_string());
-    if let Ok(logger) = ToolRoutingLogger::new(&log_dir) {
-        if let Ok(mut guard) = LOGGER.lock() {
-            *guard = Some(logger);
-        }
-    }
-}
-
 /// Write a tool routing decision to the structured audit log.
 ///
 /// This is a no-op when the logger has not been initialized.

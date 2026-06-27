@@ -46,7 +46,6 @@ pub use goal_signals::{
     COMPLETION_DETECT_EN, COMPLETION_DETECT_ZH_PHRASES, GOAL_CHAT_VERIFY_ZH_PHRASES,
     completion_claim_keywords_export, contains_completion_claim_token,
     has_goal_progress_signal, has_goal_verify_or_block_signal, has_structured_goal_contract,
-    lifecycle_profile_is_loop_capable,
 };
 
 // ────────────────────────────────────────────────────────────────

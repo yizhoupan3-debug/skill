@@ -1,6 +1,5 @@
 use serde_json::Value;
 use std::collections::HashSet;
-use std::io::Read;
 
 use super::{extract_tool_input, is_path_key, SESSION_KEY_CWD_FIELDS};
 use super::HookOutput;
@@ -95,36 +94,12 @@ fn extract_cwd_from_payload(event: &Value) -> Option<String> {
     None
 }
 
-/// Session key hash helper (delegates to core-policy crypto_util).
-pub fn short_hash_for_session(input: &str) -> String {
-    core_policy::crypto_util::short_hash(input)
-}
-
 pub fn add_context(event: &str, context: &str) -> Option<Value> {
     Some(serde_json::json!({ "context_append": format!("[{event}] {context}") }))
 }
 
 /// Silent success response (empty JSON object).
 pub fn silent_success() -> Value { serde_json::json!({}) }
-
-/// Extract completion/closeout text from a Stop payload.
-pub fn closeout_completion_text(payload: &Value) -> String {
-    payload.get("response")
-        .or_else(|| payload.get("assistant_response"))
-        .or_else(|| payload.get("last_assistant_message"))
-        .and_then(Value::as_str)
-        .unwrap_or("")
-        .to_string()
-}
-
-/// Extract the first non-empty string from a set of payload keys.
-pub fn first_nonempty_payload_str(payload: &Value, keys: &[&str]) -> String {
-    for key in keys {
-        let val = payload.get(key).and_then(Value::as_str).unwrap_or("").trim();
-        if !val.is_empty() { return val.to_string(); }
-    }
-    String::new()
-}
 
 /// Recursively collect path-like string values from JSON.
 pub fn collect_payload_paths(value: &Value, paths: &mut HashSet<String>) {
@@ -172,18 +147,6 @@ pub fn bash_command(payload: &Value) -> Option<&str> {
 /// Extract exit code from a tool payload.
 pub fn payload_exit_code(payload: &Value) -> Option<i64> {
     find_numeric_key(payload, &["exit_code", "exitCode", "exit_status"])
-}
-
-/// Check if a bash tool call succeeded.
-pub fn payload_is_successful_bash(payload: &Value) -> bool {
-    payload_exit_code(payload).is_none_or(|ec| ec == 0)
-        && !payload.get("is_error").and_then(Value::as_bool).unwrap_or(false)
-}
-
-/// Check if a generic tool call succeeded.
-pub fn payload_is_successful_tool(payload: &Value) -> bool {
-    !payload.get("is_error").and_then(Value::as_bool).unwrap_or(false)
-        && payload.get("error").is_none_or(|e| e.is_null())
 }
 
 /// Check if a tool name suggests a subagent/subprocess.
@@ -240,26 +203,6 @@ pub fn hook_output_to_json_value(event_name: &str, output: Option<HookOutput>) -
         Some(HookOutput::Warn { message }) => serde_json::json!({ "warning": message }),
         Some(HookOutput::Raw(v)) => v,
     }
-}
-
-pub fn read_stdio_agent_stdin_limited<R: Read>(reader: &mut R) -> Result<String, String> {
-    const MAX_BYTES: usize = 4 * 1024 * 1024;
-    let mut buf = Vec::with_capacity(8192);
-    let mut tmp = [0u8; 8192];
-    loop {
-        let n = reader.read(&mut tmp).map_err(|e| format!("stdin read error: {e}"))?;
-        if n == 0 { break; }
-        buf.extend_from_slice(&tmp[..n]);
-        if buf.len() > MAX_BYTES {
-            return Err(format!("stdin exceeded {} byte limit", MAX_BYTES));
-        }
-    }
-    String::from_utf8(buf).map_err(|e| format!("stdin is not valid UTF-8: {e}"))
-}
-
-/// Parse and trim stdin JSON, handling both raw JSON and wrapped envelopes.
-pub fn parse_stdio_agent_hook_stdin_trimmed(trimmed: &str) -> Result<Value, String> {
-    serde_json::from_str(trimmed).map_err(|e| format!("parse stdin JSON failed: {e}"))
 }
 
 /// Check if a payload looks like a foreign host's hook stdin envelope (not the active host).

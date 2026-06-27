@@ -38,7 +38,7 @@ pub const DEFAULT_MANAGED_MCP_SERVER_IDS: &[&str] = &[
 ];
 
 /// Path to the host adapter contract spec (relative to framework root).
-pub const HOST_ADAPTER_CONTRACT_PATH: &str = "docs/architecture.md";
+pub const HOST_ADAPTER_CONTRACT_PATH: &str = "AGENTS.md";
 
 // ---------------------------------------------------------------------------
 // Typed registry subset (host integration)
@@ -134,36 +134,6 @@ pub fn load_runtime_registry_payload(repo_root: &Path) -> Result<Value, Framewor
              pass --framework-root <framework-repo-root> or open the framework repo as the active workspace."
         ))
     })
-}
-
-pub fn load_runtime_registry_payload_if_repo_local(
-    repo_root: &Path,
-) -> Result<Option<Value>, FrameworkError> {
-    let path = repo_root.join(RUNTIME_REGISTRY_PATH);
-    // Read-first pattern: avoid TOCTOU between is_file() and read_to_string().
-    let payload = match fs::read_to_string(&path) {
-        Ok(payload) => payload,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(e) => return Err(FrameworkError::validation(format!("read {}: {e}", path.display()))),
-    };
-    let parsed = serde_json::from_str::<Value>(&payload).map_err(|err| FrameworkError::validation(err.to_string()))?;
-    let schema_version = parsed
-        .get("schema_version")
-        .and_then(Value::as_str)
-        .ok_or_else(|| {
-            FrameworkError::validation(format!(
-                "Runtime registry missing schema_version at {}",
-                path.to_string_lossy()
-            ))
-        })?;
-    if schema_version != RUNTIME_REGISTRY_SCHEMA_VERSION {
-        return Err(FrameworkError::validation(format!(
-            "Unsupported runtime registry schema_version {:?} at {}",
-            schema_version,
-            path.to_string_lossy()
-        )));
-    }
-    Ok(Some(parsed))
 }
 
 pub fn load_runtime_registry(repo_root: &Path) -> Result<RuntimeRegistry, FrameworkError> {
@@ -267,19 +237,6 @@ pub fn resolves_managed_mcp_tool(registry: &Value, tool_name_or_fqn: &str) -> bo
             == Some(server_id.as_str());
     }
     managed_mcp_server_for_tool(registry, raw).is_some()
-}
-
-pub fn closeout_evidence_hooks_unsupported_on_host(repo_root: &Path, host_id: &str) -> bool {
-    let Ok(registry) = load_runtime_registry_payload(repo_root) else {
-        return false;
-    };
-    let Some(projection) = host_projection_object(&registry, host_id) else {
-        return false;
-    };
-    harness_capability_exception_entry(projection, "closeout_evidence_hooks")
-        .and_then(|row| row.get("status"))
-        .and_then(Value::as_str)
-        == Some("unsupported")
 }
 
 #[cfg(test)]

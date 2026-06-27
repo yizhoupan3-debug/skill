@@ -244,16 +244,6 @@ fn count_done_when_items(text: &str) -> usize {
     0
 }
 
-/// True when the lifecycle_profile is "loop-auto" (loop-capable).
-///
-/// Reads from LOOP_REGISTRY.json (not GOAL_STATE). Loop Runner in PREFLIGHT
-/// phase calls this to confirm the entry profile is schedulable.
-///
-/// Cf. docs/architecture.md §1.2 (hook model)
-pub fn lifecycle_profile_is_loop_capable(profile: &str) -> bool {
-    profile == "loop-auto"
-}
-
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 #[cfg(test)]
 mod tests {

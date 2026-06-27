@@ -313,11 +313,6 @@ pub fn aggregate_passes(aggregate: &LoopCloseoutAggregate) -> bool {
     aggregate.overall_status == "pass"
 }
 
-/// Check whether the aggregate overall status is "fail".
-pub fn aggregate_has_failures(aggregate: &LoopCloseoutAggregate) -> bool {
-    aggregate.overall_status == "fail"
-}
-
 /// Check whether the aggregate has any partial actions (interrupted or unmatched).
 pub fn aggregate_has_partial(aggregate: &LoopCloseoutAggregate) -> bool {
     aggregate.partial

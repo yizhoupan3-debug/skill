@@ -24,16 +24,9 @@ fn host_state_dir_leaf(host_id: &str) -> String {
     format!("{}/hook-state", host_config_dir(host_id))
 }
 
-fn dirty_count_rel(host_id: &str) -> String {
-    format!("{}/dirty_count", host_state_dir_leaf(host_id))
-}
-
 fn audit_result_rel(host_id: &str) -> String {
     format!("{}/session_audit.txt", host_state_dir_leaf(host_id))
 }
-
-/// After N consecutive dirty PostToolUse checks, auto-stash.
-const DIRTY_THRESHOLD: usize = 5;
 
 /// Default branch names to skip during auto-save.
 const DEFAULT_BRANCHES: &[&str] = &["main", "master"];
@@ -130,96 +123,6 @@ pub fn auto_save_worktrees(repo_root: &Path, label: &str) {
                 "--include-untracked",
             ],
         );
-    }
-}
-
-/// SessionStart audit: unlock & prune orphaned worktrees, return report.
-///
-/// Scans `git worktree list --porcelain` for locked worktrees whose
-/// directories no longer exist, then auto-unlocks and prunes them.
-/// Also lists any surviving dirty worktrees.
-pub fn audit_orphan_worktrees(repo_root: &Path) -> Option<String> {
-    let output = git(repo_root, &["worktree", "list", "--porcelain"])?;
-    let list = parse_worktree_list(&output);
-
-    let mut orphaned: Vec<String> = Vec::new();
-    let mut dirty_warnings: Vec<String> = Vec::new();
-
-    for (wt_path, branch, locked) in &list {
-        if !wt_path.is_dir() && *locked {
-            // Directory gone + locked = orphan. Unlock then prune.
-            let path_str = wt_path.to_string_lossy();
-            git(repo_root, &["worktree", "unlock", &path_str]);
-            orphaned.push(format!("{path_str} (branch: {branch})"));
-        } else if wt_path.is_dir() {
-            let count = dirty_file_count(repo_root, wt_path);
-            if count > 0 {
-                dirty_warnings.push(format!(
-                    "{} has {} dirty file(s) (branch: {})",
-                    wt_path.display(),
-                    count,
-                    branch
-                ));
-            }
-        }
-    }
-
-    if !orphaned.is_empty() {
-        git(repo_root, &["worktree", "prune"]);
-    }
-
-    let mut parts: Vec<String> = Vec::new();
-    if !orphaned.is_empty() {
-        parts.push(format!(
-            "[worktree-audit] Cleaned up {} orphan worktree(s).",
-            orphaned.len()
-        ));
-    }
-    if !dirty_warnings.is_empty() {
-        parts.push("[worktree-audit] Warning: dirty worktree(s):".to_string());
-        parts.extend(dirty_warnings);
-    }
-
-    if parts.is_empty() {
-        None
-    } else {
-        Some(parts.join("\n"))
-    }
-}
-
-/// Lightweight dirty tracking, called from PostToolUse.
-///
-/// Reads/writes `.claude/hook-state/dirty_count`.
-/// Counts dirty files across ALL worktrees (not just current dir).
-/// Stashes when the consecutive dirty count reaches `DIRTY_THRESHOLD`.
-pub fn track_and_maybe_stash(repo_root: &Path, host_id: &str, label: &str) {
-    let count_path = repo_root.join(dirty_count_rel(host_id));
-    let count = collect_dirty_worktrees(repo_root)
-        .iter()
-        .map(|(_, _, c)| c)
-        .sum::<usize>();
-
-    let accum: usize = std::fs::read_to_string(&count_path)
-        .ok()
-        .and_then(|s| s.trim().parse().ok())
-        .unwrap_or(0);
-
-    let new_accum = if count > 0 { accum + 1 } else { 0 };
-    let _ = std::fs::write(&count_path, format!("{new_accum}\n"));
-
-    if new_accum >= DIRTY_THRESHOLD {
-        auto_save_worktrees(repo_root, label);
-        let _ = std::fs::write(&count_path, "0\n");
-    }
-}
-
-/// Persist the SessionStart audit result to a state file so it can be
-/// consumed by the first `userpromptsubmit` event on any host.
-pub fn save_audit_result(repo_root: &Path, host_id: &str, audit: Option<String>) {
-    let path = repo_root.join(audit_result_rel(host_id));
-    match audit {
-        Some(msg) => { let _ = std::fs::write(&path, &msg); }
-        None => { let _ = std::fs::remove_file(&path); }
     }
 }
 

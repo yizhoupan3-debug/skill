@@ -520,8 +520,8 @@ fn projection_root_resolution_honors_env_fallbacks_and_cli_home_overrides() {
         framework_root.to_str().unwrap(),
         "--project-root",
         project_root.to_str().unwrap(),
-        "--codex-home",
-        flag_codex_home.to_str().unwrap(),
+        "--host-home",
+        &format!("codex={}", flag_codex_home.to_str().unwrap()),
     ]);
     flag_status.env("CODEX_HOME", &env_codex_home);
     let flag_payload = json_from_output(&run(flag_status));

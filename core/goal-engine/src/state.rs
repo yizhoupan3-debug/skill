@@ -33,13 +33,6 @@ pub fn loop_artifacts_dir(repo_root: &Path, loop_id: &str) -> PathBuf {
     repo_root.join("artifacts").join("loop").join(loop_id)
 }
 
-/// Return the evidence directory path for a specific action: `artifacts/loop/{loop_id}/evidence/{action_id}/`.
-pub fn loop_evidence_dir(repo_root: &Path, loop_id: &str, action_id: &str) -> PathBuf {
-    loop_artifacts_dir(repo_root, loop_id)
-        .join("evidence")
-        .join(action_id)
-}
-
 /// Return the reports directory path for a loop: `artifacts/loop/{loop_id}/reports/`.
 pub fn loop_reports_dir(repo_root: &Path, loop_id: &str) -> PathBuf {
     loop_artifacts_dir(repo_root, loop_id).join("reports")

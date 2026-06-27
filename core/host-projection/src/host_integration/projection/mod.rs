@@ -149,41 +149,6 @@ impl McpConfigFormat {
     };
 }
 
-/// Insert/update managed MCP servers into a JSON config file.
-/// Returns whether the file was changed.
-pub fn mcp_json_upsert_servers(
-    path: &Path,
-    format: McpConfigFormat,
-    entries: &[(&str, Value)],
-) -> Result<bool> {
-    let McpConfigFormat::Json { top_level_key } = format;
-    let mut payload = read_json_if_exists(path)?.unwrap_or_else(|| json!({}));
-    if !payload.is_object() {
-        payload = json!({});
-    }
-    let root = payload.as_object_mut().ok_or_else(|| {
-        FrameworkError::config("MCP JSON payload root must be an object")
-    })?;
-    let servers = root
-        .entry(top_level_key.to_string())
-        .or_insert_with(|| json!({}));
-    if !servers.is_object() {
-        *servers = json!({});
-    }
-    let map = servers.as_object_mut().ok_or_else(|| {
-        FrameworkError::config("MCP JSON servers entry must be an object")
-    })?;
-    let mut changed = false;
-    for (server_id, value) in entries {
-        changed |= map.get(*server_id) != Some(value);
-        map.insert(server_id.to_string(), value.clone());
-    }
-    if changed {
-        write_json_if_changed(path, &payload)?;
-    }
-    Ok(changed)
-}
-
 /// Remove managed MCP servers from a JSON config file.
 /// Returns whether the file was changed.
 pub fn mcp_json_remove_servers(

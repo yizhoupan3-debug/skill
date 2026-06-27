@@ -30,8 +30,18 @@ use quality_gate::scene;
 /// Register all in-place checkers into the registry.
 /// Called once at startup from `runtime_core::init_quality_gate()`.
 pub fn register_checkers(registry: &mut quality_gate::CheckerRegistry) {
+    // EvidenceChecker is registered under all scenes it declares via scenes()
+    // (GENERAL, CODE_REVIEW, RESEARCH) so it runs for every scene evaluation.
     registry.register(
         scene::GENERAL,
+        Box::new(evidence_checker::EvidenceChecker),
+    );
+    registry.register(
+        scene::CODE_REVIEW,
+        Box::new(evidence_checker::EvidenceChecker),
+    );
+    registry.register(
+        scene::RESEARCH,
         Box::new(evidence_checker::EvidenceChecker),
     );
     registry.register(

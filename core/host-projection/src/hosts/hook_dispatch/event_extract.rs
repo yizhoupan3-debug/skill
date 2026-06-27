@@ -274,24 +274,3 @@ pub fn extract_response_text(payload: &Value) -> String {
     String::new()
 }
 
-/// Borrow response text directly from payload (zero-alloc when possible).
-/// Returns `None` if no response key is found or value is not a string.
-pub fn borrow_response_text(payload: &Value) -> Option<&str> {
-    const RESPONSE_KEYS: &[&str] = &[
-        "response",
-        "agent_response",
-        "agentResponse",
-        "assistant_response",
-        "last_assistant_message",
-        "content",
-        "text",
-        "output",
-    ];
-    for key in RESPONSE_KEYS {
-        if let Some(value) = payload.get(*key).and_then(Value::as_str)
-            && !value.trim().is_empty() {
-                return Some(value);
-            }
-    }
-    None
-}

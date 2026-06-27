@@ -62,7 +62,3 @@ pub fn is_settings_path(path: &str) -> bool {
         || path.ends_with("hooks.json") || path.ends_with("config.json")
 }
 
-/// Check if a path should be guarded from modification.
-pub fn is_framework_guarded_path(path: &str) -> bool {
-    is_framework_source_path(path) || is_generated_entrypoint(path) || is_settings_path(path)
-}

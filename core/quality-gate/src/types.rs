@@ -80,4 +80,7 @@ pub struct CheckContext {
     pub evidence_path: Option<std::path::PathBuf>,
     /// Async runtime handle for checkers that need to call async APIs.
     pub runtime_handle: Option<tokio::runtime::Handle>,
+    /// Optional structured task output data (from MCP tool payload), enabling
+    /// checkers to access task results without scanning repo files.
+    pub output_data: Option<serde_json::Value>,
 }

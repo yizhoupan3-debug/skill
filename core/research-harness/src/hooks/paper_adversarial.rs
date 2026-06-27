@@ -125,11 +125,6 @@ pub fn prompt_signals_manuscript_work(text: &str) -> bool {
     adjusted >= 5
 }
 
-/// Alias used by runtime-core wrappers.
-pub fn prompt_signals_paper_manuscript_work(text: &str) -> bool {
-    prompt_signals_manuscript_work(text)
-}
-
 /// Resolve the adversarial hook block from disk or builtin.
 pub fn resolve_paper_adversarial_block(repo_root: &Path) -> String {
     BLOCK_CACHE.resolve(repo_root, || BUILTIN_BLOCK.clone())

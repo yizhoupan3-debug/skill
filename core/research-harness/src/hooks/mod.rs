@@ -85,45 +85,6 @@ pub fn is_cache_valid(path: &Path, ttl: Duration) -> bool {
     }
 }
 
-/// Read cached content if valid, otherwise return None.
-pub fn read_cache(key: &str) -> Option<String> {
-    let path = cache_dir().join(format!("{key}.cache"));
-    if is_cache_valid(&path, cache_ttl()) {
-        std::fs::read_to_string(&path).ok()
-    } else {
-        None
-    }
-}
-
-/// Write content to the hook disk cache.
-pub fn write_cache(key: &str, content: &str) -> std::io::Result<()> {
-    let dir = cache_dir();
-    std::fs::create_dir_all(&dir)?;
-    std::fs::write(dir.join(format!("{key}.cache")), content)
-}
-
-/// Invalidate (delete) a cached entry.
-pub fn invalidate_cache(key: &str) {
-    let path = cache_dir().join(format!("{key}.cache"));
-    let _ = std::fs::remove_file(path);
-}
-
-// ── Hook dispatch with env switch + cache ──
-
-/// Dispatch activity log hook with env switch check.
-/// Returns Ok(true) if activity was logged, Ok(false) if skipped.
-pub fn dispatch_activity_log(
-    tool_name: &str,
-    args: &str,
-    repo_root: &Path,
-) -> anyhow::Result<bool> {
-    if !is_activity_log_enabled() {
-        return Ok(false);
-    }
-    activity_log::maybe_log_research_activity(tool_name, args, repo_root)?;
-    Ok(true)
-}
-
 /// Dispatch adversarial review hook with repo_root for BlockCache disk support.
 /// Returns the context to inject, or None if not applicable.
 pub fn dispatch_adversarial(context: &str, repo_root: Option<&std::path::Path>) -> Option<String> {

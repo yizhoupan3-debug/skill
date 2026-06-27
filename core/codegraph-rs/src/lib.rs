@@ -194,13 +194,6 @@ impl CodeGraphIndex {
         Ok(db::mcp_tool_ops::ingest_mcp_tools(&self.conn, registry)?)
     }
 
-    /// Resolve a tool name to its managed server ID via indexed lookup.
-    ///
-    /// Returns `None` if the tool is not found.
-    pub fn search_mcp_tool(&self, tool_name: &str) -> Option<String> {
-        db::mcp_tool_ops::resolve_mcp_tool_server_id(&self.conn, tool_name)
-    }
-
     /// List all MCP tool nodes in the index.
     pub fn list_mcp_tools(&self) -> anyhow::Result<Vec<Node>> {
         Ok(db::mcp_tool_ops::list_mcp_tools(&self.conn)?)

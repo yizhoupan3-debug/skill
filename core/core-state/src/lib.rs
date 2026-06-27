@@ -11,4 +11,3 @@ pub mod task_state;
 pub mod utils;
 #[cfg(test)]
 mod proptests;
-pub use error::StateError;

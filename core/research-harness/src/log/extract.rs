@@ -71,12 +71,6 @@ pub fn extract_entities_from_text(text: &str) -> Vec<(String, String)> {
     results
 }
 
-/// 从文本中提取实体及其类型，返回 `(entity, type)` 对列表。
-/// 兼容骨架 API 的便捷封装。
-pub fn extract_entities(text: &str) -> anyhow::Result<Vec<(String, String)>> {
-    Ok(extract_entities_from_text(text))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

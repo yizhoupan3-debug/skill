@@ -27,8 +27,8 @@ fn install_skills_rejects_retired_codex_app_host_id() {
         repo_root.to_str().unwrap(),
         "--project-root",
         repo_root.to_str().unwrap(),
-        "--home",
-        home.to_str().unwrap(),
+        "--host-home",
+        &format!("claude={}", home.to_str().unwrap()),
         "--bootstrap-output-dir",
         tmp.path().join("bootstrap").to_str().unwrap(),
         "claude-desktop",
@@ -60,8 +60,8 @@ fn install_skills_cursor_target_installs_only_cursor() {
         repo_root.to_str().unwrap(),
         "--project-root",
         repo_root.to_str().unwrap(),
-        "--home",
-        home.to_str().unwrap(),
+        "--host-home",
+        &format!("claude={}", home.to_str().unwrap()),
         "--bootstrap-output-dir",
         tmp.path().join("bootstrap").to_str().unwrap(),
         "cursor",
@@ -94,8 +94,8 @@ fn install_skills_claude_target_installs_only_claude() {
         repo_root.to_str().unwrap(),
         "--project-root",
         repo_root.to_str().unwrap(),
-        "--home",
-        home.to_str().unwrap(),
+        "--host-home",
+        &format!("claude={}", home.to_str().unwrap()),
         "--bootstrap-output-dir",
         tmp.path().join("bootstrap").to_str().unwrap(),
         "claude",
@@ -334,6 +334,7 @@ fn cursor_user_scope_projection_manages_browser_mcp_server() {
     let project_root = tmp.path().join("consumer");
     let artifact_root = tmp.path().join("artifacts");
     let cursor_home = tmp.path().join("cursor-home");
+    let cursor_home_arg = format!("cursor={}", cursor_home.display());
     std::fs::create_dir_all(&project_root).unwrap();
     std::fs::create_dir_all(&cursor_home).unwrap();
 
@@ -347,8 +348,8 @@ fn cursor_user_scope_projection_manages_browser_mcp_server() {
         project_root.to_str().unwrap(),
         "--artifact-root",
         artifact_root.to_str().unwrap(),
-        "--cursor-home",
-        cursor_home.to_str().unwrap(),
+        "--host-home",
+        &cursor_home_arg,
         "--to",
         "cursor",
         "--scope",
@@ -413,8 +414,8 @@ fn cursor_user_scope_projection_manages_browser_mcp_server() {
         project_root.to_str().unwrap(),
         "--artifact-root",
         artifact_root.to_str().unwrap(),
-        "--cursor-home",
-        cursor_home.to_str().unwrap(),
+        "--host-home",
+        &cursor_home_arg,
         "--to",
         "cursor",
         "--scope",
@@ -437,6 +438,7 @@ fn cursor_user_scope_install_preserves_user_owned_browser_mcp_server() {
     let project_root = tmp.path().join("consumer");
     let artifact_root = tmp.path().join("artifacts");
     let cursor_home = tmp.path().join("cursor-home");
+    let cursor_home_arg = format!("cursor={}", cursor_home.display());
     std::fs::create_dir_all(&project_root).unwrap();
     std::fs::create_dir_all(&cursor_home).unwrap();
 
@@ -463,8 +465,8 @@ fn cursor_user_scope_install_preserves_user_owned_browser_mcp_server() {
         project_root.to_str().unwrap(),
         "--artifact-root",
         artifact_root.to_str().unwrap(),
-        "--cursor-home",
-        cursor_home.to_str().unwrap(),
+        "--host-home",
+        &cursor_home_arg,
         "--to",
         "cursor",
         "--scope",
@@ -506,6 +508,7 @@ fn cursor_user_scope_install_marks_equivalent_browser_mcp_server_managed() {
     let project_root = tmp.path().join("consumer");
     let artifact_root = tmp.path().join("artifacts");
     let cursor_home = tmp.path().join("cursor-home");
+    let cursor_home_arg = format!("cursor={}", cursor_home.display());
     std::fs::create_dir_all(&project_root).unwrap();
     std::fs::create_dir_all(&cursor_home).unwrap();
 
@@ -529,8 +532,8 @@ fn cursor_user_scope_install_marks_equivalent_browser_mcp_server_managed() {
         project_root.to_str().unwrap(),
         "--artifact-root",
         artifact_root.to_str().unwrap(),
-        "--cursor-home",
-        cursor_home.to_str().unwrap(),
+        "--host-home",
+        &cursor_home_arg,
         "--to",
         "cursor",
         "--scope",
@@ -570,6 +573,7 @@ fn cursor_user_scope_equivalence_check_requires_matching_repo_root_arg() {
     let project_root = tmp.path().join("consumer");
     let artifact_root = tmp.path().join("artifacts");
     let cursor_home = tmp.path().join("cursor-home");
+    let cursor_home_arg = format!("cursor={}", cursor_home.display());
     std::fs::create_dir_all(&project_root).unwrap();
     std::fs::create_dir_all(&cursor_home).unwrap();
 
@@ -602,8 +606,8 @@ fn cursor_user_scope_equivalence_check_requires_matching_repo_root_arg() {
         project_root.to_str().unwrap(),
         "--artifact-root",
         artifact_root.to_str().unwrap(),
-        "--cursor-home",
-        cursor_home.to_str().unwrap(),
+        "--host-home",
+        &cursor_home_arg,
         "--to",
         "cursor",
         "--scope",
@@ -638,8 +642,8 @@ fn cursor_user_scope_equivalence_check_requires_matching_repo_root_arg() {
         project_root.to_str().unwrap(),
         "--artifact-root",
         artifact_root.to_str().unwrap(),
-        "--cursor-home",
-        cursor_home.to_str().unwrap(),
+        "--host-home",
+        &cursor_home_arg,
         "--to",
         "cursor",
         "--scope",
@@ -664,6 +668,7 @@ fn cursor_user_scope_remove_preserves_user_owned_browser_mcp_server() {
     let project_root = tmp.path().join("consumer");
     let artifact_root = tmp.path().join("artifacts");
     let cursor_home = tmp.path().join("cursor-home");
+    let cursor_home_arg = format!("cursor={}", cursor_home.display());
     std::fs::create_dir_all(&project_root).unwrap();
     std::fs::create_dir_all(&cursor_home).unwrap();
 
@@ -677,8 +682,8 @@ fn cursor_user_scope_remove_preserves_user_owned_browser_mcp_server() {
         project_root.to_str().unwrap(),
         "--artifact-root",
         artifact_root.to_str().unwrap(),
-        "--cursor-home",
-        cursor_home.to_str().unwrap(),
+        "--host-home",
+        &cursor_home_arg,
         "--to",
         "cursor",
         "--scope",
@@ -709,8 +714,8 @@ fn cursor_user_scope_remove_preserves_user_owned_browser_mcp_server() {
         project_root.to_str().unwrap(),
         "--artifact-root",
         artifact_root.to_str().unwrap(),
-        "--cursor-home",
-        cursor_home.to_str().unwrap(),
+        "--host-home",
+        &cursor_home_arg,
         "--to",
         "cursor",
         "--scope",
@@ -736,6 +741,7 @@ fn framework_host_integration_remove_preserves_files_not_recorded_in_manifest() 
     let project_root = tmp.path().join("consumer");
     let artifact_root = tmp.path().join("artifacts");
     let cursor_home = tmp.path().join("cursor-home");
+    let cursor_home_arg = format!("cursor={}", cursor_home.display());
     std::fs::create_dir_all(&project_root).unwrap();
     std::fs::create_dir_all(&cursor_home).unwrap();
     router_rs_json(&[
@@ -748,8 +754,8 @@ fn framework_host_integration_remove_preserves_files_not_recorded_in_manifest() 
         project_root.to_str().unwrap(),
         "--artifact-root",
         artifact_root.to_str().unwrap(),
-        "--cursor-home",
-        cursor_home.to_str().unwrap(),
+        "--host-home",
+        &cursor_home_arg,
         "--to",
         "cursor",
         "--scope",
@@ -779,8 +785,8 @@ fn framework_host_integration_remove_preserves_files_not_recorded_in_manifest() 
         project_root.to_str().unwrap(),
         "--artifact-root",
         artifact_root.to_str().unwrap(),
-        "--cursor-home",
-        cursor_home.to_str().unwrap(),
+        "--host-home",
+        &cursor_home_arg,
         "--to",
         "cursor",
         "--scope",

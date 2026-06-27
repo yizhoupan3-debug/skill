@@ -4,13 +4,11 @@
 //! "columnar array-of-arrays" format: a `keys` array defines column names,
 //! and a `skills` array contains rows where each row is a positional array.
 //!
-//! This module provides the shared parsing logic used by `registry.rs`,
+//! This module provides the shared parsing logic used by `validate`,
 //! `runtime-infra`, and potentially `routing-engine`.
 
 use serde_json::Value;
 use std::collections::HashMap;
-use std::fs;
-use std::path::Path;
 
 // ---------------------------------------------------------------------------
 // Key index
@@ -108,39 +106,6 @@ pub fn col_str_vec(row: &[Value], keys: &[String], column: &str) -> Vec<String> 
         .unwrap_or_default()
 }
 
-/// Get an `f64` from a row by column name.
-pub fn col_f64(row: &[Value], keys: &[String], column: &str) -> Option<f64> {
-    col_val(row, keys, column).and_then(|v| v.as_f64())
-}
-
-/// Get a `u64` from a row by column name.
-pub fn col_u64(row: &[Value], keys: &[String], column: &str) -> Option<u64> {
-    col_val(row, keys, column).and_then(|v| v.as_u64())
-}
-
-/// Get a `bool` from a row by column name.
-pub fn col_bool(row: &[Value], keys: &[String], column: &str) -> Option<bool> {
-    col_val(row, keys, column).and_then(|v| v.as_bool())
-}
-
-// ---------------------------------------------------------------------------
-// File-level loaders
-// ---------------------------------------------------------------------------
-
-/// Result type for [`load_columnar_file`].
-type LoadColumnarFileResult = Result<(Vec<String>, HashMap<String, Vec<Value>>), std::io::Error>;
-
-/// Load a columnar JSON file from disk.
-pub fn load_columnar_file(path: &Path) -> LoadColumnarFileResult {
-    let text = fs::read_to_string(path)?;
-    let doc: Value = serde_json::from_str(&text).map_err(|e| {
-        std::io::Error::new(std::io::ErrorKind::InvalidData, e)
-    })?;
-    let keys = parse_columnar_keys(&doc);
-    let rows = load_columnar_rows(&doc);
-    Ok((keys, rows))
-}
-
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -188,15 +153,5 @@ mod tests {
         assert_eq!(col_str(alpha, &keys, "owner"), Some("owner"));
         assert_eq!(col_str_vec(alpha, &keys, "tags"), vec!["tag1", "tag2"]);
         assert_eq!(col_str(alpha, &keys, "nonexistent"), None);
-    }
-
-    #[test]
-    fn load_from_file() {
-        let tmp = tempfile::tempdir().unwrap();
-        let path = tmp.path().join("test.json");
-        fs::write(&path, serde_json::to_string(&sample_doc()).unwrap()).unwrap();
-        let (keys, rows) = load_columnar_file(&path).unwrap();
-        assert_eq!(keys.len(), 4);
-        assert_eq!(rows.len(), 2);
     }
 }

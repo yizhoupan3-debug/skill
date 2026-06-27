@@ -368,7 +368,7 @@ fn dispatch_framework_stdio_request(op: &str, payload: Value) -> Result<Value, S
             let task_id = payload.get("task_id").and_then(|v| v.as_str()).unwrap_or("");
             let goal = payload.get("goal").and_then(|v| v.as_str()).unwrap_or("");
             let round = payload.get("round").and_then(|v| v.as_u64()).unwrap_or(1);
-            let verdict = crate::qg_entry::trigger(repo_root, task_id, quality_gate::scene::GENERAL, goal, None, round, None);
+            let verdict = crate::qg_entry::trigger(repo_root, task_id, quality_gate::scene::GENERAL, goal, None, round, None, None);
             serde_json::to_value(&verdict).map_err(|e| e.to_string())
         }
         "framework_alias" => dispatch_stdio_framework_alias(payload),

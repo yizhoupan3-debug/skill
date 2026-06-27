@@ -135,10 +135,6 @@ pub fn is_framework_stdio_op(op: &str) -> bool {
     op_in_domain(op, FRAMEWORK_STDIO_OPS)
 }
 
-pub fn is_tool_stdio_op(op: &str) -> bool {
-    TOOL_STDIO_OPS.contains(&op)
-}
-
 /// ── Runtime output mode dispatch (stub) ──
 ///
 /// These functions are intentionally stubbed here. The real implementation

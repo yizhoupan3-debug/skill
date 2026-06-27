@@ -52,6 +52,8 @@ pub const FRONTMATTER_KEYS: &[(&str, &str)] = &[
     ("network_access", "network_access"),
     ("approval_required_tools", "approval_required_tools"),
     ("kind", "kind"),
+    ("scene", "scene"),
+    ("sub_scene", "sub_scene"),
 ];
 
 /// Columns whose value should be omitted from frontmatter when null or empty.

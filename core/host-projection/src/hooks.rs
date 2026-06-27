@@ -148,19 +148,9 @@ pub fn router_rs_review_gate_stop_max_nudges_cap() -> Option<u32> {
     core_policy::env_flags::router_rs_review_gate_stop_max_nudges_cap()
 }
 
-pub fn router_rs_sessionstart_context_max_bytes() -> usize {
-    parse_env_usize("ROUTER_RS_SESSIONSTART_CONTEXT_MAX_BYTES")
-        .unwrap_or(64 * 1024)
-}
-
 // ────────────────────────────────────────────────────────────────
 // Hook-state file sweep utilities
 // ────────────────────────────────────────────────────────────────
-
-
-fn parse_env_usize(var: &str) -> Option<usize> {
-    std::env::var(var).ok().and_then(|v| v.trim().parse().ok())
-}
 
 // ────────────────────────────────────────────────────────────────
 // Cross-host stdin reader (shared by claude, codex, opencode)
@@ -193,21 +183,6 @@ pub fn read_stdin_limited<R: std::io::Read>(reader: &mut R) -> Result<String> {
         }
     }
     Ok(input)
-}
-
-/// Read stdin as JSON object with 4 MiB limit. Returns empty object if stdin is empty.
-/// Rejects non-object JSON (arrays, strings, numbers, etc.) with an error.
-pub fn read_stdin_json_limited() -> Result<Value> {
-    let mut stdin = std::io::stdin();
-    let input = read_stdin_limited(&mut stdin)?;
-    if input.trim().is_empty() {
-        return Ok(serde_json::json!({}));
-    }
-    let val: Value = serde_json::from_str(&input).map_err(|_| FrameworkError::validation("stdin_json_invalid"))?;
-    if !val.is_object() {
-        return Err(FrameworkError::validation("stdin_json_not_object: expected JSON object"));
-    }
-    Ok(val)
 }
 
 // ────────────────────────────────────────────────────────────────

@@ -34,30 +34,6 @@ pub fn append_ledger_event(workspace: &Path, kind: &str, payload: Value) -> Resu
     Ok(())
 }
 
-/// Append a section to `research-log.md`.
-/// Uses fr-utils' process-locked append for crash-safe multi-process writes.
-pub fn append_research_log(
-    workspace: &Path,
-    heading: &str,
-    bullets: Vec<String>,
-) -> Result<()> {
-    let log_path = workspace.join("research-log.md");
-    let date = chrono::Local::now().format("%Y-%m-%d");
-    let mut lines = vec![
-        String::new(),
-        format!("## {date} — {heading}"),
-        String::new(),
-    ];
-    for bullet in bullets {
-        lines.push(format!("- {bullet}"));
-    }
-    lines.push(String::new());
-    let content = lines.join("\n");
-    fr_utils::io_utils::append_text_with_process_lock(&log_path, &content, "research_log")
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
-    Ok(())
-}
-
 /// Initialize a new research workspace with default directory structure and state file.
 pub fn init_workspace(
     project: &str,

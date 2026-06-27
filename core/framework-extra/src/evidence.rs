@@ -24,40 +24,6 @@ type Result<T> = std::result::Result<T, FrameworkError>;
 
 const MAX_POST_TOOL_EVIDENCE_ARTIFACTS: usize = 120;
 
-#[allow(dead_code)]
-fn extract_shell_command_preview(event: &Value) -> Option<String> {
-    let input = event.get("tool_input").and_then(Value::as_object)?;
-    let cmd = input
-        .get("command")
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .or_else(|| {
-            input
-                .get("cmd")
-                .and_then(Value::as_str)
-                .map(str::trim)
-                .filter(|s| !s.is_empty())
-        })
-        .or_else(|| {
-            input
-                .get("script")
-                .and_then(Value::as_str)
-                .map(str::trim)
-                .filter(|s| !s.is_empty())
-        })
-        .or_else(|| {
-            input
-                .get("arguments")
-                .and_then(Value::as_object)
-                .and_then(|a| a.get("command"))
-                .and_then(Value::as_str)
-                .map(str::trim)
-                .filter(|s| !s.is_empty())
-        })?;
-    Some(truncate_utf8_chars(cmd, 2000))
-}
-
 fn coerce_exit_code_value(value: Option<&Value>) -> Option<i64> {
     let value = value?;
     if let Some(n) = value.as_i64() {
@@ -374,32 +340,6 @@ pub fn framework_hook_evidence_append(payload: Value) -> Result<Value> {
         "schema_version": HOOK_EVIDENCE_APPEND_SCHEMA_VERSION,
         "authority": FRAMEWORK_SESSION_ARTIFACT_WRITE_AUTHORITY,
     }))
-}
-
-#[allow(dead_code)]
-fn tool_name_normalized(event: &Value) -> String {
-    event
-        .get("tool_name")
-        .or(event.get("tool"))
-        .and_then(Value::as_str)
-        .unwrap_or_default()
-        .trim()
-        .to_string()
-}
-
-#[allow(dead_code)]
-fn tool_name_is_shell_like(name: &str) -> bool {
-    let n = name.trim().to_ascii_lowercase();
-    n == "bash"
-        || n == "sh"
-        || n == "zsh"
-        || n == "shell"
-        || n.contains("terminal")
-        || n.contains("shell")
-        || n == "functions.run_terminal_cmd"
-        || n == "run_terminal_cmd"
-        || n == "powershell"
-        || n == "pwsh"
 }
 
 fn shell_command_looks_like_verification(command_lower: &str) -> bool {

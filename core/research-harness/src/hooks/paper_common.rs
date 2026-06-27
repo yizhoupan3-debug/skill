@@ -16,15 +16,6 @@ pub fn operator_inject_globally_enabled() -> bool {
     core_policy::env_flags::env_enabled_default_true("ROUTER_RS_OPERATOR_INJECT")
 }
 
-/// Resolve a hook block from disk cache or builtin fallback.
-///
-/// - `block_cache`: the per-hook `BlockCache` instance
-/// - `builtin_lazy`: the `LazyLock<String>` holding the compiled-in fallback text
-pub fn resolve_block(block_cache: &BlockCache, builtin_lazy: &LazyLock<String>) -> String {
-    let builtin = (**builtin_lazy).clone();
-    block_cache.resolve(Path::new(""), move || builtin)
-}
-
 /// Append hook context if the hook is requested and the prompt signals relevance.
 ///
 /// Returns `true` if context was appended.

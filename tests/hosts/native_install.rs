@@ -198,10 +198,8 @@ fn install_native_integration_idempotent() {
 
     assert_eq!(first["hooks_enabled"], false);
     assert_eq!(first["hooks_disabled_changed"], true);
-    assert_eq!(first["deprecated_codex_hooks_removed"], false);
     assert_eq!(second["hooks_enabled"], false);
     assert_eq!(second["hooks_disabled_changed"], false);
-    assert_eq!(second["deprecated_codex_hooks_removed"], false);
     assert_eq!(first["default_bootstrap"]["status"], "materialized");
     assert!(
         ["already-present", "repaired-stale"]

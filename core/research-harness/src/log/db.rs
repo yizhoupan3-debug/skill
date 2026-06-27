@@ -135,7 +135,6 @@ struct Stmts<'a> {
     insert_connection: rusqlite::CachedStatement<'a>,
     insert_barrier_report: rusqlite::CachedStatement<'a>,
     insert_run: rusqlite::CachedStatement<'a>,
-    insert_activity: rusqlite::CachedStatement<'a>,
     update_entry: rusqlite::CachedStatement<'a>,
     get_entry: rusqlite::CachedStatement<'a>,
     get_findings_by_entry: rusqlite::CachedStatement<'a>,
@@ -182,10 +181,6 @@ impl<'a> Stmts<'a> {
             insert_run: conn.prepare_cached(
                 "INSERT INTO runs (entry_id, outcome, summary, metrics, git_state, env_fingerprint, created_at)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-            )?,
-            insert_activity: conn.prepare_cached(
-                "INSERT OR IGNORE INTO activity_log (tool_name, summary, source, metadata, created_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5)",
             )?,
             update_entry: conn.prepare_cached(
                 "UPDATE entries SET direction=?1, question=?2, context=?3, importance=?4, status=?5, updated_at=?6
@@ -377,19 +372,6 @@ pub fn insert_run(conn: &Connection, r: &Run) -> Result<()> {
     Ok(())
 }
 
-/// 插入活动日志条目。
-pub fn insert_activity_entry(conn: &Connection, a: &ActivityEntry) -> Result<()> {
-    let mut stmts = Stmts::new(conn)?;
-    stmts.insert_activity.execute(params![
-        a.tool_name,
-        a.summary,
-        a.source,
-        a.metadata,
-        a.created_at,
-    ])?;
-    Ok(())
-}
-
 /// 更新条目。
 pub fn update_entry(
     conn: &Connection,
@@ -521,40 +503,6 @@ pub fn search_findings(
     Ok(results)
 }
 
-/// 重建 FTS5 索引。
-pub fn rebuild_fts_index(conn: &Connection) -> Result<()> {
-    conn.execute_batch(
-        "INSERT INTO entries_fts(entries_fts) VALUES('rebuild');
-         INSERT INTO findings_fts(findings_fts) VALUES('rebuild');
-         INSERT INTO entities_fts(entities_fts) VALUES('rebuild');",
-    )
-    .context("rebuild FTS5 indexes")?;
-    Ok(())
-}
-
-/// 批量插入 activity log entries，直用 prepare_cached 避免创建全部 14 个 stmts。
-pub fn bulk_insert_activities(
-    conn: &Connection,
-    entries: &[ActivityEntry],
-) -> Result<usize> {
-    let mut stmt = conn.prepare_cached(
-        "INSERT OR IGNORE INTO activity_log (tool_name, summary, source, metadata, created_at)
-         VALUES (?1, ?2, ?3, ?4, ?5)",
-    )?;
-    let mut count = 0;
-    for a in entries {
-        stmt.execute(params![
-            a.tool_name,
-            a.summary,
-            a.source,
-            a.metadata,
-            a.created_at,
-        ])?;
-        count += 1;
-    }
-    Ok(count)
-}
-
 /// 获取所有 entry ID（用于遍历/导出）。
 pub fn list_entry_ids(conn: &Connection) -> Result<Vec<String>> {
     let mut stmt = conn.prepare_cached("SELECT id FROM entries ORDER BY created_at")?;
@@ -564,19 +512,6 @@ pub fn list_entry_ids(conn: &Connection) -> Result<Vec<String>> {
         ids.push(row.get(0)?);
     }
     Ok(ids)
-}
-
-/// 获取数据库中所有表和索引的大小统计。
-pub fn db_stats(conn: &Connection) -> Result<Vec<(String, i64)>> {
-    let mut stmt = conn.prepare_cached(
-        "SELECT name, pgsize FROM dbstat ORDER BY pgsize DESC",
-    )?;
-    let mut rows = stmt.query([])?;
-    let mut stats = Vec::new();
-    while let Some(row) = rows.next()? {
-        stats.push((row.get::<_, String>(0)?, row.get::<_, i64>(1)?));
-    }
-    Ok(stats)
 }
 
 // ── Entity / Knowledge Graph API ──

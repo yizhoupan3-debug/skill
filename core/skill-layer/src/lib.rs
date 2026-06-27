@@ -7,7 +7,6 @@
 pub mod backfill;
 pub mod columnar;
 pub mod constants;
-pub mod delete;
 pub mod discovery;
 pub mod frontmatter;
 pub mod frontmatter_parser;
@@ -15,8 +14,6 @@ pub mod generate;
 pub mod health;
 pub mod paths;
 pub mod refresh;
-pub mod registry;
-pub mod scaffold;
 pub mod validate;
 
 pub use frontmatter::{

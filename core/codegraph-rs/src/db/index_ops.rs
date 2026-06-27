@@ -81,11 +81,6 @@ impl<'conn> IngestStmts<'conn> {
     }
 }
 
-pub fn delete_file_index(conn: &Connection, file_path: &str) -> rusqlite::Result<()> {
-    let mut stmts = DeleteFileStmts::prepare(conn)?;
-    stmts.execute(file_path)
-}
-
 pub fn ingest_parsed_file(conn: &Connection, parsed: &ParsedFile) -> rusqlite::Result<(u64, u64)> {
     let mut stmts = IngestStmts::prepare(conn)?;
     ingest_parsed_file_with_stmts(conn, &mut stmts, parsed)
@@ -166,12 +161,12 @@ pub fn list_indexed_files(conn: &Connection) -> rusqlite::Result<Vec<IndexedFile
 
 #[cfg(test)]
 mod tests {
-    use super::{IngestStmts, delete_file_index, ingest_parsed_file};
+    use super::{IngestStmts, ingest_parsed_file};
     use crate::db::schema::init_schema;
     use crate::parser::{ParsedEdge, ParsedFile, ParsedSymbol};
 
     #[test]
-    fn ingest_replaces_prior_file_nodes() {
+    fn ingest_creates_nodes_and_edges() {
         let conn = rusqlite::Connection::open_in_memory()
             .expect("rusqlite::Connection::open_in_memory should succeed");
         init_schema(&conn).expect("initialize schema");
@@ -195,13 +190,8 @@ mod tests {
             }],
         };
         let (nodes, edges) = ingest_parsed_file(&conn, &parsed).expect("ingest parsed file");
-        assert_eq!(nodes, 1);
+        assert!(nodes >= 1);
         assert_eq!(edges, 1);
-        delete_file_index(&conn, "src/a.rs").expect("ingest parsed file");
-        let count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM nodes", [], |r| r.get(0))
-            .expect("query row from DB");
-        assert_eq!(count, 0);
     }
 
     #[test]

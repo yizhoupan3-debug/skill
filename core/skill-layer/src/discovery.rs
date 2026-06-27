@@ -104,43 +104,6 @@ pub fn safe_skill_md_path(
     Ok(path)
 }
 
-/// Resolve a skill slug from a manifest's `skill_path` field.
-///
-/// Extracted from `host-projection::tools::skill_body_path_from_manifest`.
-pub fn skill_md_from_manifest(
-    repo_root: &Path,
-    manifest: &serde_json::Value,
-    slug: &str,
-) -> Option<PathBuf> {
-    let keys: Vec<String> = manifest["keys"]
-        .as_array()
-        .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
-        .unwrap_or_default();
-    let slug_idx = keys.iter().position(|k| k == "slug");
-    let path_idx = keys.iter().position(|k| k == "skill_path");
-
-    if let (Some(slug_idx), Some(path_idx)) = (slug_idx, path_idx)
-        && let Some(rows) = manifest["skills"].as_array() {
-            for row in rows {
-                if row.get(slug_idx).and_then(|v| v.as_str()) == Some(slug)
-                    && let Some(rel) = row.get(path_idx).and_then(|v| v.as_str()) {
-                        let full = repo_root.join(rel);
-                        if full.exists() {
-                            return Some(full);
-                        }
-                    }
-            }
-        }
-
-    // Fallback to standard path
-    let fallback = paths::skill_md(repo_root, slug);
-    if fallback.exists() {
-        Some(fallback)
-    } else {
-        None
-    }
-}
-
 // ---------------------------------------------------------------------------
 // Repo root discovery
 // ---------------------------------------------------------------------------

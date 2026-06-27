@@ -115,10 +115,6 @@ impl HookReviewGateFields {
 }
 
 impl HookReviewDiskCore {
-    pub fn bump_version_for_save(&mut self) {
-        self.version = HOOK_REVIEW_DISK_VERSION;
-    }
-
     pub fn gate_fields(&self) -> HookReviewGateFields {
         self.gate.clone()
     }

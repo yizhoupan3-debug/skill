@@ -455,84 +455,6 @@ pub fn render_search_plan_summary(state: &Value) -> String {
     lines.join("\n").trim_end().to_string()
 }
 
-// ── External Research 摘要 ──
-
-pub fn render_external_research_summary(state: &Value) -> String {
-    let entries = arr(state, "external_research");
-    let mut lines = vec![
-        "## Managed External Research".into(),
-        String::new(),
-        format!("- recorded searches: {}", entries.len()),
-        "- sources: Semantic Scholar, arXiv".into(),
-        String::new(),
-    ];
-    if entries.is_empty() {
-        lines.push("_No external research recorded yet. Run `research-claim` for one claim or `research-all` for a batch after drafting claims._".into());
-        return lines.join("\n");
-    }
-    for entry in entries.iter().rev().take(5) {
-        lines.push(format!(
-            "### {} — {}",
-            str_field_default(entry, "research_id", "ext-?"),
-            str_field_default(entry, "query", "-")
-        ));
-        lines.push(String::new());
-        lines.push(format!(
-            "- claim: {}",
-            str_field_default(entry, "claim_id", "custom")
-        ));
-        lines.push(format!(
-            "- source mode: {}",
-            str_field_default(entry, "source", "all")
-        ));
-        lines.push(format!(
-            "- captured at: {}",
-            str_field_default(entry, "created_at", "-")
-        ));
-        lines.push(format!(
-            "- result count: {}",
-            crate::search::research::external_research_result_count(entry)
-        ));
-        lines.push(String::new());
-        for result in entry
-            .get("results")
-            .and_then(Value::as_array)
-            .into_iter()
-            .flatten()
-            .take(8)
-        {
-            let year = result
-                .get("year")
-                .map(value_to_string)
-                .filter(|value| !value.is_empty() && value != "null")
-                .unwrap_or_else(|| "-".into());
-            lines.push(format!(
-                "- {} ({}, {}): {}",
-                str_field_default(result, "title", "_untitled_"),
-                year,
-                str_field_default(result, "source", "-"),
-                crate::text::markdown_link(result.get("url").and_then(Value::as_str))
-            ));
-        }
-        let errors = entry
-            .get("errors")
-            .and_then(Value::as_array)
-            .map(|items| {
-                items
-                    .iter()
-                    .filter_map(Value::as_str)
-                    .collect::<Vec<_>>()
-                    .join("; ")
-            })
-            .unwrap_or_default();
-        if !errors.is_empty() {
-            lines.push(format!("- source errors: {errors}"));
-        }
-        lines.push(String::new());
-    }
-    lines.join("\n").trim_end().to_string()
-}
-
 // ── Claims 摘要 ──
 
 pub fn render_claims_summary(state: &Value) -> String {
@@ -885,36 +807,6 @@ pub fn format_protocol(hypothesis: &Value) -> String {
             "minimal_test",
             "_Smallest run that can update the decision._",
         ),
-        "",
-    ]
-    .join("\n")
-}
-
-// ── Analysis Stub ──
-
-pub fn format_analysis_stub(hypothesis: &Value) -> String {
-    [
-        &format!("# Analysis — {}", str_field(hypothesis, "id")),
-        "",
-        "## Current Pattern",
-        "",
-        "_Summarize what repeated runs are saying._",
-        "",
-        "## What This Probably Means",
-        "",
-        "_Prefer mechanism over raw metric narration._",
-        "",
-        "## Alternative Explanations",
-        "",
-        "_What else could explain the observed pattern?_",
-        "",
-        "## Baseline / Ablation Read",
-        "",
-        "_Did the result beat the right simple baseline or only tune around it?_",
-        "",
-        "## Open Questions",
-        "",
-        "_What still needs to be disambiguated?_",
         "",
     ]
     .join("\n")

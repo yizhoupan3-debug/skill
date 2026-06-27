@@ -80,16 +80,3 @@ pub struct GoalCompletionGates {
     pub block_on_rfv_pass_without_evidence: bool,
 }
 
-/// Goal execution type: determines the goal lifecycle strategy.
-/// After v10 cleanup, only Loop remains.
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
-#[serde(rename_all = "snake_case")]
-pub enum GoalType {
-    /// Loop goal: review → implement (with task splitting), uses goal engine.
-    #[default]
-    Loop,
-    /// OLD: v10 removed Linear — catch-all for backward compat with old GOAL_STATE.json.
-    #[serde(other)]
-    Unknown,
-}
-

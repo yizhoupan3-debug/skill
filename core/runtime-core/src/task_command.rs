@@ -94,8 +94,10 @@ pub fn dispatch_task_ledger_command(cmd: TaskLedgerCommand) -> Result<Value, Str
                 }
             }
 
+            let output_data = p.get("output_data").cloned();
+
             // Stage 2: QG Route evaluation
-            let verdict = crate::qg_entry::trigger(repo_root, task_id, scene, goal, sub_scene, round, None);
+            let verdict = crate::qg_entry::trigger(repo_root, task_id, scene, goal, sub_scene, round, None, output_data);
             serde_json::to_value(&verdict).map_err(|e| e.to_string())
         }
         TaskLedgerCommand::SessionArtifacts(p) => {
