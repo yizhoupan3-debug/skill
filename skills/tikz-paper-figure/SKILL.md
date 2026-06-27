@@ -1,4 +1,5 @@
 ---
+
 allowed_tools:
 - shell
 - browser
@@ -14,6 +15,7 @@ metadata:
   - figure-conversion
   version: '1.0.0'
 name: tikz-paper-figure
+scene: slides
 risk: low
 routing_gate: none
 routing_layer: L3

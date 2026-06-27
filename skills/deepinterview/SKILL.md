@@ -1,4 +1,5 @@
 ---
+
 allowed_tools:
 - shell
 - git
@@ -14,6 +15,7 @@ metadata:
   - convergence
   version: '1.0.0'
 name: deepinterview
+scene: general
 risk: low
 routing_gate: none
 routing_layer: L1

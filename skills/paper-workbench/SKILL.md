@@ -1,4 +1,5 @@
 ---
+
 description: 论文全流程前门：自动路由 reviewer/writer lane，一站式审稿、返修、投稿。按顶刊/顶会标准把关，支持 rebuttal、R&R、cover letter 全流程。
 framework_contracts:
   consumes_execution_items: false
@@ -23,6 +24,7 @@ metadata:
   - top-tier
   version: '1.16.0'
 name: paper-workbench
+scene: research
 risk: medium
 routing_gate: none
 routing_layer: L2

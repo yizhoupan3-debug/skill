@@ -1,4 +1,5 @@
 ---
+
 description: 'Ensure and manage research experiment reproducibility: environment capture, random seed management, data versioning, configuration tracking, result validation, and artifact archival. Use when the user'
 metadata:
   platforms:
@@ -12,6 +13,8 @@ metadata:
   - mlops
   version: '1.0.3'
 name: experiment-reproducibility
+scene: research
+sub_scene: reproducibility
 risk: low
 routing_gate: none
 routing_layer: L3

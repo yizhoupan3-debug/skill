@@ -1,4 +1,5 @@
 ---
+
 description: experiment-reproducibility 的无状态审计子能力：验证实验的可复现性——种子、确定性、环境锁定、数据版本和 checkpoint 恢复。
 metadata:
   platforms:
@@ -10,6 +11,8 @@ metadata:
   - research
   version: '1.0.0'
 name: reproducibility-verification
+scene: general
+sub_scene: reproducibility
 risk: low
 routing_gate: none
 routing_layer: L4

@@ -1,4 +1,5 @@
 ---
+
 allowed_tools:
 - shell
 - browser
@@ -17,6 +18,7 @@ metadata:
   - incident-triage
   version: '2.5.0'
 name: systematic-debugging
+scene: code_review
 network_access: conditional
 risk: low
 routing_gate: evidence

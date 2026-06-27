@@ -1,4 +1,5 @@
 ---
+
 allowed_tools:
 - Read
 - Write
@@ -19,6 +20,7 @@ metadata:
   - parallel-agents
   version: '1.0.0'
 name: simplify
+scene: code_review
 risk: low
 routing_gate: none
 routing_layer: L2

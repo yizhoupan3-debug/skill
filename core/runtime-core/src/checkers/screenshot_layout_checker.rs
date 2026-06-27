@@ -4,7 +4,15 @@
 //! task execution have a consistent, valid layout that matches expected
 //! visual dimensions and composition.
 //!
-//! In-place adapter at `runtime-core/checkers/` (Wave 4b).
+//! **Status: C-level stub** — requires the `image` crate and a reference
+//! template system to compare layouts.
+//!
+//! **Implementation path:**
+//! - Load screenshot PNG from task artifacts via `ctx.evidence_path`
+//! - Parse image dimensions and basic layout regions (header, body, footer)
+//! - Compare against reference templates or expected aspect ratios
+//! - Check for common issues: text overflow, clipping, aspect ratio distortion
+//! - Emit B-level findings for layout inconsistencies
 
 use quality_gate::checker::GateChecker;
 use quality_gate::types::{CheckContext, CheckResult, Finding, Severity};
@@ -28,14 +36,17 @@ impl GateChecker for ScreenshotLayoutChecker {
     fn check(&self, ctx: &CheckContext) -> CheckResult {
         let mut findings = Vec::new();
         findings.push(Finding {
-            id: "screenshot_layout-adapter".to_string(),
+            id: "screenshot_layout-stub".to_string(),
             severity: Severity::C,
             description: format!(
-                "screenshot_layout checker invoked for task '{}'",
+                "screenshot_layout checker invoked for task '{}' — C-level stub, image analysis not yet integrated",
                 ctx.task_id
             ),
             location: None,
-            suggestion: Some("implement actual checks".to_string()),
+            suggestion: Some(
+                "integrate `image` crate + layout template system to enable visual consistency checks"
+                    .to_string()
+            ),
         });
         CheckResult {
             checker_id: "screenshot_layout".to_string(),

@@ -1,4 +1,5 @@
 ---
+
 allowed_tools:
 - shell
 - browser
@@ -16,6 +17,7 @@ metadata:
   - acceptance
   version: '1.0.0'
 name: design-md
+scene: general
 network_access: conditional
 risk: low
 routing_gate: artifact

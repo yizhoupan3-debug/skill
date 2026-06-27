@@ -1,4 +1,5 @@
 ---
+
 description: Guide research statistics for test choice, effect sizes, uncertainty reporting, and interpretation. Use when the user asks 用什么检验、显著性怎么算、p 值、效应量、贝叶斯、多重比较、统计功效、回归诊断, or needs help choosing, executing, o
 metadata:
   platforms:
@@ -12,6 +13,7 @@ metadata:
   - research
   version: '1.0.2'
 name: statistical-analysis
+scene: research
 risk: low
 routing_gate: none
 routing_layer: L4

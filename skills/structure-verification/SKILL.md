@@ -1,4 +1,5 @@
 ---
+
 description: 'Structure verification capability: LaTeX compilation, cross-reference consistency, claim-evidence alignment, format compliance, notation consistency, equation numbering.'
 metadata:
   platforms:
@@ -11,6 +12,8 @@ metadata:
   - research
   version: '1.0.0'
 name: structure-verification
+scene: research
+sub_scene: structure
 risk: low
 routing_gate: none
 routing_layer: L4

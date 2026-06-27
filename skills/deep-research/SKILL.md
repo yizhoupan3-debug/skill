@@ -1,4 +1,5 @@
 ---
+
 description: Deep research harness — fan-out web searches, fetch sources, verify claims, synthesize cited report.
 metadata:
   platforms:
@@ -11,6 +12,7 @@ metadata:
   - multi-source
   version: '1.1.0'
 name: deep-research
+scene: research
 risk: low
 routing_gate: approve
 routing_layer: L2

@@ -1,4 +1,5 @@
 ---
+
 description: 'Research discovery front door: deep topic investigation, literature/survey, theory landscape, theorem applicability, math-background inquiry for unknown properties, and research-question scoping.'
 metadata:
   platforms:
@@ -11,6 +12,7 @@ metadata:
   - theory-background
   version: '1.0.0'
 name: research-discovery
+scene: research
 risk: low
 routing_gate: none
 routing_layer: L2

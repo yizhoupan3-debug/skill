@@ -1,4 +1,5 @@
 ---
+
 description: Research Knowledge Graph — navigate, visualize, trace connections between entries, manage entities, cross-workspace search.
 metadata:
   platforms:
@@ -11,6 +12,7 @@ metadata:
   - hub
   version: '1.0.0'
 name: research-knowledge-graph
+scene: research
 risk: low
 routing_gate: none
 routing_layer: L2

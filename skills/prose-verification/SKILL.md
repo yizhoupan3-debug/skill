@@ -1,4 +1,5 @@
 ---
+
 description: 'Prose verification capability: terminology consistency, style guide compliance, claim drift detection, language register, hedging appropriateness.'
 metadata:
   platforms:
@@ -11,6 +12,7 @@ metadata:
   - research
   version: '1.0.0'
 name: prose-verification
+scene: research
 risk: low
 routing_gate: none
 routing_layer: L4

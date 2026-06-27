@@ -1,4 +1,5 @@
 ---
+
 description: |-
   创建、配置、调试和注册 MCP server，实现 AI agent 工具集成。
   覆盖 stdio/SSE/streamable-http 三种传输模式，Python FastMCP 和 Rust 两种主流实现，
@@ -14,6 +15,7 @@ metadata:
   - model-context-protocol
   version: '1.0.0'
 name: mcp-server-management
+scene: general
 risk: low
 routing_gate: none
 routing_layer: L3

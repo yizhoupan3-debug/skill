@@ -1,4 +1,5 @@
 ---
+
 description: Create Mermaid or Graphviz/DOT diagrams for flowcharts, process diagrams, sequence diagrams, ERDs, dependency graphs, state machines, and publication-quality technical diagrams. Use when the user asks
 metadata:
   platforms:
@@ -12,6 +13,7 @@ metadata:
   - erd
   version: '2.0.0'
 name: diagramming
+scene: visual
 risk: low
 routing_gate: none
 routing_layer: L3

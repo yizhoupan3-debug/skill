@@ -1,4 +1,5 @@
 ---
+
 allowed_tools:
 - shell
 - git
@@ -18,6 +19,7 @@ metadata:
   - router-rs
   version: '3.0.0'
 name: update
+scene: general
 network_access: local
 risk: medium
 routing_gate: none

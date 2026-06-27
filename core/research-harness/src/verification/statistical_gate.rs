@@ -1,20 +1,23 @@
 //! QG Route `GateChecker` adapter for `StatisticalChecker`.
 //!
-//! In-place adapter (Wave 4b): wraps the `statistical` module's pure functions
-//! into a `GateChecker` for the RESEARCH scene.
+//! Extracts structured statistical data from `CheckContext::output_data` and calls
+//! the underlying pure functions in `verification::statistical`.
 //!
-//! Registered by `research_harness::register_qg_checkers()`.
+//! Expected `output_data` JSON (all fields optional):
+//! ```json
+//! {
+//!   "grim": { "mean": 3.50, "n": 100, "decimals": 2 },
+//!   "p_value": { "observed": 0.03, "expected": 0.05, "tolerance": 0.01 },
+//!   "multiple_comparison": { "num_tests": 5, "correction_applied": true },
+//!   "effect_size": { "effect_size": 0.5, "test_type": "t-test" }
+//! }
+//! ```
 
 use quality_gate::checker::GateChecker;
 use quality_gate::types::{CheckContext, CheckResult, Finding, Severity};
 
-/// QG Route checker that wraps `statistical.rs` functions.
-///
-/// Checks:
-/// - GRIM test (Granularity-Related Inconsistency of Means)
-/// - P-value verification
-/// - Multiple comparison correction
-/// - Effect size reporting
+use crate::verification::statistical;
+
 pub struct StatisticalChecker;
 
 impl GateChecker for StatisticalChecker {
@@ -27,84 +30,117 @@ impl GateChecker for StatisticalChecker {
     }
 
     fn description(&self) -> &'static str {
-        "statistical verification checks: GRIM, p-value, multiple comparisons, effect size"
+        "statistical verification: GRIM, p-value, multiple comparisons, effect size"
     }
 
     fn check(&self, ctx: &CheckContext) -> CheckResult {
-        let task_id = &ctx.task_id;
-
-        // The statistical functions are pure — they require concrete numeric
-        // values from the task output. Since CheckContext does not carry the
-        // task output text, this checker emits informational findings for each
-        // available check to confirm the adapter is wired correctly.
-        //
-        // A full integration would extract numbers from the task report and
-        // call:
-        //   statistical::grim_test(mean, n, decimals)
-        //   statistical::verify_p_value(observed, expected, tolerance)
-        //   statistical::check_multiple_comparison_correction(tests, corrected)
-        //   statistical::check_effect_size_reported(effect_size, test_type)
-
         let mut findings = Vec::new();
 
-        findings.push(Finding {
-            id: "statistical_grim_adapter".to_string(),
-            severity: Severity::C,
-            description: format!(
-                "GRIM check invoked for task '{task_id}' — adapter wired, pending mean/n input"
-            ),
-            location: None,
-            suggestion: Some(
-                "extract observed_mean, n, and decimals from task output to call statistical::grim_test"
-                    .to_string(),
-            ),
-        });
+        let Some(data) = ctx.output_data.as_ref() else {
+            findings.push(Finding {
+                id: "statistical_no_data".to_string(),
+                severity: Severity::C,
+                description: "No output_data provided — statistical checks skipped".to_string(),
+                location: None,
+                suggestion: Some(
+                    "pass output_data with statistical keys (grim, p_value, etc.) to enable checks"
+                        .to_string(),
+                ),
+            });
+            return CheckResult { checker_id: self.id().to_string(), passed: true, findings };
+        };
 
-        findings.push(Finding {
-            id: "statistical_p_value_adapter".to_string(),
-            severity: Severity::C,
-            description: format!(
-                "P-value verification invoked for task '{task_id}' — adapter wired, pending observed/expected input"
-            ),
-            location: None,
-            suggestion: Some(
-                "extract observed and expected p-values from task output to call statistical::verify_p_value"
-                    .to_string(),
-            ),
-        });
-
-        findings.push(Finding {
-            id: "statistical_multicomp_adapter".to_string(),
-            severity: Severity::C,
-            description: format!(
-                "Multiple comparison correction check invoked for task '{task_id}' — adapter wired, pending test count input"
-            ),
-            location: None,
-            suggestion: Some(
-                "extract num_tests and correction_applied from task output to call statistical::check_multiple_comparison_correction"
-                    .to_string(),
-            ),
-        });
-
-        findings.push(Finding {
-            id: "statistical_effect_size_adapter".to_string(),
-            severity: Severity::C,
-            description: format!(
-                "Effect size check invoked for task '{task_id}' — adapter wired, pending effect_size/test_type input"
-            ),
-            location: None,
-            suggestion: Some(
-                "extract effect_size and test_type from task output to call statistical::check_effect_size_reported"
-                    .to_string(),
-            ),
-        });
-
-        let passed = true; // informational only — never blocks
-
-        CheckResult {
-            checker_id: self.id().to_string(),
-            passed,
-            findings,
+        // GRIM test
+        if let Some(grim) = data.get("grim") {
+            let mean = grim.get("mean").and_then(|v| v.as_f64()).unwrap_or(0.0);
+            let n = grim.get("n").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+            let decimals = grim.get("decimals").and_then(|v| v.as_u64()).unwrap_or(2) as usize;
+            match statistical::grim_test(mean, n, decimals) {
+                Ok(passed) => {
+                    findings.push(Finding {
+                        id: "statistical_grim".to_string(),
+                        severity: if passed { Severity::C } else { Severity::B },
+                        description: format!(
+                            "GRIM test for mean={mean}, n={n}, decimals={decimals}: {}",
+                            if passed { "consistent" } else { "inconsistent" }
+                        ),
+                        location: None,
+                        suggestion: if passed { None } else {
+                            Some("mean is not granular-compatible with sample size — check data".to_string())
+                        },
+                    });
+                }
+                Err(e) => {
+                    findings.push(Finding {
+                        id: "statistical_grim_error".to_string(),
+                        severity: Severity::C,
+                        description: format!("GRIM test error: {e}"),
+                        location: None,
+                        suggestion: None,
+                    });
+                }
+            }
         }
+
+        // P-value verification
+        if let Some(pv) = data.get("p_value") {
+            let observed = pv.get("observed").and_then(|v| v.as_f64()).unwrap_or(0.0);
+            let expected = pv.get("expected").and_then(|v| v.as_f64()).unwrap_or(0.0);
+            let tolerance = pv.get("tolerance").and_then(|v| v.as_f64()).unwrap_or(0.01);
+            let passed = statistical::verify_p_value(observed, expected, tolerance);
+            findings.push(Finding {
+                id: "statistical_p_value".to_string(),
+                severity: if passed { Severity::C } else { Severity::B },
+                description: format!(
+                    "P-value verification: observed={observed}, expected={expected}, tolerance={tolerance}: {}",
+                    if passed { "consistent" } else { "inconsistent" }
+                ),
+                location: None,
+                suggestion: if passed { None } else {
+                    Some("reported p-value does not match expected value within tolerance".to_string())
+                },
+            });
+        }
+
+        // Multiple comparison correction
+        if let Some(mc) = data.get("multiple_comparison") {
+            let num_tests = mc.get("num_tests").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+            let correction_applied = mc.get("correction_applied").and_then(|v| v.as_bool()).unwrap_or(false);
+            let passed = statistical::check_multiple_comparison_correction(num_tests, correction_applied);
+            findings.push(Finding {
+                id: "statistical_multicomp".to_string(),
+                severity: if passed { Severity::C } else { Severity::Warning },
+                description: format!(
+                    "Multiple comparison: num_tests={num_tests}, correction_applied={correction_applied}: {}",
+                    if passed { "ok" } else { "missing correction" }
+                ),
+                location: None,
+                suggestion: if passed { None } else {
+                    Some("apply Bonferroni or FDR correction for multiple tests".to_string())
+                },
+            });
+        }
+
+        // Effect size reporting
+        if let Some(es) = data.get("effect_size") {
+            let effect_size = es.get("effect_size").and_then(|v| v.as_f64());
+            let test_type = es.get("test_type").and_then(|v| v.as_str()).unwrap_or("unknown");
+            let reported = statistical::check_effect_size_reported(effect_size, test_type);
+            findings.push(Finding {
+                id: "statistical_effect_size".to_string(),
+                severity: if reported { Severity::C } else { Severity::Warning },
+                description: format!(
+                    "Effect size for {test_type}: {}",
+                    if reported { "reported" } else { "missing" }
+                ),
+                location: None,
+                suggestion: if reported { None } else {
+                    Some(format!("report effect size for {test_type} test"))
+                },
+            });
+        }
+
+        let passed = findings.iter().all(|f| matches!(f.severity, Severity::C | Severity::Warning));
+        CheckResult { checker_id: self.id().to_string(), passed, findings }
     }
 }

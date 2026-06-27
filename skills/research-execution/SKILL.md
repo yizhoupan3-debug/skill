@@ -1,4 +1,5 @@
 ---
+
 description: 'Research execution lanes: experiment design, math verification, math modeling, code verification, and reproducibility. Carries a research task through evidence, math, code, and reproducibility checks.'
 metadata:
   platforms:
@@ -12,6 +13,7 @@ metadata:
   - execution
   version: '1.0.0'
 name: research-execution
+scene: research
 risk: low
 routing_gate: none
 routing_layer: L2

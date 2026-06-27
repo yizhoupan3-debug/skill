@@ -1,4 +1,5 @@
 ---
+
 allowed_tools:
 - shell
 - rust
@@ -16,6 +17,7 @@ metadata:
   - document-layout
   version: '2.0.0'
 name: doc
+scene: general
 network_access: conditional
 risk: low
 routing_gate: artifact

@@ -1,4 +1,5 @@
 ---
+
 description: Create, refactor, and review code-generated scientific figures for papers using matplotlib, seaborn, plotnine, or related Python plotting tools. Use for 科研出图, publication charts, journal style figures
 metadata:
   platforms:
@@ -12,6 +13,7 @@ metadata:
   - charts
   version: '1.2.0'
 name: scientific-figure-plotting
+scene: visual
 risk: medium
 routing_gate: none
 routing_layer: L4

@@ -1,4 +1,5 @@
 ---
+
 description: 'Cross-host Plan / 策划文档闸门：先用本地证据起草可执行计划，再产出可验收 todo；默认轻量五行证据；高风险时 audit plan。 `plan_profile: execution`（缺省）末条须做计划 vs 实际 + Git 状态证据收口（宿主支持时使用 `/gitx plan`）；`plan_profile: 跨宿主 Plan 闸门，产出可验收 todo，非 lifecycle 专用。'
 metadata:
   platforms:
@@ -10,6 +11,7 @@ metadata:
   - closeout
   version: '2.0.0'
 name: plan-mode
+scene: general
 risk: low
 routing_gate: none
 routing_layer: L1

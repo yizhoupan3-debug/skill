@@ -1,4 +1,5 @@
 ---
+
 allowed_tools:
 - shell
 - git
@@ -18,6 +19,7 @@ metadata:
   - code-review
   version: '2.0.0'
 name: gh-address-comments
+scene: code_review
 network_access: conditional
 risk: medium
 routing_gate: source

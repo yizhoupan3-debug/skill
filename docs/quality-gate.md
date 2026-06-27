@@ -15,6 +15,7 @@ Quality Gate (QG) 是 v10 架构引入的统一质量门评估系统。它替代
 - **两阶段退出**：Stage 1 防欺诈（证据链验证）+ Stage 2 QG Route（场景分发 checker 评估）
 - **就地适配**：checker 逻辑留在其自然模块位置，通过 `impl GateChecker` 适配注册（roadmap D007）
 - **纯同步合约**：所有 checker 的 `check()` 方法为同步；异步操作通过 `CheckContext::runtime_handle` 桥接
+- **结构化输出数据**：`CheckContext::output_data` 允许 MCP 工具 payload 直接传递任务输出给 checker
 
 ### 1.2 系统角色
 
@@ -122,8 +123,11 @@ pub struct CheckContext {
     pub task_id: String,                               // 任务 ID
     pub evidence_path: Option<PathBuf>,                // EVIDENCE_INDEX.json 路径
     pub runtime_handle: Option<tokio::runtime::Handle>, // 异步运行时句柄
+    pub output_data: Option<serde_json::Value>,        // 结构化任务输出数据（来自 MCP payload）
 }
 ```
+
+**`output_data` 设计说明**：该字段允许 MCP 工具 payload 中的结构化数据直接传递给 checker，无需扫描 repo 文件。checker 从 `ctx.output_data` 中提取自己关心的键，缺失时输出 C 级 info finding（graceful skip）。
 
 ### 2.7 `Scene`
 
@@ -140,6 +144,17 @@ pub struct CheckContext {
 | `VISUAL` | `"visual"` | 视觉输出审查（截图布局、可访问性） |
 
 未知场景默认归一化为 `GENERAL`。
+
+### 2.8 Sub-scene Filtering
+
+`sub_scene` 字段用于在 RESEARCH 场景内进一步过滤 checker。当前有 2 个 checker 声明了 `sub_scene_affinity`：
+
+| Checker | `sub_scene_affinity` | 含义 |
+|---------|---------------------|------|
+| `Reproducibility` | `"reproducibility"` | 仅在可重现性子场景运行 |
+| `Structure` | `"structure"` | 仅在结构验证子场景运行 |
+
+过滤逻辑：`CheckerRegistry::get_checkers_for_scene()` 返回某场景的全部 checker；`evaluate_qg_route()` 在分发前根据 `ctx.sub_scene` 和 `checker.sub_scene_affinity()` 过滤——affinity 为 `Some` 但与 `ctx.sub_scene` 不匹配的 checker 被跳过。
 
 ---
 
@@ -194,7 +209,7 @@ pub fn evaluate_qg_route(scene: &str, ctx: &CheckContext) -> GateVerdict
 set_extern_checkers(research_harness::register_qg_checkers);
 ```
 
-这桥接 `research-harness` crate 的 checker 注入到 QG Route，避免 runtime-core 与 research-harness 间的直接依赖。
+这桥接 `research-harness` crate 的 checker 注入到 QG Route，避免 runtime-core (L7) 与 research-harness (L5) 间的直接依赖。
 
 ---
 
@@ -207,7 +222,7 @@ set_extern_checkers(research_harness::register_qg_checkers);
 ### 4.1 两阶段结构
 
 ```
-trigger(repo_root, task_id, scene, goal, round, runtime_handle) → GateVerdict
+trigger(repo_root, task_id, scene, goal, sub_scene, round, runtime_handle, output_data) → GateVerdict
     │
     ├── Stage 1: Anti-fraud gate
     │   ├── 调用 core_state::state_manager::task_evidence_artifacts_summary_for_task()
@@ -215,7 +230,7 @@ trigger(repo_root, task_id, scene, goal, round, runtime_handle) → GateVerdict
     │   └── 无证据 / 证据通过 → 进入 Stage 2
     │
     └── Stage 2: Quality Gate
-        ├── 构造 CheckContext（含 evidence_path）
+        ├── 构造 CheckContext（含 evidence_path, output_data）
         ├── 调用 evaluate_qg_route(scene, &ctx)
         └── 返回聚合 GateVerdict
 ```
@@ -225,111 +240,159 @@ trigger(repo_root, task_id, scene, goal, round, runtime_handle) → GateVerdict
 - `!has_evidence`：无证据 → 空 task 列表 = 无欺诈可能，通过
 - `has_evidence && evidence_ok`：有通过证据 → 通过
 
-### 4.2 向后兼容的 Hook Wrapper
+### 4.2 调用入口
 
-`quality_gate_hook_wrapper(payload: serde_json::Value)` 适配旧有的 `framework_quality_gate` MCP 工具接口，抽取 payload 中的 `repo_root`/`task_id`/`goal`/`round` 字段后调用 `trigger()`。注：固定使用 `scene::GENERAL`。
+QG Entry 有两个主要调用路径：
+
+1. **MCP 工具 `TaskLedgerCommand::QualityGate`**（`task_command.rs`）：
+   - 从 payload 提取 `repo_root`/`task_id`/`goal`/`round`/`scene`/`sub_scene`/`output_data`
+   - 先执行 `validate_transition()`（Stage 1 前置检查）
+   - 再调用 `qg_entry::trigger()`
+   - 这是 GoalEngine 的主要集成路径
+
+2. **向后兼容 stdio dispatch**（`stdio_dispatch.rs`）：
+   - 处理旧有的 `framework_quality_gate` MCP 操作
+   - 固定使用 `scene::GENERAL`，`output_data = None`
 
 ---
 
 ## 5. Checkers
 
-所有 12 个 checker 位于 `core/runtime-core/src/checkers/`。分为两组：
+共 **16 个** checker，分为两组：6 个 in-place（runtime-core）+ 10 个外部（research-harness，通过 `EXTERN_CHECKERS` 函数指针注入）。
 
-### 5.1 就地 Checker（Wave 4b，场景——GENERAL / CODE_REVIEW / VISUAL / SLIDES）
+### 5.1 就地 Checker（runtime-core，场景分发如下）
 
-| Checker | 文件 | 场景 | 描述 |
+| Checker | 文件 | 场景 | 状态 | 描述 |
+|---------|------|------|------|------|
+| `EvidenceChecker` | `evidence_checker.rs` | GENERAL, CODE_REVIEW, RESEARCH | ✅ Real | 验证 task 存在且成功（扫描 EVIDENCE_INDEX.json） |
+| `AdversarialChecker` | `adversarial_checker.rs` | GENERAL | ✅ Real | 通用对抗检查：证据文件存在性、单轮完成警告 |
+| `CorrectnessChecker` | `correctness_checker.rs` | CODE_REVIEW | ✅ Real | 扫描 unwrap() / todo!() / unimplemented!() 计数 |
+| `SecurityChecker` | `security_checker.rs` | CODE_REVIEW | ✅ Real | 扫描 unsafe / transmute / Command::new(var) / shell 执行 |
+| `ScreenshotLayoutChecker` | `screenshot_layout_checker.rs` | VISUAL | C-level stub | 截图布局一致性（需 image crate） |
+| `OverflowChecker` | `overflow_checker.rs` | SLIDES | C-level stub | 幻灯片溢出检测（需 token counter） |
+
+### 5.2 外部 Checker（research-harness，场景——RESEARCH）
+
+这 10 个 checker 通过 `research_harness::register_qg_checkers()` 注册，均接收 `ctx.output_data` 中的结构化数据。
+
+| Checker | 文件 | 状态 | 描述 |
 |---------|------|------|------|
-| `EvidenceChecker` | `evidence_checker.rs` | GENERAL, CODE_REVIEW, RESEARCH | 验证 task 存在且成功（扫描 EVIDENCE_INDEX.json） |
-| `AdversarialChecker` | `adversarial_checker.rs` | GENERAL | 通用对抗检查：证据文件存在性、单轮完成警告 |
-| `CorrectnessChecker` | `correctness_checker.rs` | CODE_REVIEW | 扫描 unwrap() / todo!() / unimplemented!() 计数 |
-| `SecurityChecker` | `security_checker.rs` | CODE_REVIEW | 扫描 unsafe / transmute / Command::new(var) / shell 执行 |
-| `ScreenshotLayoutChecker` | `screenshot_layout_checker.rs` | VISUAL | 截图布局一致性验证（当前为 C 级占位） |
-| `OverflowChecker` | `overflow_checker.rs` | SLIDES | 检测幻灯片生成的溢出条件（当前为 C 级占位） |
-
-### 5.2 验证技能 Checker 别名（Wave 5b，场景——RESEARCH）
-
-这 6 个 checker 是 `research-harness` 验证技能的 QG 适配别名。当前实现为 C 级占位，实际检查逻辑由独立的 verification 技能模块提供：
-
-| Checker | 文件 | 场景 | 描述 |
-|---------|------|------|------|
-| `ProseQcChecker` | `prose_qc.rs` | RESEARCH | 文本质量：术语一致性、风格合规、声明漂移检测 |
-| `LiteratureGateChecker` | `literature_gate.rs` | RESEARCH | 文献验证：DOI 可达性、引用-声明对齐、矛盾扫描 |
-| `StatisticalGateChecker` | `statistical_gate.rs` | RESEARCH | 统计验证：p 值重算、GRIM 检验、效应量报告 |
-| `ReproducibilityChecker` | `reproducibility.rs` | RESEARCH | 可重现性：种子锁定、确定性重跑、环境锁定 |
-| `StructureGateChecker` | `structure_gate.rs` | RESEARCH | 结构验证：LaTeX 编译、交叉引用一致性、格式合规 |
-| `FormalGateChecker` | `formal_gate.rs` | RESEARCH | 形式验证：CAS 恒等式、SMT 一致性、量纲分析 |
+| `Asymptotic` | `asymptotic_gate.rs` | ✅ Wired | 渐近分析：链组合、量级估计、声明验证 |
+| `DimensionalConsistency` | `formal_gate.rs` | ✅ Wired | 量纲一致性：SI 单位匹配、方程链验证 |
+| `Inequality` | `inequality_gate.rs` | ✅ Wired | 不等式验证：LaTeX 解析、LP 可行性求解 |
+| `Literature` | `literature_gate.rs` | ✅ Wired | 文献验证：DOI 可达性、引用-声明对齐 |
+| `ProseQCChecker` | `prose_qc_gate.rs` | ✅ Wired | 文本质量：术语一致性、风格、声明漂移 |
+| `Reproducibility` | `reproducibility_gate.rs` | ✅ Wired | 可重现性：种子锁定、确定性重跑、环境锁定 |
+| `StatisticalChecker` | `statistical_gate.rs` | ✅ Wired | 统计验证：GRIM、p 值、多重比较、效应量 |
+| `Structure` | `structure_gate.rs` | ✅ Wired | 结构验证：LaTeX 编译、交叉引用、格式合规 |
+| `Symbolic` | `symbolic_gate.rs` | ✅ Wired | 符号验证：恒等式证明、等价性、增长分类 |
+| `SympyBridge` | `sympy_bridge_gate.rs` | ✅ Wired | SymPy 验证：恒等式检查、表达式化简 |
 
 ### 5.3 注册矩阵
 
-所有 checker 通过 `register_checkers()` 注册到 `CheckerRegistry`：
+**In-place checkers**（`runtime-core/src/checkers/mod.rs`）：
 
 ```rust
 pub fn register_checkers(registry: &mut CheckerRegistry) {
-    // GENERAL
+    // EvidenceChecker — registered under all three declared scenes
     registry.register(scene::GENERAL, Box::new(EvidenceChecker));
+    registry.register(scene::CODE_REVIEW, Box::new(EvidenceChecker));
+    registry.register(scene::RESEARCH, Box::new(EvidenceChecker));
+    // AdversarialChecker
     registry.register(scene::GENERAL, Box::new(AdversarialChecker));
-    // CODE_REVIEW
+    // CODE_REVIEW scene
     registry.register(scene::CODE_REVIEW, Box::new(CorrectnessChecker));
     registry.register(scene::CODE_REVIEW, Box::new(SecurityChecker));
-    // VISUAL
+    // VISUAL scene
     registry.register(scene::VISUAL, Box::new(ScreenshotLayoutChecker));
-    // SLIDES
+    // SLIDES scene
     registry.register(scene::SLIDES, Box::new(OverflowChecker));
-    // RESEARCH (6 verification skill adapters)
-    registry.register(scene::RESEARCH, Box::new(ProseQcChecker::new()));
-    registry.register(scene::RESEARCH, Box::new(LiteratureGateChecker::new()));
-    registry.register(scene::RESEARCH, Box::new(StatisticalGateChecker::new()));
-    registry.register(scene::RESEARCH, Box::new(ReproducibilityChecker::new()));
-    registry.register(scene::RESEARCH, Box::new(StructureGateChecker::new()));
-    registry.register(scene::RESEARCH, Box::new(FormalGateChecker::new()));
 }
 ```
+
+**外部 checkers**（`research-harness/src/lib.rs` via `EXTERN_CHECKERS`）：
+
+```rust
+pub fn register_qg_checkers(registry: &mut CheckerRegistry) {
+    // 10 RESEARCH-scene checkers from research-harness
+    registry.register(scene::RESEARCH, Box::new(Asymptotic));
+    registry.register(scene::RESEARCH, Box::new(DimensionalConsistency));
+    registry.register(scene::RESEARCH, Box::new(Inequality));
+    registry.register(scene::RESEARCH, Box::new(Literature));
+    registry.register(scene::RESEARCH, Box::new(ProseQCChecker));
+    registry.register(scene::RESEARCH, Box::new(Reproducibility));
+    registry.register(scene::RESEARCH, Box::new(StatisticalChecker));
+    registry.register(scene::RESEARCH, Box::new(Structure));
+    registry.register(scene::RESEARCH, Box::new(Symbolic));
+    registry.register(scene::RESEARCH, Box::new(SympyBridge));
+}
+```
+
+### 5.4 output_data JSON Schema
+
+checker 从 `ctx.output_data` 提取数据，各 checker 期望的键如下：
+
+| Checker | output_data key | 结构 |
+|---------|----------------|------|
+| `StatisticalChecker` | `grim` | `{ "mean": f64, "n": usize, "decimals": usize }` |
+| | `p_value` | `{ "observed": f64, "expected": f64, "tolerance": f64 }` |
+| | `multiple_comparison` | `{ "num_tests": usize, "correction_applied": bool }` |
+| | `effect_size` | `{ "effect_size": Option<f64>, "test_type": String }` |
+| `Asymptotic` | `magnitude_estimate` | `{ "expr": String, "var": String, "regime": String }` |
+| | `chain` | `{ "steps": Vec<AsymptoticStep>, "var": String, "regime": String, "sympy_check": bool }` |
+| | `claim` | `{ "f": String, "g": String, "relation": String, "var": String, "regime": String }` |
+| `DimensionalConsistency` | `equations` | `Vec<String>` |
+| `Symbolic` | `identity` | `{ "lhs": String, "rhs": String }` |
+| | `equivalent` | `{ "lhs": String, "rhs": String }` |
+| | `growth` | `{ "expr": String, "var": String }` |
+| | `compare_growth` | `{ "f": String, "g": String, "var": String }` |
+| `Inequality` | `inequalities` | `Vec<String>` (LaTeX) |
+| | `timeout_ms` | `u64` |
+| `SympyBridge` | `identity` | `{ "lhs": String, "rhs": String }` |
+| | `simplify` | `String` |
+
+所有键均为可选；缺失时 checker 输出 C 级 info finding，不阻断 gate。
 
 ---
 
 ## 6. GoalEngine Integration
 
-QG 系统与 GoalEngine 通过函数指针注册模式集成。集成点位于 `core/core-state/src/state_manager/goal_ops.rs`。
+QG 系统与 GoalEngine 通过 MCP 工具命令模式集成。集成点位于 `core/runtime-core/src/task_command.rs`。
 
-### 6.1 注册
+### 6.1 MCP 工具调用
 
-在 `runtime_core::init_hooks()` 中注册 QGEntry 函数指针：
-
-```rust
-core_state::state_manager::register_qg_entry_trigger(
-    |repo_root, task_id, scene, goal, round| {
-        let verdict = qg_entry::trigger(repo, task_id, scene, goal, round, None);
-        serde_json::to_value(&verdict).unwrap_or_else(/* fallback */)
-    },
-);
-```
-
-### 6.2 Goal "complete" 操作
-
-在 `framework_goal_drive_impl()` 的 `"complete"` 分支中：
+`TaskLedgerCommand::QualityGate(payload)` 是主要入口：
 
 ```
-1. 处理 loop goal →
-2. 触发 QGEntry (invoke_qg_entry_trigger):
-   ├── verdict.passed == true → 正常完成（归档 GOAL_STATE）
-   └── verdict.passed == false → review_pending:
-       ├── status = "review_pending"
-       ├── blockers = verdict.blockers
-       ├── 写入 GOAL_STATE.json
-       └── 返回操作 "review_pending"
+payload = {
+    "repo_root": "/path/to/repo",
+    "task_id": "task-123",
+    "goal": "完成 X 功能",
+    "scene": "research",        // 可选，缺省 GENERAL
+    "sub_scene": "formal",      // 可选
+    "round": 1,
+    "output_data": { ... }      // 可选，结构化任务输出
+}
 ```
 
-### 6.3 "continue_review" / "retry" 操作
-
-当 goal 处于 `review_pending` 状态时允许重试：
+### 6.2 Goal "complete" 流程
 
 ```
-1. 验证当前 status == "review_pending"
-2. 清除 blockers 字段
-3. 重置 status = "running"
-4. 去活冲突的 QG loop state
-5. 写入 GOAL_STATE.json
+1. validate_transition(repo_root, task_id, Complete)  ← Stage 1 前置
+   ├── !passed → 返回 P0 阻断（transition_validation_blocked）
+   └── passed → 继续
+
+2. qg_entry::trigger(repo_root, task_id, scene, goal, sub_scene, round, None, output_data)
+   ├── Stage 1: Anti-fraud gate（证据链验证）
+   └── Stage 2: QG Route（场景分发 checker 评估）
+
+3. verdict.passed == true → goal 正常完成
+   verdict.passed == false → goal 进入 review_pending
 ```
+
+### 6.3 向后兼容 stdio dispatch
+
+`core/runtime-core/src/framework_runtime/stdio_dispatch.rs` 提供对旧有 `framework_quality_gate` MCP 操作的兼容。固定使用 `scene::GENERAL` 且不传递 `output_data`。
 
 ### 6.4 QG State 管理
 
@@ -347,8 +410,12 @@ core_state::state_manager::register_qg_entry_trigger(
 ```
 L7 (Application Layer)
 ├── runtime-core::qg_route   ─── OnceLock<CheckerRegistry>, 外部 checker 桥接
-├── runtime-core::qg_entry   ─── 两阶段退出门 + 向后兼容 hook wrapper
-└── runtime-core::checkers/  ─── 12 个 in-place GateChecker 实现
+├── runtime-core::qg_entry   ─── 两阶段退出门
+├── runtime-core::checkers/  ─── 6 个 in-place GateChecker 实现
+└── runtime-core::task_command ── MCP 工具入口，提取 output_data
+
+L5 (Verification Layer)
+└── research-harness         ─── 10 个 RESEARCH-scene GateChecker 实现
 
 L4 (Contract / Library Layer)
 └── quality-gate crate       ─── GateChecker trait, CheckerRegistry, 聚合逻辑
@@ -370,9 +437,9 @@ runtime-core (L7) ─── 持 quality-gate 作为依赖
     │  ├── checkers/ 各 checker 通过 quality-gate::checker::GateChecker 适配
     │  └── qg_entry 通过 quality-gate::types 返回 GateVerdict
     │
-    ├── core-state (L0) ─── QGEntry 在 complete 分支调用 invoke_qg_entry_trigger
+    ├── core-state (L0) ─── evidence API
     │
-    └── research-harness (L5, optional) ─── 通过 EXTERN_CHECKERS 函数指针注入外部 checker
+    └── research-harness (L5, optional) ─── 通过 EXTERN_CHECKERS 函数指针注入 10 个外部 checker
 ```
 
 ### 7.3 关键设计决策
@@ -383,6 +450,7 @@ runtime-core (L7) ─── 持 quality-gate 作为依赖
 - **无 previous_results**：checker 之间不共享结果，纯函数合约
 - **Scene 归一化**：未知 scene → GENERAL，不出 panic
 - **未初始化 → 静默通过**：符合 P10（函数指针后备语义为 no-op）
+- **output_data 纯可选**：checker 缺失数据时输出 C 级 info finding，不阻断
 
 ### 7.4 外部 Checker 集成模式
 
@@ -395,11 +463,11 @@ runtime-core (L7) ─── 持 quality-gate 作为依赖
         │
         ▼
   qg_route::init_qg_route()
-        ├── register_checkers()  ← 12 in-place checkers
-        └── EXTERN_CHECKERS()   ← research-harness checkers (if registered)
+        ├── register_checkers()     ← 6 in-place checkers
+        └── EXTERN_CHECKERS()       ← 10 research-harness checkers (if registered)
 ```
 
-这种 `OnceLock<fn>` 模式避免 runtime-core (L7) 与 research-harness (L5) 间的循环依赖，与应用层（L7 router-rs-cli）注入。
+这种 `OnceLock<fn>` 模式避免 runtime-core (L7) 与 research-harness (L5) 间的循环依赖，由应用层（L7 router-rs-cli）注入。
 
 ---
 
@@ -413,27 +481,24 @@ runtime-core (L7) ─── 持 quality-gate 作为依赖
 - 旧的 `quality_gate_drive` hook 实现
 - `deactivate_goal_for_conflict_with_quality_gate()` 函数（Wave 4a-ii → QG 是 Goal 的内部模式）
 
-### 8.2 向后兼容
-
-- `quality_gate_hook_wrapper()` 在 `qg_entry.rs` 中提供，适配旧 MCP 工具 JSON 格式（`framework_quality_gate` / `framework_rfv_loop`）
-- 注册为 `framework_kernel::runtime_hooks` 中的 `quality_gate_drive` 和 `framework_quality_gate` hook
-- 旧 payload 格式：`{ "repo_root": "...", "task_id": "...", "goal": "...", "round": 1 }`
-
-### 8.3 行为差异
+### 8.2 行为差异
 
 | 方面 | 旧系统 (runtime-exit-gate) | 新系统 (QG Route) |
 |------|---------------------------|-------------------|
 | 状态机 | 独立 QG 状态机，与 goal 互斥 | QG 作为 Goal 的内部阶段 |
-| 检查方式 | 单一大函数 | 可组合 checker 列表 |
-| 场景分发 | 无 | scene 分发 + sub_scene 过滤 |
+| 检查方式 | 单一大函数 | 可组合 checker 列表（16 个） |
+| 场景分发 | 无 | 5 个场景 + sub_scene 过滤 |
 | 扩展性 | 需修改状态机 | 注册新增 GateChecker 即可 |
 | 防欺诈 | 分离 | Stage 1 内置于 QGEntry |
+| 数据传递 | N/A | CheckContext.output_data 结构化传递 |
 
-### 8.4 与架构规约的对照
+---
 
-更多架构层面的描述见 `docs/architecture.md` §7（Quality Gate Route）。
+## 附：SKILL.md 场景标注
 
-Interfaces documented at:
-- `quality_gate_hook_wrapper` in stdio_dispatch
+每个 SKILL.md 的 frontmatter 包含 `scene` 和可选 `sub_scene` 字段，由 `generate.rs` 的 `FRONTMATTER_KEYS` 控制写入。场景分配见 `skills/SKILL_ROUTING_RUNTIME.json` 的 `scene` 列。
+
+接口参考：
 - `TaskLedgerCommand::QualityGate` in `core/runtime-core/src/task_command.rs`
 - QG state management in `core/core-state/src/state_manager/quality_gate_ops.rs`
+- `Evaluator` trait and adapter in `skills/evaluator-framework/src/evaluator.rs`

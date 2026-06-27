@@ -1,4 +1,5 @@
 ---
+
 description: 'Literature verification capability: DOI reachability, citation-claim alignment, contradiction sweep, closest work identification, coverage scoring.'
 metadata:
   platforms:
@@ -10,6 +11,7 @@ metadata:
   - research
   version: '1.0.0'
 name: literature-verification
+scene: research
 risk: low
 routing_gate: none
 routing_layer: L4

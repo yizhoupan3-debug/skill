@@ -1,4 +1,5 @@
 ---
+
 description: Decide whether work should stay local, use bounded sidecars, or escalate to workflow orchestration. Also design and debug multi-agent systems when the real problem is coordination, handoff, worker boundar
 metadata:
   platforms:
@@ -9,6 +10,7 @@ metadata:
   - orchestration
   version: '4.0.0'
 name: agent-swarm-orchestration
+scene: general
 risk: medium
 routing_gate: delegation
 routing_layer: L0

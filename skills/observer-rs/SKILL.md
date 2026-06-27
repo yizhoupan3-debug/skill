@@ -1,5 +1,7 @@
 ---
+
 name: observer-rs
+scene: code_review
 description: |
   Framework-operational reference: analyze telemetry, audit usage journal,
   compute per-skill health scores, inspect integrity, snapshot registry state.

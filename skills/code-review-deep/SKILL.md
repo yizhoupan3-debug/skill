@@ -1,4 +1,5 @@
 ---
+
 allowed_tools:
 - Read
 - Bash
@@ -23,6 +24,7 @@ metadata:
   - adversarial-review
   version: '2.2.0'
 name: code-review-deep
+scene: code_review
 risk: medium
 routing_gate: none
 routing_layer: L2

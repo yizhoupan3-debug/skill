@@ -1,4 +1,5 @@
 ---
+
 allowed_tools:
 - shell
 - python
@@ -17,6 +18,7 @@ metadata:
   - incident-debugging
   version: '2.1.0'
 name: sentry
+scene: code_review
 network_access: required
 risk: medium
 routing_gate: source

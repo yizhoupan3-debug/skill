@@ -1,5 +1,7 @@
 ---
+
 name: shared-references
+scene: general
 allowed_tools:
 - Read
 - Bash

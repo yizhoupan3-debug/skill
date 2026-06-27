@@ -1,4 +1,5 @@
 ---
+
 description: Verify and format academic citations and bibliographies.
 metadata:
   platforms:
@@ -12,6 +13,7 @@ metadata:
   - academic
   version: '2.4.0'
 name: citation-management
+scene: research
 risk: low
 routing_gate: none
 routing_layer: L2

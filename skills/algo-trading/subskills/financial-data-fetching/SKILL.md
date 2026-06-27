@@ -1,5 +1,7 @@
 ---
+
 name: financial-data-fetching
+scene: general
 description: |
   Fetch, validate, normalize, and export real financial market data: OHLCV,
   OHLCV, capital metrics, and backtest exports for U.S. equities, China

@@ -1,4 +1,5 @@
 ---
+
 description: 'macOS Python governance with uv-only (Rust) packaging: PATH single-track, per-project uv.lock, pip ban, migration runbook.'
 metadata:
   platforms:
@@ -13,6 +14,7 @@ metadata:
   - reproducibility
   version: '1.1.1'
 name: python-env-management
+scene: general
 risk: medium
 routing_gate: none
 routing_layer: L4

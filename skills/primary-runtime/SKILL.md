@@ -1,5 +1,7 @@
 ---
+
 name: primary-runtime
+scene: general
 allowed_tools:
 - Read
 - Bash

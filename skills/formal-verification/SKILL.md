@@ -1,4 +1,5 @@
 ---
+
 description: 'Formal verification capability: CAS identity simplification, SMT consistency, witness validation, dimensional analysis, step dependency checking.'
 metadata:
   platforms:
@@ -12,6 +13,7 @@ metadata:
   - research
   version: '1.0.0'
 name: formal-verification
+scene: research
 risk: low
 routing_gate: none
 routing_layer: L4

@@ -1,4 +1,5 @@
 ---
+
 description: 'Statistical verification capability: p-value recomputation, GRIM test, effect size reporting, multiple comparison correction, assumption checking.'
 metadata:
   platforms:
@@ -10,6 +11,7 @@ metadata:
   - research
   version: '1.0.0'
 name: statistical-verification
+scene: research
 risk: low
 routing_gate: none
 routing_layer: L4

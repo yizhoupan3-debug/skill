@@ -1,4 +1,5 @@
 ---
+
 description: Research workspace CLI — claims, hypotheses, runs, logs, barrier escalation, smoke tests. Backed by core/research-harness.
 metadata:
   platforms:
@@ -12,6 +13,7 @@ metadata:
   - barrier
   version: '1.0.0'
 name: autoresearch
+scene: research
 risk: low
 routing_gate: none
 routing_layer: L2

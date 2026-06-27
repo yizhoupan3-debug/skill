@@ -88,7 +88,7 @@
       null,
       "conditional",
       null,
-      null,
+      "general",
       null
     ],
     [
@@ -167,7 +167,7 @@
       null,
       "conditional",
       null,
-      null,
+      "general",
       null
     ],
     [
@@ -243,7 +243,7 @@
       null,
       "conditional",
       null,
-      null,
+      "research",
       null
     ],
     [
@@ -307,7 +307,7 @@
       null,
       "conditional",
       null,
-      null,
+      "research",
       null
     ],
     [
@@ -382,7 +382,7 @@
       null,
       "local",
       null,
-      null,
+      "code_review",
       null
     ],
     [
@@ -445,7 +445,7 @@
       null,
       "required",
       null,
-      null,
+      "research",
       null
     ],
     [
@@ -504,7 +504,7 @@
       null,
       "local",
       [],
-      null,
+      "general",
       null
     ],
     [
@@ -574,7 +574,7 @@
       [
         "network install"
       ],
-      null,
+      "general",
       null
     ],
     [
@@ -640,7 +640,7 @@
       null,
       "local",
       null,
-      null,
+      "visual",
       null
     ],
     [
@@ -707,7 +707,7 @@
       [
         "file overwrite"
       ],
-      null,
+      "general",
       null
     ],
     [
@@ -769,7 +769,7 @@
       null,
       "local",
       null,
-      null,
+      "general",
       null
     ],
     [
@@ -837,8 +837,8 @@
       null,
       "local",
       null,
-      null,
-      null
+      "research",
+      "reproducibility"
     ],
     [
       "formal-verification",
@@ -894,7 +894,7 @@
       null,
       "local",
       null,
-      null,
+      "research",
       null
     ],
     [
@@ -967,7 +967,7 @@
       [
         "git push"
       ],
-      null,
+      "code_review",
       null
     ],
     [
@@ -1046,7 +1046,7 @@
       [
         "git push"
       ],
-      null,
+      "code_review",
       null
     ],
     [
@@ -1109,7 +1109,7 @@
       [
         "git push"
       ],
-      null,
+      "general",
       null
     ],
     [
@@ -1167,7 +1167,7 @@
       null,
       "local",
       null,
-      null,
+      "slides",
       null
     ],
     [
@@ -1224,7 +1224,7 @@
       null,
       "required",
       null,
-      null,
+      "research",
       null
     ],
     [
@@ -1289,8 +1289,8 @@
       null,
       "local",
       null,
-      null,
-      null
+      "research",
+      "formal"
     ],
     [
       "mcp-server-management",
@@ -1350,7 +1350,7 @@
       null,
       "conditional",
       null,
-      null,
+      "general",
       null
     ],
     [
@@ -1449,7 +1449,7 @@
       [
         "git push"
       ],
-      null,
+      "research",
       null
     ],
     [
@@ -1514,7 +1514,7 @@
       [
         "file overwrite"
       ],
-      null,
+      "general",
       null
     ],
     [
@@ -1575,7 +1575,7 @@
       null,
       "local",
       null,
-      null,
+      "general",
       null
     ],
     [
@@ -1631,7 +1631,7 @@
       null,
       "local",
       null,
-      null,
+      "research",
       null
     ],
     [
@@ -1695,7 +1695,7 @@
       null,
       "conditional",
       null,
-      null,
+      "general",
       null
     ],
     [
@@ -1749,8 +1749,8 @@
       null,
       "local",
       null,
-      null,
-      null
+      "general",
+      "reproducibility"
     ],
     [
       "research-discovery",
@@ -1822,7 +1822,7 @@
       null,
       "required",
       null,
-      null,
+      "research",
       null
     ],
     [
@@ -1895,7 +1895,7 @@
       null,
       "conditional",
       null,
-      null,
+      "research",
       null
     ],
     [
@@ -1963,7 +1963,7 @@
       null,
       "local",
       null,
-      null,
+      "research",
       null
     ],
     [
@@ -2033,7 +2033,7 @@
       },
       "conditional",
       null,
-      null,
+      "visual",
       null
     ],
     [
@@ -2097,7 +2097,7 @@
       [
         "authenticated web access"
       ],
-      null,
+      "code_review",
       null
     ],
     [
@@ -2161,7 +2161,7 @@
       null,
       "local",
       null,
-      null,
+      "code_review",
       null
     ],
     [
@@ -2233,7 +2233,7 @@
       [
         "git push"
       ],
-      null,
+      "general",
       null
     ],
     [
@@ -2300,7 +2300,7 @@
       [
         "gui automation"
       ],
-      null,
+      "code_review",
       null
     ],
     [
@@ -2362,7 +2362,7 @@
       [
         "file overwrite"
       ],
-      null,
+      "slides",
       null
     ],
     [
@@ -2417,7 +2417,7 @@
       null,
       "local",
       null,
-      null,
+      "general",
       null
     ],
     [
@@ -2485,7 +2485,7 @@
       null,
       "conditional",
       null,
-      null,
+      "research",
       null
     ],
     [
@@ -2540,7 +2540,7 @@
       null,
       "local",
       null,
-      null,
+      "research",
       null
     ],
     [
@@ -2596,8 +2596,8 @@
       null,
       "local",
       null,
-      null,
-      null
+      "research",
+      "structure"
     ],
     [
       "tikz-paper-figure",
@@ -2662,7 +2662,7 @@
       null,
       "local",
       null,
-      null,
+      "slides",
       null
     ],
     [
@@ -2728,7 +2728,7 @@
       [
         "git push"
       ],
-      null,
+      "general",
       null
     ],
     [
@@ -2796,7 +2796,7 @@
       [
         "gui automation"
       ],
-      null,
+      "visual",
       null
     ],
     [
@@ -2853,7 +2853,7 @@
       null,
       "local",
       [],
-      null,
+      "general",
       null
     ],
     [
@@ -2867,7 +2867,12 @@
       [],
       "framework",
       "skills/observer-rs/SKILL.md",
-      ["claude", "codex", "cursor", "opencode"],
+      [
+        "claude",
+        "codex",
+        "cursor",
+        "opencode"
+      ],
       "reference",
       [],
       "Framework-operational reference for observability and audit",
@@ -2875,17 +2880,27 @@
       null,
       null,
       {
-        "platforms": ["supported"],
-        "tags": ["observability", "audit", "health"],
+        "platforms": [
+          "supported"
+        ],
+        "tags": [
+          "observability",
+          "audit",
+          "health"
+        ],
         "category": "framework",
         "version": "1.0.0"
       },
       "medium",
-      ["Read", "Bash", "WebFetch"],
+      [
+        "Read",
+        "Bash",
+        "WebFetch"
+      ],
       null,
       "local",
       null,
-      null,
+      "code_review",
       null
     ],
     [
@@ -2899,7 +2914,12 @@
       [],
       "framework",
       "skills/primary-runtime/SKILL.md",
-      ["claude", "codex", "cursor", "opencode"],
+      [
+        "claude",
+        "codex",
+        "cursor",
+        "opencode"
+      ],
       "runtime",
       [],
       "Framework lifecycle orchestration: goal drive, quality gate, session supervision",
@@ -2907,15 +2927,21 @@
       null,
       null,
       {
-        "platforms": ["supported"],
+        "platforms": [
+          "supported"
+        ],
         "version": "1.0.0"
       },
       "medium",
-      ["Read", "Bash", "Agent"],
+      [
+        "Read",
+        "Bash",
+        "Agent"
+      ],
       null,
       "local",
       null,
-      null,
+      "general",
       null
     ],
     [
@@ -2929,7 +2955,12 @@
       [],
       "framework",
       "skills/shared-references/SKILL.md",
-      ["claude", "codex", "cursor", "opencode"],
+      [
+        "claude",
+        "codex",
+        "cursor",
+        "opencode"
+      ],
       "reference",
       [],
       "Cross-skill reference data: lookup tables, glossary, domain constants",
@@ -2937,16 +2968,26 @@
       null,
       null,
       {
-        "platforms": ["supported"],
-        "tags": ["reference", "glossary", "constants"],
+        "platforms": [
+          "supported"
+        ],
+        "tags": [
+          "reference",
+          "glossary",
+          "constants"
+        ],
         "version": "1.0.0"
       },
       "low",
-      ["Read", "Bash", "WebFetch"],
+      [
+        "Read",
+        "Bash",
+        "WebFetch"
+      ],
       null,
       "local",
       null,
-      null,
+      "general",
       null
     ]
   ]

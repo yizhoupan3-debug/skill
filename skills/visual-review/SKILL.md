@@ -1,4 +1,5 @@
 ---
+
 allowed_tools:
 - shell
 - browser
@@ -18,6 +19,7 @@ metadata:
   - evidence
   version: '2.2.1'
 name: visual-review
+scene: visual
 network_access: conditional
 routing_gate: evidence
 routing_layer: L3

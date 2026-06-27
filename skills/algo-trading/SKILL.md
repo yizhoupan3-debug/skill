@@ -1,4 +1,5 @@
 ---
+
 description: 'Design and implement algorithmic trading strategies, backtests, execution logic, and risk management. Sub-skill: financial data fetching.'
 metadata:
   category: finance
@@ -14,6 +15,7 @@ metadata:
   - factor-research
   version: '3.0.0'
 name: algo-trading
+scene: general
 risk: high
 routing_gate: none
 routing_layer: L4

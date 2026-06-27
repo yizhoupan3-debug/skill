@@ -1,4 +1,5 @@
 ---
+
 allowed_tools:
 - shell
 - rust
@@ -17,6 +18,7 @@ metadata:
   - reportlab
   version: '2.1.0'
 name: pdf
+scene: general
 network_access: conditional
 risk: low
 routing_gate: artifact

@@ -1,4 +1,5 @@
 ---
+
 description: 'Generate HTML/CSS/JS infographics: knowledge cards, data summary posters, single-page long-form visuals.'
 metadata:
   platforms:
@@ -11,6 +12,7 @@ metadata:
   - visual-summary
   version: '1.0.1'
 name: infographic
+scene: slides
 risk: low
 routing_gate: none
 routing_layer: L3

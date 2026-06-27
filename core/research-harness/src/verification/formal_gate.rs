@@ -1,19 +1,18 @@
 //! QG Route `GateChecker` adapter for `DimensionalConsistency`.
 //!
-//! In-place adapter (Wave 4b): wraps the `verification::formal` module's pure
-//! functions into a `GateChecker` for the RESEARCH scene.
+//! Extracts equation strings from `CheckContext::output_data` and calls
+//! `formal::check_dimensional_consistency` for each.
 //!
-//! Registered by `research_harness::register_qg_checkers()`.
+//! Expected `output_data` JSON:
+//! ```json
+//! { "equations": ["F = ma", "E = mc^2"] }
+//! ```
 
 use quality_gate::checker::GateChecker;
 use quality_gate::types::{CheckContext, CheckResult, Finding, Severity};
 
-/// QG Route checker that wraps `formal::check_dimensional_consistency`.
-///
-/// Checks:
-/// - SI dimensional consistency across equations
-/// - Unit symbol detection and mapping
-/// - Multi-part equation chain consistency
+use crate::verification::formal;
+
 pub struct DimensionalConsistency;
 
 impl GateChecker for DimensionalConsistency {
@@ -26,50 +25,64 @@ impl GateChecker for DimensionalConsistency {
     }
 
     fn description(&self) -> &'static str {
-        "dimensional consistency checks: SI unit matching, equation balance, multi-part chain validation"
+        "dimensional consistency: SI unit matching, equation chain validation"
     }
 
     fn check(&self, ctx: &CheckContext) -> CheckResult {
-        // The formal module's functions are pure — they need only an equation
-        // string. In a real integration the checker would extract equations
-        // from the task's output. For now, the context serves as the marker
-        // that the check was invoked.
-        let task_id = &ctx.task_id;
-
-        // Since we don't have equation text in CheckContext, this checker
-        // confirms that the formal module is wired correctly. A full
-        // implementation would read equations from the task output or
-        // receive them through an extended context.
         let mut findings = Vec::new();
 
-        // If we had equations, we'd call:
-        // use crate::verification::formal;
-        // let consistent = formal::check_dimensional_consistency("F = ma")?;
-        // if !consistent {
-        //     findings.push(Finding { severity: Severity::B, ... });
-        // }
-        //
-        // For now, emit an informational finding that the adapter exists.
+        let Some(data) = ctx.output_data.as_ref() else {
+            findings.push(Finding {
+                id: "formal_no_data".to_string(),
+                severity: Severity::C,
+                description: "No output_data provided — dimensional consistency checks skipped".to_string(),
+                location: None,
+                suggestion: Some("pass output_data with equations array to enable checks".to_string()),
+            });
+            return CheckResult { checker_id: self.id().to_string(), passed: true, findings };
+        };
 
-        findings.push(Finding {
-            id: "dimensional_consistency_adapter".to_string(),
-            severity: Severity::C,
-            description: format!(
-                "DimensionalConsistency checker invoked for task '{task_id}' — adapter wired, equation analysis pending content input"
-            ),
-            location: None,
-            suggestion: Some(
-                "extend CheckContext to include equation text for full dimensional consistency analysis"
-                    .to_string(),
-            ),
-        });
+        let Some(equations) = data.get("equations").and_then(|v| v.as_array()) else {
+            findings.push(Finding {
+                id: "formal_no_equations".to_string(),
+                severity: Severity::C,
+                description: "output_data has no equations array — dimensional check skipped".to_string(),
+                location: None,
+                suggestion: Some("add \"equations\": [\"F = ma\", ...] to output_data".to_string()),
+            });
+            return CheckResult { checker_id: self.id().to_string(), passed: true, findings };
+        };
 
-        let passed = true; // informational only — never blocks
-
-        CheckResult {
-            checker_id: self.id().to_string(),
-            passed,
-            findings,
+        for (i, eq_val) in equations.iter().enumerate() {
+            let Some(eq_str) = eq_val.as_str() else { continue };
+            match formal::check_dimensional_consistency(eq_str) {
+                Ok(consistent) => {
+                    findings.push(Finding {
+                        id: format!("dimensional_eq_{i}"),
+                        severity: if consistent { Severity::C } else { Severity::B },
+                        description: format!(
+                            "Equation '{eq_str}': {}",
+                            if consistent { "dimensionally consistent" } else { "dimensional inconsistency detected" }
+                        ),
+                        location: Some(format!("equations[{i}]")),
+                        suggestion: if consistent { None } else {
+                            Some("check unit symbols and dimensions in equation".to_string())
+                        },
+                    });
+                }
+                Err(e) => {
+                    findings.push(Finding {
+                        id: format!("dimensional_eq_{i}_error"),
+                        severity: Severity::C,
+                        description: format!("Equation '{eq_str}' analysis error: {e}"),
+                        location: Some(format!("equations[{i}]")),
+                        suggestion: None,
+                    });
+                }
+            }
         }
+
+        let passed = findings.iter().all(|f| matches!(f.severity, Severity::C | Severity::Warning));
+        CheckResult { checker_id: self.id().to_string(), passed, findings }
     }
 }

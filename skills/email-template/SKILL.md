@@ -1,4 +1,5 @@
 ---
+
 description: Produce cross-client HTML emails compatible with Outlook, Gmail, Apple Mail. Supports MJML/React Email.
 metadata:
   platforms:
@@ -11,6 +12,7 @@ metadata:
   - newsletter
   version: '1.0.0'
 name: email-template
+scene: general
 routing_gate: none
 routing_layer: L4
 routing_owner: owner

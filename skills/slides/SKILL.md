@@ -1,4 +1,5 @@
 ---
+
 allowed_tools:
 - shell
 - cargo
@@ -18,6 +19,7 @@ metadata:
   - proxy
   version: '2.7.0'
 name: slides
+scene: slides
 network_access: conditional
 risk: medium
 routing_gate: artifact

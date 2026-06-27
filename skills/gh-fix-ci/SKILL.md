@@ -1,4 +1,5 @@
 ---
+
 allowed_tools:
 - shell
 - git
@@ -17,6 +18,7 @@ metadata:
   - pull-request
   version: '2.0.0'
 name: gh-fix-ci
+scene: code_review
 network_access: conditional
 routing_gate: source
 routing_layer: L0

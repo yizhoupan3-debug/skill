@@ -1,4 +1,5 @@
 ---
+
 description: Execute rigorous mathematical derivations and proofs
 metadata:
   platforms:
@@ -21,6 +22,8 @@ metadata:
   - ≍
   version: '2.0.0'
 name: math-derivation
+scene: research
+sub_scene: formal
 risk: low
 routing_gate: none
 routing_layer: L4

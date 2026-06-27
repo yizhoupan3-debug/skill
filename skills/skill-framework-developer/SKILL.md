@@ -1,4 +1,5 @@
 ---
+
 allowed_tools:
 - shell
 - git
@@ -19,6 +20,7 @@ metadata:
   - first-turn-routing
   version: '3.3.1'
 name: skill-framework-developer
+scene: general
 network_access: conditional
 risk: low
 routing_gate: none

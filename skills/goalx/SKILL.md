@@ -1,4 +1,5 @@
 ---
+
 allowed_tools:
 - shell
 - git
@@ -14,6 +15,7 @@ metadata:
   - framework-command
   version: '1.0.0'
 name: goalx
+scene: general
 network_access: conditional
 risk: low
 routing_gate: none
