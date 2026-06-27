@@ -43,7 +43,7 @@ Kernel hook 事件到来 ──────→ hooks 方法调用 → L3–L5 �
 
 | 层 | 职责 | 核心 crate |
 |----|------|-----------|
-| L5 | Runtime — Goal Engine、状态管理、QG Entry/Route、stdio 分发、session 监督、trace | `runtime-core`, `core-state`, `runtime-infra`, `runtime-storage`, `session-supervisor`, `loop-engine`, `trace-runtime`, `telemetry-emit`, `fr-exec`, `fr-contracts`, `quality-gate`, `runtime-core-contracts`, `fr-utils` |
+| L5 | Runtime — Goal Engine、状态管理、QG Entry/Route、stdio 分发、Agent 编排、trace | `runtime-core`, `core-state`, `runtime-infra`, `runtime-storage`, `agent-orchestrator`, `loop-engine`, `trace-runtime`, `telemetry-emit`, `fr-exec`, `fr-contracts`, `quality-gate`, `runtime-core-contracts`, `fr-utils` |
 | L4 | Tool — MCP 工具分派、浏览器工具、科研工具 | `research-harness`, `codegraph-rs`, `browser-mcp` |
 | L3 | Skill — 验证技能、QG Checkers、框架技能 | `skill-layer`, all `skills/`, `runtime-core::checkers` (QG Checkers) |
 | L2 | Routing — Skill 路由引擎、MCP 工具注册表、路由决策 | `routing-engine`, `routing-core`, `mcp-tool-registry`, `tool-routing-engine`, `eval-route` |
@@ -76,7 +76,7 @@ L5       ✓   ✓   ✓   ✓   ✓   ✓
 | L5 | `core-state` | Task 状态机与 Goal/RFV（组件表见下） |
 | L5 | `runtime-infra` | 运行时初始化、kernel 引导、stdio 传输 |
 | L5 | `runtime-storage` | 文件系统/SQLite/内存后端、路径解析 |
-| L5 | `session-supervisor` | 多 Agent + RFV 闭环监督 |
+| L5 | `agent-orchestrator` | 多 Agent 编排引擎：team CRUD、worker 生命周期、Agent 健康追踪；通过 MCP 工具暴露 |
 | L5 | `loop-engine` | 可选自动化增强（仅 `loop-auto` profile）；RFV 闭环 |
 | L5 | `trace-runtime` | Trace 录制与压紧 |
 | L5 | `telemetry-emit` | 统一遥测发射原语：structured emit、MetricCounter、tracing+telemetry macros |

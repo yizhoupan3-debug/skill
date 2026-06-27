@@ -9,7 +9,7 @@
 //! The only shell-adjacent call is `uv run -m <module>` where `<module>` is a
 //! compile-time constant (inequality_solver, asymptotic_solver), never user input.
 
-use core_policy::error::FrameworkError;
+use core_errors::FrameworkError;
 use serde_json::Value;
 use std::io::Write;
 use std::sync::mpsc;

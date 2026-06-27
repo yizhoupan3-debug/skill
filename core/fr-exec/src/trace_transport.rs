@@ -3,7 +3,7 @@
 //! Also includes write-payload helpers moved from `cli/runtime_ops.inc`
 //! to break the `cli ↔ framework_runtime` cyclic dependency.
 
-use core_policy::error::FrameworkError;
+use core_errors::FrameworkError;
 use serde_json::{Value, json};
 use std::path::Path;
 

@@ -12,7 +12,7 @@ metadata:
 # primary-runtime
 
 Framework-operational skill that bridges the host's runtime hooks (goal drive,
-quality gate, session supervisor, eval route) to the skill-layer abstraction.
+quality gate, agent orchestrator, eval route) to the skill-layer abstraction.
 
 Intended for framework-internal use. User-facing workflows should prefer
 higher-level skills (/plan, /code-review, etc.) that delegate to this runtime

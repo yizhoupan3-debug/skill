@@ -3,7 +3,7 @@
 //! Extracted from `hooks.rs` to keep production code focused.
 
 use crate::hooks;
-use core_policy::error::FrameworkError;
+use core_errors::FrameworkError;
 use serde_json::Value;
 use std::sync::OnceLock;
 
@@ -12,7 +12,9 @@ use std::sync::OnceLock;
 static SYNTHETIC_POST_TOOL: OnceLock<fn(&Value) -> Value> = OnceLock::new();
 
 pub fn register_hook_posttool_normalize(f: fn(&Value) -> Value) {
-    hooks::once_lock_set(&SYNTHETIC_POST_TOOL, f, "SYNTHETIC_POST_TOOL");
+    SYNTHETIC_POST_TOOL.set(f).unwrap_or_else(|_| {
+        tracing::warn!("SYNTHETIC_POST_TOOL already registered — second call ignored");
+    });
 }
 
 pub fn synthetic_post_tool_evidence_shape(event: &Value) -> Value {
@@ -308,12 +310,12 @@ pub(crate) fn install_test_deps() {
             // No-op for tests.
         }
 
-        hooks::register_paper_hooks(
-            test_append_prose_context,
-            test_merge_prose_before_submit,
-            test_append_adversarial_context,
-            test_merge_adversarial_before_submit,
-        );
+        hooks::modify_runtime_hooks(|hooks| {
+            hooks.maybe_append_paper_prose_context = test_append_prose_context;
+            hooks.maybe_merge_paper_prose_before_submit = test_merge_prose_before_submit;
+            hooks.maybe_append_paper_adversarial_context = test_append_adversarial_context;
+            hooks.maybe_merge_paper_adversarial_before_submit = test_merge_adversarial_before_submit;
+        });
 
     });
 }

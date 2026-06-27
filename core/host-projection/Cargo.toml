@@ -20,6 +20,7 @@ http-util = { path = "../http-util" }
 core-state = { path = "../core-state" }
 core-state-types = { path = "../core-state-types" }
 core-policy = { path = "../core-policy" }
+core-errors = { path = "../core-errors" }
 framework-kernel = { path = "../framework-kernel" }
 chrono.workspace = true
 clap.workspace = true

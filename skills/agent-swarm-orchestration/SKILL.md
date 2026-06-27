@@ -53,7 +53,7 @@ trigger_hints:
 - 人类监督边界
 
 核心原则：
-**默认保守**：不自动升格 team。满足 team 触发后，编排真源为 `session-supervisor`（Rust team 层）与 `artifacts/teams/` 文件系统；否则先做 spawn admission，在清晰并行 lane 时优先 bounded sidecars。
+**默认保守**：不自动升格 team。满足 team 触发后，编排真源为 `agent-orchestrator`（Rust 编排层）与 `artifacts/teams/` 文件系统；否则先做 spawn admission，在清晰并行 lane 时优先 bounded sidecars。
 
 ## Orchestration mode selection
 
@@ -67,7 +67,7 @@ orchestration: { mode, trigger, reason }
 |--------|------|--------|
 | `local` | 小任务、紧耦合、拒绝规则命中 | 主线程 |
 | `sidecar` | 有清晰并行 lane，**未**触发 team | Task / subagent（声明式表） |
-| `team` | team 触发 + 有 supervisor agent | `session-supervisor` team API（`artifacts/teams/`）；成员 agent 通过 `team_send_message` / `team_read_messages` 通信 |
+| `team` | team 触发 + 有 supervisor agent | `agent-orchestrator` MCP 工具（`orchestrator_team_*`、`orchestrator_agent_*`）；成员 agent 通过 `orchestrator_team_send_message` / `orchestrator_team_read_messages` 通信 |
 
 **优先级（HARD）**：`explicit_team` > `auto_multi_phase` > 声明式 `sidecar` > `local`。
 
@@ -98,7 +98,7 @@ orchestration: { mode, trigger, reason }
 3. **Merge / Synthesize**：supervisor 主线程纯代码，**不**为 Merge/Synthesize spawn agent。
 4. **可见收口**：findings-first（对齐 [`code-review-deep`](../code-review-deep/SKILL.md) compact）；admission 一行 + 每阶段一行进度。
 5. **Agent 间通信**：通过 `team_send_message`（文件系统消息总线）传递，supervisor 监控消息队列。中间态进 `artifacts/teams/<team_id>/messages/`，不进主 context。
-6. **生命周期清理**：成员完成时 `team_remove_member` → 自动写 `agent_unregister`；所有成员完成或 team 终止时 `team_complete`。
+6. **生命周期清理**：成员完成时 `orchestrator_team_remove_member` → 自动写 `orchestrator_agent_unregister`；所有成员完成或 team 终止时 `orchestrator_team_complete`。
 7. **Workflow 已彻底移除**：不再使用 JS 编排脚本。所有多 agent 协作统一使用 team 模型。
 
 Sidecar 模式的压缩契约仍见下文 **Main-thread compression contract**。
@@ -271,10 +271,10 @@ If the discussion touches current-session execution:
 
 ## Hard Constraints
 - Do not create a new agent role, mailbox, graph, or state artifact unless an existing **team member** or **sidecar** lane contract cannot express the need.
-- **所有多 agent 协作通过 team（Rust 层 `session-supervisor` team API）+ sidecar（bounded worker）实现**。Workflow（JS 编排）已彻底移除。
-- 使用 `team_send_message` / `team_read_messages` 实现 agent 间通信。
-- 使用 `agent_register` / `agent_unregister` 跟踪 agent 生命周期。
-- 所有 agent 完成时必须调用 `agent_unregister` 或 `team_remove_member`，确保资源释放。
+- **所有多 agent 协作通过 team（`agent-orchestrator` MCP 工具：`orchestrator_team_*` / `orchestrator_agent_*`）+ sidecar（bounded worker）实现**。Workflow（JS 编排）已彻底移除。
+- 使用 `orchestrator_team_send_message` / `orchestrator_team_read_messages` 实现 agent 间通信。
+- 使用 `orchestrator_agent_register` / `orchestrator_agent_unregister` 跟踪 agent 生命周期。
+- 所有 agent 完成时必须调用 `orchestrator_agent_unregister` 或 `orchestrator_team_remove_member`，确保资源释放。
 - Do not let workers write outside their assigned lane-local scope.
 - Supervisor owns integration and final verification.
 - **Superior Quality Audit**: For multi-agent swarm architectures, apply the runtime verification gate to verify against [Superior Quality Bar / verification gate criteria](../SKILL_FRAMEWORK_PROTOCOLS.md#1-runtime-protocol).
@@ -315,6 +315,6 @@ If the discussion touches current-session execution:
 | [references/orchestration-mode.md](./references/orchestration-mode.md) | 模式表(team/sidecar/local)、触发、优先级、拒绝规则 |
 | [references/detailed-guide.md](./references/detailed-guide.md) | Team API 契约、handoff、agent 生命周期（含 team-protocol 内容） |
 | [references/detailed-guide.md](./references/detailed-guide.md) | 拓扑、handoff、spawn 细节 |
-| `core/session-supervisor/src/team_manager.rs` | Rust 层 team 编排实现真源 |
-| `core/session-supervisor/src/process.rs` | Agent 生命周期跟踪实现 |
+| `core/agent-orchestrator/src/team_manager.rs` | Rust 层 team 编排实现真源 |
+| `core/agent-orchestrator/src/process.rs` | Agent 生命周期跟踪实现 |
 | `./framework-health.md` | Agent 健康检查命令 |

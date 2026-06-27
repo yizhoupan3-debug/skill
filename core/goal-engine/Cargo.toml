@@ -2,7 +2,7 @@
 name = "goal-engine"
 version = "0.1.0"
 edition = "2024"
-description = "L6 optional automation engine: RFV loop for loop-auto profile"
+description = "Loop-Goal engine: state machine (Dormant→Active→ReviewPending→...) and QGEntry trigger"
 [lints]
 workspace = true
 

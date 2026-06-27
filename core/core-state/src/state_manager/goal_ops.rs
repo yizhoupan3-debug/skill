@@ -1,6 +1,7 @@
 // Goal state management: start, checkpoint, pause, resume, complete, block, clear.
 // Extracted from state_manager.rs during module split.
 
+use crate::transition_validation::{validate_transition, TaskTransition};
 use crate::utils::atomic_write::write_atomic_json;
 use serde_json::{Map, Value, json};
 use std::fs;
@@ -530,6 +531,14 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
             let task_id = resolve_task_id_strict(&payload)?;
             let state = read_goal_state(&repo_root, Some(&task_id))?
                 .ok_or_else(|| "GOAL_STATE missing for completion gate check".to_string())?;
+            // Phase B: validate_transition is the authoritative blocking anti-fraud gate.
+            // Runs unconditionally before the legacy conditional evidence check.
+            let transition_v = validate_transition(&repo_root, &task_id, TaskTransition::Complete);
+            if !transition_v.passed {
+                return Err(format!("validate_transition blocked: {}", transition_v.reason));
+            }
+
+            // Legacy evidence check (dual-write informational — kept for back-compat).
             if goal_requires_completion_evidence(&state) {
                 let (_, evidence_ok) =
                     task_evidence_artifacts_summary_for_task(&repo_root, task_id.as_str());

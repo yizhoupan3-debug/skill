@@ -5,7 +5,7 @@
 //! rules, returning a JSON response that consumers use to decide whether
 //! closeout is allowed.
 
-use core_policy::error::FrameworkError;
+use core_errors::FrameworkError;
 use serde_json::{Value, json};
 
 type Result<T> = std::result::Result<T, FrameworkError>;

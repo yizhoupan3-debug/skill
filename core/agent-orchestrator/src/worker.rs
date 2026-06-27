@@ -4,7 +4,7 @@ use serde_json::{Map, Value, json};
 use std::path::Path;
 use std::sync::OnceLock;
 
-use core_policy::error::FrameworkError;
+use core_errors::FrameworkError;
 
 use crate::driver::{build_driver_command, default_resume_mode, driver_id_for_host};
 use crate::process::{launch_process, process_is_alive, terminate_process};
@@ -13,19 +13,19 @@ use crate::runtime::{
     push_event, required_non_empty_string, sanitize_segment, upsert_worker, worker_log_path,
 };
 use crate::types::{
-    BlockClassification, DEFAULT_BACKOFF_SECONDS, SessionSupervisorStore, WorkerSessionRecord,
+    BlockClassification, DEFAULT_BACKOFF_SECONDS, OrchestratorStore, WorkerSessionRecord,
 };
 
 pub fn launch_worker(
     payload: &Value,
-    store: &mut SessionSupervisorStore,
+    store: &mut OrchestratorStore,
     state_path: &Path,
     dry_run: bool,
     now: &str,
 ) -> Result<WorkerSessionRecord, FrameworkError> {
-    let host = required_non_empty_string(payload, "host", "session supervisor")
+    let host = required_non_empty_string(payload, "host", "orchestrator")
         .map_err(FrameworkError::validation)?;
-    let cwd = required_non_empty_string(payload, "cwd", "session supervisor")
+    let cwd = required_non_empty_string(payload, "cwd", "orchestrator")
         .map_err(FrameworkError::validation)?;
     let prompt = optional_non_empty_string(payload, "prompt");
     let resume_target = optional_non_empty_string(payload, "resume_target");

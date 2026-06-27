@@ -3,7 +3,7 @@
 //! Functions for evaluating closeout records, checking environment-level
 //! enforcement gates, and caching task-registry lookups.
 
-use core_policy::error::FrameworkError;
+use core_errors::FrameworkError;
 use core_state::closeout_validation::{
     evaluate_closeout_record_value, evaluate_closeout_record_value_with_context,
     CloseoutEvidenceContext,
@@ -220,93 +220,3 @@ fn closeout_enforcement_disabled_by_env() -> bool {
     }
 }
 
-/// Apply closeout enforcement to a session-artifact write payload.
-///
-/// Returns:
-/// - `Ok(Some(eval))` when status claims completion and a valid record was
-///   provided that passes evaluation. The envelope is attached to the
-///   response so callers see the evidence summary alongside the write.
-/// - `Ok(None)` when status is not a completion claim. In that case
-///   any incidental `closeout_record` is intentionally **not** parsed —
-///   in-progress / planning / execution checkpoints often carry placeholder
-///   or partial records, and `deny_unknown_fields` plus strict R-rule
-///   evaluation would otherwise turn a benign in-progress write into a hard
-///   error. Pre-completion validation is the caller's responsibility (run
-///   `closeout evaluate` separately) so the artifact-write path stays
-///   resilient against in-progress draft records.
-/// - `Ok(None)` when status claims completion but programmatic enforcement is off:
-///   explicit `ROUTER_RS_CLOSEOUT_ENFORCEMENT`=`0`/`false`/`off`/`no`, **or** the variable is unset
-///   while not in CI/GitHub Actions（本地默认软；响应中不附带 `closeout_evaluation`）。
-///   团队/CI：未设置且检测到 `CI` 或 `GITHUB_ACTIONS` 时默认硬门禁。
-///   Note: `ROUTER_RS_CLOSEOUT_ENFORCEMENT` **set to empty string** is still "set" for this branch
-///   resolution — it does **not** receive the unset/local-soft treatment.
-/// - `Err(reason)` only when:
-///   - status claims completion but no `closeout_record` is provided, or
-///   - status claims completion and the provided record fails evaluation
-///     (`closeout_allowed=false` or parse error).
-pub(super) fn enforce_closeout_for_session_payload(payload: &Value) -> Result<Option<Value>, FrameworkError> {
-    let status_lower = value_text(payload.get("status")).to_ascii_lowercase();
-    let claims_completion = CLOSEOUT_COMPLETION_STATUSES
-        .iter()
-        .any(|allowed| *allowed == status_lower);
-    if !claims_completion {
-        return Ok(None);
-    }
-    if closeout_enforcement_disabled_by_env() {
-        return Ok(None);
-    }
-    let closeout_record = payload.get("closeout_record").cloned().ok_or_else(|| {
-        FrameworkError::validation("framework session artifact write claims completion (status in {completed,done,passed,...}) but no closeout_record was provided. \
-         A closeout record is required so closeout_enforcement can verify completion evidence (verification_status, commands_run, artifacts_checked, summary). \
-         Re-issue the request with a closeout_record matching configs/framework/CLOSEOUT_RECORD_SCHEMA.json.".to_string())
-    })?;
-    // Try to attach an EvidenceContext so R8 (`claimed_passed_without_evidence_index_rows`) runs.
-    // Both repo_root and task_id must resolve from the write payload; otherwise fall back to the
-    // record-only evaluator (R7 still catches the most common self-attestation pattern).
-    let repo_root_str = value_text(payload.get("repo_root"));
-    let task_id_str = value_text(payload.get("task_id"));
-    let evaluation = if !repo_root_str.is_empty() && !task_id_str.is_empty() {
-        let repo_root = PathBuf::from(&repo_root_str);
-        let (_rows_non_empty, has_success) =
-            core_state::state_manager::task_evidence_artifacts_summary_for_task(
-                &repo_root,
-                &task_id_str,
-            );
-        let goal_state = core_state::state_manager::read_goal_state(&repo_root, Some(&task_id_str))
-            .ok()
-            .flatten();
-        let goal_prediction = goal_state
-            .as_ref()
-            .and_then(core_state::goal_prediction::read_goal_prediction);
-        let ctx = CloseoutEvidenceContext {
-            task_id: Some(task_id_str.trim().to_string()),
-            has_successful_verification: has_success,
-            goal_prediction,
-        };
-        evaluate_closeout_record_value_with_context(closeout_record, &ctx)
-            .map_err(|err| FrameworkError::validation(format!("closeout enforcement failed: {err}")))?
-    } else {
-        evaluate_closeout_record_value(closeout_record)
-            .map_err(|err| FrameworkError::validation(format!("closeout enforcement failed: {err}")))?
-    };
-    let allowed = evaluation
-        .get("closeout_allowed")
-        .and_then(Value::as_bool)
-        .unwrap_or(false);
-    if !allowed {
-        let violations = evaluation
-            .get("violations")
-            .map(|v| v.to_string())
-            .unwrap_or_else(|| "[]".to_string());
-        let missing = evaluation
-            .get("missing_evidence")
-            .map(|v| v.to_string())
-            .unwrap_or_else(|| "[]".to_string());
-        return Err(FrameworkError::validation(format!(
-            "closeout_enforcement blocked completion: closeout_allowed=false. \
-             violations={violations} missing_evidence={missing}. \
-             Resolve violations or downgrade status before re-issuing the artifact write."
-        )));
-    }
-    Ok(Some(evaluation))
-}

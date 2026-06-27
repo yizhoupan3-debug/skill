@@ -8,7 +8,7 @@
 //! OLD: migrated from runtime-exit-gate (Wave 4a-ii). Old crate deleted.
 //! Now compiled as part of runtime-core (pub mod schema_drift).
 
-use core_policy::error::FrameworkError;
+use core_errors::FrameworkError;
 use hex;
 use host_projection::hosts::host_extensions::schema_drift as shared_schema_drift;
 use serde::{Deserialize, Serialize};

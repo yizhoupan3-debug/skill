@@ -9,7 +9,7 @@
 //! FEATURE layer only. MCP dispatch functions belong in `mcp_tools.rs`.
 
 use crate::types::VerificationStatus;
-use core_policy::error::FrameworkError;
+use core_errors::FrameworkError;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 

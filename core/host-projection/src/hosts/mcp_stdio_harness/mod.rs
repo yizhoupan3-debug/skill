@@ -185,6 +185,7 @@ pub(super) fn dispatch_tool(
         r.register(InfraTools);
         r.register(ToolDomainTools);
         r.register(TaskCrudTools);
+        r.register(OrchestratorTools);
         r
     });
     let ctx = ToolCallContext {
@@ -1098,7 +1099,7 @@ mod tests {
     #[cfg(test)]
     use std::sync::Once;
     #[cfg(test)]
-    use core_policy::error::FrameworkError;
+    use core_errors::FrameworkError;
     #[cfg(test)]
     use serde_json::{json, Value};
 
@@ -1151,7 +1152,9 @@ mod tests {
     #[cfg(test)]
     fn ensure_test_research_dispatch() {
         E2E_INIT.call_once(|| {
-            crate::hooks::register_research_tool_dispatch(test_research_dispatch);
+            crate::hooks::modify_runtime_hooks(|hooks| {
+                hooks.research_tool_dispatch = test_research_dispatch;
+            });
         });
     }
 

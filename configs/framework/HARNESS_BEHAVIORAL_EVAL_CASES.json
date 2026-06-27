@@ -109,12 +109,6 @@
       "verify": "router-rs eval skill-contract-lint --input-json '{\"skills_root\":\"skills\"}'"
     },
     {
-      "id": "lane_contract_requires_digest_and_verification",
-      "failure_class": "subagent_misuse",
-      "fixture": "session_supervisor lane_contract default",
-      "verify": "cargo test --manifest-path core/router-rs/Cargo.toml session_supervisor"
-    },
-    {
       "id": "review_gate_strict_dual_event_dedup",
       "failure_class": "subagent_misuse",
       "fixture": "tests/fixtures/review_gate/dual_event_same_id.json",

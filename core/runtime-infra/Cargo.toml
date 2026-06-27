@@ -11,6 +11,7 @@ workspace = true
 core-state = { path = "../core-state" }
 core-state-utils = { path = "../core-state-utils" }
 core-policy = { path = "../core-policy" }
+core-errors = { path = "../core-errors" }
 framework-kernel = { path = "../framework-kernel" }
 
 # L0/L1

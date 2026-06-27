@@ -5,7 +5,7 @@
 
 use fr_utils::constants::{
     EVIDENCE_INDEX_FILENAME, EVIDENCE_INDEX_SCHEMA_VERSION, FRAMEWORK_SESSION_ARTIFACT_WRITE_AUTHORITY,
-    HOOK_EVIDENCE_APPEND_SCHEMA_VERSION, SESSION_SUMMARY_FILENAME, TASK_POINTERS_FILENAME,
+    HOOK_EVIDENCE_APPEND_SCHEMA_VERSION, TASK_POINTERS_FILENAME,
 };
 use fr_utils::json_io::read_json_strict;
 use fr_utils::json_value::value_text;
@@ -19,7 +19,7 @@ use crate::util::{
     write_json_if_changed_unlocked,
 };
 
-use core_policy::error::FrameworkError;
+use core_errors::FrameworkError;
 type Result<T> = std::result::Result<T, FrameworkError>;
 
 const MAX_POST_TOOL_EVIDENCE_ARTIFACTS: usize = 120;
@@ -223,11 +223,10 @@ pub fn append_evidence_index_merged_row(
 
     let resolved_task_id = resolve_evidence_append_task_id(repo_root, task_id_override);
 
-    // Lightweight readiness check: avoid full 9-file snapshot rebuild
+    // Lightweight readiness check: avoid full snapshot rebuild
     let current_root = repo_root.join("artifacts/current");
     let active_pointer_exists = current_root.join(TASK_POINTERS_FILENAME).is_file();
-    let summary_exists = current_root.join(SESSION_SUMMARY_FILENAME).is_file();
-    if !active_pointer_exists && !summary_exists {
+    if !active_pointer_exists {
         tracing::debug!(
             current_dir = %current_root.display(),
             "evidence append skipped — no active continuity session"

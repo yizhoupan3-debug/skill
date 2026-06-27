@@ -82,21 +82,10 @@ pub(crate) fn tool_task_list(repo_root: &Path) -> std::result::Result<String, St
 
         let task_dir = repo_root.join("artifacts/current").join(task_id);
 
-        // Read TASK_STATE.json (fast path) → fallback to GOAL_STATE.json
-        let state_path = task_dir.join("TASK_STATE.json");
+        // Read from GOAL_STATE.json (TASK_STATE.json removed in Wave 2b).
         let goal_path = task_dir.join("GOAL_STATE.json");
 
-        let (status, goal_summary, has_evidence, goal_type, iteration_count) = if state_path.is_file() {
-            let raw = fs::read_to_string(&state_path).unwrap_or_default();
-            let v: Value = serde_json::from_str(&raw).unwrap_or(json!({}));
-            let gs = v.get("goal_state");
-            let status = gs.and_then(|g| g.get("status")).and_then(Value::as_str).unwrap_or("unknown").to_string();
-            let goal_summary = gs.and_then(|g| g.get("goal")).and_then(Value::as_str).unwrap_or("").to_string();
-            let has_evidence = v.get("evidence").and_then(|e| e.get("evidence_rows_non_empty")).and_then(Value::as_bool).unwrap_or(false);
-            let goal_type = gs.and_then(|g| g.get("goal_type")).and_then(Value::as_str).unwrap_or("").to_string();
-            let iteration_count = gs.and_then(|g| g.get("iteration_count")).and_then(Value::as_u64).unwrap_or(0);
-            (status, goal_summary, has_evidence, goal_type, iteration_count)
-        } else if goal_path.is_file() {
+        let (status, goal_summary, has_evidence, goal_type, iteration_count) = if goal_path.is_file() {
             let raw = fs::read_to_string(&goal_path).unwrap_or_default();
             let v: Value = serde_json::from_str(&raw).unwrap_or(json!({}));
             let status = v.get("status").and_then(Value::as_str).unwrap_or("unknown").to_string();

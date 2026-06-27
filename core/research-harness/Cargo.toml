@@ -14,6 +14,7 @@ smoke = []
 # framework (leaf crates, no cycle risk)
 core-state-utils = { path = "../core-state-utils" }
 core-policy = { path = "../core-policy" }
+core-errors = { path = "../core-errors" }
 core-state = { path = "../core-state" }
 framework-kernel = { path = "../framework-kernel" }
 host-projection = { path = "../host-projection" }

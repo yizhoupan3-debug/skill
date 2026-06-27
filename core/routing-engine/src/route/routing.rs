@@ -6,7 +6,6 @@ use super::constants::{
     ROUTE_AUTHORITY, ROUTE_DECISION_SCHEMA_VERSION, SEARCH_RESULTS_SCHEMA_VERSION,
 };
 use super::fuzzy::{FUZZY_MIN_SIMILARITY, fuzzy_fallback_score};
-use super::routing_logger;
 use super::scoring::{
     compact_route_reasons, pick_overlay, pick_owner, reasons_class, round2, score_bucket,
     score_route_candidate,
@@ -1020,11 +1019,9 @@ pub fn should_accept_manifest_fallback(
 }
 
 /// Wrapper that logs every routing decision and records zero-score queries.
-fn log_decision(decision: RouteDecision, query: &str, session_id: &str) -> RouteDecision {
-    routing_logger::log_routing_decision(&decision, query, session_id);
-    if decision.score <= 0.0 || decision.selected_skill == NO_SKILL_SELECTED {
-        super::zero_match_collector::record_zero_match(query);
-    }
+/// NOTE: routing_logger + zero_match_collector stubs were removed in v10 runtime
+/// cleanup (no-op since the telemetry backend was deleted in Wave 2d).
+fn log_decision(decision: RouteDecision, _query: &str, _session_id: &str) -> RouteDecision {
     decision
 }
 

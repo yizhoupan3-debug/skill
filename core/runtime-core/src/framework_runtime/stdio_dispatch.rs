@@ -22,7 +22,7 @@ use fr_utils::stdio_op_registry::{
 use fr_exec::trace_transport::{
     write_checkpoint_resume_manifest_payload, write_transport_binding_payload,
 };
-use crate::closeout_enforcement::{
+use core_state::closeout_validation::{
     CloseoutEvidenceContext, closeout_enforcement_contract, evaluate_closeout_record_value,
     evaluate_closeout_record_value_with_context,
 };
@@ -50,7 +50,7 @@ use crate::runtime_storage::{
     RuntimeStorageRequestPayload, build_checkpoint_control_plane_compiler_payload,
     runtime_storage_operation,
 };
-use crate::session_supervisor::handle_session_supervisor_operation;
+use crate::agent_orchestrator::handle_orchestrator_operation;
 use crate::stdio_payload_types::{
     BackgroundControlRequestPayload, ExecuteRequestPayload,
     TraceCompactionDeltaWriteRequestPayload, TraceMetadataWriteRequestPayload,
@@ -87,6 +87,9 @@ use framework_extra::snapshot::build_framework_runtime_snapshot_envelope_with_le
 use framework_extra::closeout::evaluate_closeout_record_file_for_task;
 use framework_extra::evidence::framework_hook_evidence_append;
 use quality_gate;
+use core_state::transition_validation::{
+    compare_old_closeout_vs_new_fraud_gate,
+};
 
 pub fn dispatch_stdio_json_request_payload(
     request: StdioJsonRequestPayload,
@@ -271,7 +274,7 @@ fn dispatch_runtime_stdio_request(op: &str, payload: Value) -> Result<Value, Str
         "background_state" => handle_background_state_operation(payload),
         #[cfg(not(feature = "l5-state"))]
         "background_state" => Err("background_state requires l5-state feature".to_string()),
-        "session_supervisor" => handle_session_supervisor_operation(payload),
+        "orchestrator" => handle_orchestrator_operation(payload),
         "describe_transport" => build_trace_transport_descriptor(payload).map_err(|e| e.to_string()),
         "describe_handoff" => build_trace_handoff_descriptor(payload).map_err(|e| e.to_string()),
         "checkpoint_resume_manifest" => build_checkpoint_resume_manifest(payload).map_err(|e| e.to_string()),
@@ -357,7 +360,19 @@ fn dispatch_framework_stdio_request(op: &str, payload: Value) -> Result<Value, S
         "framework_session_artifact_write" => write_framework_session_artifacts(payload).map_err(|e| e.to_string()),
         "framework_hook_evidence_append" => Ok(framework_hook_evidence_append(payload)?),
         "framework_goal_drive" => {
-            runtime_infra::kernel_utils::framework_goal_drive(payload)
+            let result = runtime_infra::kernel_utils::framework_goal_drive(payload.clone())?;
+            // If this is an iteration_complete operation, run Phase A informational
+            // comparison between old closeout enforcement and new fraud gate.
+            if result.get("operation").and_then(|v| v.as_str()) == Some("iteration_completed") {
+                let repo_root = std::path::Path::new(
+                    payload.get("repo_root").and_then(|v| v.as_str()).unwrap_or(".")
+                );
+                let task_id = payload.get("task_id").and_then(|v| v.as_str()).unwrap_or("");
+                if !task_id.is_empty() {
+                    compare_old_closeout_vs_new_fraud_gate(repo_root, task_id);
+                }
+            }
+            Ok(result)
         }
         "framework_rfv_loop" => {
             let repo_root = std::path::Path::new(
@@ -366,7 +381,14 @@ fn dispatch_framework_stdio_request(op: &str, payload: Value) -> Result<Value, S
             let task_id = payload.get("task_id").and_then(|v| v.as_str()).unwrap_or("");
             let goal = payload.get("goal").and_then(|v| v.as_str()).unwrap_or("");
             let round = payload.get("round").and_then(|v| v.as_u64()).unwrap_or(1);
-            let verdict = crate::qg_entry::trigger(repo_root, task_id, quality_gate::scene::GENERAL, goal, None, round, None);
+            let scene = payload.get("scene")
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+                .unwrap_or(quality_gate::scene::GENERAL);
+            let sub_scene = payload.get("sub_scene")
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty());
+            let verdict = crate::qg_entry::trigger(repo_root, task_id, scene, goal, sub_scene, round, None);
             serde_json::to_value(&verdict).map_err(|e| e.to_string())
         }
         "framework_alias" => dispatch_stdio_framework_alias(payload),

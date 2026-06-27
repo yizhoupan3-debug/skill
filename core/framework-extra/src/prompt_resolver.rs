@@ -1,6 +1,6 @@
 //! Prompt resolver — resolves content-store references into full text.
 
-use core_policy::error::FrameworkError;
+use core_errors::FrameworkError;
 
 use crate::content_store::{ContentNotFound, ContentStore};
 
@@ -66,11 +66,12 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::unwrap_used)]
     fn resolve_missing_hash() {
         let (resolver, _dir) = make_resolver();
         let err = resolver.resolve_one("nonexistent");
         assert!(err.is_err());
-        assert!(err.unwrap_err().contains("content not found"));
+        assert!(err.unwrap_err().to_string().contains("content not found"));
     }
 
     #[test]

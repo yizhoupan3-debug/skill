@@ -1,5 +1,5 @@
 #![deny(clippy::unwrap_used, clippy::expect_used)]
-//! Session supervisor: native-process worker lifecycle for long-running CLI hosts.
+//! Agent orchestrator: native-process worker lifecycle, team management, and agent health.
 
 use rt_storage::runtime_storage::acquire_runtime_path_lock;
 use serde_json::{Value, json};
@@ -19,7 +19,7 @@ mod tests;
 pub mod hooks;
 pub mod router_env_flags;
 
-pub use types::{SESSION_SUPERVISOR_AUTHORITY, SESSION_SUPERVISOR_SCHEMA_VERSION};
+pub use types::{ORCHESTRATOR_AUTHORITY, ORCHESTRATOR_SCHEMA_VERSION};
 pub use types::WorkerSessionRecord;
 pub use types::AgentHealthEntry;
 pub use types::AgentHealthStore;
@@ -49,19 +49,19 @@ fn idle_observation_side_effect(payload: &Value, workers: &[types::WorkerSession
 }
 
 #[instrument(level = "info", skip_all, fields(operation))]
-pub fn handle_session_supervisor_operation(payload: Value) -> Result<Value, String> {
-    let operation = required_non_empty_string(&payload, "operation", "session supervisor")?;
-    debug!(%operation, "session supervisor operation");
+pub fn handle_orchestrator_operation(payload: Value) -> Result<Value, String> {
+    let operation = required_non_empty_string(&payload, "operation", "orchestrator")?;
+    debug!(%operation, "orchestrator operation");
     let state_path = resolve_state_path(&payload)?;
 
     if operation == "classify_block" {
-        let host = required_non_empty_string(&payload, "host", "session supervisor")?;
+        let host = required_non_empty_string(&payload, "host", "orchestrator")?;
         let evidence_text =
-            required_non_empty_string(&payload, "evidence_text", "session supervisor")?;
+            required_non_empty_string(&payload, "evidence_text", "orchestrator")?;
         let classification = classify_rate_limit_block(&host, &evidence_text)?;
         return Ok(json!({
-            "schema_version": SESSION_SUPERVISOR_SCHEMA_VERSION,
-            "authority": SESSION_SUPERVISOR_AUTHORITY,
+            "schema_version": ORCHESTRATOR_SCHEMA_VERSION,
+            "authority": ORCHESTRATOR_AUTHORITY,
             "operation": operation,
             "state_path": state_path.display().to_string(),
             "changed": false,
@@ -80,8 +80,8 @@ pub fn handle_session_supervisor_operation(payload: Value) -> Result<Value, Stri
             let worker = launch_worker(&payload, &mut store, &state_path, dry_run, &now)?;
             save_store(&state_path, &store)?;
             Ok(json!({
-                "schema_version": SESSION_SUPERVISOR_SCHEMA_VERSION,
-                "authority": SESSION_SUPERVISOR_AUTHORITY,
+                "schema_version": ORCHESTRATOR_SCHEMA_VERSION,
+                "authority": ORCHESTRATOR_AUTHORITY,
                 "operation": operation,
                 "state_path": state_path.display().to_string(),
                 "changed": true,
@@ -90,20 +90,20 @@ pub fn handle_session_supervisor_operation(payload: Value) -> Result<Value, Stri
             }))
         }
         "inspect" => {
-            let worker_id = required_non_empty_string(&payload, "worker_id", "session supervisor")?;
+            let worker_id = required_non_empty_string(&payload, "worker_id", "orchestrator")?;
             let worker_snapshot = {
                 let worker = store
                     .workers
                     .iter_mut()
                     .find(|worker| worker.worker_id == worker_id)
-                    .ok_or_else(|| format!("Unknown supervisor worker_id: {worker_id}"))?;
+                    .ok_or_else(|| format!("Unknown orchestrator worker_id: {worker_id}"))?;
                 reconcile_process_state(worker);
                 worker.clone()
             };
             save_store(&state_path, &store)?;
             Ok(json!({
-                "schema_version": SESSION_SUPERVISOR_SCHEMA_VERSION,
-                "authority": SESSION_SUPERVISOR_AUTHORITY,
+                "schema_version": ORCHESTRATOR_SCHEMA_VERSION,
+                "authority": ORCHESTRATOR_AUTHORITY,
                 "operation": operation,
                 "state_path": state_path.display().to_string(),
                 "changed": true,
@@ -124,8 +124,8 @@ pub fn handle_session_supervisor_operation(payload: Value) -> Result<Value, Stri
             }
             let idle_observation = idle_observation_side_effect(&payload, &store.workers);
             Ok(json!({
-                "schema_version": SESSION_SUPERVISOR_SCHEMA_VERSION,
-                "authority": SESSION_SUPERVISOR_AUTHORITY,
+                "schema_version": ORCHESTRATOR_SCHEMA_VERSION,
+                "authority": ORCHESTRATOR_AUTHORITY,
                 "operation": operation,
                 "state_path": state_path.display().to_string(),
                 "changed": true,
@@ -134,20 +134,20 @@ pub fn handle_session_supervisor_operation(payload: Value) -> Result<Value, Stri
             }))
         }
         "terminate" => {
-            let worker_id = required_non_empty_string(&payload, "worker_id", "session supervisor")?;
+            let worker_id = required_non_empty_string(&payload, "worker_id", "orchestrator")?;
             let (worker_snapshot, terminated) = {
                 let worker = store
                     .workers
                     .iter_mut()
                     .find(|worker| worker.worker_id == worker_id)
-                    .ok_or_else(|| format!("Unknown supervisor worker_id: {worker_id}"))?;
+                    .ok_or_else(|| format!("Unknown orchestrator worker_id: {worker_id}"))?;
                 let terminated = terminate_worker(worker, dry_run, &now)?;
                 (worker.clone(), terminated)
             };
             save_store(&state_path, &store)?;
             Ok(json!({
-                "schema_version": SESSION_SUPERVISOR_SCHEMA_VERSION,
-                "authority": SESSION_SUPERVISOR_AUTHORITY,
+                "schema_version": ORCHESTRATOR_SCHEMA_VERSION,
+                "authority": ORCHESTRATOR_AUTHORITY,
                 "operation": operation,
                 "state_path": state_path.display().to_string(),
                 "changed": true,
@@ -157,20 +157,20 @@ pub fn handle_session_supervisor_operation(payload: Value) -> Result<Value, Stri
             }))
         }
         "mark_blocked" => {
-            let worker_id = required_non_empty_string(&payload, "worker_id", "session supervisor")?;
+            let worker_id = required_non_empty_string(&payload, "worker_id", "orchestrator")?;
             let (worker_snapshot, classification) = {
                 let worker = store
                     .workers
                     .iter_mut()
                     .find(|worker| worker.worker_id == worker_id)
-                    .ok_or_else(|| format!("Unknown supervisor worker_id: {worker_id}"))?;
+                    .ok_or_else(|| format!("Unknown orchestrator worker_id: {worker_id}"))?;
                 let classification = mark_worker_blocked(worker, &payload, &now)?;
                 (worker.clone(), classification)
             };
             save_store(&state_path, &store)?;
             Ok(json!({
-                "schema_version": SESSION_SUPERVISOR_SCHEMA_VERSION,
-                "authority": SESSION_SUPERVISOR_AUTHORITY,
+                "schema_version": ORCHESTRATOR_SCHEMA_VERSION,
+                "authority": ORCHESTRATOR_AUTHORITY,
                 "operation": operation,
                 "state_path": state_path.display().to_string(),
                 "changed": true,
@@ -215,8 +215,8 @@ pub fn handle_session_supervisor_operation(payload: Value) -> Result<Value, Stri
             save_store(&state_path, &store)?;
             let idle_observation = idle_observation_side_effect(&payload, &store.workers);
             Ok(json!({
-                "schema_version": SESSION_SUPERVISOR_SCHEMA_VERSION,
-                "authority": SESSION_SUPERVISOR_AUTHORITY,
+                "schema_version": ORCHESTRATOR_SCHEMA_VERSION,
+                "authority": ORCHESTRATOR_AUTHORITY,
                 "operation": operation,
                 "state_path": state_path.display().to_string(),
                 "changed": true,
@@ -429,6 +429,6 @@ pub fn handle_session_supervisor_operation(payload: Value) -> Result<Value, Stri
             }))
         }
 
-        other => Err(format!("Unsupported session supervisor operation: {other}")),
+        other => Err(format!("Unsupported orchestrator operation: {other}")),
     }
 }

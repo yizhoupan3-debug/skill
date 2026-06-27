@@ -1039,7 +1039,7 @@ mod paper_prose_routing_score_tests {
                 })
                 .filter(|(_, score, _)| *score > 0.0)
                 .collect();
-            scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+            scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
             results.push(serde_json::json!({
                 "query": q,
                 "top3": scores.into_iter().take(3).map(|(slug, score, reasons)| {

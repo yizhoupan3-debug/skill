@@ -1,6 +1,6 @@
 use chrono::Local;
 use clap::{Parser, Subcommand};
-use core_policy::error::FrameworkError;
+use core_errors::FrameworkError;
 use framework_kernel::repo_roots::{framework_root_from_executable_path, is_framework_root};
 use framework_kernel::runtime_registry::{load_runtime_registry, load_runtime_registry_payload};
 use serde::Deserialize;

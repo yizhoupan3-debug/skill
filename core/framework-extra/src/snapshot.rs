@@ -4,9 +4,8 @@
 //! and `build_framework_runtime_snapshot_envelope_with_level`) as well as internal helpers.
 
 use fr_utils::constants::{
-    FRAMEWORK_RUNTIME_AUTHORITY, FRAMEWORK_RUNTIME_SNAPSHOT_SCHEMA_VERSION, SESSION_SUMMARY_FILENAME,
-    NEXT_ACTIONS_FILENAME, EVIDENCE_INDEX_FILENAME, TRACE_METADATA_FILENAME,
-    SUPERVISOR_STATE_FILENAME, TASK_REGISTRY_SCHEMA_VERSION,
+    FRAMEWORK_RUNTIME_AUTHORITY, FRAMEWORK_RUNTIME_SNAPSHOT_SCHEMA_VERSION,
+    EVIDENCE_INDEX_FILENAME, SUPERVISOR_STATE_FILENAME, TASK_REGISTRY_SCHEMA_VERSION,
 };
 use fr_utils::json_value::{nonempty_string, value_text};
 use fr_exec::runtime_view;
@@ -96,10 +95,7 @@ pub fn build_framework_runtime_snapshot_envelope_with_level(
     // --- paths: summary omits full paths map ---
     let paths_value = if is_full {
         json!({
-            "session_summary": snapshot.current_root.join(SESSION_SUMMARY_FILENAME).display().to_string(),
-            "next_actions": snapshot.current_root.join(NEXT_ACTIONS_FILENAME).display().to_string(),
             "evidence_index": snapshot.current_root.join(EVIDENCE_INDEX_FILENAME).display().to_string(),
-            "trace_metadata": snapshot.current_root.join(TRACE_METADATA_FILENAME).display().to_string(),
             "current_pointer_root": snapshot.mirror_root.display().to_string(),
             "supervisor_state": repo_root.join(SUPERVISOR_STATE_FILENAME).display().to_string(),
         })
@@ -144,7 +140,6 @@ pub fn build_framework_runtime_snapshot_envelope_with_level(
         "parallel_task_count": snapshot.known_task_ids.len(),
         "registered_tasks": registered_tasks,
         "collected_at": snapshot.collected_at,
-        "session_summary_present": !snapshot.session_summary_text.trim().is_empty(),
         "next_action_count": continuity
             .get("next_actions")
             .and_then(Value::as_array)

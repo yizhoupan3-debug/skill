@@ -39,7 +39,7 @@ orchestration: { mode: local|sidecar|team|, trigger: explicit|auto_multi_phase|s
 
 | mode | 宿主 | 执行 |
 |------|------|------|
-| `team` | 全宿主 | `session-supervisor` team API（`artifacts/teams/`）；成员通过 `team_send_message` / `team_read_messages` 通信 |
+| `team` | 全宿主 | `agent-orchestrator` MCP 工具（`orchestrator_team_*`）；成员通过 `orchestrator_team_send_message` / `orchestrator_team_read_messages` 通信 |
 | `sidecar` | 全宿主 | Bounded subagent，无 team 编排 |
 | `local` | 全宿主 | 无 delegation |
 

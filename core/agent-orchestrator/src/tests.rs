@@ -1,5 +1,5 @@
 use crate::driver::{build_driver_command, is_safe_worktree_slug, resolve_worktree_cwd};
-use crate::handle_session_supervisor_operation;
+use crate::handle_orchestrator_operation;
 use crate::types::WorkerSessionRecord;
 use crate::worker::terminate_worker;
 use serde_json::{Value, json};
@@ -56,9 +56,9 @@ fn codex_resume_command_uses_placeholder_spec() {
 
 #[test]
 fn dry_run_launch_and_resume_round_trip_persists_state() {
-    let state_path = temp_state_path("session-supervisor");
+    let state_path = temp_state_path("orchestrator");
     let now = "2026-04-23T10:00:00Z";
-    let launch = handle_session_supervisor_operation(json!({
+    let launch = handle_orchestrator_operation(json!({
         "operation": "launch",
         "state_path": state_path,
         "host": "codex",
@@ -94,7 +94,7 @@ fn dry_run_launch_and_resume_round_trip_persists_state() {
         json!([])
     );
 
-    let marked = handle_session_supervisor_operation(json!({
+    let marked = handle_orchestrator_operation(json!({
         "operation": "mark_blocked",
         "state_path": state_path,
         "worker_id": worker_id,
@@ -104,7 +104,7 @@ fn dry_run_launch_and_resume_round_trip_persists_state() {
     .expect("mark blocked");
     assert_eq!(marked["worker"]["status"], json!("blocked_rate_limit"));
 
-    let resumed = handle_session_supervisor_operation(json!({
+    let resumed = handle_orchestrator_operation(json!({
         "operation": "resume_due",
         "state_path": state_path,
         "dry_run": true,
@@ -117,7 +117,7 @@ fn dry_run_launch_and_resume_round_trip_persists_state() {
     assert_eq!(resumed_workers.len(), 1);
     assert_eq!(resumed_workers[0]["action"], json!("dry_run"));
 
-    let listed = handle_session_supervisor_operation(json!({
+    let listed = handle_orchestrator_operation(json!({
         "operation": "list",
         "state_path": state_path,
         "now": "2026-04-23T10:06:00Z",
@@ -130,8 +130,8 @@ fn dry_run_launch_and_resume_round_trip_persists_state() {
 
 #[test]
 fn launch_merges_empty_lane_contract_with_required_defaults() {
-    let state_path = temp_state_path("session-supervisor-lane-contract");
-    let launch = handle_session_supervisor_operation(json!({
+    let state_path = temp_state_path("orchestrator-lane-contract");
+    let launch = handle_orchestrator_operation(json!({
         "operation": "launch",
         "state_path": state_path,
         "worker_id": "lane-empty-contract",
@@ -159,12 +159,12 @@ fn launch_merges_empty_lane_contract_with_required_defaults() {
 
 #[test]
 fn concurrent_dry_run_launches_do_not_clobber_store() {
-    let state_path = temp_state_path("session-supervisor-concurrent");
+    let state_path = temp_state_path("orchestrator-concurrent");
     let mut handles = Vec::new();
     for idx in 0..6 {
         let state_path = state_path.clone();
         handles.push(std::thread::spawn(move || {
-            handle_session_supervisor_operation(json!({
+            handle_orchestrator_operation(json!({
                 "operation": "launch",
                 "state_path": state_path,
                 "worker_id": format!("worker-{idx}"),
@@ -181,7 +181,7 @@ fn concurrent_dry_run_launches_do_not_clobber_store() {
         handle.join().expect("thread join");
     }
 
-    let listed = handle_session_supervisor_operation(json!({
+    let listed = handle_orchestrator_operation(json!({
         "operation": "list",
         "state_path": state_path,
         "now": "2026-04-23T10:00:00Z",
@@ -367,7 +367,7 @@ fn subagent_parallel_spawn_close_stability() {
     for idx in 0..N {
         let state_path = state_path.clone();
         launch_handles.push(std::thread::spawn(move || {
-            handle_session_supervisor_operation(json!({
+            handle_orchestrator_operation(json!({
                 "operation": "launch",
                 "state_path": state_path,
                 "worker_id": format!("parallel-{idx}"),
@@ -388,7 +388,7 @@ fn subagent_parallel_spawn_close_stability() {
     for idx in 0..N {
         let state_path = state_path.clone();
         terminate_handles.push(std::thread::spawn(move || {
-            handle_session_supervisor_operation(json!({
+            handle_orchestrator_operation(json!({
                 "operation": "terminate",
                 "state_path": state_path,
                 "worker_id": format!("parallel-{idx}"),
@@ -402,7 +402,7 @@ fn subagent_parallel_spawn_close_stability() {
         handle.join().expect("terminate thread join");
     }
 
-    let listed = handle_session_supervisor_operation(json!({
+    let listed = handle_orchestrator_operation(json!({
         "operation": "list",
         "state_path": state_path,
         "now": terminate_now,
@@ -454,7 +454,7 @@ fn subagent_lifecycle_spawn_terminate_shutdown_smoke() {
     let state_path = temp_state_path("subagent-lifecycle-smoke");
     let now = "2026-04-23T10:00:00Z";
 
-    let launch = handle_session_supervisor_operation(json!({
+    let launch = handle_orchestrator_operation(json!({
         "operation": "launch",
         "state_path": state_path,
         "worker_id": "smoke-worker",
@@ -467,7 +467,7 @@ fn subagent_lifecycle_spawn_terminate_shutdown_smoke() {
     .expect("launch worker");
     assert_eq!(launch["worker"]["status"], json!("queued"));
 
-    let terminate = handle_session_supervisor_operation(json!({
+    let terminate = handle_orchestrator_operation(json!({
         "operation": "terminate",
         "state_path": state_path,
         "worker_id": "smoke-worker",
@@ -502,7 +502,7 @@ fn subagent_spawn_error_shutdown_smoke() {
     let state_path = temp_state_path("error-shutdown-smoke");
     let launch_now = "2026-04-23T10:00:00Z";
 
-    let launch = handle_session_supervisor_operation(json!({
+    let launch = handle_orchestrator_operation(json!({
         "operation": "launch",
         "state_path": state_path,
         "worker_id": "error-worker",
@@ -515,7 +515,7 @@ fn subagent_spawn_error_shutdown_smoke() {
     .expect("launch worker");
     assert_eq!(launch["worker"]["status"], json!("queued"));
 
-    let blocked = handle_session_supervisor_operation(json!({
+    let blocked = handle_orchestrator_operation(json!({
         "operation": "mark_blocked",
         "state_path": state_path,
         "worker_id": "error-worker",
@@ -526,7 +526,7 @@ fn subagent_spawn_error_shutdown_smoke() {
     assert_eq!(blocked["worker"]["status"], json!("blocked_rate_limit"));
     assert!(blocked["worker"]["last_error"].is_string());
 
-    let terminate = handle_session_supervisor_operation(json!({
+    let terminate = handle_orchestrator_operation(json!({
         "operation": "terminate",
         "state_path": state_path,
         "worker_id": "error-worker",
@@ -560,7 +560,7 @@ fn list_idle_workers_reports_observation_analyze_dry_run() {
     let state_path = temp_state_path("observation-idle-dry-run");
     let now = "2026-04-23T10:00:00Z";
 
-    let launch = handle_session_supervisor_operation(json!({
+    let launch = handle_orchestrator_operation(json!({
         "operation": "launch",
         "state_path": state_path,
         "host": "codex",
@@ -575,7 +575,7 @@ fn list_idle_workers_reports_observation_analyze_dry_run() {
         .expect("worker_id")
         .to_string();
 
-    let _ = handle_session_supervisor_operation(json!({
+    let _ = handle_orchestrator_operation(json!({
         "operation": "terminate",
         "state_path": state_path,
         "worker_id": worker_id,
@@ -584,7 +584,7 @@ fn list_idle_workers_reports_observation_analyze_dry_run() {
     }))
     .expect("terminate worker");
 
-    let listed = handle_session_supervisor_operation(json!({
+    let listed = handle_orchestrator_operation(json!({
         "operation": "list",
         "state_path": state_path,
         "dry_run": true,
@@ -610,7 +610,7 @@ fn list_with_running_worker_skips_idle_observation_trigger() {
     running.created_at = now.to_string();
     running.updated_at = now.to_string();
     let store = json!({
-        "schema_version": crate::types::SESSION_SUPERVISOR_STORE_SCHEMA_VERSION,
+        "schema_version": crate::types::ORCHESTRATOR_STORE_SCHEMA_VERSION,
         "version": 1,
         "workers": [running],
     });
@@ -620,7 +620,7 @@ fn list_with_running_worker_skips_idle_observation_trigger() {
     )
     .expect("write store");
 
-    let listed = handle_session_supervisor_operation(json!({
+    let listed = handle_orchestrator_operation(json!({
         "operation": "list",
         "state_path": state_path,
         "dry_run": true,
@@ -674,7 +674,7 @@ fn subagent_spawn_timeout_shutdown_smoke() {
     let launch_now = "2026-04-23T10:00:00Z";
     let stale_now = "2026-04-23T11:00:01Z";
 
-    let launch = handle_session_supervisor_operation(json!({
+    let launch = handle_orchestrator_operation(json!({
         "operation": "launch",
         "state_path": state_path,
         "worker_id": "timeout-worker",
@@ -687,7 +687,7 @@ fn subagent_spawn_timeout_shutdown_smoke() {
     .expect("launch worker");
     assert_eq!(launch["worker"]["status"], json!("queued"));
 
-    let listed = handle_session_supervisor_operation(json!({
+    let listed = handle_orchestrator_operation(json!({
         "operation": "list",
         "state_path": state_path,
         "now": stale_now,
@@ -734,7 +734,7 @@ fn subagent_resource_leak_detection() {
 
     for idx in 0..N {
         let worker_id = format!("leak-{idx}");
-        handle_session_supervisor_operation(json!({
+        handle_orchestrator_operation(json!({
             "operation": "launch",
             "state_path": state_path,
             "worker_id": worker_id,
@@ -745,7 +745,7 @@ fn subagent_resource_leak_detection() {
             "now": launch_now,
         }))
         .expect("launch worker");
-        handle_session_supervisor_operation(json!({
+        handle_orchestrator_operation(json!({
             "operation": "terminate",
             "state_path": state_path,
             "worker_id": worker_id,
@@ -765,14 +765,14 @@ fn subagent_resource_leak_detection() {
     }
 
     // Sentinel `.lock` files are retained by design; a follow-up op must succeed (flock released).
-    handle_session_supervisor_operation(json!({
+    handle_orchestrator_operation(json!({
         "operation": "list",
         "state_path": state_path,
         "now": terminate_now,
     }))
     .expect("list after shutdown must not be blocked by stale flock");
 
-    let listed = handle_session_supervisor_operation(json!({
+    let listed = handle_orchestrator_operation(json!({
         "operation": "list",
         "state_path": state_path,
         "now": terminate_now,
@@ -816,12 +816,12 @@ fn subagent_resource_leak_detection() {
 
 /// non-dry_run real process spawn → terminate smoke (`smoke-shell` / `sleep 1`).
 ///
-/// Opt-in: `ROUTER_RS_SESSION_SUPERVISOR_REAL_PROCESS_SMOKE=1` (skipped by default for CI).
+/// Opt-in: `ROUTER_RS_ORCHESTRATOR_REAL_PROCESS_SMOKE=1` (skipped by default for CI).
 #[test]
 fn subagent_spawn_real_process_smoke() {
-    if !crate::router_env_flags::router_rs_session_supervisor_real_process_smoke_enabled() {
+    if !crate::router_env_flags::orchestrator_real_process_smoke_enabled() {
         eprintln!(
-            "skip subagent_spawn_real_process_smoke: set ROUTER_RS_SESSION_SUPERVISOR_REAL_PROCESS_SMOKE=1"
+            "skip subagent_spawn_real_process_smoke: set ORCHESTRATOR_REAL_PROCESS_SMOKE=1"
         );
         return;
     }
@@ -839,7 +839,7 @@ fn subagent_spawn_real_process_smoke() {
     let launch_now = "2026-04-23T10:00:00Z";
     let terminate_now = "2026-04-23T10:00:15Z";
 
-    let launch = handle_session_supervisor_operation(json!({
+    let launch = handle_orchestrator_operation(json!({
         "operation": "launch",
         "state_path": state_path,
         "worker_id": "real-smoke-worker",
@@ -859,7 +859,7 @@ fn subagent_spawn_real_process_smoke() {
     );
     assert!(worker["log_path"].is_string());
 
-    let terminate = handle_session_supervisor_operation(json!({
+    let terminate = handle_orchestrator_operation(json!({
         "operation": "terminate",
         "state_path": state_path,
         "worker_id": "real-smoke-worker",
@@ -1094,7 +1094,7 @@ fn terminate_process_sigkill_fallback() {
 #[test]
 fn concurrent_save_store_no_corruption() {
     use crate::runtime::{load_store, save_store};
-    use crate::types::SessionSupervisorStore;
+    use crate::types::OrchestratorStore;
 
     let state_path = std::env::temp_dir().join(format!(
         "concurrent-save-{}-{}.json",
@@ -1102,7 +1102,7 @@ fn concurrent_save_store_no_corruption() {
         chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0)
     ));
 
-    let store = SessionSupervisorStore::default();
+    let store = OrchestratorStore::default();
     save_store(&state_path, &store).expect("initial save");
 
     let handles: Vec<_> = (0..8)
@@ -1185,51 +1185,51 @@ fn fresh_worker_not_reaped() {
 
 #[test]
 fn inspect_unknown_worker_returns_error() {
-    let state_path = temp_state_path("session-supervisor-inspect-unknown");
-    let _ = handle_session_supervisor_operation(json!({
+    let state_path = temp_state_path("orchestrator-inspect-unknown");
+    let _ = handle_orchestrator_operation(json!({
         "operation": "list",
         "state_path": state_path,
         "now": "2026-06-06T10:00:00Z",
     }));
-    let err = handle_session_supervisor_operation(json!({
+    let err = handle_orchestrator_operation(json!({
         "operation": "inspect",
         "state_path": state_path,
         "worker_id": "does-not-exist",
         "now": "2026-06-06T10:00:00Z",
     }))
     .expect_err("should reject unknown worker_id");
-    assert!(err.contains("Unknown supervisor worker_id"), "error: {err}");
+    assert!(err.contains("Unknown orchestrator worker_id"), "error: {err}");
     let _ = fs::remove_file(state_path);
 }
 
 #[test]
 fn terminate_unknown_worker_returns_error() {
-    let state_path = temp_state_path("session-supervisor-term-unknown");
-    let _ = handle_session_supervisor_operation(json!({
+    let state_path = temp_state_path("orchestrator-term-unknown");
+    let _ = handle_orchestrator_operation(json!({
         "operation": "list",
         "state_path": state_path,
         "now": "2026-06-06T10:00:00Z",
     }));
-    let err = handle_session_supervisor_operation(json!({
+    let err = handle_orchestrator_operation(json!({
         "operation": "terminate",
         "state_path": state_path,
         "worker_id": "ghost-worker",
         "now": "2026-06-06T10:00:00Z",
     }))
     .expect_err("should reject unknown worker_id");
-    assert!(err.contains("Unknown supervisor worker_id"), "error: {err}");
+    assert!(err.contains("Unknown orchestrator worker_id"), "error: {err}");
     let _ = fs::remove_file(state_path);
 }
 
 #[test]
 fn mark_blocked_unknown_worker_returns_error() {
-    let state_path = temp_state_path("session-supervisor-mark-unknown");
-    let _ = handle_session_supervisor_operation(json!({
+    let state_path = temp_state_path("orchestrator-mark-unknown");
+    let _ = handle_orchestrator_operation(json!({
         "operation": "list",
         "state_path": state_path,
         "now": "2026-06-06T10:00:00Z",
     }));
-    let err = handle_session_supervisor_operation(json!({
+    let err = handle_orchestrator_operation(json!({
         "operation": "mark_blocked",
         "state_path": state_path,
         "worker_id": "missing-worker",
@@ -1237,14 +1237,14 @@ fn mark_blocked_unknown_worker_returns_error() {
         "now": "2026-06-06T10:00:00Z",
     }))
     .expect_err("should reject unknown worker_id");
-    assert!(err.contains("Unknown supervisor worker_id"), "error: {err}");
+    assert!(err.contains("Unknown orchestrator worker_id"), "error: {err}");
     let _ = fs::remove_file(state_path);
 }
 
 #[test]
 fn launch_unsupported_host_gets_placeholder_spec() {
-    let state_path = temp_state_path("session-supervisor-launch-unsupported");
-    let result = handle_session_supervisor_operation(json!({
+    let state_path = temp_state_path("orchestrator-launch-unsupported");
+    let result = handle_orchestrator_operation(json!({
         "operation": "launch",
         "state_path": state_path,
         "host": "unsupported-ai",
@@ -1260,8 +1260,8 @@ fn launch_unsupported_host_gets_placeholder_spec() {
 
 #[test]
 fn launch_missing_host_returns_error() {
-    let state_path = temp_state_path("session-supervisor-launch-no-host");
-    let err = handle_session_supervisor_operation(json!({
+    let state_path = temp_state_path("orchestrator-launch-no-host");
+    let err = handle_orchestrator_operation(json!({
         "operation": "launch",
         "state_path": state_path,
         "cwd": "/tmp/project",
@@ -1275,8 +1275,8 @@ fn launch_missing_host_returns_error() {
 
 #[test]
 fn launch_missing_cwd_returns_error() {
-    let state_path = temp_state_path("session-supervisor-launch-no-cwd");
-    let err = handle_session_supervisor_operation(json!({
+    let state_path = temp_state_path("orchestrator-launch-no-cwd");
+    let err = handle_orchestrator_operation(json!({
         "operation": "launch",
         "state_path": state_path,
         "host": "codex",
@@ -1290,9 +1290,9 @@ fn launch_missing_cwd_returns_error() {
 
 #[test]
 fn resume_due_skips_worker_not_yet_due() {
-    let state_path = temp_state_path("session-supervisor-resume-not-due");
+    let state_path = temp_state_path("orchestrator-resume-not-due");
     let now = "2026-06-06T10:00:00Z";
-    let launch = handle_session_supervisor_operation(json!({
+    let launch = handle_orchestrator_operation(json!({
         "operation": "launch",
         "state_path": state_path,
         "host": "codex",
@@ -1304,7 +1304,7 @@ fn resume_due_skips_worker_not_yet_due() {
     .expect("launch");
     let worker_id = launch["worker"]["worker_id"].as_str().unwrap();
 
-    handle_session_supervisor_operation(json!({
+    handle_orchestrator_operation(json!({
         "operation": "mark_blocked",
         "state_path": state_path,
         "worker_id": worker_id,
@@ -1314,7 +1314,7 @@ fn resume_due_skips_worker_not_yet_due() {
     }))
     .expect("mark blocked");
 
-    let result = handle_session_supervisor_operation(json!({
+    let result = handle_orchestrator_operation(json!({
         "operation": "resume_due",
         "state_path": state_path,
         "dry_run": true,
@@ -1332,9 +1332,9 @@ fn resume_due_skips_worker_not_yet_due() {
 fn legacy_store_json_with_tmux_fields_loads() {
     use crate::runtime::load_store;
 
-    let state_path = temp_state_path("session-supervisor-legacy-tmux");
+    let state_path = temp_state_path("orchestrator-legacy-tmux");
     let legacy_json = r#"{
-        "schema_version": "router-rs-session-supervisor-store-v1",
+        "schema_version": "router-rs-orchestrator-store-v1",
         "version": 1,
         "workers": [{
             "worker_id": "legacy-worker",

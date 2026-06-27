@@ -239,7 +239,7 @@ fn runtime_registry_host_projections_expose_supervisor_capabilities() {
 
     let cursor = &payload["host_projections"]["cursor"];
     assert_eq!(cursor["profile_id"], "cursor_profile");
-    // Lock the contract-with-code alignment: session_supervisor.rs only
+    // Lock the contract-with-code alignment: agent-orchestrator only
     // accepts codex/codex, so the registry must mark the cursor driver
     // as unsupported (was previously misdeclared as "cursor_driver").
     assert_eq!(cursor["session_supervisor_driver"], "unsupported");

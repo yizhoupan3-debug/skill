@@ -7,10 +7,10 @@ use std::path::{Path, PathBuf};
 
 pub use framework_kernel::json_value::{required_non_empty_string, optional_non_empty_string, optional_bool};
 
-use core_policy::error::FrameworkError;
+use core_errors::FrameworkError;
 
 use crate::types::{
-    SESSION_SUPERVISOR_STORE_SCHEMA_VERSION, SessionSupervisorStore, WorkerEvent,
+    ORCHESTRATOR_STORE_SCHEMA_VERSION, OrchestratorStore, WorkerEvent,
     WorkerSessionRecord,
 };
 
@@ -21,19 +21,19 @@ pub fn worker_log_path(state_path: &Path, worker_id: &str) -> PathBuf {
         .join(format!("{}.log", sanitize_segment(worker_id)))
 }
 
-pub fn load_store(path: &Path) -> Result<SessionSupervisorStore, FrameworkError> {
+pub fn load_store(path: &Path) -> Result<OrchestratorStore, FrameworkError> {
     if !path.is_file() {
-        return Ok(SessionSupervisorStore {
-            schema_version: SESSION_SUPERVISOR_STORE_SCHEMA_VERSION.to_string(),
+        return Ok(OrchestratorStore {
+            schema_version: ORCHESTRATOR_STORE_SCHEMA_VERSION.to_string(),
             version: 1,
             workers: Vec::new(),
         });
     }
-    let payload: SessionSupervisorStore = serde_json::from_str(&fs::read_to_string(path)?)?;
+    let payload: OrchestratorStore = serde_json::from_str(&fs::read_to_string(path)?)?;
     Ok(payload)
 }
 
-pub fn save_store(path: &Path, store: &SessionSupervisorStore) -> Result<(), FrameworkError> {
+pub fn save_store(path: &Path, store: &OrchestratorStore) -> Result<(), FrameworkError> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }
@@ -70,12 +70,12 @@ pub fn save_store(path: &Path, store: &SessionSupervisorStore) -> Result<(), Fra
 /// Insert or update a worker record in the supervisor store.
 ///
 /// # Concurrency safety
-/// This function takes `&mut SessionSupervisorStore` (exclusive access to the in-memory store).
-/// All callers in `handle_session_supervisor_operation` acquire a POSIX `flock`
+/// This function takes `&mut OrchestratorStore` (exclusive access to the in-memory store).
+/// All callers in `handle_orchestrator_operation` acquire a POSIX `flock`
 /// (`acquire_runtime_path_lock`) before calling this, ensuring cross-process
 /// mutual exclusion on the backing file. Callers outside that path must provide
 /// their own synchronization.
-pub fn upsert_worker(store: &mut SessionSupervisorStore, worker: WorkerSessionRecord) {
+pub fn upsert_worker(store: &mut OrchestratorStore, worker: WorkerSessionRecord) {
     if let Some(existing) = store
         .workers
         .iter_mut()
@@ -90,7 +90,7 @@ pub fn upsert_worker(store: &mut SessionSupervisorStore, worker: WorkerSessionRe
 
 pub fn resolve_state_path(payload: &Value) -> Result<PathBuf, FrameworkError> {
     let cwd = std::env::current_dir()?;
-    let default = cwd.join("artifacts/session_supervisor/state.json");
+    let default = cwd.join("artifacts/orchestrator/state.json");
     if let Some(path) = optional_non_empty_string(payload, "state_path") {
         let pb = PathBuf::from(&path);
         let candidate = if pb.is_absolute() {

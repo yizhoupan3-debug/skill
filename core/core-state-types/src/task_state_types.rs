@@ -88,5 +88,8 @@ pub enum GoalType {
     /// Loop goal: review → implement (with task splitting), uses goal engine.
     #[default]
     Loop,
+    /// OLD: v10 removed Linear — catch-all for backward compat with old GOAL_STATE.json.
+    #[serde(other)]
+    Unknown,
 }
 

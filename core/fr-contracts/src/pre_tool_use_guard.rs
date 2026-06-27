@@ -17,7 +17,7 @@ use core_policy::tool_safety_rules;
 use framework_kernel::runtime_registry::load_runtime_registry_json;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use core_policy::error::FrameworkError;
+use core_errors::FrameworkError;
 use sha2::{Digest, Sha256};
 use std::path::{Component, Path};
 
@@ -517,7 +517,7 @@ fn register_test_hooks() {
             registry: || vec![],
         },
         framework_goal_drive: |_| Ok(serde_json::Value::Null),
-        handle_session_supervisor_operation: |_| Ok(serde_json::Value::Null),
+        handle_orchestrator_operation: |_| Ok(serde_json::Value::Null),
         handle_background_state_operation: |_| Ok(serde_json::Value::Null),
         runtime_concurrency_defaults_payload: || serde_json::Value::Null,
         eval_route_contract: || serde_json::Value::Null,

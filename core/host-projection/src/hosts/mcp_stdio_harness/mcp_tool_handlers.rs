@@ -168,6 +168,63 @@ fn resolve_tool_registry_path(repo_root: &std::path::Path) -> std::path::PathBuf
         .unwrap_or_else(|| repo_root.join(framework_kernel::constants::MCP_TOOL_REGISTRY_RELATIVE_PATH))
 }
 
+// ---------------------------------------------------------------------------
+// OrchestratorTools (14 tools: team, agent, worker operations)
+// ---------------------------------------------------------------------------
+
+pub struct OrchestratorTools;
+impl ToolHandler for OrchestratorTools {
+    fn tool_names(&self) -> &[&'static str] {
+        &[
+            "orchestrator_team_create",
+            "orchestrator_team_add_member",
+            "orchestrator_team_remove_member",
+            "orchestrator_team_complete",
+            "orchestrator_team_send_message",
+            "orchestrator_team_read_messages",
+            "orchestrator_team_alive_members",
+            "orchestrator_team_list",
+            "orchestrator_agent_register",
+            "orchestrator_agent_unregister",
+            "orchestrator_agent_list_running",
+            "orchestrator_worker_launch",
+            "orchestrator_worker_list",
+            "orchestrator_worker_terminate",
+        ]
+    }
+    fn dispatch(&self, tool_name: &str, args: &Value, ctx: &ToolCallContext) -> Result<String, String> {
+        let operation = orchestrator_operation_for_tool(tool_name)?;
+        let mut payload = args.clone();
+        payload["operation"] = json!(operation);
+        payload["state_path"] = json!(format!(
+            "{}/artifacts/orchestrator/state.json",
+            ctx.repo_root.display()
+        ));
+        let result = framework_kernel::runtime_hooks::hooks().handle_orchestrator_operation(payload)?;
+        serde_json::to_string_pretty(&result).map_err(|e| e.to_string())
+    }
+}
+
+fn orchestrator_operation_for_tool(tool_name: &str) -> Result<&'static str, String> {
+    match tool_name {
+        "orchestrator_team_create" => Ok("team_create"),
+        "orchestrator_team_add_member" => Ok("team_add_member"),
+        "orchestrator_team_remove_member" => Ok("team_remove_member"),
+        "orchestrator_team_complete" => Ok("team_complete"),
+        "orchestrator_team_send_message" => Ok("team_send_message"),
+        "orchestrator_team_read_messages" => Ok("team_read_messages"),
+        "orchestrator_team_alive_members" => Ok("team_alive_members"),
+        "orchestrator_team_list" => Ok("team_list"),
+        "orchestrator_agent_register" => Ok("agent_register"),
+        "orchestrator_agent_unregister" => Ok("agent_unregister"),
+        "orchestrator_agent_list_running" => Ok("agent_list_running"),
+        "orchestrator_worker_launch" => Ok("launch"),
+        "orchestrator_worker_list" => Ok("list"),
+        "orchestrator_worker_terminate" => Ok("terminate"),
+        _ => Err(format!("OrchestratorTools: unknown tool: {tool_name}")),
+    }
+}
+
 /// route_tool: route a natural language query to the best-matching MCP tool.
 /// Uses the connection-level host_id by default; args can override with `host_id`.
 fn tool_route_tool(

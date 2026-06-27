@@ -8,6 +8,7 @@
 
 use serde_json::Value;
 use quality_gate;
+use core_state::transition_validation::{validate_transition, TaskTransition};
 
 pub const TASK_LEDGER_COMMAND_ENVELOPE_SCHEMA: &str = "router-rs-task-ledger-command-envelope-v1";
 
@@ -63,7 +64,38 @@ pub fn dispatch_task_ledger_command(cmd: TaskLedgerCommand) -> Result<Value, Str
             let task_id = p.get("task_id").and_then(|v| v.as_str()).unwrap_or("");
             let goal = p.get("goal").and_then(|v| v.as_str()).unwrap_or("");
             let round = p.get("round").and_then(|v| v.as_u64()).unwrap_or(1);
-            let verdict = crate::qg_entry::trigger(repo_root, task_id, quality_gate::scene::GENERAL, goal, None, round, None);
+            let scene = p.get("scene")
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+                .unwrap_or(quality_gate::scene::GENERAL);
+            let sub_scene = p.get("sub_scene")
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty());
+
+            // Stage 1: transition validation as blocking gate (anti-fraud evidence check)
+            if !task_id.is_empty() {
+                let transition_v = validate_transition(repo_root, task_id, TaskTransition::Complete);
+                if !transition_v.passed {
+                    return serde_json::to_value(&quality_gate::types::GateVerdict {
+                        passed: false,
+                        checkers_ran: 0,
+                        blockers: vec![quality_gate::types::Finding {
+                            id: "transition_validation_blocked".to_string(),
+                            severity: quality_gate::types::Severity::P0,
+                            description: transition_v.reason.clone(),
+                            location: None,
+                            suggestion: Some(
+                                "record evidence artifacts (exit_code=0 or success=true) before completing".to_string(),
+                            ),
+                        }],
+                        advisories: vec![],
+                        reason: Some(format!("transition validation blocked: {}", transition_v.reason)),
+                    }).map_err(|e| e.to_string());
+                }
+            }
+
+            // Stage 2: QG Route evaluation
+            let verdict = crate::qg_entry::trigger(repo_root, task_id, scene, goal, sub_scene, round, None);
             serde_json::to_value(&verdict).map_err(|e| e.to_string())
         }
         TaskLedgerCommand::SessionArtifacts(p) => {

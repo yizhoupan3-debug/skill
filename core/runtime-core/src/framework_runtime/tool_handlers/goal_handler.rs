@@ -1,7 +1,7 @@
 //! Goal state management tool handler (`domain:goal`).
 //! Payload construction + core_state state_manager call.
 
-use core_policy::error::FrameworkError;
+use core_errors::FrameworkError;
 use serde_json::{json, Value};
 use std::path::Path;
 
@@ -78,15 +78,18 @@ pub fn goal_state_manage_dispatch(
             payload["session_id"] = json!(session_id);
 
             if let Some(gt) = arguments.get("goal_type").and_then(Value::as_str) {
-                match gt {
-                    "linear" | "loop" => {
-                        payload["goal_type"] = json!(gt);
-                        // goal_type=loop without explicit lifecycle_profile → auto-set loop-auto
-                        if gt == "loop" && arguments.get("lifecycle_profile").is_none() {
-                            payload["lifecycle_profile"] = json!("loop-auto");
-                        }
+                if gt == "loop" {
+                    payload["goal_type"] = json!("loop");
+                    // goal_type=loop without explicit lifecycle_profile → auto-set loop-auto
+                    if arguments.get("lifecycle_profile").is_none() {
+                        payload["lifecycle_profile"] = json!("loop-auto");
                     }
-                    _ => return Err(FrameworkError::validation(format!("Invalid goal_type: {gt}. Must be one of: linear, loop"))),
+                } else if gt == "linear" {
+                    return Err(FrameworkError::validation(
+                        "goal_type=linear was removed in v10 — all goals follow loop semantics. Remove goal_type or set goal_type=loop."
+                    ));
+                } else {
+                    return Err(FrameworkError::validation(format!("Invalid goal_type: {gt}. Only goal_type=loop is supported in v10.")));
                 }
             }
             if let Some(lp) = arguments.get("lifecycle_profile").and_then(Value::as_str) {

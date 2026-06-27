@@ -105,7 +105,7 @@ pub fn build_driver_command(
         }
         other => {
             tracing::warn!(
-                "Unknown session supervisor host: \"{other}\" — using placeholder driver spec. \
+                "Unknown orchestrator host: \"{other}\" — using placeholder driver spec. \
                  Check that the host provider is registered via hooks."
             );
             // Placeholder spec so state management (launch/terminate/list) can proceed

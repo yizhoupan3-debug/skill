@@ -35,8 +35,10 @@ fn init_browser_mcp_dispatch() {
         inspect_trace_stream: inspect_trace_stream_wrapper,
     });
     // Adapter: browser-mcp returns anyhow::Error; dispatch hook expects String.
-    host_projection::hooks::set_browser_dispatch(|cmd| {
-        Ok(browser_mcp::dispatch_browser_command(cmd).map_err(|e| e.to_string())?)
+    host_projection::hooks::modify_runtime_hooks(|hooks| {
+        hooks.browser_dispatch = |cmd| {
+            Ok(browser_mcp::dispatch_browser_command(cmd).map_err(|e| e.to_string())?)
+        };
     });
 }
 

@@ -12,6 +12,7 @@ fr-contracts = { path = "../fr-contracts" }
 core-state-utils = { path = "../core-state-utils" }
 core-state-types = { path = "../core-state-types" }
 core-policy = { path = "../core-policy" }
+core-errors = { path = "../core-errors" }
 framework-kernel = { path = "../framework-kernel" }
 http-util = { path = "../http-util" }
 runtime-storage = { path = "../runtime-storage" }

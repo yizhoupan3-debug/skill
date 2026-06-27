@@ -5,7 +5,7 @@
 //! FEATURE layer — serialization format belongs with the data model.
 
 use crate::proof_dag::Blueprint;
-use core_policy::error::FrameworkError;
+use core_errors::FrameworkError;
 
 /// Schema version string written into every serialized DAG.
 pub const SERIALIZATION_SCHEMA_VERSION: &str = "proof-dag-v1";

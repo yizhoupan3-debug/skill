@@ -1,7 +1,7 @@
 //! Human-readable checks for `router-rs framework doctor`.
 
 use core_policy::doc_registry;
-use core_policy::error::FrameworkError;
+use core_errors::FrameworkError;
 use fr_exec::router_env_flags::router_rs_task_ledger_flock_enabled;
 use core_state::task_state::resolve_task_view;
 use serde_json::{Value, json};

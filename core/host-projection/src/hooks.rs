@@ -1,17 +1,18 @@
 //! host-projection hooks proxy layer.
 //!
-//! Owns the shared function pointer OnceLock store and proxy functions.
+//! Owns the shared `RuntimeHooks` struct (replaces ~38 individual OnceLock slots).
 //! L4 crates (runtime-core, framework-runtime, goal-engine) register
-//! their callbacks into these slots during bootstrap.
+//! their callbacks via `set_runtime_hooks()` during bootstrap.
+//! L5 crates (research-harness) extend specific fields via `modify_runtime_hooks()`.
 //!
 //! Proxy functions are re-exported for consumers that need them.
 
-use core_policy::error::FrameworkError;
+use core_errors::FrameworkError;
 type Result<T> = std::result::Result<T, FrameworkError>;
 
 use serde_json::Value;
 use std::path::{Path, PathBuf};
-use std::sync::OnceLock;
+use std::sync::Mutex;
 
 // ── Function pointer type aliases (reduce type_complexity warnings) ──
 
@@ -32,28 +33,13 @@ type BuildCheckpointFn = fn(&Path, &str, &str, Option<&str>, bool, bool) -> Valu
 /// Append evidence index row: (repo_root, task_id, metadata) -> Result<()>
 type AppendEvidenceFn = fn(&Path, Option<&str>, serde_json::Map<String, Value>) -> Result<()>;
 
-/// Register a `OnceLock` cell with consistent diagnostics on double-registration.
-/// In `#[cfg(test)]` mode, includes a backtrace to help debug conflicting registrations.
-pub fn once_lock_set<T>(lock: &OnceLock<T>, value: T, name: &str) {
-    lock.set(value).unwrap_or_else(|_| {
-        #[cfg(test)]
-        {
-            let bt = std::backtrace::Backtrace::force_capture();
-            tracing::warn!(
-                "{name} already registered — second call ignored\nbacktrace:\n{bt:?}"
-            );
-        }
-        #[cfg(not(test))]
-        tracing::warn!("{name} already registered — second call ignored");
-    });
-}
-
-// ── Hook proxy macros (Phase C: RuntimeHooks-only, no OnceLock) ──
+// ── Hook proxy macros (RuntimeHooks-only) ──
 
 /// Proxy functions that delegate to `RuntimeHooks` struct.
 ///
-/// v10 Wave 3a Phase C: replaces `once_lock_hook!` macro. No OnceLock slots
-/// or register functions — all hooks are set via `set_runtime_hooks()` during bootstrap.
+/// v10 Wave 3a Phase C ✅: replaces `once_lock_hook!` macro + all individual
+/// OnceLock slots. All hooks are set via `set_runtime_hooks()` during bootstrap;
+/// L5 crates extend specific fields via `modify_runtime_hooks()`.
 ///
 /// Arms:
 /// - `fn name(args...);` — unit return, no-op if RuntimeHooks not yet set
@@ -406,8 +392,7 @@ pub use crate::test_helpers::{
 // goal readiness without the hooks proxy.
 
 // ────────────────────────────────────────────────────────────────
-// paper hooks: individual OnceLock slots (set by research-harness)
-// Proxy reads individual slot first (priority over RuntimeHooks).
+// paper hooks + research activity (RuntimeHooks-only, Phase C ✅)
 // ────────────────────────────────────────────────────────────────
 
 /// Append paper prose/adversarial context: (repo_root, prompt_text, contexts, host)
@@ -415,63 +400,14 @@ type AppendPaperContextFn = fn(&Path, &str, &mut Vec<String>, PaperProseHookHost
 /// Merge paper prose/adversarial before submit: (repo_root, output, prompt_text, use_followup_message, host)
 type MergePaperContextFn = fn(&Path, &mut Value, &str, bool, PaperProseHookHost);
 
-static APPEND_PROSE: OnceLock<AppendPaperContextFn> = OnceLock::new();
-static MERGE_PROSE: OnceLock<MergePaperContextFn> = OnceLock::new();
-static APPEND_ADVERSARIAL: OnceLock<AppendPaperContextFn> = OnceLock::new();
-static MERGE_ADVERSARIAL: OnceLock<MergePaperContextFn> = OnceLock::new();
+runtime_hook_proxy! { fn maybe_append_paper_prose_context(repo_root: &Path, prompt_text: &str, contexts: &mut Vec<String>, host: PaperProseHookHost); }
+runtime_hook_proxy! { fn maybe_merge_paper_prose_before_submit(repo_root: &Path, output: &mut Value, prompt_text: &str, use_followup_message: bool, host: PaperProseHookHost); }
+runtime_hook_proxy! { fn maybe_append_paper_adversarial_context(repo_root: &Path, prompt_text: &str, contexts: &mut Vec<String>, host: PaperProseHookHost); }
+runtime_hook_proxy! { fn maybe_merge_paper_adversarial_before_submit(repo_root: &Path, output: &mut Value, prompt_text: &str, use_followup_message: bool, host: PaperProseHookHost); }
 
-pub fn register_append_prose(f: AppendPaperContextFn) { once_lock_set(&APPEND_PROSE, f, "APPEND_PROSE"); }
-pub fn register_merge_prose(f: MergePaperContextFn) { once_lock_set(&MERGE_PROSE, f, "MERGE_PROSE"); }
-pub fn register_append_adversarial(f: AppendPaperContextFn) { once_lock_set(&APPEND_ADVERSARIAL, f, "APPEND_ADVERSARIAL"); }
-pub fn register_merge_adversarial(f: MergePaperContextFn) { once_lock_set(&MERGE_ADVERSARIAL, f, "MERGE_ADVERSARIAL"); }
-
-pub fn register_paper_hooks(
-    append_prose: AppendPaperContextFn,
-    merge_prose: MergePaperContextFn,
-    append_adversarial: AppendPaperContextFn,
-    merge_adversarial: MergePaperContextFn,
-) {
-    register_append_prose(append_prose);
-    register_merge_prose(merge_prose);
-    register_append_adversarial(append_adversarial);
-    register_merge_adversarial(merge_adversarial);
-}
-
-pub fn maybe_append_paper_prose_context(repo_root: &Path, prompt_text: &str, contexts: &mut Vec<String>, host: PaperProseHookHost) {
-    if let Some(f) = APPEND_PROSE.get() { f(repo_root, prompt_text, contexts, host); return; }
-    if let Some(h) = get_runtime_hooks() { (h.maybe_append_paper_prose_context)(repo_root, prompt_text, contexts, host); }
-}
-pub fn maybe_merge_paper_prose_before_submit(repo_root: &Path, output: &mut Value, prompt_text: &str, use_followup_message: bool, host: PaperProseHookHost) {
-    if let Some(f) = MERGE_PROSE.get() { f(repo_root, output, prompt_text, use_followup_message, host); return; }
-    if let Some(h) = get_runtime_hooks() { (h.maybe_merge_paper_prose_before_submit)(repo_root, output, prompt_text, use_followup_message, host); }
-}
-pub fn maybe_append_paper_adversarial_context(repo_root: &Path, prompt_text: &str, contexts: &mut Vec<String>, host: PaperProseHookHost) {
-    if let Some(f) = APPEND_ADVERSARIAL.get() { f(repo_root, prompt_text, contexts, host); return; }
-    if let Some(h) = get_runtime_hooks() { (h.maybe_append_paper_adversarial_context)(repo_root, prompt_text, contexts, host); }
-}
-pub fn maybe_merge_paper_adversarial_before_submit(repo_root: &Path, output: &mut Value, prompt_text: &str, use_followup_message: bool, host: PaperProseHookHost) {
-    if let Some(f) = MERGE_ADVERSARIAL.get() { f(repo_root, output, prompt_text, use_followup_message, host); return; }
-    if let Some(h) = get_runtime_hooks() { (h.maybe_merge_paper_adversarial_before_submit)(repo_root, output, prompt_text, use_followup_message, host); }
-}
-
-// ────────────────────────────────────────────────────────────────
-// research activity log: individual OnceLock slot (set by research-harness)
-// ────────────────────────────────────────────────────────────────
-
-static RESEARCH_ACTIVITY: OnceLock<fn(&Path, &str, &str)> = OnceLock::new();
-
-pub fn register_research_activity_hook(f: fn(&Path, &str, &str)) {
-    once_lock_set(&RESEARCH_ACTIVITY, f, "RESEARCH_ACTIVITY");
-}
-
-pub fn maybe_record_research_activity(repo_root: &Path, tool_name: &str, summary: &str) {
-    if let Some(f) = RESEARCH_ACTIVITY.get() { f(repo_root, tool_name, summary); return; }
-    if let Some(h) = get_runtime_hooks() { (h.maybe_record_research_activity)(repo_root, tool_name, summary); }
-}
+runtime_hook_proxy! { fn maybe_record_research_activity(repo_root: &Path, tool_name: &str, summary: &str); }
 
 // ── Skill routing bridge: removed ──
-// Was never registered in production (register_skill_routing_bridge not called).
-// Route decision goes through route_task_with_manifest_fallback instead.
 // Was never registered in production (register_skill_routing_bridge not called).
 // Route decision goes through route_task_with_manifest_fallback instead.
 
@@ -526,21 +462,12 @@ runtime_hook_proxy! { fn evaluate_mcp_pre_guard_safe(tool_name: &str, arguments:
 // ── Test-only re-exports from test_helpers (for host_extensions::cursor test code) ──
 
 
-// ── Host-projection-specific OnceLock slots ──
-
 /// Research tool dispatch: injected at startup by runtime-core
 /// to break the L3→L6 dependency direction.
 type ResearchToolDispatchFn = fn(&str, &Value) -> std::result::Result<String, FrameworkError>;
 
-// Returns None if not registered (caller should fall back to core-state).
-static RESEARCH_TOOL_DISPATCH_SLOT: OnceLock<ResearchToolDispatchFn> = OnceLock::new();
-
-pub fn register_research_tool_dispatch(f: ResearchToolDispatchFn) {
-    once_lock_set(&RESEARCH_TOOL_DISPATCH_SLOT, f, "RESEARCH_TOOL_DISPATCH_SLOT");
-}
-
+/// Get the registered research tool dispatch function from RuntimeHooks.
 pub fn get_research_tool_dispatch() -> Option<ResearchToolDispatchFn> {
-    if let Some(f) = RESEARCH_TOOL_DISPATCH_SLOT.get().copied() { return Some(f); }
     get_runtime_hooks().map(|h| h.research_tool_dispatch)
 }
 
@@ -559,28 +486,17 @@ type McpToolSearchSkillsFn = fn(query: &str, limit: usize, effective_host: &str,
 runtime_hook_proxy! { fn mcp_tool_skill_route(query: &str, host_id: &str, first_turn: bool, repo_root: &str) -> Result<String> = err("MCP_TOOL_SKILL_ROUTE not registered — runtime-core boot required"); }
 runtime_hook_proxy! { fn mcp_tool_search_skills(query: &str, limit: usize, effective_host: &str, repo_root: &str) -> Result<String> = err("MCP_TOOL_SEARCH_SKILLS not registered — runtime-core boot required"); }
 
-// ── Browser dispatch (moved from runtime-core to break L3→L4 dep) ──
-// Manual: custom register with different warning pattern
+// ── Browser dispatch (via RuntimeHooks, set via modify_runtime_hooks) ──
 type BrowserDispatchFn = fn(framework_kernel::cli_args::BrowserSubcommand) -> Result<()>;
-static BROWSER_DISPATCH: OnceLock<BrowserDispatchFn> = OnceLock::new();
-
-/// Register the browser command dispatch function (call once at startup).
-pub fn set_browser_dispatch(f: BrowserDispatchFn) {
-    if BROWSER_DISPATCH.set(f).is_err() {
-        tracing::warn!("BROWSER_DISPATCH already registered — second call ignored");
-    }
-}
 
 /// Dispatch a browser subcommand. Returns `Err` if no dispatch function was registered.
 pub fn dispatch_browser_command(
     command: framework_kernel::cli_args::BrowserSubcommand,
 ) -> Result<()> {
-    match BROWSER_DISPATCH.get() {
-        Some(f) => f(command),
-        None => Err(FrameworkError::validation(
-            "browser-mcp dispatch not registered; call set_browser_dispatch() at startup",
-        )),
-    }
+    get_runtime_hooks().map(|h| (h.browser_dispatch)(command))
+        .unwrap_or_else(|| Err(FrameworkError::validation(
+            "browser-mcp dispatch not registered; set via modify_runtime_hooks() at startup",
+        )))
 }
 
 // ── Runtime trace transport proxies (break browser-mcp L3→L4 dep) ──
@@ -608,14 +524,16 @@ runtime_hook_proxy! { fn tool_closeout_record_write_dispatch(args: &Value, repo_
 runtime_hook_proxy! { fn tool_closeout_gate_evaluate(args: &Value, repo_root: &Path, host_id: &str) -> Result<String> = err("CLOSEOUT_GATE_EVALUATE not registered — runtime-core boot required"); }
 
 // ════════════════════════════════════════════════════════════════
-// RuntimeHooks — Wave 3a Phase A: consolidate all fn ptr slots
+// RuntimeHooks — Wave 3a ✅ all phases complete
 // ════════════════════════════════════════════════════════════════
 
 /// Consolidated function pointer hooks (replaces ~38 individual OnceLock slots).
 ///
 /// v10 Wave 3a Phase A: define struct + double-registration from runtime-core bootstrap.
 /// Phase B: migrate consumers from proxy functions to `get_runtime_hooks()?.field`.
-/// Phase C: remove old `once_lock_hook!` macro and individual OnceLock slots.
+/// Phase C ✅: all individual OnceLock slots removed; L5 crates use
+/// `modify_runtime_hooks()` to extend research-specific fields after bootstrap.
+#[derive(Clone, Copy)]
 pub struct RuntimeHooks {
     // framework_runtime (5 fields)
     pub closeout_record_path_for_task: fn(&Path, &str) -> Result<PathBuf>,
@@ -661,19 +579,34 @@ pub struct RuntimeHooks {
     pub inspect_trace_stream: InspectTraceStreamFn,
 }
 
-static RUNTIME_HOOKS: OnceLock<RuntimeHooks> = OnceLock::new();
+static RUNTIME_HOOKS: Mutex<Option<RuntimeHooks>> = Mutex::new(None);
 
 /// Get the consolidated RuntimeHooks struct. Returns `None` if not yet set (bootstrap not complete).
-pub fn get_runtime_hooks() -> Option<&'static RuntimeHooks> {
-    RUNTIME_HOOKS.get()
+pub fn get_runtime_hooks() -> Option<RuntimeHooks> {
+    RUNTIME_HOOKS.lock().ok().and_then(|g| g.clone())
 }
 
 /// Set the consolidated RuntimeHooks struct during bootstrap.
-/// Idempotent: second call is silently ignored.
+/// Second call from L5 (research-harness) replaces the struct with research-specific fields.
 pub fn set_runtime_hooks(hooks: RuntimeHooks) {
-    RUNTIME_HOOKS.set(hooks).unwrap_or_else(|_| {
-        tracing::warn!("RuntimeHooks already registered — second call ignored");
-    });
+    if let Ok(mut guard) = RUNTIME_HOOKS.lock() {
+        let was_set = guard.is_some();
+        *guard = Some(hooks);
+        if was_set {
+            tracing::debug!("RuntimeHooks replaced (L5 research-harness extension)");
+        }
+    }
+}
+
+/// Modify specific fields of the already-initialized RuntimeHooks struct in-place.
+/// Used by L5 crates (research-harness) and browser-mcp dispatch to override
+/// specific hook implementations after `runtime_core::init_hooks()`.
+pub fn modify_runtime_hooks(f: impl FnOnce(&mut RuntimeHooks)) {
+    if let Ok(mut guard) = RUNTIME_HOOKS.lock() {
+        if let Some(hooks) = guard.as_mut() {
+            f(hooks);
+        }
+    }
 }
 
 // ── Mirror type structural canary tests ──

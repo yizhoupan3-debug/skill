@@ -29,6 +29,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "agent-orchestrator"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "core-errors",
+ "core-policy",
+ "core-state",
+ "core-state-utils",
+ "framework-kernel",
+ "libc",
+ "regex",
+ "runtime-storage",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tracing",
+]
+
+[[package]]
 name = "ahash"
 version = "0.8.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1169,6 +1188,7 @@ dependencies = [
 name = "fr-contracts"
 version = "0.1.0"
 dependencies = [
+ "core-errors",
  "core-policy",
  "ctor",
  "fr-utils",
@@ -1185,6 +1205,7 @@ name = "fr-exec"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "core-errors",
  "core-policy",
  "core-state-types",
  "core-state-utils",
@@ -1234,6 +1255,7 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "codegraph-rs",
+ "core-errors",
  "core-policy",
  "core-state",
  "core-state-utils",
@@ -1551,6 +1573,7 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "clap",
+ "core-errors",
  "core-policy",
  "core-state",
  "core-state-types",
@@ -3216,6 +3239,7 @@ dependencies = [
  "anyhow",
  "chrono",
  "clap",
+ "core-errors",
  "core-policy",
  "core-state",
  "core-state-utils",
@@ -3337,9 +3361,11 @@ checksum = "6c20b6793b5c2fa6553b250154b78d6d0db37e72700ae35fad9387a46f487c97"
 name = "runtime-core"
 version = "0.1.0"
 dependencies = [
+ "agent-orchestrator",
  "chrono",
  "clap",
  "codegraph-rs",
+ "core-errors",
  "core-policy",
  "core-state",
  "core-state-utils",
@@ -3370,7 +3396,6 @@ dependencies = [
  "serde",
  "serde_json",
  "serial_test",
- "session-supervisor",
  "sha2 0.11.0",
  "tempfile",
  "tokio",
@@ -3385,6 +3410,7 @@ dependencies = [
 name = "runtime-core-contracts"
 version = "0.1.0"
 dependencies = [
+ "core-errors",
  "core-policy",
  "framework-kernel",
  "insta",
@@ -3400,6 +3426,7 @@ dependencies = [
 name = "runtime-infra"
 version = "0.1.0"
 dependencies = [
+ "core-errors",
  "core-policy",
  "core-state",
  "core-state-utils",
@@ -3420,6 +3447,7 @@ name = "runtime-storage"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "core-errors",
  "core-policy",
  "core-state-utils",
  "framework-kernel",
@@ -3635,24 +3663,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
-]
-
-[[package]]
-name = "session-supervisor"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "core-policy",
- "core-state",
- "core-state-utils",
- "framework-kernel",
- "libc",
- "regex",
- "runtime-storage",
- "serde",
- "serde_json",
- "tempfile",
- "tracing",
 ]
 
 [[package]]

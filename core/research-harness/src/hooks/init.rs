@@ -1,53 +1,32 @@
 //! Research-harness hook initialization.
 //!
-//! Registers L5 research hooks into the L0 function-pointer registry.
+//! Registers L5 research hooks into the L0 RuntimeHooks struct.
 //! Called explicitly from the binary entry point (`router-rs-cli.rs`).
 //!
 //! This decouples runtime-core (L4) from research-harness (L5) — the DAG
 //! violation of L4→L5 is eliminated because L5 registers its own hooks
-//! into L0, and L4 never needs to depend on L5.
-//!
-//! Safe to call multiple times — internal `OnceLock` guards make repeated
-//! registration calls no-ops.
+//! directly into L0 via `modify_runtime_hooks()`, and L4 never depends on L5.
 
 use host_projection::hooks;
 
-/// Register all research hooks into the L0 function-pointer registry.
+/// Register all research hooks into the L0 RuntimeHooks struct.
+/// Safe to call multiple times — `modify_runtime_hooks` is idempotent.
 pub fn init_hooks() {
-    // ── Paper prose / adversarial hooks ──
-    // Closure wrappers adapt the study functions' signatures to match the
-    // L0 function-pointer type expected by `register_paper_hooks`.
-    // The closures are not needed for lifetime adaptation — L0 accepts `&str`.
-    hooks::register_paper_hooks(
-        |root, prompt, lines, host| {
-            super::paper_prose::maybe_append_paper_prose_context(root, prompt, lines, host)
-        },
-        |root, output, prompt, followup, host| {
-            super::paper_prose::maybe_merge_paper_prose_before_submit(
-                root, output, prompt, followup, host,
-            )
-        },
-        |root, prompt, lines, host| {
-            super::paper_adversarial::maybe_append_paper_adversarial_context(
-                root, prompt, lines, host,
-            )
-        },
-        |root, output, prompt, followup, host| {
-            super::paper_adversarial::maybe_merge_paper_adversarial_before_submit(
-                root, output, prompt, followup, host,
-            )
-        },
-    );
-
-    // ── Research activity log hook ──
-    hooks::register_research_activity_hook(
-        |root, tool, summary| {
-            if let Err(e) = super::activity_log::maybe_log_research_activity(tool, summary, root) {
+    hooks::modify_runtime_hooks(|h| {
+        h.maybe_append_paper_prose_context = super::paper_prose::maybe_append_paper_prose_context;
+        h.maybe_merge_paper_prose_before_submit =
+            super::paper_prose::maybe_merge_paper_prose_before_submit;
+        h.maybe_append_paper_adversarial_context =
+            super::paper_adversarial::maybe_append_paper_adversarial_context;
+        h.maybe_merge_paper_adversarial_before_submit =
+            super::paper_adversarial::maybe_merge_paper_adversarial_before_submit;
+        h.maybe_record_research_activity = |root, tool, summary| {
+            if let Err(e) =
+                super::activity_log::maybe_log_research_activity(tool, summary, root)
+            {
                 tracing::warn!("[research-activity-log] failed: {e}");
             }
-        },
-    );
-
-    // ── Research tool dispatch ──
-    hooks::register_research_tool_dispatch(crate::mcp_tools::handle_research_tool);
+        };
+        h.research_tool_dispatch = crate::mcp_tools::handle_research_tool;
+    });
 }

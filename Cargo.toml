@@ -34,7 +34,7 @@ members = [
     "core/runtime-storage",
     "core/runtime-core",
     "core/runtime-core-contracts",
-    "core/session-supervisor",
+    "core/agent-orchestrator",
     "core/trace-runtime",
     "core/browser-mcp-dispatch",
     "tools/browser-mcp",

@@ -18,6 +18,7 @@ path = "src/lib.rs"
 [dependencies]
 chrono = { workspace = true }
 core-policy = { path = "../core-policy" }
+core-errors = { path = "../core-errors" }
 core-state-utils = { path = "../core-state-utils" }
 framework-kernel = { path = "../framework-kernel" }
 libc = { workspace = true }

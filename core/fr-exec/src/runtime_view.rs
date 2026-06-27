@@ -5,7 +5,7 @@
 
 use fr_utils::constants::*;
 use fr_utils::constants::EVIDENCE_INDEX_FILENAME;
-use fr_utils::json_io::{read_json_if_exists, read_json_strict, read_text_if_exists};
+use fr_utils::json_io::{read_json_if_exists, read_json_strict};
 use fr_utils::json_value::{
     first_nonempty, join_lines, nonempty_string, safe_slug, stable_line_items, value_bool_or_none,
     value_string_list, value_text,
@@ -204,10 +204,10 @@ pub fn load_framework_runtime_view(
     };
 
     FrameworkRuntimeView {
-        session_summary_text: read_text_if_exists(&read_task_or_mirror(SESSION_SUMMARY_FILENAME)),
-        next_actions: read_json_if_exists(&read_task_or_mirror(NEXT_ACTIONS_FILENAME)),
+        session_summary_text: String::new(),
+        next_actions: Value::Object(Map::new()),
         evidence_index: read_json_if_exists(&read_task_or_mirror(EVIDENCE_INDEX_FILENAME)),
-        trace_metadata: read_json_if_exists(&read_task_or_mirror(TRACE_METADATA_FILENAME)),
+        trace_metadata: Value::Object(Map::new()),
         supervisor_state,
         routing_runtime_version: load_routing_runtime_version(repo_root),
         repo_root: repo_root.to_path_buf(),
@@ -502,10 +502,7 @@ pub fn classify_runtime_continuity(snapshot: &FrameworkRuntimeView) -> Value {
         },
         "summary_fields": summary,
         "paths": {
-            "session_summary": snapshot.current_root.join(SESSION_SUMMARY_FILENAME).display().to_string(),
-            "next_actions": snapshot.current_root.join(NEXT_ACTIONS_FILENAME).display().to_string(),
             "evidence_index": snapshot.current_root.join(EVIDENCE_INDEX_FILENAME).display().to_string(),
-            "trace_metadata": snapshot.current_root.join(TRACE_METADATA_FILENAME).display().to_string(),
             "task_root": snapshot.task_root.display().to_string(),
             "current_pointer_root": snapshot.mirror_root.display().to_string(),
             "supervisor_state": snapshot.repo_root.join(SUPERVISOR_STATE_FILENAME).display().to_string(),
@@ -758,7 +755,7 @@ fn normalize_evidence_index(payload: &Value) -> Vec<Map<String, Value>> {
 
 fn normalize_trace_skills(payload: &Value) -> Vec<String> {
     let skills = if payload.get("schema_version").and_then(Value::as_str)
-        == Some(TRACE_METADATA_SCHEMA_VERSION)
+        == Some("trace-metadata-v2")
     {
         payload.get("matched_skills")
     } else {

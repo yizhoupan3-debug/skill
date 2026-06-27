@@ -22,8 +22,8 @@ use std::env;
 
 const ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE_ENV: &str = "ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE";
 const ROUTER_RS_HOOK_TIMING_ENV: &str = "ROUTER_RS_HOOK_TIMING";
-const ROUTER_RS_SESSION_SUPERVISOR_REAL_PROCESS_SMOKE_ENV: &str =
-    "ROUTER_RS_SESSION_SUPERVISOR_REAL_PROCESS_SMOKE";
+const ROUTER_RS_ORCHESTRATOR_REAL_PROCESS_SMOKE_ENV: &str =
+    "ROUTER_RS_ORCHESTRATOR_REAL_PROCESS_SMOKE";
 
 pub use core_policy::env_flags::{
     router_rs_subagent_model_inherit_nudge_enabled,
@@ -140,8 +140,8 @@ pub fn router_rs_qg_max_rounds_cap() -> u64 {
 }
 
 /// §6.4 cat.1 real-process spawn/terminate smoke (`sleep 1` via `smoke-shell` host). Opt-in for CI.
-pub fn router_rs_session_supervisor_real_process_smoke_enabled() -> bool {
-    router_rs_env_enabled_default_false(ROUTER_RS_SESSION_SUPERVISOR_REAL_PROCESS_SMOKE_ENV)
+pub fn router_rs_orchestrator_real_process_smoke_enabled() -> bool {
+    router_rs_env_enabled_default_false(ROUTER_RS_ORCHESTRATOR_REAL_PROCESS_SMOKE_ENV)
 }
 
 #[cfg(test)]

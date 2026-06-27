@@ -1,6 +1,6 @@
 use super::SQLITE_TABLE_NAME;
 use super::paths::normalize_runtime_path;
-use core_policy::error::FrameworkError;
+use core_errors::FrameworkError;
 use rusqlite::{Connection, OptionalExtension, params};
 use std::collections::HashSet;
 use std::fs;

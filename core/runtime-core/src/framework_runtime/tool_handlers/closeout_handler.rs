@@ -1,7 +1,7 @@
 //! Closeout tool handlers (`domain:closeout`).
 //! closeout_record_write (file I/O + evaluation) and closeout_gate_evaluate.
 
-use core_policy::error::FrameworkError;
+use core_errors::FrameworkError;
 use serde_json::{json, Map, Value};
 use std::path::Path;
 

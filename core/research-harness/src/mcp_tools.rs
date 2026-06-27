@@ -2,7 +2,7 @@
 //!
 //! Delegated from host-projection's tool dispatcher (Phase 4 T1).
 
-use core_policy::error::FrameworkError;
+use core_errors::FrameworkError;
 use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::path::Path;

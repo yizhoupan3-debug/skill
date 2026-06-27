@@ -12,7 +12,7 @@ use host_projection::hooks;
 use host_projection::host_entrypoint_sync::sync_host_entrypoints;
 use super::args::*;
 use fr_utils::json_io::{parse_json_input, print_json_value as raw_print_json_value};
-use runtime_core::closeout_enforcement::{
+use core_state::closeout_validation::{
     CloseoutEvidenceContext, closeout_enforcement_contract, evaluate_closeout_record_value,
     evaluate_closeout_record_value_with_context,
 };

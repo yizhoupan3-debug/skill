@@ -32,7 +32,7 @@ Unified research harness crate for the skill framework. Integrates paper revisio
 Does **not** depend on `runtime-core` — avoids circular dependency.
 `runtime-core` can call `research-harness` hook interfaces through `host-projection` function pointers.
 
-## MCP Tools
+## MCP Tools & QG Checkers
 
 Exposed through `host-projection`'s `mcp_stdio_harness`:
 
@@ -41,6 +41,20 @@ Exposed through `host-projection`'s `mcp_stdio_harness`:
 - `research_aigc_humanize` — AIGC reduction (syntactic rewriting / lexical substitution)
 - `research_claim_drift` — Claim drift detection (original vs current claims)
 - `research_review_loop` — Multi-round adversarial review loop
+
+### QG Route Checkers (Wave 4b/5b)
+
+Registered via `research_harness::register_qg_checkers()` into the shared `CheckerRegistry`
+at startup. All checkers are in-place adapter modules in `src/verification/`:
+
+| Checker | Scene | Description |
+|---------|-------|-------------|
+| `LiteratureGate` | RESEARCH | Citation-claim alignment, DOI reachability, closest-work identification |
+| `ProseQCChecker` | RESEARCH | AI slop detection, hedging analysis, terminology consistency |
+| `Reproducibility` | RESEARCH | Experiment seed/determinism/environment lock verification |
+| `StatisticalChecker` | RESEARCH | p-value recomputation, GRIM test, effect size reporting |
+| `StructureGate` | RESEARCH | LaTeX compilation, cross-ref consistency, notation/format checks |
+| `FormalGate/DimensionalConsistency` | RESEARCH | CAS identity simplification, dimensional analysis, SMT consistency |
 
 ## Backward Compatibility
 

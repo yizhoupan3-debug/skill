@@ -3,7 +3,6 @@
 pub mod crypto_util;
 pub mod dev_exempt;
 pub mod env_flags;
-pub mod error;
 pub mod goal_auto_detect;
 pub mod hook_common;
 pub mod hook_policy;

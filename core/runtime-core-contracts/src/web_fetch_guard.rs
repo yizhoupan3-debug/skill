@@ -5,7 +5,7 @@ use std::borrow::Cow;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, ToSocketAddrs};
 use std::str::FromStr;
 
-use core_policy::error::FrameworkError;
+use core_errors::FrameworkError;
 
 type Result<T> = std::result::Result<T, FrameworkError>;
 

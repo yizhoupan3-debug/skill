@@ -3,7 +3,7 @@
 //! Functions for building the contract summary envelope (`build_framework_contract_summary_envelope`)
 //! including the SHA-256 digest, host harness fragment, and prompt-line helpers.
 
-use core_policy::error::FrameworkError;
+use core_errors::FrameworkError;
 use fr_utils::constants::{
     FRAMEWORK_CONTRACT_SUMMARY_SCHEMA_VERSION, FRAMEWORK_RUNTIME_AUTHORITY,
 };

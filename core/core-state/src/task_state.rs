@@ -6,7 +6,7 @@
 //! (phase 2); this module only aggregates read models (`ResolvedTaskView`, `ContinuityFrame`).
 
 use crate::state_manager::{
-    goal_state_requests_continuation, read_goal_state, task_evidence_artifacts_summary_for_task,
+    read_goal_state, task_evidence_artifacts_summary_for_task,
 };
 use crate::state_manager::{
     read_quality_gate_state, validate_external_research_strict, validate_external_research_structured,
@@ -462,8 +462,6 @@ pub fn hydrate_task_state_hybrid(
     let mut resolution_notes = Vec::new();
     let mut goal_state: Option<Value> = None;
     let mut rfv_loop_state: Option<Value> = None;
-    let mut evidence_rows_non_empty = false;
-    let mut has_successful_verification = false;
     // TASK_STATE.json aggregate was removed in Wave 2b.
     // Always read directly from physical files.
     match read_goal_state(repo_root, Some(task_id)) {
@@ -476,9 +474,8 @@ pub fn hydrate_task_state_hybrid(
             push_resolution_read_err(&mut resolution_notes, "rfv_loop_state_read_failed", e)
         }
     }
-    let (rows, ok) = task_evidence_artifacts_summary_for_task(repo_root, task_id);
-    evidence_rows_non_empty = rows;
-    has_successful_verification = ok;
+    let (mut evidence_rows_non_empty, mut has_successful_verification) =
+        task_evidence_artifacts_summary_for_task(repo_root, task_id);
 
     // Read TASK_LEDGER.jsonl and replay all transactions (TASK_STATE.json aggregate was removed in Wave 2b, so no last_seq filtering)
     let txs = read_task_ledger_transactions(repo_root, task_id);

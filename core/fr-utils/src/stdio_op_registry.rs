@@ -45,7 +45,7 @@ const RUNTIME_STDIO_OPS: &[&str] = &[
     "runtime_observability_health_snapshot",
     "background_control",
     "background_state",
-    "session_supervisor",
+    "orchestrator",
     "describe_transport",
     "describe_handoff",
     "checkpoint_resume_manifest",
@@ -179,7 +179,7 @@ mod tests {
     #[test]
     fn classify_runtime_ops() {
         assert_eq!(classify_stdio_op("execute"), Some(StdioOpDomain::Runtime));
-        assert_eq!(classify_stdio_op("session_supervisor"), Some(StdioOpDomain::Runtime));
+        assert_eq!(classify_stdio_op("orchestrator"), Some(StdioOpDomain::Runtime));
     }
 
     #[test]

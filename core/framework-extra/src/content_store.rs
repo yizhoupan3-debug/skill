@@ -10,7 +10,7 @@
 //!
 //! Reuses `fr_utils::json_io::*` for all I/O (no new filesystem primitives).
 
-use core_policy::error::FrameworkError;
+use core_errors::FrameworkError;
 use fr_utils::constants::CONTENT_STORE_DIR;
 use fr_utils::json_io::write_json_if_changed;
 use serde::{Deserialize, Serialize};

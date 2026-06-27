@@ -13,7 +13,6 @@ use serde_json::Value;
 use std::fs;
 use std::path::Path;
 use std::time::SystemTime;
-use core_state_types::task_state_types::GoalType;
 
 // ── Constants ──
 pub const GOAL_STATE_FILENAME: &str = "GOAL_STATE.json";
@@ -230,18 +229,6 @@ pub fn goal_state_requests_continuation(state: &Value) -> bool {
         return false;
     }
     state.get("status").and_then(Value::as_str) == Some("running")
-}
-
-/// Read `GoalType` from a parsed GOAL_STATE Value. Always returns `Loop` since
-/// `GoalType::Linear` was removed in v10 cleanup.
-pub fn read_goal_type_from_state(_state: &Value) -> GoalType {
-    GoalType::Loop
-}
-
-/// Convenience: read `GoalType` for a task_id from disk. Always returns `Loop` since
-/// `GoalType::Linear` was removed in v10 cleanup.
-pub fn read_goal_type_by_id(_repo_root: &Path, _task_id: &str) -> GoalType {
-    GoalType::Loop
 }
 
 // ── Hydration ──
@@ -889,9 +876,10 @@ mod tests {
         let _ = fs::remove_dir_all(&repo);
     }
 
-    /// GOAL 与 RFV 同 task 互斥：goal_drive start 应将活跃 RFV 标为 superseded。
+    /// GOAL 与旧 RFV 同 task：goal_drive start 不再需要 supersede RFV
+    /// (QG↔Goal 互斥在 Wave 4a-ii 中删除，QG 只是 Goal 内部模式)。
     #[test]
-    fn goal_drive_start_supersedes_active_rfv_same_task() {
+    fn goal_drive_start_ignores_old_rfv_same_task() {
         let suffix = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("time")
@@ -901,8 +889,7 @@ mod tests {
         fs::create_dir_all(repo.join("artifacts/current/mx-task")).expect("mkdir");
         let rr = repo.display().to_string();
 
-        // Write RFV state file directly (quality_gate module is being deleted;
-        // this test only needs a valid RFV state file on disk).
+        // Write old-format RFV state file (remnant of removed QG state machine).
         let rfv_path = quality_gate_state_path(&repo, "mx-task").expect("rfv path");
         if let Some(parent) = rfv_path.parent() {
             fs::create_dir_all(parent).expect("mkdir rfv dir");
@@ -918,6 +905,7 @@ mod tests {
         )
         .expect("write rfv state");
 
+        // Goal start should succeed despite old RFV state (no longer superseded).
         let ag = framework_goal_drive(json!({
             "repo_root": rr,
             "operation": "start",
@@ -930,17 +918,21 @@ mod tests {
         }))
         .expect("goal start");
 
-        let rfv_path = quality_gate_state_path(&repo, "mx-task").expect("rfv path");
+        // Verify goal was started (not that old RFV was superseded).
+        assert_eq!(ag["operation"], json!("start"));
+        assert_eq!(ag["status"], json!("running"));
+
+        // Old RFV file is left as-is (Wave 4a-ii: no mutual exclusion).
         let raw = fs::read_to_string(&rfv_path).expect("read rfv");
         let v: Value = serde_json::from_str(&raw).expect("parse rfv");
-        assert_eq!(v["loop_status"], json!("superseded"));
-        assert_eq!(v["superseded_by"], json!("goal_drive"));
+        assert_eq!(v["loop_status"], json!("active"),
+            "old RFV should not be superseded — QG互斥已删除");
 
-        let _ = fs::remove_dir_all(&repo);
-    }
+    let _ = fs::remove_dir_all(&repo);
+}
 
-    #[test]
-    fn goal_complete_rejected_when_completion_gates_depth_not_met() {
+#[test]
+fn goal_complete_rejected_when_completion_gates_depth_not_met() {
         let suffix = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("time")
@@ -1777,28 +1769,6 @@ mod tests {
         assert_eq!(after["goal"], json!("cleared goal"));
 
         let _ = fs::remove_dir_all(&repo);
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // read_goal_type_from_state
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    #[test]
-    fn read_goal_type_loop() {
-        let state = json!({"goal_type": "loop"});
-        assert_eq!(read_goal_type_from_state(&state), GoalType::Loop);
-    }
-
-    #[test]
-    fn read_goal_type_missing_still_loop() {
-        let state = json!({"status": "running"});
-        assert_eq!(read_goal_type_from_state(&state), GoalType::Loop);
-    }
-
-    #[test]
-    fn read_goal_type_unknown_value_still_loop() {
-        let state = json!({"goal_type": "banana"});
-        assert_eq!(read_goal_type_from_state(&state), GoalType::Loop);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

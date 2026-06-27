@@ -1,5 +1,5 @@
 use super::*;
-use core_policy::error::FrameworkError;
+use core_errors::FrameworkError;
 
 pub fn compatibility_alias_inventory() -> Value {
     json!({

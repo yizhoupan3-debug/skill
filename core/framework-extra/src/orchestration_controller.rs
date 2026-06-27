@@ -2,7 +2,7 @@
 //!
 //! This file contains static data constructors with hardcoded parameters.
 
-use core_policy::error::FrameworkError;
+use core_errors::FrameworkError;
 use std::collections::HashSet;
 use std::time::{SystemTime, UNIX_EPOCH};
 

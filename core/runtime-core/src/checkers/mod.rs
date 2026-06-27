@@ -7,20 +7,23 @@
 //! ## Available checkers
 //! - `evidence_checker`: validates that task evidence exists
 //! - (Wave 4b+) ProseQC, LogicAndEvidence, LiteracyChecker, etc.
-//! - (Wave 5b) 6 verification skill → QG Checker aliases for RESEARCH scene
+//!
+//! ## RESEARCH scene checkers
+//! Research verification checkers are registered via the extern mechanism
+//! in `router-rs-cli.rs` through `research_harness::register_qg_checkers`.
+//! The Wave 5b alias checkers that lived here were removed in favor of the
+//! extern registration to avoid double registration.
+//!
+//! ## External registration bridge
+//! The extern hook is set via `runtime_core::qg_route::set_extern_checkers()`
+//! before `init_hooks()`. See `router-rs-cli.rs` for the wiring.
 
 pub mod adversarial_checker;
 pub mod correctness_checker;
 pub mod evidence_checker;
-pub mod formal_gate;
-pub mod literature_gate;
 pub mod overflow_checker;
-pub mod prose_qc;
-pub mod reproducibility;
 pub mod screenshot_layout_checker;
 pub mod security_checker;
-pub mod statistical_gate;
-pub mod structure_gate;
 
 use quality_gate::scene;
 
@@ -50,30 +53,5 @@ pub fn register_checkers(registry: &mut quality_gate::CheckerRegistry) {
     registry.register(
         scene::SLIDES,
         Box::new(overflow_checker::OverflowChecker),
-    );
-    // Wave 5b: 6 verification skill → QG Checker aliases for RESEARCH scene
-    registry.register(
-        scene::RESEARCH,
-        Box::new(prose_qc::ProseQcChecker::new()),
-    );
-    registry.register(
-        scene::RESEARCH,
-        Box::new(literature_gate::LiteratureGateChecker::new()),
-    );
-    registry.register(
-        scene::RESEARCH,
-        Box::new(statistical_gate::StatisticalGateChecker::new()),
-    );
-    registry.register(
-        scene::RESEARCH,
-        Box::new(reproducibility::ReproducibilityChecker::new()),
-    );
-    registry.register(
-        scene::RESEARCH,
-        Box::new(structure_gate::StructureGateChecker::new()),
-    );
-    registry.register(
-        scene::RESEARCH,
-        Box::new(formal_gate::FormalGateChecker::new()),
     );
 }
