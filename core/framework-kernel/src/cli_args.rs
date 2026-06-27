@@ -71,6 +71,21 @@ pub enum RouterCommand {
         #[command(subcommand)]
         command: router_self::RouterSelfCommands,
     },
+    /// Research tools (migrated from MCP for blocking I/O isolation)
+    Research {
+        #[command(subcommand)]
+        command: ResearchCommand,
+    },
+    /// Math tools (migrated from MCP for blocking I/O isolation)
+    Math {
+        #[command(subcommand)]
+        command: MathCommand,
+    },
+    /// Web tools (migrated from MCP for blocking I/O isolation)
+    Web {
+        #[command(subcommand)]
+        command: WebCommand,
+    },
 }
 
 #[derive(Args, Debug, Clone)]
@@ -574,6 +589,150 @@ pub struct CurrentArtifactClutterCommand {
     pub active_task_id: String,
     #[arg(long)]
     pub repo_root: Option<PathBuf>,
+}
+
+// ── Research command types ──
+
+#[derive(Subcommand, Debug, Clone)]
+pub enum ResearchCommand {
+    /// Detect AI-generated text with probability scoring.
+    AigcCheck(ResearchAigcCheckCommand),
+    /// Freshness smoke test for academic data sources (arXiv/Semantic Scholar).
+    Smoke(ResearchSmokeCommand),
+    /// Verification sub-commands.
+    Verify {
+        #[command(subcommand)]
+        command: ResearchVerifyCommand,
+    },
+}
+
+#[derive(Subcommand, Debug, Clone)]
+pub enum ResearchVerifyCommand {
+    /// Verify DOI reachability or claim coverage scores.
+    Literature(ResearchVerifyLiteratureCommand),
+    /// Check LaTeX compilability and figure references.
+    Structure(ResearchVerifyStructureCommand),
+    /// Audit experiment reproducibility.
+    Reproducibility(ResearchVerifyReproducibilityCommand),
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct ResearchAigcCheckCommand {
+    /// Text to analyze for AI generation patterns.
+    #[arg(long)]
+    pub text: String,
+    /// Language: en (default) or zh.
+    #[arg(long, default_value = "en")]
+    pub language: String,
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct ResearchSmokeCommand {
+    /// Filter by source (arxiv, semantic-scholar).
+    #[arg(long)]
+    pub source: Option<String>,
+    /// Repository root path.
+    #[arg(long)]
+    pub repo_root: Option<PathBuf>,
+    /// Filter by barrier_id.
+    #[arg(long)]
+    pub barrier_id: Option<String>,
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct ResearchVerifyLiteratureCommand {
+    /// Check type: doi or claim_coverage.
+    #[arg(long)]
+    pub check: String,
+    /// DOI identifier (required for check=doi).
+    #[arg(long)]
+    pub doi: Option<String>,
+    /// Claims JSON array (required for check=claim_coverage).
+    #[arg(long)]
+    pub claims: Option<String>,
+    /// References JSON array (required for check=claim_coverage).
+    #[arg(long)]
+    pub references: Option<String>,
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct ResearchVerifyStructureCommand {
+    /// Path to .tex file.
+    pub path: PathBuf,
+    /// Check type: latex or figures.
+    #[arg(long)]
+    pub check: String,
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct ResearchVerifyReproducibilityCommand {
+    /// Experiment directory path.
+    pub experiment_dir: PathBuf,
+    /// JSON array of run script paths (optional).
+    #[arg(long)]
+    pub run_paths: Option<String>,
+}
+
+// ── Math command types ──
+
+#[derive(Subcommand, Debug, Clone)]
+pub enum MathCommand {
+    /// Prove a linear inequality using SMT solving.
+    Prove(MathProveCommand),
+    /// Check availability of math backends (Lean, SymPy, Z3/SMT).
+    Backend,
+    /// Verify an asymptotic reasoning chain with multiple steps.
+    AsymptoticChain(MathAsymptoticChainCommand),
+    /// Verify a Lean 4 theorem from a script file.
+    LeanVerify(MathLeanVerifyCommand),
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct MathProveCommand {
+    /// Inequality expression to prove (e.g. "x + 1 > x").
+    pub expression: String,
+    /// Solver timeout in milliseconds (optional).
+    #[arg(long)]
+    pub timeout_ms: Option<u64>,
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct MathAsymptoticChainCommand {
+    /// JSON array of asymptotic steps.
+    #[arg(long)]
+    pub steps: String,
+    /// Variable name (default: x).
+    #[arg(long, default_value = "x")]
+    pub variable: String,
+    /// Regime: oo (infinity, default) or 0 (zero).
+    #[arg(long, default_value = "oo")]
+    pub regime: String,
+    /// Skip SymPy verification.
+    #[arg(long)]
+    pub no_sympy: bool,
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct MathLeanVerifyCommand {
+    /// Path to Lean 4 script file.
+    pub script_path: PathBuf,
+}
+
+// ── Web command types ──
+
+#[derive(Subcommand, Debug, Clone)]
+pub enum WebCommand {
+    /// Fetch a URL with SSRF protection. Outputs JSON response body.
+    Fetch(WebFetchCommand),
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct WebFetchCommand {
+    /// URL to fetch (http/https only).
+    pub url: String,
+    /// Maximum bytes to read (optional, default: 50000, max: 50000).
+    #[arg(long)]
+    pub max_bytes: Option<usize>,
 }
 
 /// Framework contracts command (merged: contract-summary + contracts)
