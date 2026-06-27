@@ -9,6 +9,7 @@
 //! formatting, and MCP tool dispatch belong in `mcp_tools.rs`.
 
 use crate::types::{VerificationResult, VerificationStatus};
+use core_errors::FrameworkError;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -72,11 +73,11 @@ impl FeasibilityResult {
 // LaTeX inequality string parsing (regex)
 // ===========================================================================
 
-pub fn parse_inequality_latex(expr: &str) -> Result<Inequality, String> {
+pub fn parse_inequality_latex(expr: &str) -> Result<Inequality, FrameworkError> {
     parse_via_regex(expr)
 }
 
-fn parse_via_regex(expr: &str) -> Result<Inequality, String> {
+fn parse_via_regex(expr: &str) -> Result<Inequality, FrameworkError> {
     let cleaned = expr
         .replace("\\leq", "<=").replace("\\le", "<=")
         .replace("\\geq", ">=").replace("\\ge", ">=")
@@ -84,18 +85,18 @@ fn parse_via_regex(expr: &str) -> Result<Inequality, String> {
         .replace("\\cdot", "*").replace(' ', "");
 
     let re = regex::Regex::new(r"^(.+?)\s*(<=|>=|==|=|<|>)\s*(.+)$")
-        .map_err(|e| format!("regex: {e}"))?;
-    let caps = re.captures(&cleaned).ok_or_else(|| format!("cannot parse: {expr}"))?;
+        .map_err(|e| FrameworkError::validation(format!("regex: {e}")))?;
+    let caps = re.captures(&cleaned).ok_or_else(|| FrameworkError::validation(format!("cannot parse: {expr}")))?;
 
-    let lhs_str = caps.get(1).ok_or_else(|| "regex missing LHS group".to_string())?.as_str();
-    let sense_str = caps.get(2).ok_or_else(|| "regex missing sense group".to_string())?.as_str();
-    let rhs_str = caps.get(3).ok_or_else(|| "regex missing RHS group".to_string())?.as_str();
+    let lhs_str = caps.get(1).ok_or_else(|| FrameworkError::validation("regex missing LHS group"))?.as_str();
+    let sense_str = caps.get(2).ok_or_else(|| FrameworkError::validation("regex missing sense group"))?.as_str();
+    let rhs_str = caps.get(3).ok_or_else(|| FrameworkError::validation("regex missing RHS group"))?.as_str();
 
     let sense = match sense_str {
         "<" => InequalitySense::Lt,  "<=" => InequalitySense::Le,
         "==" | "=" => InequalitySense::Eq,
         ">=" => InequalitySense::Ge, ">" => InequalitySense::Gt,
-        _ => return Err(format!("unknown sense: {sense_str}")),
+        _ => return Err(FrameworkError::validation(format!("unknown sense: {sense_str}"))),
     };
 
     // Extract terms from both sides. Variables go to LHS, constants to RHS.
@@ -121,14 +122,14 @@ fn parse_via_regex(expr: &str) -> Result<Inequality, String> {
     Ok(Inequality::new(net_coeffs, all_vars, sense, rhs_net))
 }
 
-fn parse_number(s: &str) -> Result<f64, String> {
+fn parse_number(s: &str) -> Result<f64, FrameworkError> {
     if let Some(pos) = s.find('/') {
-        let n: f64 = s[..pos].parse().map_err(|_| format!("bad num: {}", &s[..pos]))?;
-        let d: f64 = s[pos+1..].parse().map_err(|_| format!("bad den: {}", &s[pos+1..]))?;
-        if d == 0.0 { return Err("div by zero".into()); }
+        let n: f64 = s[..pos].parse().map_err(|_| FrameworkError::validation(format!("bad num: {}", &s[..pos])))?;
+        let d: f64 = s[pos+1..].parse().map_err(|_| FrameworkError::validation(format!("bad den: {}", &s[pos+1..])))?;
+        if d == 0.0 { return Err(FrameworkError::validation("div by zero")); }
         return Ok(n / d);
     }
-    s.parse::<f64>().map_err(|_| format!("bad number: {s}"))
+    s.parse::<f64>().map_err(|_| FrameworkError::validation(format!("bad number: {s}")))
 }
 
 fn extract_terms(lhs: &str) -> (Vec<f64>, Vec<String>, f64) {
@@ -201,7 +202,7 @@ pub fn solve_system(system: &InequalitySystem, timeout_ms: Option<u64>) -> Feasi
     }
 }
 
-fn solve_via_minilp(system: &InequalitySystem) -> Result<HashMap<String, f64>, String> {
+fn solve_via_minilp(system: &InequalitySystem) -> Result<HashMap<String, f64>, FrameworkError> {
     use minilp::{ComparisonOp, OptimizationDirection, Problem};
 
     let mut prob = Problem::new(OptimizationDirection::Maximize);
@@ -227,7 +228,7 @@ fn solve_via_minilp(system: &InequalitySystem) -> Result<HashMap<String, f64>, S
                 InequalitySense::Gt => 0.0 > c.rhs,
             };
             if !ok {
-                return Err(format!("constant constraint violated: {:?} {} {}", c.coefficients, c.rhs, c.rhs));
+                return Err(FrameworkError::validation(format!("constant constraint violated: {:?} {} {}", c.coefficients, c.rhs, c.rhs)));
             }
         }
         return Ok(HashMap::new());
@@ -286,7 +287,7 @@ fn solve_via_minilp(system: &InequalitySystem) -> Result<HashMap<String, f64>, S
                 .collect();
             Ok(model)
         }
-        Err(e) => Err(format!("minilp: {e}")),
+        Err(e) => Err(FrameworkError::validation(format!("minilp: {e}"))),
     }
 }
 

@@ -5,6 +5,7 @@
 //! No external dependencies beyond `std` and `minilp` (for inequality solving).
 
 use crate::verification::asymptotic::OrderRelation;
+use core_errors::FrameworkError;
 use std::collections::HashMap;
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -63,17 +64,17 @@ impl Parser {
         }
     }
 
-    fn expect_char(&mut self, expected: char) -> Result<(), String> {
+    fn expect_char(&mut self, expected: char) -> Result<(), FrameworkError> {
         self.skip_ws();
         match self.next() {
             Some(c) if c == expected => Ok(()),
-            Some(c) => Err(format!("expected '{expected}', got '{c}'")),
-            None => Err(format!("expected '{expected}', got end of input")),
+            Some(c) => Err(FrameworkError::validation(format!("expected '{expected}', got '{c}'")),
+            None => Err(FrameworkError::validation(format!("expected '{expected}', got end of input")),
         }
     }
 
     /// Parse the full expression (lowest precedence: +, -).
-    fn parse_expr(&mut self) -> Result<Expr, String> {
+    fn parse_expr(&mut self) -> Result<Expr, FrameworkError> {
         let mut left = self.parse_term()?;
         loop {
             self.skip_ws();
@@ -93,7 +94,7 @@ impl Parser {
     }
 
     /// Parse a term (precedence: *, /).
-    fn parse_term(&mut self) -> Result<Expr, String> {
+    fn parse_term(&mut self) -> Result<Expr, FrameworkError> {
         let mut left = self.parse_power()?;
         loop {
             self.skip_ws();
@@ -121,7 +122,7 @@ impl Parser {
     }
 
     /// Parse a power expression (right-associative ^).
-    fn parse_power(&mut self) -> Result<Expr, String> {
+    fn parse_power(&mut self) -> Result<Expr, FrameworkError> {
         let base = self.parse_unary()?;
         self.skip_ws();
         if self.peek() == Some('^') {
@@ -134,7 +135,7 @@ impl Parser {
     }
 
     /// Parse unary negation.
-    fn parse_unary(&mut self) -> Result<Expr, String> {
+    fn parse_unary(&mut self) -> Result<Expr, FrameworkError> {
         self.skip_ws();
         match self.peek() {
             Some('-') => {
@@ -151,7 +152,7 @@ impl Parser {
     }
 
     /// Parse a factor: number, variable, function call, or parenthesized expression.
-    fn parse_factor(&mut self) -> Result<Expr, String> {
+    fn parse_factor(&mut self) -> Result<Expr, FrameworkError> {
         self.skip_ws();
         match self.peek() {
             Some('(') => {
@@ -185,12 +186,12 @@ impl Parser {
                     }
                 }
             }
-            Some(c) => Err(format!("unexpected character: '{c}'")),
-            None => Err("unexpected end of input".to_string()),
+            Some(c) => Err(FrameworkError::validation(format!("unexpected character: '{c}'")),
+            None => Err(FrameworkError::validation("unexpected end of input")),
         }
     }
 
-    fn parse_number(&mut self) -> Result<Expr, String> {
+    fn parse_number(&mut self) -> Result<Expr, FrameworkError> {
         let mut s = String::new();
         if self.peek() == Some('.') {
             // Handle numbers starting with "."
@@ -223,12 +224,12 @@ impl Parser {
 }
 
 /// Parse a string into an expression tree.
-pub fn parse(input: &str) -> Result<Expr, String> {
+pub fn parse(input: &str) -> Result<Expr, FrameworkError> {
     let mut parser = Parser::new(input);
     let expr = parser.parse_expr()?;
     parser.skip_ws();
     if parser.peek().is_some() {
-        return Err(format!("unexpected trailing input at position {}", parser.pos));
+        return Err(FrameworkError::validation(format!("unexpected trailing input at position {}", parser.pos));
     }
     Ok(expr)
 }
@@ -238,7 +239,7 @@ pub fn parse(input: &str) -> Result<Expr, String> {
 // ════════════════════════════════════════════════════════════════════════════
 
 /// Evaluate an expression with variable bindings.
-pub fn eval(expr: &Expr, vars: &HashMap<String, f64>) -> Result<f64, String> {
+pub fn eval(expr: &Expr, vars: &HashMap<String, f64>) -> Result<f64, FrameworkError> {
     match expr {
         Expr::Const(c) => Ok(*c),
         Expr::Var(name) => vars.get(name).copied().ok_or_else(|| format!("undefined variable: {name}")),
@@ -249,7 +250,7 @@ pub fn eval(expr: &Expr, vars: &HashMap<String, f64>) -> Result<f64, String> {
         Expr::Div(a, b) => {
             let bv = eval(b, vars)?;
             if bv.abs() < 1e-15 {
-                return Err("division by zero".into());
+                return Err(FrameworkError::validation("division by zero"));
             }
             Ok(eval(a, vars)? / bv)
         }
@@ -263,38 +264,38 @@ pub fn eval(expr: &Expr, vars: &HashMap<String, f64>) -> Result<f64, String> {
             let vals = vals?;
             match name.as_str() {
                 "log" | "ln" => {
-                    if vals.len() != 1 { return Err("log requires 1 argument".into()); }
+                    if vals.len() != 1 { return Err(FrameworkError::validation("log requires 1 argument")); }
                     Ok(vals[0].ln())
                 }
                 "log2" => {
-                    if vals.len() != 1 { return Err("log2 requires 1 argument".into()); }
+                    if vals.len() != 1 { return Err(FrameworkError::validation("log2 requires 1 argument")); }
                     Ok(vals[0].log2())
                 }
                 "log10" => {
-                    if vals.len() != 1 { return Err("log10 requires 1 argument".into()); }
+                    if vals.len() != 1 { return Err(FrameworkError::validation("log10 requires 1 argument")); }
                     Ok(vals[0].log10())
                 }
                 "exp" => {
-                    if vals.len() != 1 { return Err("exp requires 1 argument".into()); }
+                    if vals.len() != 1 { return Err(FrameworkError::validation("exp requires 1 argument")); }
                     Ok(vals[0].exp())
                 }
                 "sin" => {
-                    if vals.len() != 1 { return Err("sin requires 1 argument".into()); }
+                    if vals.len() != 1 { return Err(FrameworkError::validation("sin requires 1 argument")); }
                     Ok(vals[0].sin())
                 }
                 "cos" => {
-                    if vals.len() != 1 { return Err("cos requires 1 argument".into()); }
+                    if vals.len() != 1 { return Err(FrameworkError::validation("cos requires 1 argument")); }
                     Ok(vals[0].cos())
                 }
                 "sqrt" => {
-                    if vals.len() != 1 { return Err("sqrt requires 1 argument".into()); }
+                    if vals.len() != 1 { return Err(FrameworkError::validation("sqrt requires 1 argument")); }
                     Ok(vals[0].sqrt())
                 }
                 "abs" => {
-                    if vals.len() != 1 { return Err("abs requires 1 argument".into()); }
+                    if vals.len() != 1 { return Err(FrameworkError::validation("abs requires 1 argument")); }
                     Ok(vals[0].abs())
                 }
-                _ => Err(format!("unknown function: {name}")),
+                _ => Err(FrameworkError::validation(format!("unknown function: {name}")),
             }
         }
     }
@@ -991,11 +992,11 @@ fn constant_value(expr: &Expr) -> Option<f64> {
 // ════════════════════════════════════════════════════════════════════════════
 
 /// Estimate the leading term of an expression as var → ∞.
-pub fn leading_term(expr_str: &str, var: &str) -> Result<(String, String), String> {
+pub fn leading_term(expr_str: &str, var: &str) -> Result<(String, String), FrameworkError> {
     let expr = parse(expr_str)?;
     let terms = flatten_add(&expr);
     if terms.is_empty() {
-        return Err("empty expression".into());
+        return Err(FrameworkError::validation("empty expression"));
     }
 
     // Classify each term
@@ -1012,7 +1013,7 @@ pub fn leading_term(expr_str: &str, var: &str) -> Result<(String, String), Strin
     classified.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
 
     if classified.is_empty() {
-        return Err("cannot classify expression".into());
+        return Err(FrameworkError::validation("cannot classify expression"));
     }
 
     let dominant_class = classify_growth(classified[0].1, var);
@@ -1048,7 +1049,7 @@ fn growth_to_order(class: &GrowthClass, var: &str) -> String {
 /// Compare the growth of two expression strings.
 ///
 /// Returns the `OrderRelation` that holds between f and g as var → ∞.
-pub fn compare_growth(f: &str, g: &str, var: &str) -> Result<OrderRelation, String> {
+pub fn compare_growth(f: &str, g: &str, var: &str) -> Result<OrderRelation, FrameworkError> {
     let f_expr = parse(f)?;
     let g_expr = parse(g)?;
 
@@ -1064,7 +1065,7 @@ pub fn compare_growth(f: &str, g: &str, var: &str) -> Result<OrderRelation, Stri
         std::cmp::Ordering::Greater => {
             // f grows strictly faster than g (f = ω(g)).
             // None of the OrderRelation variants (≪, ≲, ≍) hold from f to g.
-            Err(format!("{f} grows faster than {g}, so no finite OrderRelation holds"))
+            Err(FrameworkError::validation(format!("{f} grows faster than {g}, so no finite OrderRelation holds"))
         }
         std::cmp::Ordering::Equal => {
             // Same growth class — check if parameters match
@@ -1076,7 +1077,7 @@ pub fn compare_growth(f: &str, g: &str, var: &str) -> Result<OrderRelation, Stri
                 match compare_growth_classes(&gf, &gg) {
                     std::cmp::Ordering::Less => Ok(OrderRelation::MuchLess),
                     std::cmp::Ordering::Greater => {
-                        Err(format!("{f} grows faster than {g} in the same class"))
+                        Err(FrameworkError::validation(format!("{f} grows faster than {g} in the same class"))
                     }
                     std::cmp::Ordering::Equal => Ok(OrderRelation::Asymp),
                 }

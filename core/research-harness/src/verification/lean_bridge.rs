@@ -3,6 +3,7 @@
 //! FEATURE layer only. MCP dispatch belongs in `mcp_tools.rs`.
 
 use crate::types::{VerificationResult, VerificationStatus};
+use core_errors::FrameworkError;
 use serde::{Deserialize, Serialize};
 
 /// Status of the Lean toolchain availability.
@@ -92,14 +93,14 @@ pub fn verify_lean_theorem(script: &str) -> VerificationResult {
     }
     let _guard = CleanupGuard(temp_dir.clone());
 
-    let result = (|| -> Result<std::process::Output, String> {
-        std::fs::write(&script_path, script).map_err(|e| format!("write: {e}"))?;
+    let result = (|| -> Result<std::process::Output, FrameworkError> {
+        std::fs::write(&script_path, script).map_err(FrameworkError::Io)?;
         std::process::Command::new("lean")
             .arg(&script_path)
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
             .output()
-            .map_err(|e| format!("exec: {e}"))
+            .map_err(FrameworkError::Io)
     })();
 
     // Clean up both file and directory (Drop guard also handles this, but eager
@@ -111,7 +112,7 @@ pub fn verify_lean_theorem(script: &str) -> VerificationResult {
         Err(e) => return VerificationResult {
             check_name: "math_lean_verify".into(),
             status: VerificationStatus::Warn,
-            details: e,
+            details: e.to_string(),
             evidence_path: None,
         },
     };
