@@ -256,6 +256,14 @@ pub(super) fn dispatch_tool(
 
     // Not found in built-in registry → try externally-registered dispatch
     // (research-harness tools registered via hooks.rs at runtime-core startup)
+    //
+    // NOTE: 9 CLI-routed tools (research_aigc_check, research_smoke,
+    // math_prove_inequality, math_backend_available, math_asymptotic_chain,
+    // math_lean_verify, research_verification_literature,
+    // research_verification_structure, research_verification_reproducibility)
+    // have handlers in research-harness that are effectively dead code since
+    // the CLI dispatch at line 226 returns early. They are retained in case
+    // mcp_server is changed back from "router-rs-cli" to "research-harness".
     if let Some(dispatch) = crate::hooks::get_research_tool_dispatch() {
         Ok(dispatch(tool_name, args)?)
     } else {
@@ -480,8 +488,7 @@ fn handle_initialize(id: Option<Value>) -> Value {
 }
 
 pub fn handle_tools_list(id: Option<Value>) -> Value {
-    // Build framework dispatch-domain and research tool entries dynamically from the registry
-    let composite_tools = build_composite_tools_from_registry();
+    let composite_tools = build_tools_from_registry();
 
     // Task CRUD tools (built-in)
     let task_tools = task_crud_tool_schemas();
@@ -501,7 +508,7 @@ pub fn handle_tools_list(id: Option<Value>) -> Value {
 /// Build tool schema entries for framework dispatch-domain and research tools
 /// from MCP_TOOL_REGISTRY.json. Includes tools with dispatch_domain starting
 /// with `domain:` or equal to `research`, excluding deprecated tools.
-fn build_composite_tools_from_registry() -> Vec<Value> {
+fn build_tools_from_registry() -> Vec<Value> {
     let registry_path = mcp_tool_registry::resolve_tool_registry_path()
         .unwrap_or_else(|| {
             std::path::PathBuf::from(framework_kernel::constants::MCP_TOOL_REGISTRY_RELATIVE_PATH)
@@ -1034,32 +1041,51 @@ fn map_tool_to_cli_args(tool_name: &str, args: &Value) -> Result<Vec<String>, St
 /// The subprocess is spawned with the repo_root as the current directory.
 /// Temp files (e.g., for lean-verify) are cleaned up after the subprocess finishes.
 fn spawn_cli_tool(tool_name: &str, args: &Value, repo_root: &Path) -> Result<String, String> {
+    use std::io::Read;
+
     let cli_args = map_tool_to_cli_args(tool_name, args)?;
 
-    let result = (|| {
-        let output = std::process::Command::new("router-rs-cli")
-            .args(&cli_args)
-            .current_dir(repo_root)
-            .output()
-            .map_err(|e| {
-                format!(
-                    "router-rs-cli subprocess failed (is it in PATH or built?): {e}"
-                )
-            })?;
+    let timeout = Duration::from_secs(300);
+    let poll_interval = Duration::from_millis(100);
 
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(format!(
-                "router-rs-cli {} failed ({}): {}",
-                tool_name,
-                output.status,
-                stderr.trim()
-            ));
+    let mut child = std::process::Command::new("router-rs-cli")
+        .args(&cli_args)
+        .current_dir(repo_root)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .map_err(|e| {
+            format!(
+                "router-rs-cli subprocess failed (is it in PATH or built?): {e}"
+            )
+        })?;
+
+    let start = std::time::Instant::now();
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break status,
+            Ok(None) => {
+                if start.elapsed() >= timeout {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return Err(format!(
+                        "router-rs-cli {} timed out after {}s",
+                        tool_name,
+                        timeout.as_secs()
+                    ));
+                }
+                std::thread::sleep(poll_interval);
+            }
+            Err(e) => {
+                return Err(format!("router-rs-cli subprocess wait error: {e}"));
+            }
         }
+    };
 
-        String::from_utf8(output.stdout)
-            .map_err(|e| format!("CLI output encoding error: {e}"))
-    })();
+    let mut stdout = String::new();
+    let mut stderr = String::new();
+    let _ = child.stdout.as_mut().map(|r| r.read_to_string(&mut stdout));
+    let _ = child.stderr.as_mut().map(|r| r.read_to_string(&mut stderr));
 
     // Clean up temp file created for lean-verify
     if tool_name == "math_lean_verify" {
@@ -1068,7 +1094,16 @@ fn spawn_cli_tool(tool_name: &str, args: &Value, repo_root: &Path) -> Result<Str
         let _ = std::fs::remove_file(&tmp_path);
     }
 
-    result
+    if !status.success() {
+        return Err(format!(
+            "router-rs-cli {} failed ({}): {}",
+            tool_name,
+            status,
+            stderr.trim()
+        ));
+    }
+
+    Ok(stdout)
 }
 
 

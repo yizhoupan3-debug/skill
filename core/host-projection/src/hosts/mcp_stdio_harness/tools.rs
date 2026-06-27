@@ -188,6 +188,8 @@ fn skill_body_path(repo_root: &Path, slug: &str) -> Result<PathBuf, String> {
 }
 
 /// Validate the resolved skill path stays within the repo root.
+/// Additionally checks that symlink-resolved paths remain within the
+/// skills directory (catches redirections in intermediate components).
 /// Returns the path on success.
 fn finalize_skill_path(repo_root: &Path, path: &Path, slug: &str) -> Result<PathBuf, String> {
     use core_state_utils::path_guard::{path_is_within_repo_root, reject_unsafe_path};
@@ -201,6 +203,17 @@ fn finalize_skill_path(repo_root: &Path, path: &Path, slug: &str) -> Result<Path
             "skill path for {slug} escapes repo root: {}",
             path.display()
         ));
+    }
+    // Canonicalize to catch symlink redirections in intermediate components
+    // that symlink_metadata (used by reject_unsafe_path) cannot detect.
+    if let Ok(canonical) = path.canonicalize() {
+        let skills_dir = repo_root.join("skills");
+        if !canonical.starts_with(&skills_dir) {
+            return Err(format!(
+                "skill path for {slug} resolves outside skills directory via symlink: {}",
+                canonical.display()
+            ));
+        }
     }
     Ok(path.to_path_buf())
 }

@@ -340,6 +340,10 @@ fn full_output(text: &str, estimate: usize) -> Value {
 }
 
 // ── Legacy fallback (FRAMEWORK_COMPRESSION_LOSSLESS=false) ──────────────────────
+// TODO(v10+): Remove these legacy functions and the env-flag branch in
+// build_framework_prompt_compression_envelope. The lossless HTMC path is the
+// sole compression strategy going forward; the env flag was a rollout safety
+// valve and is no longer needed.
 
 fn compress_legacy(prompt: &str, token_budget: usize) -> Result<Value, String> {
     let input_token_estimate = alias::estimate_token_count(prompt);

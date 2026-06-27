@@ -229,6 +229,8 @@ fn tool_verification_structure(arguments: &Value) -> Result<String, FrameworkErr
         "latex" => {
             let path = arguments.get("path").and_then(Value::as_str)
                 .ok_or(FrameworkError::validation("latex check requires 'path' (string path to .tex file)"))?;
+            core_state_utils::path_guard::reject_unsafe_path(Path::new(path))
+                .map_err(|e| FrameworkError::validation(format!("path rejected: {e}")))?;
             let passed = crate::verification::structure::check_latex_compilable(Path::new(path))
                 .map_err(|e| FrameworkError::validation(format!("LaTeX compilation check failed: {e}")))?;
             serde_json::to_string_pretty(&json!({
@@ -240,6 +242,8 @@ fn tool_verification_structure(arguments: &Value) -> Result<String, FrameworkErr
         "figures" => {
             let path = arguments.get("path").and_then(Value::as_str)
                 .ok_or(FrameworkError::validation("figures check requires 'path' (string path to .tex file)"))?;
+            core_state_utils::path_guard::reject_unsafe_path(Path::new(path))
+                .map_err(|e| FrameworkError::validation(format!("path rejected: {e}")))?;
             let missing = crate::verification::structure::check_figure_references(Path::new(path))
                 .map_err(|e| FrameworkError::validation(format!("figure reference check failed: {e}")))?;
             serde_json::to_string_pretty(&json!({

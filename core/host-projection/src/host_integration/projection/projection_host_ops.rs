@@ -80,12 +80,12 @@ pub(super) const ALL_HOOK_EVENTS: &[&str] = &[
 pub fn merge_settings_hooks(existing: Option<Value>, host_id: &str) -> Result<Value> {
     let mut root = match existing {
         Some(Value::Object(map)) => map,
-        Some(_) => return Err("settings root must be a JSON object".to_string().into()),
+        Some(_) => return Err(FrameworkError::validation("settings root must be a JSON object")),
         None => Map::new(),
     };
     let mut hooks = match root.remove("hooks") {
         Some(Value::Object(map)) => map,
-        Some(_) => return Err("settings `hooks` must be a JSON object".to_string().into()),
+        Some(_) => return Err(FrameworkError::validation("settings `hooks` must be a JSON object")),
         None => Map::new(),
     };
     for &event in ALL_HOOK_EVENTS {

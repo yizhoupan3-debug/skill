@@ -131,7 +131,6 @@ impl From<String> for FrameworkError {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     #[test]

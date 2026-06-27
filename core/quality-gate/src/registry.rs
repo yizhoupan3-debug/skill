@@ -162,6 +162,7 @@ mod tests {
             task_id: task_id.to_string(),
             evidence_path: None,
             runtime_handle: None,
+            output_data: None,
         }
     }
 
