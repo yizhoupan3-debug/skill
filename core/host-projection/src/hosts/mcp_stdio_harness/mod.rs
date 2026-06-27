@@ -154,7 +154,9 @@ pub(super) fn dispatch_tool(
     let registry = REGISTRY.get_or_init(|| {
         let mut r = CompositeRegistry::new();
         r.register(RoutingTools);
-        r.register(LifecycleTools);
+        r.register(GoalTools);
+        r.register(CloseoutTools);
+        r.register(FrameworkTools);
         r.register(InfraTools);
         r.register(ToolDomainTools);
         r.register(TaskCrudTools);

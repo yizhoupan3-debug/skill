@@ -78,31 +78,55 @@ impl ToolHandler for RoutingTools {
 }
 
 // ---------------------------------------------------------------------------
-// LifecycleTools (6 tools)
+// GoalTools (2 tools: goal_state_read, goal_state_manage)
 // ---------------------------------------------------------------------------
 
-pub struct LifecycleTools;
-impl ToolHandler for LifecycleTools {
+pub struct GoalTools;
+impl ToolHandler for GoalTools {
     fn tool_names(&self) -> &[&'static str] {
-        &[
-            "record_evidence",
-            "session_checkpoint",
-            "closeout_gate",
-            "goal_state_read",
+        &["goal_state_read", "goal_state_manage"]
+    }
+    fn dispatch(&self, tool_name: &str, args: &Value, ctx: &ToolCallContext) -> Result<String, String> {
+        match tool_name {
+            "goal_state_read" => tool_goal_state_read(args, &ctx.repo_root),
+            "goal_state_manage" => tool_goal_state_manage(args, &ctx.repo_root, &ctx.connection_session_id),
+            _ => Err(format!("GoalTools: unknown tool: {tool_name}")),
+        }
+    }
+}
 
-            "goal_state_manage",
-            "closeout_record_write",
-        ]
+// ---------------------------------------------------------------------------
+// CloseoutTools (2 tools: closeout_gate, closeout_record_write)
+// ---------------------------------------------------------------------------
+
+pub struct CloseoutTools;
+impl ToolHandler for CloseoutTools {
+    fn tool_names(&self) -> &[&'static str] {
+        &["closeout_gate", "closeout_record_write"]
+    }
+    fn dispatch(&self, tool_name: &str, args: &Value, ctx: &ToolCallContext) -> Result<String, String> {
+        match tool_name {
+            "closeout_gate" => tool_closeout_gate(args, &ctx.repo_root, &ctx.host_id),
+            "closeout_record_write" => tool_closeout_record_write(args, &ctx.repo_root, &ctx.host_id),
+            _ => Err(format!("CloseoutTools: unknown tool: {tool_name}")),
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// FrameworkTools (2 tools: record_evidence, session_checkpoint)
+// ---------------------------------------------------------------------------
+
+pub struct FrameworkTools;
+impl ToolHandler for FrameworkTools {
+    fn tool_names(&self) -> &[&'static str] {
+        &["record_evidence", "session_checkpoint"]
     }
     fn dispatch(&self, tool_name: &str, args: &Value, ctx: &ToolCallContext) -> Result<String, String> {
         match tool_name {
             "record_evidence" => tool_record_evidence(args, &ctx.repo_root),
             "session_checkpoint" => tool_session_checkpoint(args, &ctx.repo_root),
-            "closeout_gate" => tool_closeout_gate(args, &ctx.repo_root, &ctx.host_id),
-            "goal_state_read" => tool_goal_state_read(args, &ctx.repo_root),
-            "goal_state_manage" => tool_goal_state_manage(args, &ctx.repo_root, &ctx.connection_session_id),
-            "closeout_record_write" => tool_closeout_record_write(args, &ctx.repo_root, &ctx.host_id),
-            _ => Err(format!("LifecycleTools: unknown tool: {tool_name}")),
+            _ => Err(format!("FrameworkTools: unknown tool: {tool_name}")),
         }
     }
 }
