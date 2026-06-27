@@ -342,10 +342,11 @@ fn remove_dir_if_exists(path: &Path) -> Result<(), FrameworkError> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     #[test]
-    fn default_install_paths_use_home_local_bin() {
+    fn default_install_dir_and_path() {
         let dir = default_router_rs_install_dir();
         assert!(dir.ends_with(".local/bin"));
         assert_eq!(default_router_rs_install_path(), dir.join("router-rs-cli"));

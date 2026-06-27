@@ -2,6 +2,7 @@
 //!
 //! Telemetry bootstrap (LogAggregator, TelemetryObserver) removed per v10 Wave 2d.
 use routing_engine::routing_runtime_watch;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Once;
 use std::thread;
 use std::time::Duration;
@@ -16,6 +17,14 @@ impl framework_kernel::TokenizerProvider for RouteTokenizerProvider {
     fn has_parallel_review_candidate_context(&self, query: &str, tokens: &[String]) -> bool {
         routing_engine::route::has_parallel_review_candidate_context(query, tokens)
     }
+}
+
+static BOOTSTRAP_SHUTDOWN: AtomicBool = AtomicBool::new(false);
+
+/// Request the bootstrap background thread to shut down gracefully.
+/// The thread will exit on its next loop iteration.
+pub fn request_bootstrap_shutdown() {
+    BOOTSTRAP_SHUTDOWN.store(true, Ordering::Relaxed);
 }
 
 static BOOTSTRAP_ONCE: Once = Once::new();
@@ -47,6 +56,10 @@ fn spawn_routing_runtime_cache_invalidator() {
         #[allow(clippy::let_unit_value)]
         let _ = rx.borrow_and_update();
         loop {
+            if BOOTSTRAP_SHUTDOWN.load(Ordering::Relaxed) {
+                tracing::debug!("kernel_bootstrap: shutdown requested, exiting cache invalidator");
+                return;
+            }
             thread::sleep(Duration::from_secs(1));
             if !matches!(rx.has_changed(), Ok(true)) {
                 continue;

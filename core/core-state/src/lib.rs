@@ -2,7 +2,6 @@
 
 pub mod closeout_validation;
 pub mod transition_validation;
-pub mod error;
 pub mod goal_prediction;
 pub mod state_manager;
 pub mod step_ledger;

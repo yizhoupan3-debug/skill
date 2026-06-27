@@ -212,7 +212,7 @@ pub fn dispatch_framework_command(command: FrameworkCommand) -> Result<(), Strin
             let payload = parse_json_input::<Value>(&command.input_json, "framework step ledger")?;
             print_json_value(&handle_step_ledger_operation(payload)?)
         }
-        FrameworkCommand::Maint { command } => runtime_core::framework_maint::dispatch(command),
+        FrameworkCommand::Maint { command } => runtime_core::framework_maint::dispatch(command).map_err(|e| e.to_string()),
         FrameworkCommand::Skills { command } => dispatch_framework_skills(command),
         FrameworkCommand::HostIntegration(command) => {
             let payload = run_host_integration_from_args(&command.args)?;
@@ -651,7 +651,7 @@ pub fn dispatch_storage_command(command: StorageCommand) -> Result<(), String> {
 pub fn dispatch_codegraph_command(command: CodegraphSubcommand) -> Result<(), String> {
     match command {
         CodegraphSubcommand::McpStdio(command) => {
-            run_codegraph_mcp_stdio_loop(command.repo_root.as_deref())
+            run_codegraph_mcp_stdio_loop(command.repo_root.as_deref()).map_err(|e| e.to_string())
         }
     }
 }
@@ -912,12 +912,17 @@ fn dispatch_research_aigc_check(args: ResearchAigcCheckCommand) -> Result<(), St
     #[cfg(not(feature = "research"))]
     { let _ = args; Err("research feature not enabled; rebuild with --features research".to_string()) }
     #[cfg(feature = "research")] {
-        let lang = if args.language == "zh" { research_harness::aigc::detector::Language::Zh } else { research_harness::aigc::detector::Language::En };
-        let result = research_harness::aigc::detector::detect(&args.text, lang).map_err(|e| e.to_string())?;
-        let scored = research_harness::aigc::scorer::score(&result);
+        use research_harness::aigc::Language;
+        use research_harness::aigc::detector::{DetectionConfig, detect};
+        let config = DetectionConfig {
+            language: if args.language == "zh" { Language::Chinese } else { Language::English },
+            ..Default::default()
+        };
+        let results = detect(&args.text, &config).map_err(|e| e.to_string())?;
+        let scored = research_harness::aigc::scorer::score(&results);
         print_json_value(&serde_json::json!({
-            "ai_generated_probability": result.ai_generated_probability,
-            "per_segment_analysis": result.segment_analysis,
+            "ai_generated_probability": results.iter().map(|r| r.ai_probability).collect::<Vec<_>>(),
+            "per_segment_analysis": results,
             "score": scored,
         }))
     }
@@ -927,12 +932,11 @@ fn dispatch_research_smoke(args: ResearchSmokeCommand) -> Result<(), String> {
     #[cfg(not(feature = "research"))]
     { let _ = args; Err("research feature not enabled; rebuild with --features research".to_string()) }
     #[cfg(feature = "research")] {
-        let repo_root = args.repo_root.as_deref()
-            .and_then(|s| if s.is_empty() { None } else { Some(s) })
-            .or_else(|| std::env::current_dir().ok().and_then(|p| Some(p.display().to_string())))
-            .map(|s| s.to_string());
+        let repo_root: Option<std::path::PathBuf> = args.repo_root.clone()
+            .filter(|p| !p.as_os_str().is_empty())
+            .or_else(|| std::env::current_dir().ok());
         let result = research_harness::smoke::run_smoke_tests(
-            repo_root.as_deref(),
+            repo_root.as_deref().unwrap_or(std::path::Path::new("")),
             args.source.as_deref(),
             args.barrier_id.as_deref(),
         ).map_err(|e| e.to_string())?;
@@ -1034,8 +1038,8 @@ fn dispatch_math_prove(args: MathProveCommand) -> Result<(), String> {
     #[cfg(feature = "research")] {
         let result = research_harness::verification::inequality::check_inequality(
             &args.expression,
-            args.timeout_ms.map(|t| t as usize),
-        ).map_err(|e| e.to_string())?;
+            args.timeout_ms.map(|t| t as u64),
+        );
         print_json_value(&result)
     }
 }
@@ -1059,15 +1063,15 @@ fn dispatch_math_asymptotic_chain(args: MathAsymptoticChainCommand) -> Result<()
     #[cfg(not(feature = "research"))]
     { let _ = args; Err("research feature not enabled; rebuild with --features research".to_string()) }
     #[cfg(feature = "research")] {
-        let steps: Vec<serde_json::Value> = serde_json::from_str(&args.steps)
+        let steps: Vec<research_harness::verification::asymptotic::AsymptoticStep> = serde_json::from_str(&args.steps)
             .map_err(|e| format!("invalid steps JSON: {e}"))?;
         let result = research_harness::verification::asymptotic::verify_asymptotic_chain_with_name(
-            "cli-chain",
             &steps,
             &args.variable,
             &args.regime,
             !args.no_sympy,
-        ).map_err(|e| e.to_string())?;
+            "cli-chain",
+        );
         print_json_value(&result)
     }
 }
@@ -1079,8 +1083,7 @@ fn dispatch_math_lean_verify(args: MathLeanVerifyCommand) -> Result<(), String> 
         use std::fs;
         let script = fs::read_to_string(&args.script_path)
             .map_err(|e| format!("read Lean script {}: {e}", args.script_path.display()))?;
-        let result = research_harness::verification::lean_bridge::verify_lean_theorem(&script)
-            .map_err(|e| e.to_string())?;
+        let result = research_harness::verification::lean_bridge::verify_lean_theorem(&script);
         print_json_value(&result)
     }
 }

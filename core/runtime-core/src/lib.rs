@@ -280,9 +280,9 @@ pub fn init_hooks() {
                         .collect()
                 },
             },
-            framework_goal_drive: core_state::state_manager::framework_goal_drive,
+            framework_goal_drive: |payload| core_state::state_manager::framework_goal_drive(payload).map_err(|e| e.to_string()),
             handle_orchestrator_operation: |_payload| {
-                Err(core_errors::FrameworkError::hook("orchestrator operation not registered"))
+                Err(core_errors::FrameworkError::hook("orchestrator operation not registered").to_string())
             },
             #[cfg(feature = "l5-state")]
             handle_background_state_operation: rt_storage::background_state::handle_background_state_operation,

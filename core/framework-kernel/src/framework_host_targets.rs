@@ -265,6 +265,7 @@ pub fn host_entrypoints_value_for_id(registry: &Value, host_id: &str) -> Result<
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use crate::runtime_registry::{RUNTIME_REGISTRY_SCHEMA_VERSION, ALL_HOST_IDS};
     use std::path::PathBuf;

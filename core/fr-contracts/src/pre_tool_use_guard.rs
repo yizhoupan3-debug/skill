@@ -529,6 +529,7 @@ fn register_test_hooks() {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use crate::execution_contract::build_execution_contract_bundle;
     use serde_json::json;

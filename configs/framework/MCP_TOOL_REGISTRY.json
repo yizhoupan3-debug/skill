@@ -431,10 +431,9 @@
         "链接"
       ],
       "host_platforms": [],
-      "mcp_server": "router-rs",
+      "mcp_server": "router-rs-cli",
       "tool_flags": [
-        "behavior:core_routing_tool",
-        "deprecated"
+        "behavior:core_routing_tool"
       ],
       "input_schema": {
         "type": "object",
@@ -478,10 +477,8 @@
         "AI文本"
       ],
       "host_platforms": [],
-      "mcp_server": "research-harness",
-      "tool_flags": [
-        "deprecated"
-      ],
+      "mcp_server": "router-rs-cli",
+      "tool_flags": [],
       "input_schema": {
         "type": "object",
         "required": [
@@ -682,7 +679,7 @@
         "学术数据"
       ],
       "host_platforms": [],
-      "mcp_server": "research-harness",
+      "mcp_server": "router-rs-cli",
       "tool_flags": [
         "deprecated"
       ],

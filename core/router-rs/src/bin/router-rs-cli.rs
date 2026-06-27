@@ -104,5 +104,5 @@ fn main() -> Result<(), String> {
         }
     let args = router_rs::cli::Cli::parse_from(args);
     init_browser_mcp_dispatch();
-    router_rs::cli::run(&args)
+    router_rs::cli::run(&args).map_err(|e| e.to_string())
 }

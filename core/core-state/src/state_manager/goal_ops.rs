@@ -975,19 +975,19 @@ mod tests {
     #[test]
     fn drive_contract_rejects_no_non_goals() {
         let err = validate_drive_contract(true, &[], &[json!("d1"), json!("d2")], &[json!("cargo test")], "test").unwrap_err();
-        assert!(err.contains("non_goals"), "{err}");
+        assert!(err.to_string().contains("non_goals"), "{err}");
     }
 
     #[test]
     fn drive_contract_rejects_less_than_two_done_when() {
         let err = validate_drive_contract(true, &[json!("n1")], &[json!("d1")], &[json!("cargo test")], "test").unwrap_err();
-        assert!(err.contains("done_when"), "{err}");
+        assert!(err.to_string().contains("done_when"), "{err}");
     }
 
     #[test]
     fn drive_contract_rejects_no_validation_commands() {
         let err = validate_drive_contract(true, &[json!("n1")], &[json!("d1"), json!("d2")], &[], "test").unwrap_err();
-        assert!(err.contains("validation_commands"), "{err}");
+        assert!(err.to_string().contains("validation_commands"), "{err}");
     }
 
     #[test]
@@ -999,7 +999,7 @@ mod tests {
     fn drive_contract_ignores_empty_string_items() {
         // Empty strings should not count toward the contract
         let err = validate_drive_contract(true, &[json!(""), json!("n1")], &[json!(""), json!("d1"), json!("d2")], &[json!("")], "test").unwrap_err();
-        assert!(err.contains("validation_commands"), "empty validation cmd should not satisfy contract: {err}");
+        assert!(err.to_string().contains("validation_commands"), "empty validation cmd should not satisfy contract: {err}");
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -1093,7 +1093,7 @@ mod tests {
             // missing non_goals, done_when, validation_commands
         }))
         .unwrap_err();
-        assert!(err.contains("non_goals"), "must reject: {err}");
+        assert!(err.to_string().contains("non_goals"), "must reject: {err}");
         assert!(!repo.join("artifacts/current/t-bad/GOAL_STATE.json").is_file());
         let _ = fs::remove_dir_all(&repo);
     }
@@ -1193,7 +1193,7 @@ mod tests {
             "note": "",
         }))
         .unwrap_err();
-        assert!(err.contains("non-empty note"), "{err}");
+        assert!(err.to_string().contains("non-empty note"), "{err}");
         let _ = fs::remove_dir_all(&repo);
     }
 
@@ -1302,7 +1302,7 @@ mod tests {
         }))
         .unwrap_err();
         assert!(
-            err.contains("validate_transition blocked"),
+            err.to_string().contains("validate_transition blocked"),
             "must reject without evidence: {err}"
         );
         let _ = fs::remove_dir_all(&repo);
@@ -1370,7 +1370,7 @@ mod tests {
             "blocker": "",
         }))
         .unwrap_err();
-        assert!(err.contains("non-empty blocker"), "{err}");
+        assert!(err.to_string().contains("non-empty blocker"), "{err}");
         let _ = fs::remove_dir_all(&repo);
     }
 
@@ -1527,7 +1527,7 @@ mod tests {
             // no goal/non_goals/done_when/validation_commands
         }))
         .unwrap_err();
-        assert!(err.contains("at least one field"), "{err}");
+        assert!(err.to_string().contains("at least one field"), "{err}");
         let _ = fs::remove_dir_all(&repo);
     }
 
@@ -1607,7 +1607,7 @@ mod tests {
         let repo = Path::new("/tmp");
         for bad in ["", "../x", "a/b", ".."] {
             let err = goal_state_path_for_task(repo, bad).unwrap_err();
-            assert!(err.contains("safe path component"), "bad id {bad:?}: {err}");
+            assert!(err.to_string().contains("safe path component"), "bad id {bad:?}: {err}");
         }
     }
 
@@ -1744,7 +1744,7 @@ mod tests {
         }))
         .unwrap_err();
         assert!(
-            err.contains("validate_transition blocked"),
+            err.to_string().contains("validate_transition blocked"),
             "loop drive goal should require evidence: {err}"
         );
 

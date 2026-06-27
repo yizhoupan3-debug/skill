@@ -1,7 +1,7 @@
 #![deny(clippy::unwrap_used, clippy::expect_used)]
 //! Session supervisor: native-process worker lifecycle for long-running CLI hosts.
 
-use core_policy::error::FrameworkError;
+use core_errors::FrameworkError;
 use rt_storage::runtime_storage::acquire_runtime_path_lock;
 use serde_json::{Value, json};
 use tracing::{debug, instrument};

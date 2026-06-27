@@ -790,9 +790,7 @@ mod tests {
             }
             for (slug, total) in &slug_totals {
                 if *total > MAX_NL_BOOST_ACCUMULATION {
-                    println!(
-                        "INFO: {phase_name} phase: {slug} cumulative boost {total} > cap {MAX_NL_BOOST_ACCUMULATION} (runtime clips this)"
-                    );
+                    tracing::info!(phase = %phase_name, slug = %slug, total = %total, cap = %MAX_NL_BOOST_ACCUMULATION, "cumulative boost exceeds cap (runtime clips this)");
                 }
             }
         }

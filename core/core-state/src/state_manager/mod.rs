@@ -425,7 +425,7 @@ mod tests {
             "drive_until_done": true,
         }))
         .expect_err("non_goals required");
-        assert!(missing_non_goals.contains("non_goals"));
+        assert!(missing_non_goals.to_string().contains("non_goals"));
 
         let single_done_when = framework_goal_drive(json!({
             "repo_root": rr,
@@ -438,7 +438,7 @@ mod tests {
             "drive_until_done": true,
         }))
         .expect_err("two done_when items required");
-        assert!(single_done_when.contains("done_when"));
+        assert!(single_done_when.to_string().contains("done_when"));
 
         let _ = fs::remove_dir_all(&repo);
     }
@@ -630,7 +630,7 @@ mod tests {
         }))
         .expect_err("complete should require evidence");
         assert!(
-            err.contains("validate_transition blocked"),
+            err.to_string().contains("validate_transition blocked"),
             "err={err}"
         );
         let st = read_goal_state(&repo, Some("noev"))
@@ -679,7 +679,7 @@ mod tests {
         }))
         .expect_err("paused drive goal still requires evidence");
         assert!(
-            err.contains("validate_transition blocked"),
+            err.to_string().contains("validate_transition blocked"),
             "err={err}"
         );
         let st = read_goal_state(&repo, Some("paused"))
@@ -716,7 +716,7 @@ mod tests {
         }))
         .expect_err("legacy validation contract requires evidence");
         assert!(
-            err.contains("validate_transition blocked"),
+            err.to_string().contains("validate_transition blocked"),
             "err={err}"
         );
         let st = read_goal_state(&repo, Some("legacy"))
@@ -870,7 +870,7 @@ fn goal_complete_rejected_when_completion_gates_depth_not_met() {
         }))
         .expect_err("gate should reject");
         assert!(
-            err.contains("completion_gates") && err.contains("depth_score"),
+            err.to_string().contains("completion_gates") && err.to_string().contains("depth_score"),
             "err={err}"
         );
         let st = read_goal_state(&repo, Some("ggate"))
@@ -1391,7 +1391,7 @@ fn goal_complete_rejected_when_completion_gates_depth_not_met() {
             "done_when": [],
         }))
         .expect_err("amend should reject empty done_when for drive goal");
-        assert!(err.contains("done_when"), "err: {err}");
+        assert!(err.to_string().contains("done_when"), "err: {err}");
 
         // Clear non_goals via amend → must be rejected
         let err = framework_goal_drive(json!({
@@ -1401,7 +1401,7 @@ fn goal_complete_rejected_when_completion_gates_depth_not_met() {
             "non_goals": [],
         }))
         .expect_err("amend should reject empty non_goals for drive goal");
-        assert!(err.contains("non_goals"), "err: {err}");
+        assert!(err.to_string().contains("non_goals"), "err: {err}");
 
         let _ = fs::remove_dir_all(&repo);
     }
@@ -1443,7 +1443,7 @@ fn goal_complete_rejected_when_completion_gates_depth_not_met() {
             "drive_until_done": true,
         }))
         .expect_err("resume should reject drive_until_done=true for incomplete goal");
-        assert!(err.contains("non_goals"), "resume err: {err}");
+        assert!(err.to_string().contains("non_goals"), "resume err: {err}");
 
         let _ = fs::remove_dir_all(&repo);
     }

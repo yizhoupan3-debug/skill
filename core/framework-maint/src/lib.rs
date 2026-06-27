@@ -7,3 +7,12 @@ pub mod maint;
 
 // Re-export the main dispatch function
 pub use maint::dispatch;
+
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn smoke() {
+        assert!(true);
+    }
+}

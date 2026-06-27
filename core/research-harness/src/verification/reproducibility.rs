@@ -8,7 +8,7 @@ use sha2::{Digest, Sha256};
 use std::path::Path;
 
 /// 检查结果封装。
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum CheckStatus {
     Pass,
     Fail(String),   // blocker message
@@ -17,12 +17,12 @@ pub enum CheckStatus {
 }
 
 /// 可复现性验证报告。
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct ReproducibilityReport {
     pub checks: Vec<CheckResult>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct CheckResult {
     pub name: &'static str,
     pub status: CheckStatus,

@@ -96,13 +96,16 @@ pub fn tokenize_query(text: &str) -> Vec<String> {
 fn token_regex() -> &'static Regex {
     static TOKEN_REGEX: OnceLock<Regex> = OnceLock::new();
     TOKEN_REGEX.get_or_init(|| {
-        Regex::new(r"[A-Za-z0-9.+#/-]+|[\u{4e00}-\u{9fff}]+").expect("token regex")
+        Regex::new(r"[A-Za-z0-9.+#/-]+|[\u{4e00}-\u{9fff}]+")
+            .unwrap_or_else(|e| panic!("token regex: {e}"))
     })
 }
 
 pub fn phrase_split_regex() -> &'static Regex {
     static PHRASE_SPLIT_REGEX: OnceLock<Regex> = OnceLock::new();
-    PHRASE_SPLIT_REGEX.get_or_init(|| Regex::new(r"[,\n/|，]+").expect("phrase split regex"))
+    PHRASE_SPLIT_REGEX.get_or_init(|| {
+        Regex::new(r"[,\n/|，]+").unwrap_or_else(|e| panic!("phrase split regex: {e}"))
+    })
 }
 
 pub fn common_route_stop_tokens() -> &'static [&'static str] {
@@ -145,7 +148,7 @@ pub fn common_route_stop_tokens() -> &'static [&'static str] {
 fn wordlike_token_regex() -> &'static Regex {
     static WORDLIKE_TOKEN_REGEX: OnceLock<Regex> = OnceLock::new();
     WORDLIKE_TOKEN_REGEX
-        .get_or_init(|| Regex::new(r"^[a-z0-9.+#/_-]+$").expect("wordlike token regex"))
+        .get_or_init(|| Regex::new(r"^[a-z0-9.+#/_-]+$").unwrap_or_else(|e| panic!("wordlike token regex: {e}")))
 }
 
 pub fn tokenize_route_text(text: &str) -> Vec<String> {

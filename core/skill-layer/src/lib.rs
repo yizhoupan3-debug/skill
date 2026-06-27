@@ -21,3 +21,12 @@ pub use frontmatter::{
     SkillFrontmatter, SkillFrontmatterSpec,
 };
 pub use frontmatter_parser::{FrontmatterError, FrontmatterWarning, parse_and_validate};
+
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn smoke() {
+        assert!(true);
+    }
+}

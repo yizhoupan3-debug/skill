@@ -50,6 +50,7 @@ members = [
     "core/tool-routing-engine",
     "core/http-util",
     "core/quality-gate",
+    "core/session-supervisor",
     "rust_tools/batch-common",
     "rust_tools/citation_tool_rs",
     "rust_tools/financial_data_rs",

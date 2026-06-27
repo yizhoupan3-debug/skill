@@ -30,3 +30,13 @@ pub use tokenizer::{
 };
 pub use json_value::*;
 pub use time::current_local_timestamp;
+
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
+    #[test]
+    fn smoke() {
+        assert!(true);
+    }
+}

@@ -98,6 +98,7 @@ pub fn resolve_repo_root_arg(repo_root: Option<&Path>) -> Result<PathBuf, Framew
 
 #[cfg(test)]
 mod repo_root_placeholder_tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::resolve_repo_root_arg;
     use std::env;
 
@@ -130,6 +131,7 @@ mod repo_root_placeholder_tests {
 
 #[cfg(test)]
 mod framework_root_from_exe_tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::{framework_root_from_executable_path, is_framework_root};
     use std::fs;
 

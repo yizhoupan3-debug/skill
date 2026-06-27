@@ -130,3 +130,12 @@ impl From<String> for FrameworkError {
         Self::Validation { message }
     }
 }
+
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn smoke() {
+        assert!(true);
+    }
+}

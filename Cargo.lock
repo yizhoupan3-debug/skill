@@ -3270,6 +3270,7 @@ dependencies = [
  "chrono",
  "clap",
  "codegraph-rs",
+ "core-errors",
  "core-policy",
  "core-state",
  "core-state-utils",
@@ -3291,6 +3292,7 @@ dependencies = [
  "research-harness",
  "routing-engine",
  "runtime-core",
+ "runtime-core-contracts",
  "rusqlite",
  "serde",
  "serde_json",
@@ -3643,6 +3645,26 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "session-supervisor"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "core-errors",
+ "core-policy",
+ "core-state",
+ "core-state-utils",
+ "fr-utils",
+ "framework-kernel",
+ "libc",
+ "regex",
+ "runtime-storage",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tracing",
 ]
 
 [[package]]

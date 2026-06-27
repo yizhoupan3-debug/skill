@@ -132,17 +132,16 @@ impl ToolHandler for FrameworkTools {
 }
 
 // ---------------------------------------------------------------------------
-// InfraTools (1 tool)
+// InfraTools (now empty — web_fetch migrated to router-rs-cli subprocess)
 // ---------------------------------------------------------------------------
 
 pub struct InfraTools;
 impl ToolHandler for InfraTools {
     fn tool_names(&self) -> &[&'static str] {
-        &["web_fetch"]
+        &[]
     }
-    fn dispatch(&self, _tool_name: &str, args: &Value, _ctx: &ToolCallContext) -> Result<String, String> {
-        // Registry already matched tool_name; InfraTools only registers one tool.
-        tool_web_fetch(args)
+    fn dispatch(&self, _tool_name: &str, _args: &Value, _ctx: &ToolCallContext) -> Result<String, String> {
+        Err("InfraTools: no tools registered".to_string())
     }
 }
 

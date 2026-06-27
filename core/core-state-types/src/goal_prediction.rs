@@ -157,7 +157,7 @@ pub fn merge_prediction_from_payload(obj: &mut serde_json::Map<String, Value>, p
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used)]
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use serde_json::json;
 

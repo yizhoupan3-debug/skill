@@ -155,6 +155,7 @@ pub fn build_task_id(label: &str, created_at: Option<&str>) -> String {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use serde_json::json;
 

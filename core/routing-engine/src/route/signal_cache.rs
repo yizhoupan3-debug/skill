@@ -78,7 +78,9 @@ pub fn cached_signal(
                 hits: HashMap::new(),
             });
         }
-        let state = guard.as_mut().expect("cache state just initialized");
+        let state = guard
+            .as_mut()
+            .unwrap_or_else(|| panic!("cache state just initialized"));
         if let Some(&hit) = state.hits.get(name) {
             return hit;
         }

@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 
 pub use framework_kernel::json_value::{required_non_empty_string, optional_non_empty_string, optional_bool};
 
-use core_policy::error::FrameworkError;
+use core_errors::FrameworkError;
 
 use crate::types::{
     SESSION_SUPERVISOR_STORE_SCHEMA_VERSION, SessionSupervisorStore, WorkerEvent,

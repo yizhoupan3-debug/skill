@@ -29,10 +29,10 @@ pub fn parse_task_ledger_command_envelope(envelope: &Value) -> Result<TaskLedger
         .unwrap_or("")
         .trim();
     if !schema.is_empty() && schema != TASK_LEDGER_COMMAND_ENVELOPE_SCHEMA {
-        return Err(format!(
+        return Err(FrameworkError::validation(format!(
             "task_ledger_command: expected schema_version {:?} or omit; got {:?}",
             TASK_LEDGER_COMMAND_ENVELOPE_SCHEMA, schema
-        ));
+        )));
     }
     let kind = envelope
         .get("kind")

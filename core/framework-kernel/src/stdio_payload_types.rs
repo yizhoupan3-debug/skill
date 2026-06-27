@@ -333,6 +333,7 @@ pub fn runtime_concurrency_defaults_payload() -> RuntimeConcurrencyDefaultsPaylo
 #[cfg(test)]
 #[allow(clippy::assertions_on_constants)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     // ── Concurrency constant sanity checks ──

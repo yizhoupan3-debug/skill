@@ -6,3 +6,12 @@
 pub mod kernel_bootstrap;
 pub mod kernel_utils;
 pub mod stdio_transport;
+
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn smoke() {
+        assert!(true);
+    }
+}

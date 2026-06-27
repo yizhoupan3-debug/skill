@@ -4,7 +4,7 @@ use serde_json::{Map, Value, json};
 use std::path::Path;
 use std::sync::OnceLock;
 
-use core_policy::error::FrameworkError;
+use core_errors::FrameworkError;
 
 use crate::driver::{build_driver_command, default_resume_mode, driver_id_for_host};
 use crate::process::{launch_process, process_is_alive, terminate_process};

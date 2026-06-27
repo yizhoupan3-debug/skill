@@ -38,6 +38,21 @@ impl LoopPhase {
         matches!(self, LoopPhase::Completed | LoopPhase::Interrupted)
     }
 
+    /// Return the set of valid next phases from this phase.
+    /// When `other` is not in this set, the transition is unusual but not blocked.
+    pub fn valid_transitions(&self) -> &[LoopPhase] {
+        match self {
+            LoopPhase::Pending => &[LoopPhase::Discovering, LoopPhase::Interrupted],
+            LoopPhase::Discovering => &[LoopPhase::Preflight, LoopPhase::Interrupted],
+            LoopPhase::Preflight => &[LoopPhase::Running, LoopPhase::Interrupted],
+            LoopPhase::Running => &[LoopPhase::Verifying, LoopPhase::Interrupted],
+            LoopPhase::Verifying => &[LoopPhase::Completed, LoopPhase::Escalated, LoopPhase::Interrupted],
+            LoopPhase::Completed => &[], // terminal
+            LoopPhase::Escalated => &[LoopPhase::Completed, LoopPhase::Interrupted],
+            LoopPhase::Interrupted => &[], // terminal
+        }
+    }
+
     pub fn as_str(&self) -> &'static str {
         match self {
             LoopPhase::Pending => "pending",

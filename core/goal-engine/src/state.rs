@@ -105,7 +105,21 @@ pub fn create_initial_state(loop_id: &str, profile: &str) -> LoopRunState {
 }
 
 /// Transition the loop runner to a new phase, updating the heartbeat and refresh timestamp.
+/// Logs a warning when the transition is not in the valid set, but still allows it.
 pub fn transition_phase(state: &mut LoopRunState, new_phase: LoopPhase) {
+    let current_str = &state.phase;
+    if let Some(current) = [LoopPhase::Pending, LoopPhase::Discovering, LoopPhase::Preflight, LoopPhase::Running, LoopPhase::Verifying, LoopPhase::Completed, LoopPhase::Escalated, LoopPhase::Interrupted]
+        .iter().find(|p| p.as_str() == current_str)
+    {
+        let valid = current.valid_transitions();
+        if !valid.contains(&new_phase) {
+            tracing::warn!(
+                from = %current_str,
+                to = %new_phase.as_str(),
+                "LoopPhase: invalid transition detected (allowed but unusual)"
+            );
+        }
+    }
     state.phase = new_phase.as_str().to_string();
     state.last_heartbeat = now_iso();
     state.last_refreshed_at = now_iso();

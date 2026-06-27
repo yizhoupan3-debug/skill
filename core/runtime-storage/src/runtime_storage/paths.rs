@@ -1,4 +1,3 @@
-use core_errors::FrameworkError;
 use super::RuntimeStorageRequestPayload;
 use super::backend::normalized_backend_family;
 use sha2::{Digest, Sha256};
@@ -50,6 +49,10 @@ pub fn clean_absolute_path(path: &Path) -> Result<PathBuf, String> {
     Ok(cleaned)
 }
 
+/// Normalize a path via lexical-only component cleaning (does NOT resolve symlinks).
+/// Despite its name, this function does NOT call `std::fs::canonicalize` — it only
+/// removes `.` and `..` components from the absolute path string. If you need actual
+/// symlink resolution, use `canonicalize_existing_ancestors` instead.
 #[tracing::instrument(level = "debug", skip_all)]
 pub fn canonicalize_or_clean_absolute_path(path: &Path) -> Result<PathBuf, String> {
     clean_absolute_path(path)

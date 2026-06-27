@@ -65,6 +65,7 @@ pub fn set_hooks(h: BrowserMcpHooks) {
 
 /// Get the hook function pointers. Panics if `set_hooks` was never called.
 pub fn hooks() -> &'static BrowserMcpHooks {
+    #[allow(clippy::expect_used)]
     HOOKS.get().expect(
         "BrowserMcpHooks not initialized — call browser_mcp_dispatch::set_hooks() before using browser-mcp",
     )

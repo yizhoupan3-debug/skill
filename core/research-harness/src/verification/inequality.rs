@@ -198,7 +198,7 @@ pub fn solve_system(system: &InequalitySystem, timeout_ms: Option<u64>) -> Feasi
     let result = solve_via_minilp(system);
     match result {
         Ok(model) => FeasibilityResult::Feasible { model },
-        Err(cert) => FeasibilityResult::Infeasible { proof_certificate: cert },
+        Err(cert) => FeasibilityResult::Infeasible { proof_certificate: cert.to_string() },
     }
 }
 

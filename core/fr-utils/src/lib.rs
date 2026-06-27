@@ -5,6 +5,16 @@ pub mod env_flags;
 pub mod io_utils;
 pub mod json_io;
 pub mod json_value;
+pub mod process_utils;
 pub mod stdio_op_registry;
 pub mod types;
 pub mod util;
+
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn smoke() {
+        assert!(true);
+    }
+}

@@ -121,7 +121,7 @@ pub fn dispatch_stdio_json_request(op: &str, payload: Value) -> Result<Value, Fr
         Some(StdioOpDomain::Trace) => dispatch_trace_stdio_request(op, payload),
         Some(StdioOpDomain::Framework) => dispatch_framework_stdio_request(op, payload),
         Some(StdioOpDomain::Tool) => dispatch_tool_stdio_request(op, payload),
-        None => Err(format!("unsupported stdio operation: {op}")),
+        None => Err(FrameworkError::validation(format!("unsupported stdio operation: {op}"))),
     }
 }
 
@@ -372,11 +372,21 @@ fn dispatch_framework_stdio_request(op: &str, payload: Value) -> Result<Value, F
                 .map_err(FrameworkError::validation)
         }
         "framework_rfv_loop" => {
-            let repo_root = std::path::Path::new(
-                payload.get("repo_root").and_then(|v| v.as_str()).unwrap_or(".")
-            );
+            let repo_root_str = payload.get("repo_root").and_then(|v| v.as_str()).unwrap_or(".");
+            if repo_root_str == "." {
+                tracing::warn!("framework_rfv_loop: repo_root is missing, defaulting to \".\"");
+            }
+            let repo_root = std::path::Path::new(repo_root_str);
             let task_id = payload.get("task_id").and_then(|v| v.as_str()).unwrap_or("");
+            if task_id.is_empty() {
+                return Err(FrameworkError::validation(
+                    "framework_rfv_loop: task_id is required".to_string(),
+                ));
+            }
             let goal = payload.get("goal").and_then(|v| v.as_str()).unwrap_or("");
+            if goal.is_empty() {
+                tracing::warn!("framework_rfv_loop: goal is missing, defaulting to empty string");
+            }
             let round = payload.get("round").and_then(|v| v.as_u64()).unwrap_or(1);
             let verdict = crate::qg_entry::trigger(repo_root, task_id, quality_gate::scene::GENERAL, goal, None, round, None, None);
             Ok(serde_json::to_value(&verdict)?)
@@ -394,7 +404,7 @@ fn dispatch_tool_stdio_request(op: &str, payload: Value) -> Result<Value, Framew
             let registry_path = resolve_tool_registry_path_from_payload(&payload)?;
             let decision = tool_routing_engine::routing::route_tool(&query, &registry_path, None)?
                 .ok_or_else(|| FrameworkError::not_found(format!("route_tool: no matching tool found for query '{query}'")))?;
-            serde_json::to_value(&decision).map_err(|e| e.to_string())
+            serde_json::to_value(&decision).map_err(|e| FrameworkError::validation(e.to_string()))
         }
         "search_tools" => {
             let query = required_non_empty_string(&payload, "query", "stdio search_tools")?;
@@ -405,7 +415,7 @@ fn dispatch_tool_stdio_request(op: &str, payload: Value) -> Result<Value, Framew
             let records = mcp_tool_registry::load_tool_records_cached(&registry_path)
                 ?;
             let results = tool_routing_engine::search::search_tools(&query, &records, top_k, None);
-            serde_json::to_value(&results).map_err(|e| e.to_string())
+            serde_json::to_value(&results).map_err(|e| FrameworkError::validation(e.to_string()))
         }
         "tool_registry_status" => {
             let registry_path = resolve_tool_registry_path_from_payload(&payload)?;
@@ -537,7 +547,8 @@ fn dispatch_stdio_search_skills(payload: Value) -> Result<Value, FrameworkError>
     let runtime_path = optional_non_empty_string(&payload, "runtime_path").map(PathBuf::from);
     let host_id = optional_non_empty_string(&payload, "host_id");
     let records = load_records_cached_for_stdio(runtime_path.as_deref()).map_err(FrameworkError::validation)?;
-    let host_indices = filter_record_indices_for_host(&records, host_id.as_deref()).map_err(FrameworkError::validation)?;
+    let host_indices = filter_record_indices_for_host(&records, host_id.as_deref())
+        .map_err(|e| FrameworkError::validation(format!("host filter: {e}")))?;
     let matches = search_skills_subset(&records, Some(&host_indices), &query, limit);
     let resolved = build_search_results_payload(&query, matches);
     serialize_payload(resolved, "search")

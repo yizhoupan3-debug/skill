@@ -137,9 +137,77 @@ use mcp_tool_handlers::*;
 #[cfg(any(test, feature = "test-support"))]
 pub use tools::{build_evidence_entry, tool_closeout_gate};
 
+/// Dispatch target derived from MCP_TOOL_REGISTRY.json's `mcp_server` field.
+/// Determines how a tool is executed within this server process.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum McpDispatchTarget {
+    /// In-process via CompositeRegistry (mcp_server: "router-rs")
+    Builtin,
+    /// In-process via research-harness fn ptr (mcp_server: "research-harness")
+    ResearchHarness,
+    /// Out-of-process via router-rs-cli subprocess (mcp_server: "router-rs-cli")
+    CliSubprocess,
+}
+
+/// Registry-backed dispatch table loaded from MCP_TOOL_REGISTRY.json.
+/// Maps tool names to their dispatch target based on the `mcp_server` field.
+/// Single source of truth for both tools/list visibility and tools/call routing.
+struct ToolDispatchTable {
+    targets: HashMap<String, McpDispatchTarget>,
+}
+
+impl ToolDispatchTable {
+    /// Build the dispatch table from the tool registry.
+    /// Only includes tools handled by this MCP server process (router-rs, research-harness, router-rs-cli).
+    fn from_registry() -> Self {
+        let registry_path = mcp_tool_registry::resolve_tool_registry_path()
+            .unwrap_or_else(|| {
+                std::path::PathBuf::from(
+                    framework_kernel::constants::MCP_TOOL_REGISTRY_RELATIVE_PATH,
+                )
+            });
+        let records = match mcp_tool_registry::load_tool_records_cached(&registry_path) {
+            Ok(records) => records,
+            Err(e) => {
+                tracing::warn!("ToolDispatchTable: failed to load registry: {e}");
+                return Self { targets: HashMap::new() };
+            }
+        };
+
+        let mut targets = HashMap::new();
+        for r in &records {
+            let target = match r.mcp_server.as_str() {
+                "router-rs" => Some(McpDispatchTarget::Builtin),
+                "research-harness" => Some(McpDispatchTarget::ResearchHarness),
+                "router-rs-cli" => Some(McpDispatchTarget::CliSubprocess),
+                _ => None,
+            };
+            if let Some(t) = target {
+                targets.insert(r.slug.clone(), t);
+            }
+        }
+        Self { targets }
+    }
+
+    fn get(&self, tool_name: &str) -> Option<McpDispatchTarget> {
+        self.targets.get(tool_name).copied()
+    }
+
+    fn is_cli_tool(&self, tool_name: &str) -> bool {
+        self.get(tool_name) == Some(McpDispatchTarget::CliSubprocess)
+    }
+}
+
+/// Lazily-initialized dispatch table from MCP_TOOL_REGISTRY.json.
+static DISPATCH_TABLE: OnceLock<ToolDispatchTable> = OnceLock::new();
+
 /// Dispatch a tool call through the global CompositeRegistry,
 /// falling through to the external research-tool handler when
 /// the built-in registry does not recognise the tool name.
+///
+/// CLI-routed tools (mcp_server: "router-rs-cli") are intercepted before
+/// both the CompositeRegistry and the research-harness fallback and
+/// executed as a router-rs-cli subprocess for process isolation.
 /// Defined in mod.rs so both tools and mcp_tool_handlers can reference it.
 pub(super) fn dispatch_tool(
     tool_name: &str,
@@ -148,6 +216,16 @@ pub(super) fn dispatch_tool(
     host_id: &str,
     connection_session_id: &str,
 ) -> Result<String, String> {
+    // CLI-routed tools: spawn as subprocess (process isolation for blocking I/O).
+    // MUST be checked before CompositeRegistry — some CLI tools (e.g. web_fetch)
+    // have legacy ToolHandler entries that would otherwise consume the call.
+    if DISPATCH_TABLE
+        .get_or_init(ToolDispatchTable::from_registry)
+        .is_cli_tool(tool_name)
+    {
+        return spawn_cli_tool(tool_name, args, repo_root);
+    }
+
     use std::sync::OnceLock;
 
     static REGISTRY: OnceLock<CompositeRegistry> = OnceLock::new();
@@ -440,8 +518,13 @@ fn build_composite_tools_from_registry() -> Vec<Value> {
 
     records
         .iter()
+        // Include tools handled by this MCP server (router-rs/research-harness/router-rs-cli)
+        // based on mcp_server as the authoritative field, not dispatch_domain.
         .filter(|r| {
-            r.dispatch_domain.starts_with("domain:") || r.dispatch_domain == "research"
+            matches!(
+                r.mcp_server.as_str(),
+                "router-rs" | "research-harness" | "router-rs-cli"
+            )
         })
         .filter(|r| !r.tool_flags.iter().any(|f| f == "deprecated"))
         .map(|r| {
@@ -789,6 +872,203 @@ pub fn tool_closeout_record_write_for_test(
     repo_path: &Path,
 ) -> Result<String, String> {
     tool_closeout_record_write(arguments, repo_path, "opencode")
+}
+
+
+// ── CLI subprocess dispatch ──
+
+/// Map MCP tool name and JSON arguments to `router-rs-cli` subcommand arguments.
+/// Each tool name maps to its corresponding CLI subcommand tree with flags
+/// derived from the MCP tool's JSON input schema.
+fn map_tool_to_cli_args(tool_name: &str, args: &Value) -> Result<Vec<String>, String> {
+    match tool_name {
+        "web_fetch" => {
+            let url = args.get("url")
+                .and_then(Value::as_str)
+                .ok_or("Missing required argument: url")?;
+            let mut cmd = vec!["web".to_string(), "fetch".to_string(), url.to_string()];
+            if let Some(max_bytes) = args.get("max_bytes").and_then(Value::as_u64) {
+                cmd.push("--max-bytes".to_string());
+                cmd.push(max_bytes.to_string());
+            }
+            Ok(cmd)
+        }
+        "research_aigc_check" => {
+            let text = args.get("text")
+                .and_then(Value::as_str)
+                .ok_or("Missing required argument: text")?;
+            let mut cmd = vec![
+                "research".to_string(), "aigc-check".to_string(),
+                "--text".to_string(), text.to_string(),
+            ];
+            if let Some(lang) = args.get("language").and_then(Value::as_str) {
+                cmd.push("--language".to_string());
+                cmd.push(lang.to_string());
+            }
+            Ok(cmd)
+        }
+        "research_smoke" => {
+            let mut cmd = vec!["research".to_string(), "smoke".to_string()];
+            if let Some(source) = args.get("source").and_then(Value::as_str) {
+                cmd.push("--source".to_string());
+                cmd.push(source.to_string());
+            }
+            if let Some(repo_root) = args.get("repo_root").and_then(Value::as_str) {
+                cmd.push("--repo-root".to_string());
+                cmd.push(repo_root.to_string());
+            }
+            if let Some(barrier_id) = args.get("barrier_id").and_then(Value::as_str) {
+                cmd.push("--barrier-id".to_string());
+                cmd.push(barrier_id.to_string());
+            }
+            Ok(cmd)
+        }
+        "research_verification_literature" => {
+            let check = args.get("check")
+                .and_then(Value::as_str)
+                .ok_or("Missing required argument: check")?;
+            let mut cmd = vec![
+                "research".to_string(), "verify".to_string(), "literature".to_string(),
+                "--check".to_string(), check.to_string(),
+            ];
+            if let Some(doi) = args.get("doi").and_then(Value::as_str) {
+                cmd.push("--doi".to_string());
+                cmd.push(doi.to_string());
+            }
+            if let Some(claims) = args.get("claims").and_then(Value::as_array) {
+                cmd.push("--claims".to_string());
+                cmd.push(serde_json::to_string(claims)
+                    .map_err(|e| format!("claims serialization failed: {e}"))?);
+            }
+            if let Some(references) = args.get("references").and_then(Value::as_array) {
+                cmd.push("--references".to_string());
+                cmd.push(serde_json::to_string(references)
+                    .map_err(|e| format!("references serialization failed: {e}"))?);
+            }
+            Ok(cmd)
+        }
+        "research_verification_structure" => {
+            let check = args.get("check")
+                .and_then(Value::as_str)
+                .ok_or("Missing required argument: check")?;
+            let path = args.get("path")
+                .and_then(Value::as_str)
+                .ok_or("Missing required argument: path")?;
+            Ok(vec![
+                "research".to_string(), "verify".to_string(), "structure".to_string(),
+                path.to_string(), "--check".to_string(), check.to_string(),
+            ])
+        }
+        "research_verification_reproducibility" => {
+            let dir = args.get("experiment_dir")
+                .and_then(Value::as_str)
+                .ok_or("Missing required argument: experiment_dir")?;
+            let mut cmd = vec![
+                "research".to_string(), "verify".to_string(), "reproducibility".to_string(),
+                dir.to_string(),
+            ];
+            if let Some(run_paths) = args.get("run_paths").and_then(Value::as_array) {
+                cmd.push("--run-paths".to_string());
+                cmd.push(serde_json::to_string(run_paths)
+                    .map_err(|e| format!("run_paths serialization failed: {e}"))?);
+            }
+            Ok(cmd)
+        }
+        "math_prove_inequality" => {
+            let expr = args.get("expression")
+                .and_then(Value::as_str)
+                .ok_or("Missing required argument: expression")?;
+            let mut cmd = vec!["math".to_string(), "prove".to_string(), expr.to_string()];
+            if let Some(timeout) = args.get("timeout_ms").and_then(Value::as_u64) {
+                cmd.push("--timeout-ms".to_string());
+                cmd.push(timeout.to_string());
+            }
+            Ok(cmd)
+        }
+        "math_backend_available" => {
+            Ok(vec!["math".to_string(), "backend".to_string()])
+        }
+        "math_asymptotic_chain" => {
+            let steps = args.get("steps")
+                .and_then(Value::as_array)
+                .ok_or("Missing required argument: steps")?;
+            let mut cmd = vec![
+                "math".to_string(), "asymptotic-chain".to_string(),
+                "--steps".to_string(),
+                serde_json::to_string(steps)
+                    .map_err(|e| format!("steps serialization failed: {e}"))?,
+            ];
+            if let Some(var) = args.get("variable").and_then(Value::as_str) {
+                cmd.push("--variable".to_string());
+                cmd.push(var.to_string());
+            }
+            if let Some(regime) = args.get("regime").and_then(Value::as_str) {
+                cmd.push("--regime".to_string());
+                cmd.push(regime.to_string());
+            }
+            if let Some(sympy) = args.get("sympy_check").and_then(Value::as_bool) {
+                if !sympy {
+                    cmd.push("--no-sympy".to_string());
+                }
+            }
+            Ok(cmd)
+        }
+        "math_lean_verify" => {
+            let script = args.get("script")
+                .and_then(Value::as_str)
+                .ok_or("Missing required argument: script")?;
+            let tmp_path = std::env::temp_dir()
+                .join(format!("router_rs_lean_{}.lean", std::process::id()));
+            std::fs::write(&tmp_path, script)
+                .map_err(|e| format!("failed to write lean script to temp file: {e}"))?;
+            Ok(vec![
+                "math".to_string(), "lean-verify".to_string(),
+                tmp_path.to_string_lossy().to_string(),
+            ])
+        }
+        _ => Err(format!("Unknown CLI-routed tool: {tool_name}")),
+    }
+}
+
+/// Spawn a `router-rs-cli` subprocess for the given tool name and arguments.
+/// The subprocess is spawned with the repo_root as the current directory.
+/// Temp files (e.g., for lean-verify) are cleaned up after the subprocess finishes.
+fn spawn_cli_tool(tool_name: &str, args: &Value, repo_root: &Path) -> Result<String, String> {
+    let cli_args = map_tool_to_cli_args(tool_name, args)?;
+
+    let result = (|| {
+        let output = std::process::Command::new("router-rs-cli")
+            .args(&cli_args)
+            .current_dir(repo_root)
+            .output()
+            .map_err(|e| {
+                format!(
+                    "router-rs-cli subprocess failed (is it in PATH or built?): {e}"
+                )
+            })?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(format!(
+                "router-rs-cli {} failed ({}): {}",
+                tool_name,
+                output.status,
+                stderr.trim()
+            ));
+        }
+
+        String::from_utf8(output.stdout)
+            .map_err(|e| format!("CLI output encoding error: {e}"))
+    })();
+
+    // Clean up temp file created for lean-verify
+    if tool_name == "math_lean_verify" {
+        let tmp_path = std::env::temp_dir()
+            .join(format!("router_rs_lean_{}.lean", std::process::id()));
+        let _ = std::fs::remove_file(&tmp_path);
+    }
+
+    result
 }
 
 

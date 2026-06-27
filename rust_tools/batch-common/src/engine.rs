@@ -47,11 +47,10 @@ pub const JOBS_AUTO: &str = "auto";
 /// The `env_prefix` identifies the tool (e.g. "PDF", "OOXML").
 pub fn resolve_jobs(env_prefix: &str, jobs_arg: &str, hint_paths: &[PathBuf]) -> usize {
     let env_key = format!("{env_prefix}_BATCH_JOBS");
-    if let Ok(raw) = std::env::var(&env_key) {
-        if let Ok(n) = raw.parse::<usize>() {
+    if let Ok(raw) = std::env::var(&env_key)
+        && let Ok(n) = raw.parse::<usize>() {
             return n.max(1);
         }
-    }
 
     if !jobs_arg.eq_ignore_ascii_case(JOBS_AUTO) {
         if let Ok(n) = jobs_arg.parse::<usize>() {

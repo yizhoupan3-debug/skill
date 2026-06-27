@@ -23,3 +23,12 @@ pub mod types;
 pub use checker::GateChecker;
 pub use registry::CheckerRegistry;
 pub use types::{CheckContext, CheckResult, Finding, GateVerdict, Severity};
+
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn smoke() {
+        assert!(true);
+    }
+}

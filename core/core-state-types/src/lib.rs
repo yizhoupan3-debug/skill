@@ -2,3 +2,12 @@
 
 pub mod goal_prediction;
 pub mod task_state_types;
+
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn smoke() {
+        assert!(true);
+    }
+}

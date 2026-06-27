@@ -57,13 +57,11 @@ impl CheckerRegistry {
         let mut results: Vec<CheckResult> = Vec::with_capacity(checkers.len());
         for checker in checkers {
             // Sub-scene filtering (Wave 6): skip checkers with a mismatched affinity.
-            if let Some(ref sub) = ctx.sub_scene {
-                if let Some(affinity) = checker.sub_scene_affinity() {
-                    if affinity != sub.as_str() {
+            if let Some(ref sub) = ctx.sub_scene
+                && let Some(affinity) = checker.sub_scene_affinity()
+                    && affinity != sub.as_str() {
                         continue;
                     }
-                }
-            }
 
             let result = checker.check(ctx);
             if !result.findings.is_empty() || !result.passed {

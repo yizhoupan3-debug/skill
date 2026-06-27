@@ -1,7 +1,8 @@
 //! Scene constants for QG Route dispatch.
 //!
 //! These are the only valid scene values. Every SKILL.md must declare one;
-//! scene extraction defaults to GENERAL when absent or invalid.
+use tracing;
+// scene extraction defaults to GENERAL when absent or invalid.
 
 /// General-purpose / default scene (fallback).
 pub const GENERAL: &str = "general";
@@ -24,5 +25,10 @@ pub(crate) fn is_valid(s: &str) -> bool {
 
 /// Return `s` if valid, otherwise `GENERAL`. Never panics.
 pub(crate) fn normalize(s: &str) -> &str {
-    if is_valid(s) { s } else { GENERAL }
+    if is_valid(s) {
+        s
+    } else {
+        tracing::warn!(invalid_scene = s, "QG scene: unknown scene normalized to GENERAL");
+        GENERAL
+    }
 }

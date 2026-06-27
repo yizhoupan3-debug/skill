@@ -779,6 +779,7 @@ pub use crate::stdio_payload_types::*;
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use clap::Parser;
 

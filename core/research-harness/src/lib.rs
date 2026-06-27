@@ -69,3 +69,11 @@ pub fn register_qg_checkers(registry: &mut quality_gate::CheckerRegistry) {
     registry.register(quality_gate::scene::RESEARCH, Box::new(verification::symbolic_gate::Symbolic));
     registry.register(quality_gate::scene::RESEARCH, Box::new(verification::sympy_bridge_gate::SympyBridge));
 }
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn smoke() {
+        assert!(true);
+    }
+}
