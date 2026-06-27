@@ -15,8 +15,8 @@ use crate::tool_types::McpToolRecord;
 
 use core_errors::FrameworkError;
 
-pub const EXPECTED_SCHEMA: &str = "mcp-tool-registry-v1";
-const EXPECTED_SCHEMA_V2: &str = "mcp-tool-registry-v2";
+pub const EXPECTED_SCHEMA: &str = "mcp-tool-registry-v2";
+const EXPECTED_SCHEMA_V1: &str = "mcp-tool-registry-v1";
 
 /// Default TTL for the cached registry (60 seconds).
 const CACHE_TTL_SECS: u64 = 60;
@@ -32,9 +32,9 @@ pub fn load_tool_records(registry_path: &Path) -> Result<Vec<McpToolRecord>, Fra
         .get("schema_version")
         .and_then(|v| v.as_str())
         .unwrap_or("");
-    if schema != EXPECTED_SCHEMA && schema != EXPECTED_SCHEMA_V2 {
+    if schema != EXPECTED_SCHEMA && schema != EXPECTED_SCHEMA_V1 {
         return Err(FrameworkError::validation(format!(
-            "MCP_TOOL_REGISTRY.json schema mismatch: expected {EXPECTED_SCHEMA} or {EXPECTED_SCHEMA_V2}, got {schema}"
+            "MCP_TOOL_REGISTRY.json schema mismatch: expected {EXPECTED_SCHEMA} or {EXPECTED_SCHEMA_V1}, got {schema}"
         )));
     }
 
@@ -51,10 +51,10 @@ pub fn load_tool_records(registry_path: &Path) -> Result<Vec<McpToolRecord>, Fra
     match &tools[0] {
         Value::Object(_) => tools
             .iter()
-            .enumerate()
-            .map(|(_idx, tool)| {
+            
+            .map(|tool| {
                 serde_json::from_value::<McpToolRecord>(tool.clone())
-                    .map_err(|e| FrameworkError::Json(e))
+                    .map_err(FrameworkError::Json)
             })
             .collect(),
         Value::Array(_) => {

@@ -78,7 +78,7 @@ impl ToolHandler for RoutingTools {
 }
 
 // ---------------------------------------------------------------------------
-// LifecycleTools (8 tools, including aliases)
+// LifecycleTools (6 tools)
 // ---------------------------------------------------------------------------
 
 pub struct LifecycleTools;
@@ -152,11 +152,11 @@ impl ToolHandler for TaskCrudTools {
     }
     fn dispatch(&self, tool_name: &str, args: &Value, ctx: &ToolCallContext) -> Result<String, String> {
         match tool_name {
-            "task_create" => tool_task_create(args, &ctx.repo_root),
-            "task_list" => tool_task_list(&ctx.repo_root),
-            "task_complete" => tool_task_complete(args, &ctx.repo_root),
-            "task_focus" => tool_task_focus(args, &ctx.repo_root),
-            "task_chain_advance" => tool_task_chain_advance(args, &ctx.repo_root),
+            "task_create" => Ok(tool_task_create(args, &ctx.repo_root)?),
+            "task_list" => Ok(tool_task_list(&ctx.repo_root)?),
+            "task_complete" => Ok(tool_task_complete(args, &ctx.repo_root)?),
+            "task_focus" => Ok(tool_task_focus(args, &ctx.repo_root)?),
+            "task_chain_advance" => Ok(tool_task_chain_advance(args, &ctx.repo_root)?),
             _ => Err(format!("TaskCrudTools: unknown tool: {tool_name}")),
         }
     }

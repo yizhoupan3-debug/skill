@@ -99,9 +99,8 @@ pub fn build_orchestrator_prompt(
 {manuscript_path}
 
 ## Procedure
-1. Initialize Quality Gate loop via `framework_goal_drive`:
+1. Initialize Quality Gate loop via `research_review_loop`:
    - operation: start
-   - goal_type: loop
    - goal: "{goal}"
    - max_rounds: 10
    - min_rounds: 5
@@ -112,7 +111,7 @@ pub fn build_orchestrator_prompt(
    b. Spawn ONE reviewer subagent with the dimension-specific prompt
    c. Receive findings (JSON)
    d. Apply surgical fixes based on findings
-   e. Log round via `framework_rfv_loop`:
+   e. Log round via `research_review_loop`:
       - operation: submit_round
       - round: N
       - review_summary: summary from reviewer
@@ -125,7 +124,7 @@ pub fn build_orchestrator_prompt(
       - If stable_count >= 2 → BREAK (converged)
 
 3. Close QG:
-   - framework_rfv_loop(operation=close, supervisor_decision="close")
+   - research_review_loop(operation=close, supervisor_decision="close")
 
 4. Write closeout record:
    - summary: "Paper revision converged after N rounds"

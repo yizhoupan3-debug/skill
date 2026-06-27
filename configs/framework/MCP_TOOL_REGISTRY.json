@@ -244,7 +244,7 @@
           },
           "verification_status": {
             "type": "string",
-            "description": "验证状态：passed/failed/skipped"
+            "description": "验证状态：passed/failed/partial/not_run"
           },
           "changed_files": {
             "type": "array",
@@ -266,6 +266,17 @@
               "type": "string"
             },
             "description": "风险项列表"
+          },
+          "commands_run": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "已执行命令列表（可选）"
+          },
+          "notes": {
+            "type": "string",
+            "description": "附加说明（可选）"
           }
         }
       }
@@ -422,7 +433,8 @@
       "host_platforms": [],
       "mcp_server": "router-rs",
       "tool_flags": [
-        "behavior:core_routing_tool"
+        "behavior:core_routing_tool",
+        "deprecated"
       ],
       "input_schema": {
         "type": "object",
@@ -467,7 +479,9 @@
       ],
       "host_platforms": [],
       "mcp_server": "research-harness",
-      "tool_flags": [],
+      "tool_flags": [
+        "deprecated"
+      ],
       "input_schema": {
         "type": "object",
         "required": [
@@ -669,7 +683,9 @@
       ],
       "host_platforms": [],
       "mcp_server": "research-harness",
-      "tool_flags": [],
+      "tool_flags": [
+        "deprecated"
+      ],
       "input_schema": {
         "type": "object",
         "properties": {
@@ -714,7 +730,9 @@
       ],
       "host_platforms": [],
       "mcp_server": "research-harness",
-      "tool_flags": [],
+      "tool_flags": [
+        "deprecated"
+      ],
       "input_schema": {
         "type": "object",
         "required": [
@@ -759,7 +777,9 @@
       ],
       "host_platforms": [],
       "mcp_server": "research-harness",
-      "tool_flags": [],
+      "tool_flags": [
+        "deprecated"
+      ],
       "input_schema": {
         "type": "object",
         "properties": {}
@@ -838,7 +858,9 @@
       ],
       "host_platforms": [],
       "mcp_server": "research-harness",
-      "tool_flags": [],
+      "tool_flags": [
+        "deprecated"
+      ],
       "input_schema": {
         "type": "object",
         "required": [
@@ -1140,7 +1162,9 @@
       ],
       "host_platforms": [],
       "mcp_server": "research-harness",
-      "tool_flags": [],
+      "tool_flags": [
+        "deprecated"
+      ],
       "input_schema": {
         "type": "object",
         "required": [
@@ -1176,7 +1200,9 @@
       ],
       "host_platforms": [],
       "mcp_server": "research-harness",
-      "tool_flags": [],
+      "tool_flags": [
+        "deprecated"
+      ],
       "input_schema": {
         "type": "object",
         "required": [
@@ -1297,7 +1323,9 @@
       ],
       "host_platforms": [],
       "mcp_server": "research-harness",
-      "tool_flags": [],
+      "tool_flags": [
+        "deprecated"
+      ],
       "input_schema": {
         "type": "object",
         "required": [
@@ -1418,7 +1446,9 @@
       ],
       "host_platforms": [],
       "mcp_server": "research-harness",
-      "tool_flags": [],
+      "tool_flags": [
+        "deprecated"
+      ],
       "input_schema": {
         "type": "object",
         "required": [

@@ -2,6 +2,7 @@
 // Extracted from state_manager.rs during module split.
 
 use crate::utils::atomic_write::write_atomic_json;
+use core_errors::FrameworkError;
 use serde_json::{Value, json};
 use std::fs;
 use std::path::Path;
@@ -78,15 +79,14 @@ fn pointer_file_matches_task_id(path: &Path, task_id: &str) -> bool {
 }
 
 /// Load TASK_POINTERS.json, creating parent dirs if needed.
-fn load_task_pointers_json(repo_root: &Path) -> Result<Value, String> {
+fn load_task_pointers_json(repo_root: &Path) -> Result<Value, FrameworkError> {
     let mirror = repo_root.join("artifacts/current");
-    fs::create_dir_all(&mirror).map_err(|e| format!("mkdir {}: {e}", mirror.display()))?;
+    fs::create_dir_all(&mirror)?;
     let pointers_path = mirror.join("TASK_POINTERS.json");
     Ok(match fs::read_to_string(&pointers_path) {
-        Ok(raw) => serde_json::from_str::<Value>(&raw)
-            .map_err(|e| format!("parse TASK_POINTERS.json: {e}"))?,
+        Ok(raw) => serde_json::from_str::<Value>(&raw)?,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => json!({}),
-        Err(e) => return Err(format!("read TASK_POINTERS.json: {e}")),
+        Err(e) => return Err(FrameworkError::Io(e)),
     })
 }
 
@@ -130,7 +130,7 @@ fn upsert_tasks_array_entry(
 }
 
 /// Write `artifacts/current/active_task.json` (`{"task_id":…}` only).
-pub fn write_active_task_pointer(repo_root: &Path, task_id: &str) -> Result<(), String> {
+pub fn write_active_task_pointer(repo_root: &Path, task_id: &str) -> Result<(), FrameworkError> {
     crate::utils::path_guard::validate_task_id_component(task_id)?;
     let mut pointers = load_task_pointers_json(repo_root)?;
     if let Some(obj) = pointers.as_object_mut() {
@@ -140,14 +140,14 @@ pub fn write_active_task_pointer(repo_root: &Path, task_id: &str) -> Result<(), 
     write_atomic_json(
         &repo_root.join("artifacts/current/TASK_POINTERS.json"),
         &pointers,
-    ).map_err(|e| e.to_string())
+    )
 }
 
 fn write_focus_task_pointer_minimal(
     repo_root: &Path,
     task_id: &str,
     task_label: &str,
-) -> Result<(), String> {
+) -> Result<(), FrameworkError> {
     crate::utils::path_guard::validate_task_id_component(task_id)?;
     let mut pointers = load_task_pointers_json(repo_root)?;
     let updated_at = framework_kernel::time::now_iso();
@@ -159,7 +159,7 @@ fn write_focus_task_pointer_minimal(
     write_atomic_json(
         &repo_root.join("artifacts/current/TASK_POINTERS.json"),
         &pointers,
-    ).map_err(|e| e.to_string())
+    )
 }
 
 /// Atomically write both `active_task_id` and `focus_task_id` in one operation,
@@ -169,7 +169,7 @@ pub fn set_task_focus(
     repo_root: &Path,
     task_id: &str,
     task_label: &str,
-) -> Result<(), String> {
+) -> Result<(), FrameworkError> {
     crate::utils::path_guard::validate_task_id_component(task_id)?;
     let mut pointers = load_task_pointers_json(repo_root)?;
     let updated_at = framework_kernel::time::now_iso();
@@ -182,7 +182,7 @@ pub fn set_task_focus(
     write_atomic_json(
         &repo_root.join("artifacts/current/TASK_POINTERS.json"),
         &pointers,
-    ).map_err(|e| e.to_string())
+    )
 }
 
 fn goal_drive_set_focus_from_payload(payload: &Value) -> bool {
@@ -198,7 +198,7 @@ pub fn sync_task_pointers_after_goal_drive(
     task_id: &str,
     goal_label: &str,
     payload: &Value,
-) -> Result<(), String> {
+) -> Result<(), FrameworkError> {
     write_active_task_pointer(repo_root, task_id)?;
     if goal_drive_set_focus_from_payload(payload) {
         write_focus_task_pointer_minimal(repo_root, task_id, goal_label)?;
@@ -207,14 +207,13 @@ pub fn sync_task_pointers_after_goal_drive(
 }
 
 /// Remove active/focus pointers when they reference `task_id` (complete / clear).
-pub fn neutralize_task_pointers_for_task(repo_root: &Path, task_id: &str) -> Result<(), String> {
+pub fn neutralize_task_pointers_for_task(repo_root: &Path, task_id: &str) -> Result<(), FrameworkError> {
     // Update TASK_POINTERS.json (Phase 3C consolidated file)
     let pointers_path = repo_root.join("artifacts/current/TASK_POINTERS.json");
     if pointers_path.is_file() {
         let raw = fs::read_to_string(&pointers_path)
-            .map_err(|e| format!("read TASK_POINTERS.json: {e}"))?;
-        let mut data: Value = serde_json::from_str(&raw)
-            .map_err(|e| format!("parse TASK_POINTERS.json: {e}"))?;
+            .map_err(FrameworkError::Io)?;
+        let mut data: Value = serde_json::from_str(&raw)?;
         let mut changed = false;
         if let Some(obj) = data.as_object_mut() {
             if obj.get("active_task_id").and_then(Value::as_str) == Some(task_id) {
@@ -238,8 +237,7 @@ pub fn neutralize_task_pointers_for_task(repo_root: &Path, task_id: &str) -> Res
             }
         }
         if changed {
-            write_atomic_json(&pointers_path, &data)
-                .map_err(|e| format!("write TASK_POINTERS.json: {e}"))?;
+            write_atomic_json(&pointers_path, &data)?;
         }
     }
     // Also clean up legacy files if they exist
@@ -247,11 +245,11 @@ pub fn neutralize_task_pointers_for_task(repo_root: &Path, task_id: &str) -> Res
     let focus_path = repo_root.join("artifacts/current/focus_task.json");
     if pointer_file_matches_task_id(&active_path, task_id) {
         fs::remove_file(&active_path)
-            .map_err(|e| format!("remove legacy active_task.json: {e}"))?;
+            .map_err(FrameworkError::Io)?;
     }
     if pointer_file_matches_task_id(&focus_path, task_id) {
         fs::remove_file(&focus_path)
-            .map_err(|e| format!("remove legacy focus_task.json: {e}"))?;
+            .map_err(FrameworkError::Io)?;
     }
     Ok(())
 }
@@ -259,12 +257,11 @@ pub fn neutralize_task_pointers_for_task(repo_root: &Path, task_id: &str) -> Res
 pub fn ensure_task_directory(
     repo_root: &Path,
     task_id: &str,
-) -> Result<std::path::PathBuf, String> {
+) -> Result<std::path::PathBuf, FrameworkError> {
     let tid = crate::utils::path_guard::validate_task_id_component(task_id)?;
     let task_dir = repo_root.join("artifacts/current").join(tid);
     if !task_dir.is_dir() {
-        fs::create_dir_all(&task_dir)
-            .map_err(|e| format!("failed to create task directory '{}': {e}", tid))?;
+        fs::create_dir_all(&task_dir)?;
     }
     Ok(task_dir)
 }

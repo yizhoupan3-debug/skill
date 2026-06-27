@@ -648,13 +648,13 @@ fn review_loop_start(arguments: &Value) -> Result<String, FrameworkError> {
             "checklist": checklist,
         },
         "total_dimensions": std::cmp::min(max_rounds, 7),
-        "workflow": "1. Call framework_goal_drive(operation=start, goal_type=loop, ...) to init the runtime loop. 2. Spawn reviewer subagent using current_round. 3. Call research_review_loop(operation=submit_round, round=N, findings=[...]) for next-round. 4. framework_rfv_loop handles convergence tracking.",
+        "workflow": "1. Call research_review_loop(operation=start, min_rounds=5, max_rounds=10, ...) to init the review loop. 2. Spawn reviewer subagent using current_round. 3. Call research_review_loop(operation=submit_round, round=N, findings=[...]) for next-round. 4. research_review_loop handles convergence tracking.",
     }))
     .map_err(FrameworkError::Json)
 }
 
 /// Operation `submit_round`: accept round + findings, return next-round dimension or completion.
-/// Stateless — convergence is managed by framework_rfv_loop at the runtime layer.
+/// Stateless — convergence is managed by research_review_loop at the runtime layer.
 fn review_loop_submit_round(arguments: &Value) -> Result<String, FrameworkError> {
     let round = arguments
         .get("round")
@@ -710,7 +710,7 @@ fn review_loop_submit_round(arguments: &Value) -> Result<String, FrameworkError>
             "prompt": prompt,
             "checklist": checklist,
         },
-        "next_step": "Call framework_rfv_loop(operation=submit_round, ...) to record the round in the runtime loop, then spawn reviewer for next round.",
+        "next_step": "Call research_review_loop(operation=submit_round, ...) to record the round in the runtime loop, then spawn reviewer for next round.",
     }))
     .map_err(FrameworkError::Json)
 }
@@ -723,8 +723,8 @@ fn review_loop_status(arguments: &Value) -> Result<String, FrameworkError> {
     serde_json::to_string_pretty(&json!({
         "round": round,
         "dimension": dim.display_name(),
-        "note": "Runtime loop state (convergence, rounds) is managed by framework_rfv_loop at the runtime layer.",
-        "next_step": "Call framework_rfv_loop(operation=status) for convergence state.",
+        "note": "Runtime loop state (convergence, rounds) is managed by research_review_loop at the runtime layer.",
+        "next_step": "Call research_review_loop(operation=status) for convergence state.",
     }))
     .map_err(FrameworkError::Json)
 }

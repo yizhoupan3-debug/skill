@@ -41,7 +41,7 @@ fn resolve_framework_goal_drive_repo(payload: &Value) -> Result<PathBuf, Framewo
 }
 
 /// stdio / CLI：`framework_goal_drive`
-pub fn framework_goal_drive(payload: Value) -> Result<Value, String> {
+pub fn framework_goal_drive(payload: Value) -> Result<Value, FrameworkError> {
     let operation = payload
         .get("operation")
         .and_then(Value::as_str)
@@ -49,13 +49,13 @@ pub fn framework_goal_drive(payload: Value) -> Result<Value, String> {
         .trim()
         .to_ascii_lowercase();
     if operation == "status" {
-        framework_goal_drive_impl(payload).map_err(|e| e.to_string())
+        framework_goal_drive_impl(payload)
     } else {
         let repo_root = resolve_framework_goal_drive_repo(&payload)?;
         crate::utils::task_write_lock::apply_task_ledger_mutation(
             &repo_root,
             || framework_goal_drive_impl(payload).map_err(|e| e.to_string()),
-        ).map_err(|e| e.to_string())
+        )
     }
 }
 
