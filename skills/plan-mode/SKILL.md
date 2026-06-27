@@ -33,7 +33,7 @@ trigger_hints:
 ---
 # plan-mode
 
-把「写计划」当成**证据先行、可验收、可对照收口**的产物，而不是一次性 prose。默认不要把小任务拖进审计级流程；只有跨模块、高风险、用户明确要求或宿主 gate 需要时，才升级到完整 audit plan。计划草稿落在宿主工作区（如 `.cursor/plans/`）；Task 状态机驱动下计划真源在 **`artifacts/current/<task_id>/ROADMAP.md`**。终稿统一归档到 `docs/plans/`。
+把「写计划」当成**证据先行、可验收、可对照收口**的产物，而不是一次性 prose。默认不要把小任务拖进审计级流程；只有跨模块、高风险、用户明确要求或宿主 gate 需要时，才升级到完整 audit plan。计划草稿落在宿主工作区（如 `.cursor/plans/`）；Task 状态机驱动下计划真源在 **`artifacts/current/<task_id>/ROADMAP.md`**。终稿统一归档到 `artifacts/current/<task_id>/`。
 
 ## When to use
 
@@ -146,7 +146,7 @@ Non-goals: <可选>
 ## Related
 
 - `skills/SKILL_FRAMEWORK_PROTOCOLS.md` — 讨论 → 规划 → 执行 → 验证形状。`skills/gitx/SKILL.md` — `/gitx plan` 收口。
-- `skills/code-review-deep/SKILL.md` — 深度代码审。终稿统一归档到 `docs/plans/`。
+- `skills/code-review-deep/SKILL.md` — 深度代码审。终稿统一归档到 `artifacts/current/<task_id>/`。
 - [references/research-profile-guide.md](references/research-profile-guide.md) — 对照表、overview 模板、todo 收口。
 - [references/research-scope-and-examples.md](references/research-scope-and-examples.md) — 调研范围、能力联动与弱/强示例。
 - [references/cursor-createplan-contract.md](references/cursor-createplan-contract.md) — Cursor 宿主专属全量契约。

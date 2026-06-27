@@ -64,7 +64,7 @@ It gathers and ranks evidence from Sentry before deeper debugging or implementat
 ## 调试后续步骤
 
 After extracting Sentry evidence, if the root cause is still not confirmed:
-- **Must perform systematic root-cause debugging** in the current context before domain fix（systematic-debugging 已归档，不再路由）.
+- **Must perform systematic root-cause debugging** in the current context before domain fix（参见 `systematic-debugging/SKILL.md`）.
 - Pass along the extracted stack trace and Sentry event metadata as the evidence block.
 - Do not jump directly to a "fix" without root-cause isolation when the Sentry trace is ambiguous.
 

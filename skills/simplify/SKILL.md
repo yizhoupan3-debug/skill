@@ -340,7 +340,7 @@ make test
 - Deferred risks: <anything intentionally not simplified>
 ```
 
-产出路径: `skills/simplify/artifacts/simplification-pass.md`
+产出路径: `docs/` — 待为此 pass 创建最佳实践文档
 
 ## 与 code-review-deep 的互补说明
 

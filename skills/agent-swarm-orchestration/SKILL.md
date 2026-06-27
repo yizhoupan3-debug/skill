@@ -317,5 +317,5 @@ If the discussion touches current-session execution:
 | [references/orchestration-mode.md](./references/orchestration-mode.md) | 模式表(team/sidecar/local)、触发、优先级、拒绝规则 |
 | [references/detailed-guide.md](./references/detailed-guide.md) | Team API 契约、handoff、agent 生命周期（含 team-protocol 内容） |
 | [references/detailed-guide.md](./references/detailed-guide.md) | 拓扑、handoff、spawn 细节 |
-| `core/agent-orchestrator/src/team_manager.rs` | Rust 层 team 编排实现真源 |
-| `core/agent-orchestrator/src/process.rs` | Agent 生命周期跟踪实现 |
+| `core/session-supervisor/src/team_manager.rs` | Rust 层 team 编排实现真源 |
+| `core/session-supervisor/src/process.rs` | Agent 生命周期跟踪实现 |

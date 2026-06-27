@@ -36,8 +36,8 @@ Statements, detailed fundamentals, holders, CSI constituents, and CSI weights ar
 
 ## File layout
 
-- Skill doc: `${SKILL_FRAMEWORK_ROOT}/skills/financial-data-fetching/SKILL.md`
-- README: `${SKILL_FRAMEWORK_ROOT}/skills/financial-data-fetching/README.md`
+- Skill doc: `${SKILL_FRAMEWORK_ROOT}/skills/algo-trading/subskills/financial-data-fetching/SKILL.md`
+- README: `${SKILL_FRAMEWORK_ROOT}/skills/algo-trading/subskills/financial-data-fetching/README.md`
 - Rust CLI: `${SKILL_FRAMEWORK_ROOT}/rust_tools/financial_data_rs/`
 
 ---

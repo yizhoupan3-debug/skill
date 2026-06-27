@@ -452,6 +452,7 @@ pub fn modify_runtime_hooks(f: impl FnOnce(&mut RuntimeHooks)) {
 
 #[cfg(test)]
 mod mirror_type_tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     /// Verify that `RouteDecision` has the expected field count and types.

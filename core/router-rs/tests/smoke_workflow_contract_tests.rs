@@ -58,14 +58,14 @@ fn agent_health_registry_artifact_exists() {
     );
 }
 
-/// Validate team_manager module is linked via agent-orchestrator dependency.
+/// Validate team_manager module is linked via session-supervisor dependency.
 #[test]
 fn team_manager_module_linked() {
     let raw = fs::read_to_string(framework_repo_root().join("Cargo.toml"))
         .expect("read workspace Cargo.toml");
     assert!(
-        raw.contains("agent-orchestrator"),
-        "workspace must include agent-orchestrator crate (team model dependency)"
+        raw.contains("session-supervisor"),
+        "workspace must include session-supervisor crate (team model dependency)"
     );
 }
 

@@ -501,4 +501,4 @@ runtime-core (L7) ─── 持 quality-gate 作为依赖
 接口参考：
 - `TaskLedgerCommand::QualityGate` in `core/runtime-core/src/task_command.rs`
 - QG state management in `core/core-state/src/state_manager/quality_gate_ops.rs`
-- `Evaluator` trait and adapter in `skills/evaluator-framework/src/evaluator.rs`
+- `GateChecker` trait and CheckerRegistry in `core/quality-gate/src/` — see §3.1 Core Types above

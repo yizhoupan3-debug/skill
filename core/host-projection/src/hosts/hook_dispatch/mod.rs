@@ -264,7 +264,7 @@ pub trait HostHookDispatcher: HostHookConfig {
         }
     }
 
-    /// SubagentStart: register agent in agent-orchestrator health registry.
+    /// SubagentStart: register agent in session-supervisor health registry.
     fn handle_subagent_start(&self, event: &HookEvent) -> Option<HookOutput> {
         let agent_id = extract_subagent_id_from_payload(event.payload)
             .unwrap_or_else(|| format!("agent-{}", std::time::SystemTime::now()
@@ -281,7 +281,7 @@ pub trait HostHookDispatcher: HostHookConfig {
         None
     }
 
-    /// SubagentStop: unregister agent in agent-orchestrator health registry.
+    /// SubagentStop: unregister agent in session-supervisor health registry.
     fn handle_subagent_stop(&self, event: &HookEvent) -> Option<HookOutput> {
         let Some(agent_id) = extract_subagent_id_from_payload(event.payload) else {
             debug!("SubagentStop: no agent_id in payload, skipping unregister");

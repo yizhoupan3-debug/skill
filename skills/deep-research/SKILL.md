@@ -196,8 +196,8 @@ findings as context.
 ## Cross-references
 
 - Academic sources (when academic APIs are needed): [`../research-discovery/references/academic-sources.md`](../research-discovery/references/academic-sources.md) — arXiv, OpenAlex, CrossRef, PubMed E-utilities, DOAJ API templates.
-- Team orchestration API: `core/agent-orchestrator/src/team_manager.rs` — team-based multi-agent orchestration, exposed via `orchestrator_team_*` MCP tools (replaces deprecated JS workflow model).
-- Agent lifecycle tracking: `core/agent-orchestrator/src/process.rs` — agent health registry for monitoring active subagents.
+- Team orchestration API: `core/session-supervisor/src/team_manager.rs` — team-based multi-agent orchestration, exposed via `orchestrator_team_*` MCP tools (replaces deprecated JS workflow model).
+- Agent lifecycle tracking: `core/session-supervisor/src/process.rs` — agent health registry for monitoring active subagents.
 - Manuscript stack boundary: [`../paper-workbench/references/RESEARCH_PAPER_STACK.md`](../paper-workbench/references/RESEARCH_PAPER_STACK.md)
 - Discovery counterpart: [`../research-discovery/SKILL.md`](../research-discovery/SKILL.md)
 - Execution counterpart: [`../research-execution/SKILL.md`](../research-execution/SKILL.md)

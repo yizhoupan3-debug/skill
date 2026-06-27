@@ -691,7 +691,7 @@ Wave 6  ~1 天    sub_scene 专项治理     ── ✅
 **实际产出**：
 - ~4000+ 行删除，~1650 行新增（符合预估）
 - 删除 4 个 crate/模块：`runtime-exit-gate`、`closeout_enforcement`、`telemetry_emit`、`telemetry_observer`
-- `looop-engine` → `goal-engine` 重命名
+- `loop-engine` → `goal-engine` 重命名
 - 新增 `core/quality-gate/` crate（5 源文件 + 6 Checker 适配器）
 - 全部 `once_lock_hook!` 宏消除，hooks.rs 56% 缩减
 - 关闭 MCP tool：`framework_closeout`、`framework_quality_gate start/close_gates`

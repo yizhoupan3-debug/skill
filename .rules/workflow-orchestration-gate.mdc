@@ -5,7 +5,7 @@ alwaysApply: true
 
 # Orchestration Gate（Cross-host）
 
-跨宿主基线见 [AGENTS.md](../AGENTS.md) · [docs/architecture.md](../docs/architecture.md)；编排细则见 [agent-swarm-orchestration/SKILL.md](../skills/agent-swarm-orchestration/SKILL.md)。
+跨宿主基线见 [AGENTS.md](../AGENTS.md) · [docs/LAYER-MAP.md](../docs/LAYER-MAP.md)；编排细则见 [agent-swarm-orchestration/SKILL.md](../skills/agent-swarm-orchestration/SKILL.md)。
 
 ## 何时生效（当前用户消息）
 

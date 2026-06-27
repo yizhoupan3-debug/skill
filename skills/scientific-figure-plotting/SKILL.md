@@ -55,7 +55,7 @@ produce reproducible scripts, not one-off screenshots.
 - General data cleaning before plotting -> answer in the current data/implementation context.
 - Statistical test choice without figure work -> use `$statistical-analysis`.
 - Visual review of an already-rendered figure only -> use `$visual-review`.
-- Infographics or marketing visuals -> answer in the current context, or use design skills（`$infographic` 已归档）.
+- Infographics or marketing visuals -> answer in the current context, or use design skills（参见 `infographic/SKILL.md`）.
 
 ## Figure Rules
 

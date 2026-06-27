@@ -7,8 +7,8 @@
 跨宿主 **team** 与 **sidecar** 的统一前门见 SKILL 正文 **Orchestration mode selection**。细则：
 
 - 触发与优先级：[orchestration-mode.md](./orchestration-mode.md)
-- 核心实现：`core/agent-orchestrator/src/team_manager.rs`
-- Agent 生命周期跟踪：`core/agent-orchestrator/src/process.rs`
+- 核心实现：`core/session-supervisor/src/team_manager.rs`
+- Agent 生命周期跟踪：`core/session-supervisor/src/process.rs`
 - Artifact 路径：`artifacts/teams/`
 - **Workflow（JS 编排）已彻底移除**，所有多 agent 协作统一使用 team 模型。
 
