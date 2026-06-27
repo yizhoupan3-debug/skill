@@ -25,7 +25,37 @@ pub mod overflow_checker;
 pub mod screenshot_layout_checker;
 pub mod security_checker;
 
+use std::path::Path;
+
 use quality_gate::scene;
+
+/// Recursively find all non-hidden `.rs` files under the given root directory.
+pub(crate) fn find_rust_files(root: &Path) -> Vec<std::path::PathBuf> {
+    let mut files = Vec::new();
+    find_rust_files_recursive(root, &mut files);
+    files
+}
+
+fn find_rust_files_recursive(dir: &Path, files: &mut Vec<std::path::PathBuf>) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .map_or(false, |n| n.starts_with('.'))
+        {
+            continue;
+        }
+        if path.is_dir() {
+            find_rust_files_recursive(&path, files);
+        } else if path.extension().and_then(|e| e.to_str()) == Some("rs") {
+            files.push(path);
+        }
+    }
+}
 
 /// Register all in-place checkers into the registry.
 /// Called once at startup from `runtime_core::init_quality_gate()`.

@@ -5,10 +5,10 @@
 //!
 //! In-place adapter (Wave 4b, enhanced Wave 5b).
 
-use std::path::Path;
-
 use quality_gate::checker::GateChecker;
 use quality_gate::types::{CheckContext, CheckResult, Finding, Severity};
+
+use crate::checkers::find_rust_files;
 
 /// Checker that validates code correctness in review contexts.
 pub struct CorrectnessChecker;
@@ -29,7 +29,7 @@ impl GateChecker for CorrectnessChecker {
     fn check(&self, ctx: &CheckContext) -> CheckResult {
         let mut findings = Vec::new();
 
-        let repo_root = Path::new(&ctx.repo_root);
+        let repo_root = std::path::Path::new(&ctx.repo_root);
         let rs_files = find_rust_files(repo_root);
 
         if rs_files.is_empty() {
@@ -143,26 +143,3 @@ impl GateChecker for CorrectnessChecker {
     }
 }
 
-/// Find Rust source files (.rs) at the repo root (non-hidden).
-fn find_rust_files(root: &Path) -> Vec<std::path::PathBuf> {
-    let mut files = Vec::new();
-    if let Ok(entries) = std::fs::read_dir(root) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if !path.is_file() {
-                continue;
-            }
-            if path
-                .file_name()
-                .and_then(|n| n.to_str())
-                .map_or(false, |n| n.starts_with('.'))
-            {
-                continue;
-            }
-            if path.extension().and_then(|e| e.to_str()) == Some("rs") {
-                files.push(path);
-            }
-        }
-    }
-    files
-}

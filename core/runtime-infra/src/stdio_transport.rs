@@ -222,10 +222,10 @@ fn run_concurrent_stdio_json_loop(max_concurrency: usize) -> Result<()> {
     drop(task_tx);
     dispatcher_handle
         .join()
-        .map_err(|_| "stdio dispatcher thread panicked".to_string())?;
+        .map_err(|_| "stdio dispatcher thread panicked (see stderr)".to_string())?;
     for join in worker_joins {
         join.join()
-            .map_err(|_| "stdio worker thread panicked".to_string())?;
+            .map_err(|_| "stdio worker thread panicked (see stderr)".to_string())?;
     }
     while !in_flight_requests.is_empty() {
         if let Some(envelope) =

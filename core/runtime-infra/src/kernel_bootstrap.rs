@@ -53,7 +53,9 @@ fn spawn_routing_runtime_cache_invalidator() {
             }
             #[allow(clippy::let_unit_value)]
             let _ = rx.borrow_and_update();
-            let _ = routing_engine::route::invalidate_records_cache();
+            if let Err(e) = routing_engine::route::invalidate_records_cache() {
+                tracing::warn!("route cache invalidation failed: {e}");
+            }
         }
     });
 }
