@@ -7,6 +7,7 @@ use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
+use std::time::SystemTime;
 
 pub(crate) const RUNTIME_REGISTRY_PATH: &str = "configs/framework/RUNTIME_REGISTRY.json";
 
@@ -26,7 +27,7 @@ struct ReviewGateSnapshot {
     spawn_first_includes_model_inherit_by_host: HashMap<String, bool>,
 }
 
-static CACHE: OnceLock<Mutex<HashMap<PathBuf, ReviewGateSnapshot>>> = OnceLock::new();
+static CACHE: OnceLock<Mutex<HashMap<PathBuf, (ReviewGateSnapshot, SystemTime)>>> = OnceLock::new();
 
 thread_local! {
     static HOOK_REGISTRY_REPO_ROOT: std::cell::RefCell<Option<PathBuf>> =
@@ -59,7 +60,7 @@ impl Drop for HookRegistryRepoGuard {
     }
 }
 
-fn cache() -> &'static Mutex<HashMap<PathBuf, ReviewGateSnapshot>> {
+fn cache() -> &'static Mutex<HashMap<PathBuf, (ReviewGateSnapshot, SystemTime)>> {
     CACHE.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
@@ -201,23 +202,18 @@ fn load_snapshot_from_disk(registry_path: &Path) -> Result<ReviewGateSnapshot, F
 fn snapshot(repo_root: Option<&Path>) -> Result<ReviewGateSnapshot, FrameworkError> {
     let path = registry_json_path(repo_root);
     let key = repo_cache_key(&path);
-    let hit = {
-        let guard = cache()
-            .lock()
-            .map_err(|e| FrameworkError::lock(format!("registry cache lock poisoned: {e}")))?;
-        guard.get(&key).cloned()
-    };
-    if let Some(snapshot) = hit {
-        return Ok(snapshot);
+    let file_mtime = fs::metadata(&path).ok().and_then(|m| m.modified().ok());
+    if let Some(mtime) = file_mtime {
+        let guard = cache().lock().map_err(|e| FrameworkError::lock(format!("registry cache lock poisoned: {e}")))?;
+        if let Some((cached, cached_mtime)) = guard.get(&key) {
+            if *cached_mtime == mtime { return Ok(cached.clone()); }
+        }
     }
     let loaded = load_snapshot_from_disk(&path)?;
-    let mut guard = cache()
-        .lock()
-        .map_err(|e| FrameworkError::lock(format!("registry cache lock poisoned: {e}")))?;
-    if guard.len() >= 64 {
-        guard.clear();
-    }
-    guard.insert(key, loaded.clone());
+    let mut guard = cache().lock().map_err(|e| FrameworkError::lock(format!("registry cache lock poisoned: {e}")))?;
+    if guard.len() >= 64 { guard.clear(); }
+    let stamp = file_mtime.unwrap_or_else(SystemTime::now);
+    guard.insert(key, (loaded.clone(), stamp));
     Ok(loaded)
 }
 
