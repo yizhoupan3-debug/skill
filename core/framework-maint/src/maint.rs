@@ -4,6 +4,7 @@
 //! Markdown UTF-8 surface, rust_cli_tools, host_integration, browser MCP scripts, codex aggregator).
 //! Set `ROUTER_RS_UPDATE_RUN_AUTORESEARCH_CLI_TESTS=1` to also run `autoresearch_cli` (network / arXiv).
 
+use core_errors::FrameworkError;
 use framework_kernel::cli_args::{
     MaintRepoArgs, MaintRootsArgs, MaintSubcommand, UpdateAuditArgs,
 };
@@ -18,14 +19,14 @@ use tracing;
 
 #[path = "clean.rs"] mod clean;
 
-pub fn dispatch(command: MaintSubcommand) -> Result<(), String> {
+pub fn dispatch(command: MaintSubcommand) -> Result<(), FrameworkError> {
     match command {
         MaintSubcommand::RefreshHostProjections(args) => refresh_host_projections(args),
         MaintSubcommand::VerifyHostHooks { host_id, args } => {
             host_projection::hosts::host_extensions::schema_drift::verify_host_projection(
                 &repo_from_maint_repo_args(&args)?,
                 &host_id,
-            )
+            ).map_err(FrameworkError::validation)
         }
         MaintSubcommand::UpdateOneShot(args) => update_one_shot(args),
         MaintSubcommand::UpdateAudit(args) => update_audit(args),
@@ -40,7 +41,7 @@ pub fn dispatch(command: MaintSubcommand) -> Result<(), String> {
             let root = repo_from_maint_repo_args(&args)?;
             framework_extra::framework_doctor::run_continuity_audit(&root)
                 .map(|_| ())
-                .map_err(|e| e.to_string())
+                .map_err(FrameworkError::config)
         }
         MaintSubcommand::CleanHookState(args) => {
             let root = repo_from_framework_root_arg(args.framework_root.as_deref())?;
@@ -57,16 +58,16 @@ pub fn dispatch(command: MaintSubcommand) -> Result<(), String> {
     }
 }
 
-fn repo_from_maint_repo_args(args: &MaintRepoArgs) -> Result<PathBuf, String> {
+fn repo_from_maint_repo_args(args: &MaintRepoArgs) -> Result<PathBuf, FrameworkError> {
     Ok(resolve_maint_roots(args.framework_root.as_deref(), None)?.0)
 }
 
-fn repo_from_framework_root_arg(framework_root: Option<&Path>) -> Result<PathBuf, String> {
+fn repo_from_framework_root_arg(framework_root: Option<&Path>) -> Result<PathBuf, FrameworkError> {
     Ok(resolve_maint_roots(framework_root, None)?.0)
 }
 
-fn repo_from_update_audit_args(args: &UpdateAuditArgs) -> Result<PathBuf, String> {
-    let cwd = std::env::current_dir().map_err(|err| err.to_string())?;
+fn repo_from_update_audit_args(args: &UpdateAuditArgs) -> Result<PathBuf, FrameworkError> {
+    let cwd = std::env::current_dir()?;
     let candidate = args
         .repo_root
         .as_deref()
@@ -86,22 +87,22 @@ fn repo_from_update_audit_args(args: &UpdateAuditArgs) -> Result<PathBuf, String
             "--show-toplevel",
         ])
         .output()
-        .map_err(|err| format!("git rev-parse spawn failed: {err}"))?;
+        .map_err(FrameworkError::Io)?;
     if !output.status.success() {
-        return Err(format!(
+        return Err(FrameworkError::validation(format!(
             "update-audit requires a git repository root or subdirectory; {} failed git discovery: {}",
             candidate.display(),
             String::from_utf8_lossy(&output.stderr).trim()
-        ));
+        )));
     }
     let root = String::from_utf8_lossy(&output.stdout).trim().to_string();
     if root.is_empty() {
-        return Err("git rev-parse returned an empty repository root".to_string());
+        return Err(FrameworkError::validation("git rev-parse returned an empty repository root"));
     }
-    fs::canonicalize(&root).map_err(|err| format!("failed to canonicalize git root {root}: {err}"))
+    fs::canonicalize(&root).map_err(|err| FrameworkError::validation(format!("failed to canonicalize git root {root}: {err}")))
 }
 
-fn refresh_host_projections(args: MaintRootsArgs) -> Result<(), String> {
+fn refresh_host_projections(args: MaintRootsArgs) -> Result<(), FrameworkError> {
     let (fw, art) = resolve_maint_roots(
         args.framework_root.as_deref(),
         args.artifact_root.as_deref(),
@@ -188,7 +189,7 @@ fn projection_install_scopes_for_tool(tool: &str) -> Vec<&'static str> {
     scopes.to_vec()
 }
 
-fn installable_projection_tools(repo_root: &Path) -> Result<Vec<String>, String> {
+fn installable_projection_tools(repo_root: &Path) -> Result<Vec<String>, FrameworkError> {
     let pairs = framework_kernel::framework_host_targets::installable_host_id_and_skills_install_tool_pairs(
         repo_root,
     )?;
@@ -204,7 +205,7 @@ fn installable_projection_tools(repo_root: &Path) -> Result<Vec<String>, String>
 /// Verify host projections using the unified registry-driven verifier.
 /// All host-specific data (hooks path, events, launcher) is derived from
 /// the HostProvider registry via `verify_host_projection`.
-fn verify_installable_projections(repo_root: &Path, tools: &[String]) -> Result<(), String> {
+fn verify_installable_projections(repo_root: &Path, tools: &[String]) -> Result<(), FrameworkError> {
     for tool in tools {
         // tool is an install_tool name (e.g. "cursor", "claude").
         // Resolve to host_id via registry, then verify.
@@ -222,7 +223,7 @@ fn verify_installable_projections(repo_root: &Path, tools: &[String]) -> Result<
 }
 
 
-fn update_one_shot(args: MaintRootsArgs) -> Result<(), String> {
+fn update_one_shot(args: MaintRootsArgs) -> Result<(), FrameworkError> {
     let (fw, art) = resolve_maint_roots(
         args.framework_root.as_deref(),
         args.artifact_root.as_deref(),
@@ -280,10 +281,10 @@ fn update_one_shot(args: MaintRootsArgs) -> Result<(), String> {
         art.to_string_lossy().into_owned(),
     ])?;
     if status_json.get("ok").and_then(Value::as_bool) != Some(true) {
-        return Err(format!(
+        return Err(FrameworkError::validation(format!(
             "generated-artifacts-status not ok: {}",
             serde_json::to_string(&status_json).unwrap_or_default()
-        ));
+        )));
     }
 
     if host_skills_publish_enabled() {
@@ -347,7 +348,7 @@ fn update_one_shot(args: MaintRootsArgs) -> Result<(), String> {
     Ok(())
 }
 
-fn update_audit(args: UpdateAuditArgs) -> Result<(), String> {
+fn update_audit(args: UpdateAuditArgs) -> Result<(), FrameworkError> {
     let root = repo_from_update_audit_args(&args)?;
     let tracked = git_lines(&root, &["ls-files"])?;
     let status = git_lines_preserve_leading(
@@ -386,16 +387,16 @@ fn update_audit(args: UpdateAuditArgs) -> Result<(), String> {
     });
     println!(
         "{}",
-        serde_json::to_string_pretty(&payload).map_err(|e| e.to_string())?
+        serde_json::to_string_pretty(&payload).map_err(FrameworkError::Json)?
     );
     Ok(())
 }
 
-fn git_lines(repo_root: &Path, args: &[&str]) -> Result<Vec<String>, String> {
+fn git_lines(repo_root: &Path, args: &[&str]) -> Result<Vec<String>, FrameworkError> {
     git_lines_with_trim(repo_root, args, true)
 }
 
-fn git_lines_preserve_leading(repo_root: &Path, args: &[&str]) -> Result<Vec<String>, String> {
+fn git_lines_preserve_leading(repo_root: &Path, args: &[&str]) -> Result<Vec<String>, FrameworkError> {
     git_lines_with_trim(repo_root, args, false)
 }
 
@@ -403,18 +404,18 @@ fn git_lines_with_trim(
     repo_root: &Path,
     args: &[&str],
     trim_leading: bool,
-) -> Result<Vec<String>, String> {
+) -> Result<Vec<String>, FrameworkError> {
     let output = Command::new("git")
         .args(args)
         .current_dir(repo_root)
         .output()
-        .map_err(|e| format!("git {} spawn failed: {e}", args.join(" ")))?;
+        .map_err(FrameworkError::Io)?;
     if !output.status.success() {
-        return Err(format!(
+        return Err(FrameworkError::validation(format!(
             "git {} failed: {}",
             args.join(" "),
             String::from_utf8_lossy(&output.stderr).trim()
-        ));
+        )));
     }
     let lines = String::from_utf8_lossy(&output.stdout)
         .lines()
@@ -434,7 +435,7 @@ fn git_grep_lines(
     repo_root: &Path,
     pattern: &str,
     pathspecs: &[&str],
-) -> Result<Vec<String>, String> {
+) -> Result<Vec<String>, FrameworkError> {
     let output = Command::new("git")
         .arg("grep")
         .arg("-n")
@@ -444,7 +445,7 @@ fn git_grep_lines(
         .args(pathspecs)
         .current_dir(repo_root)
         .output()
-        .map_err(|e| format!("git grep spawn failed: {e}"))?;
+        .map_err(FrameworkError::Io)?;
     if output.status.success() {
         return Ok(String::from_utf8_lossy(&output.stdout)
             .lines()
@@ -456,10 +457,10 @@ fn git_grep_lines(
     if output.status.code() == Some(1) {
         return Ok(Vec::new());
     }
-    Err(format!(
+    Err(FrameworkError::validation(format!(
         "git grep failed: {}",
         String::from_utf8_lossy(&output.stderr).trim()
-    ))
+    )))
 }
 
 fn key_document_candidates(tracked: &[String], untracked: &[String]) -> Vec<Value> {
@@ -507,7 +508,7 @@ fn is_document_like_path(lower: &str) -> bool {
     )
 }
 
-fn dead_code_markers(repo_root: &Path, untracked: &[String]) -> Result<Vec<String>, String> {
+fn dead_code_markers(repo_root: &Path, untracked: &[String]) -> Result<Vec<String>, FrameworkError> {
     let mut markers = git_grep_lines(
         repo_root,
         r"(allow\(dead_code\)|dead code|unused|obsolete|deprecated|retired)",
@@ -529,7 +530,7 @@ fn dead_code_markers(repo_root: &Path, untracked: &[String]) -> Result<Vec<Strin
     Ok(markers)
 }
 
-fn stale_doc_markers(repo_root: &Path, untracked: &[String]) -> Result<Vec<String>, String> {
+fn stale_doc_markers(repo_root: &Path, untracked: &[String]) -> Result<Vec<String>, FrameworkError> {
     let mut markers = git_grep_lines(
         repo_root,
         r"(stale|obsolete|deprecated|retired|outdated|TODO|FIXME|旧|废弃|过期)",
@@ -611,7 +612,7 @@ fn untracked_keyword_markers(
     untracked: &[String],
     keywords: &[&str],
     include_path: impl Fn(&str) -> bool,
-) -> Result<Vec<String>, String> {
+) -> Result<Vec<String>, FrameworkError> {
     let mut markers = Vec::new();
     let lowercase_keywords: Vec<String> = keywords
         .iter()
@@ -666,7 +667,7 @@ fn cap_values(mut values: Vec<Value>, max: usize) -> Vec<Value> {
 
 /// Generic host home path resolution: checks `$HOST_HOME` env var,
 /// falls back to `$HOME/<config_dir>` from RUNTIME_REGISTRY.json.
-fn host_home_path(host_id: &str) -> Result<PathBuf, String> {
+fn host_home_path(host_id: &str) -> Result<PathBuf, FrameworkError> {
     let env_var = framework_kernel::runtime_registry::home_env_var(host_id);
     if !env_var.is_empty()
         && let Some(path) = std::env::var_os(env_var) {
@@ -674,7 +675,7 @@ fn host_home_path(host_id: &str) -> Result<PathBuf, String> {
         }
     std::env::var_os("HOME")
         .map(|h| PathBuf::from(h).join(framework_kernel::runtime_registry::host_private_config_dir(host_id)))
-        .ok_or_else(|| format!("{env_var} or HOME must be set for host skill publish"))
+        .ok_or_else(|| FrameworkError::validation(format!("{env_var} or HOME must be set for host skill publish")))
 }
 
 fn autoresearch_integration_tests_enabled() -> bool {
@@ -695,11 +696,11 @@ fn host_skills_publish_enabled() -> bool {
         .unwrap_or(false)
 }
 
-fn print_local_homes(fw: PathBuf) -> Result<(), String> {
+fn print_local_homes(fw: PathBuf) -> Result<(), FrameworkError> {
     for host_dir in framework_kernel::runtime_registry::host_home_dirs() {
         let host_id = host_dir.trim_start_matches('.');
         let local = fw.join(format!(".local/{host_id}-home"));
-        fs::create_dir_all(&local).map_err(|e| e.to_string())?;
+        fs::create_dir_all(&local)?;
         let env_var = framework_kernel::runtime_registry::home_env_var(host_id);
         let home = std::env::var_os(env_var)
             .map(PathBuf::from)
@@ -716,27 +717,25 @@ fn print_local_homes(fw: PathBuf) -> Result<(), String> {
 }
 
 
-fn run_cargo(repo_root: &Path, args: &[&str]) -> Result<(), String> {
+fn run_cargo(repo_root: &Path, args: &[&str]) -> Result<(), FrameworkError> {
     let status = Command::new("cargo")
         .args(args)
         .current_dir(repo_root)
-        .status()
-        .map_err(|e| format!("cargo spawn failed: {e}"))?;
+        .status()?;
     if !status.success() {
-        return Err(format!("cargo failed with {status}"));
+        return Err(FrameworkError::config(format!("cargo failed with {status}")));
     }
     Ok(())
 }
 
-fn run_router(repo_root: &Path, args: &[&str]) -> Result<(), String> {
-    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+fn run_router(repo_root: &Path, args: &[&str]) -> Result<(), FrameworkError> {
+    let exe = std::env::current_exe()?;
     let status = Command::new(&exe)
         .args(args)
         .current_dir(repo_root)
-        .status()
-        .map_err(|e| e.to_string())?;
+        .status()?;
     if !status.success() {
-        return Err(format!("router-rs {} failed: {status}", args.join(" ")));
+        return Err(FrameworkError::config(format!("router-rs {} failed: {status}", args.join(" "))));
     }
     Ok(())
 }

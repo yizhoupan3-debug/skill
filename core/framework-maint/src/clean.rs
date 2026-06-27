@@ -3,18 +3,19 @@
 //! All clean operations support `--dry-run` to preview changes before execution.
 //! Symlink targets are skipped to avoid following bind mounts into unexpected locations.
 
+use core_errors::FrameworkError;
 use std::fs;
 use std::path::Path;
 
 use framework_kernel::runtime_registry::ALL_KNOWN_HOST_DIRS;
 use tracing;
 
-pub(super) fn clean_rust_target_dirs(repo_root: &Path, dry_run: bool) -> Result<(), String> {
+pub(super) fn clean_rust_target_dirs(repo_root: &Path, dry_run: bool) -> Result<(), FrameworkError> {
     clean_targets_walk(repo_root, dry_run)?;
     Ok(())
 }
 
-fn clean_targets_walk(path: &Path, dry_run: bool) -> Result<(), String> {
+fn clean_targets_walk(path: &Path, dry_run: bool) -> Result<(), FrameworkError> {
     if path.file_name().and_then(|n| n.to_str()) == Some(".git") {
         return Ok(());
     }
@@ -27,15 +28,15 @@ fn clean_targets_walk(path: &Path, dry_run: bool) -> Result<(), String> {
         if dry_run {
             println!("  DRY-RUN: would remove {}", path.display());
         } else {
-            fs::remove_dir_all(path).map_err(|e| e.to_string())?;
+            fs::remove_dir_all(path)?;
             println!("  removed {}", path.display());
         }
         return Ok(());
     }
     if path.is_dir() {
-        let read = fs::read_dir(path).map_err(|e| e.to_string())?;
+        let read = fs::read_dir(path)?;
         for ent in read {
-            clean_targets_walk(&ent.map_err(|e| e.to_string())?.path(), dry_run)?;
+            clean_targets_walk(&ent?.path(), dry_run)?;
         }
     }
     Ok(())
@@ -46,10 +47,10 @@ pub(super) fn clean_hook_state_files(
     repo_root: &Path,
     dry_run: bool,
     ttl_days: u64,
-) -> Result<(), String> {
+) -> Result<(), FrameworkError> {
     let cutoff = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .map_err(|e| e.to_string())?
+        .map_err(|e| FrameworkError::validation(e.to_string()))?
         .as_secs()
         .saturating_sub(ttl_days * 24 * 60 * 60);
 
@@ -65,7 +66,7 @@ pub(super) fn clean_hook_state_files(
         let mut files_to_clean: Vec<(std::path::PathBuf, u64)> = Vec::new();
         let mut kept: usize = 0;
 
-        let entries = fs::read_dir(&hook_state_dir).map_err(|e| e.to_string())?;
+        let entries = fs::read_dir(&hook_state_dir)?;
         for entry in entries.flatten() {
             let path = entry.path();
             if !path.is_file() {
@@ -148,10 +149,10 @@ pub(super) fn clean_orphan_directories(
     repo_root: &Path,
     dry_run: bool,
     ttl_days: u64,
-) -> Result<(), String> {
+) -> Result<(), FrameworkError> {
     let cutoff = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .map_err(|e| e.to_string())?
+        .map_err(|e| FrameworkError::validation(e.to_string()))?
         .as_secs()
         .saturating_sub(ttl_days * 24 * 60 * 60);
 
@@ -222,7 +223,7 @@ pub(super) fn clean_orphan_directories(
             if dry_run {
                 println!("  DRY-RUN: would remove empty or stale dir {}", path.display());
             } else {
-                fs::remove_dir(&path).map_err(|e| e.to_string())?;
+                fs::remove_dir(&path)?;
                 println!("  removed empty/stale dir {}", path.display());
             }
             total_removed += 1;

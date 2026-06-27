@@ -9,6 +9,7 @@ mod quality_gate_ops;
 mod scrub_ops;
 mod validation;
 
+use core_errors::FrameworkError;
 use serde_json::Value;
 use std::fs;
 use std::path::Path;
@@ -58,7 +59,7 @@ pub use scrub_ops::{
 pub fn goal_state_path_for_task(
     repo_root: &Path,
     task_id: &str,
-) -> Result<std::path::PathBuf, String> {
+) -> Result<std::path::PathBuf, FrameworkError> {
     let tid = crate::utils::path_guard::validate_task_id_component(task_id)?;
     Ok(repo_root
         .join("artifacts/current")
@@ -87,9 +88,6 @@ fn goal_state_path_for_nested_under_current(
 
 // ── Session ID / staleness ──
 fn current_env_session_id() -> Option<String> {
-    // Use wildcard matching (same algorithm as `resolve_session_id` in goal_ops.rs)
-    // instead of a hardcoded key list. This ensures custom * _SESSION_ID env vars
-    // are discovered consistently for both goal creation and staleness detection.
     for (key, val) in std::env::vars() {
         if key.ends_with("_SESSION_ID") {
             let trimmed = val.trim().to_string();
@@ -101,56 +99,28 @@ fn current_env_session_id() -> Option<String> {
     None
 }
 
-/// Check if a GOAL_STATE's session_id matches the current session.
-/// If the GOAL_STATE has a `session_id` field and it does not match the current
-/// environment session (from env vars or absent), annotate with `stale=true`.
-///
-/// Goals without `session_id` (legacy) are treated as still valid (backward compat).
 fn annotate_goal_staleness(goal: &mut Value) {
     let goal_session_id = match goal.get("session_id").and_then(Value::as_str) {
         Some(s) => s.trim(),
-        None => {
-            // Legacy goal without session_id — not stale (backward compat)
-            return;
-        }
+        None => { return; }
     };
-    if goal_session_id.is_empty() {
-        return;
-    }
-    // Get current session_id from env (do NOT auto-generate; absence means we can't compare)
+    if goal_session_id.is_empty() { return; }
     let current_session_id = current_env_session_id();
     match current_session_id {
         Some(ref current) if current != goal_session_id => {
             if let Some(obj) = goal.as_object_mut() {
                 obj.insert("stale".to_string(), serde_json::json!(true));
-                obj.insert(
-                    "stale_reason".to_string(),
-                    serde_json::json!("session_id mismatch: goal belongs to a different session"),
-                );
+                obj.insert("stale_reason".to_string(), serde_json::json!("session_id mismatch: goal belongs to a different session"));
             }
         }
         None => {
-            // Cannot determine the current session.
-            // Only mark stale if the goal session_id is an auto-generated token
-            // from an earlier version of resolve_session_id (starting with "auto-").
-            // Such tokens were unique per creation and can never match in a later
-            // read when env is also absent, so they will never resolve correctly.
-            // Explicit session_ids (from payload) are NOT marked stale here —
-            // the caller may be reading in the same context that created them.
             if goal_session_id.starts_with("auto-")
                 && let Some(obj) = goal.as_object_mut() {
                     obj.insert("stale".to_string(), serde_json::json!(true));
-                    obj.insert(
-                        "stale_reason".to_string(),
-                        serde_json::json!(
-                            "auto-generated session_id from older version; cannot verify current session"
-                        ),
-                    );
+                    obj.insert("stale_reason".to_string(), serde_json::json!("auto-generated session_id from older version; cannot verify current session"));
                 }
         }
-        _ => {
-            // Same session — not stale
-        }
+        _ => {}
     }
 }
 
@@ -158,141 +128,87 @@ fn annotate_goal_staleness(goal: &mut Value) {
 pub fn read_goal_state(
     repo_root: &Path,
     task_id_override: Option<&str>,
-) -> Result<Option<Value>, String> {
+) -> Result<Option<Value>, FrameworkError> {
     let task_id = if let Some(t) = task_id_override {
         if t.trim().is_empty() {
-            return Err("framework_goal_drive: task_id override is empty".to_string());
+            return Err(FrameworkError::validation("framework_goal_drive: task_id override is empty"));
         }
         t.trim().to_string()
     } else {
         let (active, focus) = read_task_pointer_pair(repo_root);
-        let Some(t) = active.or(focus) else {
-            return Ok(None);
-        };
+        let Some(t) = active.or(focus) else { return Ok(None); };
         t
     };
-    crate::utils::path_guard::validate_task_id_component(&task_id)
-        .map_err(|e| format!("framework_goal_drive: invalid task_id for GOAL_STATE path: {e}"))?;
+    crate::utils::path_guard::validate_task_id_component(&task_id)?;
     let path = goal_state_path_for_task(repo_root, &task_id)?;
-    if !path.is_file() {
-        return Ok(None);
-    }
-    let raw = fs::read_to_string(&path).map_err(|err| format!("read GOAL_STATE: {err}"))?;
-    let mut value: Value =
-        serde_json::from_str(&raw).map_err(|err| format!("parse GOAL_STATE: {err}"))?;
-    // session-scoped goal: check session_id staleness
+    if !path.is_file() { return Ok(None); }
+    let raw = fs::read_to_string(&path)?;
+    let mut value: Value = serde_json::from_str(&raw)?;
     annotate_goal_staleness(&mut value);
     Ok(Some(value))
 }
 
-/// 能解析为 JSON 的 `GOAL_STATE` 才返回；读失败或非法 JSON 返回 `None`（便于换指针/扫描回退）。
 pub fn read_goal_state_pair_if_valid(repo_root: &Path, task_id: &str) -> Option<(Value, String)> {
-    if task_id.trim().is_empty() {
-        return None;
-    }
+    if task_id.trim().is_empty() { return None; }
     let path = match goal_state_path_for_task(repo_root, task_id) {
         Ok(p) => p,
         Err(_) => goal_state_path_for_nested_under_current(repo_root, task_id)?,
     };
-    if !path.is_file() {
-        return None;
-    }
+    if !path.is_file() { return None; }
     let raw = match fs::read_to_string(&path) {
         Ok(s) => s,
-        Err(e) => {
-            tracing::warn!("read goal state ({:?}): {e}", path);
-            return None;
-        }
+        Err(e) => { tracing::warn!("read goal state ({:?}): {e}", path); return None; }
     };
     let mut value: Value = match serde_json::from_str(&raw) {
         Ok(v) => v,
-        Err(e) => {
-            tracing::warn!("parse goal state ({:?}): {e}", path);
-            return None;
-        }
+        Err(e) => { tracing::warn!("parse goal state ({:?}): {e}", path); return None; }
     };
-    // session-scoped goal: annotate staleness
     annotate_goal_staleness(&mut value);
-    let tid_out = task_id
-        .trim()
-        .replace('\\', "/")
-        .trim_matches('/')
-        .to_string();
+    let tid_out = task_id.trim().replace('\\', "/").trim_matches('/').to_string();
     Some((value, tid_out))
 }
 
-/// `GOAL_STATE` 是否处于「宏控制应续跑」态。
-/// 只依赖 `status=running`（不依赖 drive_until_done）。
-/// Stale goals (session_id mismatch) do NOT request continuation.
 pub fn goal_state_requests_continuation(state: &Value) -> bool {
-    if state.get("stale").and_then(Value::as_bool) == Some(true) {
-        return false;
-    }
+    if state.get("stale").and_then(Value::as_bool) == Some(true) { return false; }
     state.get("status").and_then(Value::as_str) == Some("running")
 }
 
 // ── Hydration ──
 
-/// Cursor Stop/drive 门控回补：只依次尝试 `active_task.json`、`focus_task.json`。
-/// 历史 orphan goal 不能被当作当前任务续跑真源。
-pub fn read_goal_state_for_hydration(repo_root: &Path) -> Result<Option<(Value, String)>, String> {
+pub fn read_goal_state_for_hydration(repo_root: &Path) -> Result<Option<(Value, String)>, FrameworkError> {
     let (active_task_id, focus_task_id) = read_task_pointer_pair(repo_root);
     read_goal_state_for_hydration_from_pointer_ids(repo_root, &active_task_id, &focus_task_id)
 }
 
-/// Same semantics as [`read_goal_state_for_hydration`], but uses pointer ids from a single
-/// snapshot (e.g. paired with [`crate::task_state::resolve_task_view_with_pointers`]).
 pub fn read_goal_state_for_hydration_from_pointer_ids(
     repo_root: &Path,
     active_task_id: &Option<String>,
     focus_task_id: &Option<String>,
-) -> Result<Option<(Value, String)>, String> {
+) -> Result<Option<(Value, String)>, FrameworkError> {
     select_goal_state_from_pointer_ids(repo_root, active_task_id, focus_task_id)
 }
 
-/// Single continuation truth for hydration, Stop checkpoint, and hook drive followups.
-///
-/// Priority: active GOAL when it requests continuation; else focus when it requests continuation;
-/// else active GOAL if readable; else focus GOAL. Never scans orphan goals by mtime.
 pub fn select_goal_state_from_pointer_ids(
     repo_root: &Path,
     active_task_id: &Option<String>,
     focus_task_id: &Option<String>,
-) -> Result<Option<(Value, String)>, String> {
-    let active_pair = active_task_id
-        .as_ref()
-        .and_then(|id| read_goal_state_pair_if_valid(repo_root, id));
-    let focus_pair = focus_task_id
-        .as_ref()
-        .and_then(|id| read_goal_state_pair_if_valid(repo_root, id));
-
+) -> Result<Option<(Value, String)>, FrameworkError> {
+    let active_pair = active_task_id.as_ref().and_then(|id| read_goal_state_pair_if_valid(repo_root, id));
+    let focus_pair = focus_task_id.as_ref().and_then(|id| read_goal_state_pair_if_valid(repo_root, id));
     if let Some((goal, tid)) = active_pair {
-        if goal_state_requests_continuation(&goal) {
-            return Ok(Some((goal, tid)));
-        }
+        if goal_state_requests_continuation(&goal) { return Ok(Some((goal, tid))); }
         if let Some((fgoal, ftid)) = focus_pair {
-            if goal_state_requests_continuation(&fgoal) {
-                return Ok(Some((fgoal, ftid)));
-            }
-            // Active readable but not driving: prefer focus GOAL when present (completed active + running focus).
+            if goal_state_requests_continuation(&fgoal) { return Ok(Some((fgoal, ftid))); }
             return Ok(Some((fgoal, ftid)));
         }
         return Ok(Some((goal, tid)));
     }
-    // Active pointer set but GOAL unreadable: fall back to focus when readable (P1-11).
-    if active_task_id
-        .as_ref()
-        .is_some_and(|id| !id.trim().is_empty())
-    {
-        if let Some(pair) = focus_pair {
-            return Ok(Some(pair));
-        }
+    if active_task_id.as_ref().is_some_and(|id| !id.trim().is_empty()) {
+        if let Some(pair) = focus_pair { return Ok(Some(pair)); }
         return Ok(None);
     }
     if let Some((goal, tid)) = focus_pair {
-        if goal_state_requests_continuation(&goal) {
-            return Ok(Some((goal, tid)));
-        }
+        if goal_state_requests_continuation(&goal) { return Ok(Some((goal, tid))); }
         return Ok(Some((goal, tid)));
     }
     Ok(None)
@@ -304,11 +220,9 @@ const GOAL_DISCOVER_MAX_DEPTH: usize = 8;
 
 fn discover_goal_state_task_ids_under_current(
     repo_root: &Path,
-) -> Result<Vec<(String, SystemTime)>, String> {
+) -> Result<Vec<(String, SystemTime)>, FrameworkError> {
     let current = repo_root.join("artifacts/current");
-    if !current.is_dir() {
-        return Ok(Vec::new());
-    }
+    if !current.is_dir() { return Ok(Vec::new()); }
     let mut out = Vec::new();
     visit_goal_state_dirs(&current, &current, GOAL_DISCOVER_MAX_DEPTH, &mut out)?;
     Ok(out)
@@ -319,74 +233,47 @@ fn visit_goal_state_dirs(
     current_root: &Path,
     depth: usize,
     out: &mut Vec<(String, SystemTime)>,
-) -> Result<(), String> {
-    if depth == 0 {
-        return Ok(());
-    }
+) -> Result<(), FrameworkError> {
+    if depth == 0 { return Ok(()); }
     let goal_path = dir.join(GOAL_STATE_FILENAME);
     if goal_path.is_file()
         && let Ok(rel) = dir.strip_prefix(current_root) {
-            let tid_norm = rel
-                .to_str()
-                .map(|s| s.trim().replace('\\', "/"))
-                .filter(|s| !s.is_empty());
+            let tid_norm = rel.to_str().map(|s| s.trim().replace('\\', "/")).filter(|s| !s.is_empty());
             if let Some(tid_norm) = tid_norm {
-                let mtime = fs::metadata(&goal_path)
-                    .and_then(|m| m.modified())
-                    .unwrap_or(SystemTime::UNIX_EPOCH);
+                let mtime = fs::metadata(&goal_path).and_then(|m| m.modified()).unwrap_or(SystemTime::UNIX_EPOCH);
                 out.push((tid_norm, mtime));
             }
         }
-    if !dir.is_dir() {
-        return Ok(());
-    }
-    for entry in fs::read_dir(dir).map_err(|e| format!("read_dir {}: {e}", dir.display()))? {
-        let entry = entry.map_err(|e| format!("read_dir entry: {e}"))?;
+    if !dir.is_dir() { return Ok(()); }
+    for entry in fs::read_dir(dir)? {
+        let entry = entry?;
         let p = entry.path();
-        if p.is_dir() {
-            visit_goal_state_dirs(&p, current_root, depth - 1, out)?;
-        }
+        if p.is_dir() { visit_goal_state_dirs(&p, current_root, depth - 1, out)?; }
     }
     Ok(())
 }
 
-/// 诊断 / 测试专用 mtime 扫描：picks the **newest** `GOAL_STATE.json` under `artifacts/current/**`.
-///
-/// 整个扫描链（包括下方 `discover_*` / `visit_*` / `GOAL_DISCOVER_MAX_DEPTH`）只在
-/// `hydration_ignores_orphan_goal_when_active_task_missing` 等单测里复活 orphan goal 用于负面断言。
-/// **绝不能**从 Cursor / Codex / Claude hook 的续跑路径调用：continuity 真源是
-/// [`read_goal_state_for_hydration`]（active → focus，不做 orphan mtime sweep）。
 pub fn read_goal_state_for_diagnostics_scan(
     repo_root: &Path,
-) -> Result<Option<(Value, String)>, String> {
+) -> Result<Option<(Value, String)>, FrameworkError> {
     let mut candidates = discover_goal_state_task_ids_under_current(repo_root)?;
-    if candidates.is_empty() {
-        return Ok(None);
-    }
+    if candidates.is_empty() { return Ok(None); }
     candidates.sort_by_key(|(_, score)| std::cmp::Reverse(*score));
     for (tid, _) in candidates {
-        if let Some(pair) = read_goal_state_pair_if_valid(repo_root, &tid) {
-            return Ok(Some(pair));
-        }
+        if let Some(pair) = read_goal_state_pair_if_valid(repo_root, &tid) { return Ok(Some(pair)); }
     }
     Ok(None)
 }
 
 // ── Evidence helpers ──
 
-/// 单一来源：`EVIDENCE_INDEX.json` 单条 artifact 是否计作「成功验证」。
-/// 规则：`success == true` **或** `exit_code` 取 0（i64 或 u64 皆可）。
-/// `rfv_loop` 与 `goal_drive` 都走这里，防止两路证据口径分叉。
 pub fn evidence_index_entry_implies_success(entry: &Value) -> bool {
-    if entry.get("success").and_then(Value::as_bool) == Some(true) {
-        return true;
-    }
+    if entry.get("success").and_then(Value::as_bool) == Some(true) { return true; }
     match entry.get("exit_code") {
         Some(v) => v.as_i64() == Some(0) || v.as_u64() == Some(0),
         None => false,
     }
 }
-
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used)]
@@ -1089,7 +976,7 @@ fn goal_complete_rejected_when_completion_gates_depth_not_met() {
         );
 
         let err = read_quality_gate_state(&repo, Some("   ")).expect_err("empty override");
-        assert!(err.contains("empty"));
+        assert!(err.to_string().contains("empty"));
 
         let _ = fs::remove_dir_all(&repo);
     }

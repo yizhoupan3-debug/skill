@@ -466,12 +466,12 @@ pub fn hydrate_task_state_hybrid(
     // Always read directly from physical files.
     match read_goal_state(repo_root, Some(task_id)) {
         Ok(g) => goal_state = g,
-        Err(e) => push_resolution_read_err(&mut resolution_notes, "goal_state_read_failed", e),
+        Err(e) => push_resolution_read_err(&mut resolution_notes, "goal_state_read_failed", e.to_string()),
     }
     match read_quality_gate_state(repo_root, Some(task_id)) {
         Ok(v) => rfv_loop_state = v,
         Err(e) => {
-            push_resolution_read_err(&mut resolution_notes, "rfv_loop_state_read_failed", e)
+            push_resolution_read_err(&mut resolution_notes, "rfv_loop_state_read_failed", e.to_string())
         }
     }
     let (mut evidence_rows_non_empty, mut has_successful_verification) =

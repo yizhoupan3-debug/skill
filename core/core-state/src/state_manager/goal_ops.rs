@@ -3,6 +3,7 @@
 
 use crate::transition_validation::{validate_transition, TaskTransition};
 use crate::utils::atomic_write::write_atomic_json;
+use core_errors::FrameworkError;
 use serde_json::{Map, Value, json};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -12,7 +13,7 @@ use super::pointer_ops::{
 };
 use super::{REQUIRES_COMPLETION_EVIDENCE_KEY, goal_state_path_for_task, read_goal_state};
 
-fn resolve_task_id_strict(payload: &Value) -> Result<String, String> {
+fn resolve_task_id_strict(payload: &Value) -> Result<String, FrameworkError> {
     payload
         .get("task_id")
         .and_then(Value::as_str)
@@ -20,21 +21,21 @@ fn resolve_task_id_strict(payload: &Value) -> Result<String, String> {
         .filter(|s| !s.is_empty())
         .map(|s| s.to_string())
         .ok_or_else(|| {
-            "goal_state_manage: task_id is required in payload (multi-agent safe mode)".to_string()
+            FrameworkError::validation("goal_state_manage: task_id is required in payload (multi-agent safe mode)")
         })
 }
 
-fn resolve_framework_goal_drive_repo(payload: &Value) -> Result<PathBuf, String> {
+fn resolve_framework_goal_drive_repo(payload: &Value) -> Result<PathBuf, FrameworkError> {
     let repo_root = payload
         .get("repo_root")
         .and_then(|v| v.as_str())
         .map(PathBuf::from)
-        .ok_or_else(|| "framework_goal_drive requires repo_root".to_string())?;
+        .ok_or_else(|| FrameworkError::validation("framework_goal_drive requires repo_root"))?;
     if !repo_root.is_dir() {
-        return Err(format!(
+        return Err(FrameworkError::not_found(format!(
             "framework_goal_drive: repo_root is not a directory: {}",
             repo_root.display()
-        ));
+        )));
     }
     Ok(repo_root.to_path_buf())
 }
@@ -48,12 +49,12 @@ pub fn framework_goal_drive(payload: Value) -> Result<Value, String> {
         .trim()
         .to_ascii_lowercase();
     if operation == "status" {
-        framework_goal_drive_impl(payload)
+        framework_goal_drive_impl(payload).map_err(|e| e.to_string())
     } else {
         let repo_root = resolve_framework_goal_drive_repo(&payload)?;
         crate::utils::task_write_lock::apply_task_ledger_mutation(
             &repo_root,
-            || framework_goal_drive_impl(payload),
+            || framework_goal_drive_impl(payload).map_err(|e| e.to_string()),
         ).map_err(|e| e.to_string())
     }
 }
@@ -173,24 +174,24 @@ pub(crate) fn validate_drive_contract(
     done_when: &[Value],
     validation_commands: &[Value],
     context: &str,
-) -> Result<(), String> {
+) -> Result<(), FrameworkError> {
     if !drive_until_done {
         return Ok(());
     }
     if count_nonempty_string_items(non_goals) == 0 {
-        return Err(format!(
+        return Err(FrameworkError::validation(format!(
             "framework_goal_drive {context}: drive_until_done goal requires non-empty non_goals"
-        ));
+        )));
     }
     if count_nonempty_string_items(done_when) < 2 {
-        return Err(format!(
+        return Err(FrameworkError::validation(format!(
             "framework_goal_drive {context}: drive_until_done goal requires >=2 done_when items"
-        ));
+        )));
     }
     if count_nonempty_string_items(validation_commands) == 0 {
-        return Err(format!(
+        return Err(FrameworkError::validation(format!(
             "framework_goal_drive {context}: drive_until_done goal requires non-empty validation_commands"
-        ));
+        )));
     }
     Ok(())
 }
@@ -332,17 +333,17 @@ pub fn task_evidence_artifacts_summary_for_task(repo_root: &Path, task_id: &str)
     (true, any_ok)
 }
 
-fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
+fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
     let repo_root = payload
         .get("repo_root")
         .and_then(Value::as_str)
         .map(PathBuf::from)
-        .ok_or_else(|| "framework_goal_drive requires repo_root".to_string())?;
+        .ok_or_else(|| FrameworkError::validation("framework_goal_drive requires repo_root"))?;
     if !repo_root.is_dir() {
-        return Err(format!(
+        return Err(FrameworkError::not_found(format!(
             "framework_goal_drive: repo_root is not a directory: {}",
             repo_root.display()
-        ));
+        )));
     }
     let repo_root = repo_root.canonicalize().unwrap_or(repo_root);
     let operation = payload
@@ -394,7 +395,7 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
                 .and_then(Value::as_str)
                 .map(str::trim)
                 .filter(|s| !s.is_empty())
-                .ok_or_else(|| "framework_goal_drive start requires non-empty goal".to_string())?;
+                .ok_or_else(|| FrameworkError::validation("framework_goal_drive start requires non-empty goal"))?;
             let drive_until_done = payload
                 .get("drive_until_done")
                 .and_then(Value::as_bool)
@@ -450,7 +451,7 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
                 schema_version: Some(1),
             };
             crate::task_ledger::append_transaction_assuming_l1_held(&repo_root, &task_id, tx)
-                .map_err(|e| format!("TASK_LEDGER append failed: {e}"))?;
+                .map_err(|e| FrameworkError::validation(format!("TASK_LEDGER append failed: {e}")))?;
             sync_task_pointers_after_goal_drive(&repo_root, &task_id, goal, &payload)?;
             Ok(json!({
                 "ok": true,
@@ -469,16 +470,16 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
                 .map(str::trim)
                 .filter(|s| !s.is_empty())
                 .ok_or_else(|| {
-                    "framework_goal_drive checkpoint requires non-empty note".to_string()
+                    FrameworkError::validation("framework_goal_drive checkpoint requires non-empty note")
                 })?;
             let path = goal_state_path_for_task(&repo_root, &task_id)?;
             let mut state = read_goal_state(&repo_root, Some(&task_id))?
-                .ok_or_else(|| format!("GOAL_STATE missing at {}", path.display()))?;
+                .ok_or_else(|| FrameworkError::not_found(format!("GOAL_STATE missing at {}", path.display())))?;
             let arr = state
                 .as_object_mut()
                 .and_then(|o| o.get_mut("checkpoints"))
                 .and_then(|c| c.as_array_mut())
-                .ok_or_else(|| "GOAL_STATE.checkpoints corrupt".to_string())?;
+                .ok_or_else(|| FrameworkError::validation("GOAL_STATE.checkpoints corrupt"))?;
             arr.push(json!({
                 "at": framework_kernel::time::now_iso(),
                 "note": note,
@@ -500,7 +501,7 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
                 schema_version: Some(1),
             };
             crate::task_ledger::append_transaction_assuming_l1_held(&repo_root, &task_id, tx)
-                .map_err(|e| format!("TASK_LEDGER append failed: {e}"))?;
+                .map_err(|e| FrameworkError::validation(format!("TASK_LEDGER append failed: {e}")))?;
             Ok(json!({
                 "ok": true,
                 "operation": "checkpoint",
@@ -530,14 +531,14 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
         "complete" => {
             let task_id = resolve_task_id_strict(&payload)?;
             let state = read_goal_state(&repo_root, Some(&task_id))?
-                .ok_or_else(|| "GOAL_STATE missing for completion gate check".to_string())?;
+                .ok_or_else(|| FrameworkError::validation("GOAL_STATE missing for completion gate check"))?;
             // Phase B: validate_transition is the authoritative blocking anti-fraud gate.
             // Only applies to goals that require completion evidence (drive_until_done,
             // validation_commands, done_when, or explicit requires_completion_evidence).
             if goal_requires_completion_evidence(&state) {
                 let transition_v = validate_transition(&repo_root, &task_id, TaskTransition::Complete);
                 if !transition_v.passed {
-                    return Err(format!("validate_transition blocked: {}", transition_v.reason));
+                    return Err(FrameworkError::validation(format!("validate_transition blocked: {}", transition_v.reason)));
                 }
             }
 
@@ -547,8 +548,7 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
                     task_evidence_artifacts_summary_for_task(&repo_root, task_id.as_str());
                 if !evidence_ok {
                     return Err(
-                        "framework_goal_drive complete requires successful EVIDENCE_INDEX row"
-                            .to_string(),
+                        FrameworkError::validation("framework_goal_drive complete requires successful EVIDENCE_INDEX row"),
                     );
                 }
             }
@@ -577,7 +577,7 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
                 schema_version: Some(1),
             };
             crate::task_ledger::append_transaction_assuming_l1_held(&repo_root, &task_id, tx)
-                .map_err(|e| format!("TASK_LEDGER append failed: {e}"))?;
+                .map_err(|e| FrameworkError::validation(format!("TASK_LEDGER append failed: {e}")))?;
             Ok(json!({
                 "ok": true,
                 "operation": "iteration_completed",
@@ -590,15 +590,15 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
             crate::utils::path_guard::validate_task_id_component(&task_id)?;
             let path = goal_state_path_for_task(&repo_root, &task_id)?;
             let mut state = read_goal_state(&repo_root, Some(&task_id))?
-                .ok_or_else(|| format!("GOAL_STATE missing at {}", path.display()))?;
+                .ok_or_else(|| FrameworkError::not_found(format!("GOAL_STATE missing at {}", path.display())))?;
             let obj = state
                 .as_object_mut()
-                .ok_or_else(|| "GOAL_STATE root must be object".to_string())?;
+                .ok_or_else(|| FrameworkError::validation("GOAL_STATE root must be object"))?;
             let current_status = obj.get("status").and_then(Value::as_str).unwrap_or("");
             if current_status != "review_pending" {
-                return Err(format!(
+                return Err(FrameworkError::validation(format!(
                     "cannot retry a goal in '{current_status}' status — must be 'review_pending'"
-                ));
+                )));
             }
             obj.insert("status".to_string(), json!("running"));
             obj.insert("blockers".to_string(), Value::Null);
@@ -613,7 +613,7 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
                 schema_version: Some(1),
             };
             crate::task_ledger::append_transaction_assuming_l1_held(&repo_root, &task_id, tx)
-                .map_err(|e| format!("TASK_LEDGER append failed: {e}"))?;
+                .map_err(|e| FrameworkError::validation(format!("TASK_LEDGER append failed: {e}")))?;
             let goal_label = state
                 .get("goal")
                 .and_then(Value::as_str)
@@ -633,7 +633,7 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
                 .map(str::trim)
                 .filter(|s| !s.is_empty())
                 .ok_or_else(|| {
-                    "framework_goal_drive block requires non-empty blocker".to_string()
+                    FrameworkError::validation("framework_goal_drive block requires non-empty blocker")
                 })?;
             set_terminal_flags(
                 &repo_root,
@@ -649,10 +649,10 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
             crate::utils::path_guard::validate_task_id_component(&task_id)?;
             let path = goal_state_path_for_task(&repo_root, &task_id)?;
             let mut state = read_goal_state(&repo_root, Some(&task_id))?
-                .ok_or_else(|| format!("GOAL_STATE missing at {}", path.display()))?;
+                .ok_or_else(|| FrameworkError::not_found(format!("GOAL_STATE missing at {}", path.display())))?;
             let obj = state
                 .as_object_mut()
-                .ok_or_else(|| "GOAL_STATE root must be object".to_string())?;
+                .ok_or_else(|| FrameworkError::validation("GOAL_STATE root must be object"))?;
 
             // Only mutable states can be amended
             let status = obj.get("status").and_then(Value::as_str).unwrap_or("");
@@ -660,15 +660,13 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
                 || obj.get("archived").and_then(Value::as_bool).unwrap_or(false)
             {
                 return Err(
-                    "framework_goal_drive amend: cannot amend a completed/archived goal"
-                        .to_string(),
+                    FrameworkError::validation("framework_goal_drive amend: cannot amend a completed/archived goal"),
                 );
             }
             // Stale goals from another session cannot be amended
             if obj.get("stale").and_then(Value::as_bool).unwrap_or(false) {
                 return Err(
-                    "framework_goal_drive amend: cannot amend a stale goal (session_id mismatch)"
-                        .to_string(),
+                    FrameworkError::validation("framework_goal_drive amend: cannot amend a stale goal (session_id mismatch)"),
                 );
             }
 
@@ -730,9 +728,8 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
 
             if !has_amend {
                 return Err(
-                    "framework_goal_drive amend requires at least one field to update: \
-                     goal, non_goals, done_when, or validation_commands"
-                        .to_string(),
+                    FrameworkError::validation("framework_goal_drive amend requires at least one field to update: \
+                     goal, non_goals, done_when, or validation_commands"),
                 );
             }
 
@@ -774,7 +771,7 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
                 schema_version: Some(1),
             };
             crate::task_ledger::append_transaction_assuming_l1_held(&repo_root, &task_id, tx)
-                .map_err(|e| format!("TASK_LEDGER append failed: {e}"))?;
+                .map_err(|e| FrameworkError::validation(format!("TASK_LEDGER append failed: {e}")))?;
             Ok(json!({
                 "ok": true,
                 "operation": "amend",
@@ -782,20 +779,20 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
                 "goal_state_path": path.display().to_string(),
             }))
         }
-        _ => Err(format!(
+        _ => Err(FrameworkError::validation(format!(
             "framework_goal_drive: unknown operation '{operation}'"
-        )),
+        ))),
     }
 }
 
-fn clear_goal_state(repo_root: &Path, task_id_resolved: Option<String>) -> Result<Value, String> {
+fn clear_goal_state(repo_root: &Path, task_id_resolved: Option<String>) -> Result<Value, FrameworkError> {
     let task_id = task_id_resolved.ok_or_else(|| {
-        "goal_state_manage: task_id is required (multi-agent safe mode)".to_string()
+        FrameworkError::validation("goal_state_manage: task_id is required (multi-agent safe mode)")
     })?;
     let path = goal_state_path_for_task(repo_root, &task_id)?;
     let existed = path.is_file();
     if existed {
-        fs::remove_file(&path).map_err(|err| format!("remove GOAL_STATE: {err}"))?;
+        fs::remove_file(&path)?;
     }
     neutralize_task_pointers_for_task(repo_root, &task_id)?;
     Ok(json!({
@@ -812,16 +809,16 @@ fn resume_goal_running(
     task_id_resolved: Option<String>,
     drive_until_done: bool,
     payload: &Value,
-) -> Result<Value, String> {
+) -> Result<Value, FrameworkError> {
     let task_id = task_id_resolved.ok_or_else(|| {
-        "goal_state_manage: task_id is required (multi-agent safe mode)".to_string()
+        FrameworkError::validation("goal_state_manage: task_id is required (multi-agent safe mode)")
     })?;
     let path = goal_state_path_for_task(repo_root, &task_id)?;
     let mut state = read_goal_state(repo_root, Some(&task_id))?
-        .ok_or_else(|| format!("GOAL_STATE missing at {}", path.display()))?;
+        .ok_or_else(|| FrameworkError::not_found(format!("GOAL_STATE missing at {}", path.display())))?;
     let obj = state
         .as_object_mut()
-        .ok_or_else(|| "GOAL_STATE root must be object".to_string())?;
+        .ok_or_else(|| FrameworkError::validation("GOAL_STATE root must be object"))?;
     obj.insert("status".to_string(), json!("running"));
     obj.insert("drive_until_done".to_string(), json!(drive_until_done));
     obj.insert("updated_at".to_string(), json!(framework_kernel::time::now_iso()));
@@ -855,7 +852,7 @@ fn resume_goal_running(
         schema_version: Some(1),
     };
     crate::task_ledger::append_transaction_assuming_l1_held(repo_root, &task_id, tx)
-        .map_err(|e| format!("TASK_LEDGER append failed: {e}"))?;
+        .map_err(|e| FrameworkError::validation(format!("TASK_LEDGER append failed: {e}")))?;
     let goal_label = state
         .get("goal")
         .and_then(Value::as_str)
@@ -876,24 +873,24 @@ fn set_terminal_flags(
     status: &str,
     drive_until_done: Option<bool>,
     blocker: Option<String>,
-) -> Result<Value, String> {
+) -> Result<Value, FrameworkError> {
     let task_id = task_id_resolved.ok_or_else(|| {
-        "goal_state_manage: task_id is required (multi-agent safe mode)".to_string()
+        FrameworkError::validation("goal_state_manage: task_id is required (multi-agent safe mode)")
     })?;
     let path = goal_state_path_for_task(repo_root, &task_id)?;
     let mut state = read_goal_state(repo_root, Some(&task_id))?
-        .ok_or_else(|| format!("GOAL_STATE missing at {}", path.display()))?;
+        .ok_or_else(|| FrameworkError::not_found(format!("GOAL_STATE missing at {}", path.display())))?;
     let obj = state
         .as_object_mut()
-        .ok_or_else(|| "GOAL_STATE root must be object".to_string())?;
+        .ok_or_else(|| FrameworkError::validation("GOAL_STATE root must be object"))?;
 
     // Guard: cannot pause or block a goal in a terminal/review state.
     // Only running, paused, and blocked are mutable operational states.
     let current = obj.get("status").and_then(Value::as_str).unwrap_or("");
     if current == "completed" || current == "review_pending" {
-        return Err(format!(
+        return Err(FrameworkError::validation(format!(
             "cannot set status '{status}' on a goal in '{current}' state"
-        ));
+        )));
     }
     obj.insert("status".to_string(), json!(status));
     if let Some(d) = drive_until_done {
@@ -915,14 +912,13 @@ fn set_terminal_flags(
         schema_version: Some(1),
     };
     crate::task_ledger::append_transaction_assuming_l1_held(repo_root, &task_id, tx)
-        .map_err(|e| format!("TASK_LEDGER append failed: {e}"))?;
+        .map_err(|e| FrameworkError::validation(format!("TASK_LEDGER append failed: {e}")))?;
     Ok(json!({
         "ok": true,
         "operation": status,
         "task_id": task_id,
     }))
 }
-
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used)]
