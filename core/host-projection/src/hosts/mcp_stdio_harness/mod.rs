@@ -110,6 +110,12 @@ impl RateLimiter {
 
 static RATE_LIMITER: OnceLock<Arc<std::sync::Mutex<RateLimiter>>> = OnceLock::new();
 
+fn get_rate_limiter() -> Arc<std::sync::Mutex<RateLimiter>> {
+    RATE_LIMITER
+        .get_or_init(|| Arc::new(std::sync::Mutex::new(RateLimiter::new(100))))
+        .clone()
+}
+
 macro_rules! poison_safe_lock {
     ($mutex:expr) => {{
         match $mutex.lock() {
