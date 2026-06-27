@@ -891,3 +891,239 @@ pub fn dispatch_loop_command(command: LoopCommand) -> Result<(), String> {
         }
     }
 }
+// ── Research CLI dispatch ──
+
+#[cfg(feature = "research")]
+use research_harness;
+
+pub fn dispatch_research_command(command: ResearchCommand) -> Result<(), String> {
+    match command {
+        ResearchCommand::AigcCheck(args) => dispatch_research_aigc_check(args),
+        ResearchCommand::Smoke(args) => dispatch_research_smoke(args),
+        ResearchCommand::Verify { command } => match command {
+            ResearchVerifyCommand::Literature(args) => dispatch_research_verify_literature(args),
+            ResearchVerifyCommand::Structure(args) => dispatch_research_verify_structure(args),
+            ResearchVerifyCommand::Reproducibility(args) => dispatch_research_verify_reproducibility(args),
+        },
+    }
+}
+
+fn dispatch_research_aigc_check(args: ResearchAigcCheckCommand) -> Result<(), String> {
+    #[cfg(not(feature = "research"))]
+    { let _ = args; Err("research feature not enabled; rebuild with --features research".to_string()) }
+    #[cfg(feature = "research")] {
+        let lang = if args.language == "zh" { research_harness::aigc::detector::Language::Zh } else { research_harness::aigc::detector::Language::En };
+        let result = research_harness::aigc::detector::detect(&args.text, lang).map_err(|e| e.to_string())?;
+        let scored = research_harness::aigc::scorer::score(&result);
+        print_json_value(&serde_json::json!({
+            "ai_generated_probability": result.ai_generated_probability,
+            "per_segment_analysis": result.segment_analysis,
+            "score": scored,
+        }))
+    }
+}
+
+fn dispatch_research_smoke(args: ResearchSmokeCommand) -> Result<(), String> {
+    #[cfg(not(feature = "research"))]
+    { let _ = args; Err("research feature not enabled; rebuild with --features research".to_string()) }
+    #[cfg(feature = "research")] {
+        let repo_root = args.repo_root.as_deref()
+            .and_then(|s| if s.is_empty() { None } else { Some(s) })
+            .or_else(|| std::env::current_dir().ok().and_then(|p| Some(p.display().to_string())))
+            .map(|s| s.to_string());
+        let result = research_harness::smoke::run_smoke_tests(
+            repo_root.as_deref(),
+            args.source.as_deref(),
+            args.barrier_id.as_deref(),
+        ).map_err(|e| e.to_string())?;
+        print_json_value(&result)
+    }
+}
+
+fn dispatch_research_verify_literature(args: ResearchVerifyLiteratureCommand) -> Result<(), String> {
+    match args.check.as_str() {
+        "doi" => {
+            let doi = args.doi.as_deref().ok_or_else(|| "doi is required for check=doi".to_string())?;
+            let client = reqwest::blocking::Client::builder()
+                .timeout(std::time::Duration::from_secs(15))
+                .build()
+                .map_err(|e| e.to_string())?;
+            let url = format!("https://doi.org/{}", doi);
+            let resp = client.head(&url).send().map_err(|e| e.to_string())?;
+            let reachable = resp.status().is_success() || resp.status().is_redirection();
+            print_json_value(&serde_json::json!({
+                "doi": doi,
+                "reachable": reachable,
+                "status": resp.status().as_u16(),
+            }))
+        }
+        "claim_coverage" => {
+            #[cfg(not(feature = "research"))]
+            { return Err("research feature not enabled; rebuild with --features research".to_string()); }
+            #[cfg(feature = "research")] {
+                let claims: Vec<String> = args.claims.as_deref()
+                    .ok_or_else(|| "claims is required for check=claim_coverage".to_string())
+                    .and_then(|s| serde_json::from_str(s).map_err(|e| format!("invalid claims JSON: {e}")))?;
+                let references: Vec<String> = args.references.as_deref()
+                    .ok_or_else(|| "references is required for check=claim_coverage".to_string())
+                    .and_then(|s| serde_json::from_str(s).map_err(|e| format!("invalid references JSON: {e}")))?;
+                let result = research_harness::verification::literature::verify_claim_coverage(
+                    &claims, &references,
+                ).map_err(|e| e.to_string())?;
+                print_json_value(&result)
+            }
+        }
+        other => Err(format!("unknown literature check: {other}")),
+    }
+}
+
+fn dispatch_research_verify_structure(args: ResearchVerifyStructureCommand) -> Result<(), String> {
+    #[cfg(not(feature = "research"))]
+    { let _ = args; Err("research feature not enabled; rebuild with --features research".to_string()) }
+    #[cfg(feature = "research")] {
+        match args.check.as_str() {
+            "latex" => {
+                let result = research_harness::verification::structure::check_latex_compilable(&args.path)
+                    .map_err(|e| e.to_string())?;
+                print_json_value(&result)
+            }
+            "figures" => {
+                let result = research_harness::verification::structure::check_figure_references(&args.path)
+                    .map_err(|e| e.to_string())?;
+                print_json_value(&result)
+            }
+            other => Err(format!("unknown structure check: {other}")),
+        }
+    }
+}
+
+fn dispatch_research_verify_reproducibility(args: ResearchVerifyReproducibilityCommand) -> Result<(), String> {
+    #[cfg(not(feature = "research"))]
+    { let _ = args; Err("research feature not enabled; rebuild with --features research".to_string()) }
+    #[cfg(feature = "research")] {
+        let run_paths: Option<Vec<std::path::PathBuf>> = args.run_paths.as_deref()
+            .map(|s| serde_json::from_str::<Vec<String>>(s)
+                .map_err(|e| format!("invalid run_paths JSON: {e}"))
+                .map(|v| v.into_iter().map(std::path::PathBuf::from).collect()))
+            .transpose()?;
+        let path_refs: Vec<&std::path::Path> = run_paths.as_deref()
+            .map(|v| v.iter().map(|p| p.as_path()).collect())
+            .unwrap_or_default();
+        let result = research_harness::verification::reproducibility::run_reproducibility_audit(
+            &args.experiment_dir,
+            if path_refs.is_empty() { None } else { Some(path_refs.as_slice()) },
+        ).map_err(|e| e.to_string())?;
+        print_json_value(&result)
+    }
+}
+
+// ── Math CLI dispatch ──
+
+pub fn dispatch_math_command(command: MathCommand) -> Result<(), String> {
+    match command {
+        MathCommand::Prove(args) => dispatch_math_prove(args),
+        MathCommand::Backend => dispatch_math_backend(),
+        MathCommand::AsymptoticChain(args) => dispatch_math_asymptotic_chain(args),
+        MathCommand::LeanVerify(args) => dispatch_math_lean_verify(args),
+    }
+}
+
+fn dispatch_math_prove(args: MathProveCommand) -> Result<(), String> {
+    #[cfg(not(feature = "research"))]
+    { let _ = args; Err("research feature not enabled; rebuild with --features research".to_string()) }
+    #[cfg(feature = "research")] {
+        let result = research_harness::verification::inequality::check_inequality(
+            &args.expression,
+            args.timeout_ms.map(|t| t as usize),
+        ).map_err(|e| e.to_string())?;
+        print_json_value(&result)
+    }
+}
+
+fn dispatch_math_backend() -> Result<(), String> {
+    #[cfg(not(feature = "research"))]
+    { Err("research feature not enabled; rebuild with --features research".to_string()) }
+    #[cfg(feature = "research")] {
+        use research_harness::verification::inequality::solver_available;
+        use research_harness::verification::lean_bridge::check_lean_status;
+        use research_harness::verification::sympy_bridge::sympy_available;
+        print_json_value(&serde_json::json!({
+            "smt_solver": solver_available(),
+            "lean": check_lean_status(),
+            "sympy": sympy_available(),
+        }))
+    }
+}
+
+fn dispatch_math_asymptotic_chain(args: MathAsymptoticChainCommand) -> Result<(), String> {
+    #[cfg(not(feature = "research"))]
+    { let _ = args; Err("research feature not enabled; rebuild with --features research".to_string()) }
+    #[cfg(feature = "research")] {
+        let steps: Vec<serde_json::Value> = serde_json::from_str(&args.steps)
+            .map_err(|e| format!("invalid steps JSON: {e}"))?;
+        let result = research_harness::verification::asymptotic::verify_asymptotic_chain_with_name(
+            "cli-chain",
+            &steps,
+            &args.variable,
+            &args.regime,
+            !args.no_sympy,
+        ).map_err(|e| e.to_string())?;
+        print_json_value(&result)
+    }
+}
+
+fn dispatch_math_lean_verify(args: MathLeanVerifyCommand) -> Result<(), String> {
+    #[cfg(not(feature = "research"))]
+    { let _ = args; Err("research feature not enabled; rebuild with --features research".to_string()) }
+    #[cfg(feature = "research")] {
+        use std::fs;
+        let script = fs::read_to_string(&args.script_path)
+            .map_err(|e| format!("read Lean script {}: {e}", args.script_path.display()))?;
+        let result = research_harness::verification::lean_bridge::verify_lean_theorem(&script)
+            .map_err(|e| e.to_string())?;
+        print_json_value(&result)
+    }
+}
+
+// ── Web CLI dispatch ──
+
+pub fn dispatch_web_command(command: WebCommand) -> Result<(), String> {
+    match command {
+        WebCommand::Fetch(args) => dispatch_web_fetch(args),
+    }
+}
+
+fn dispatch_web_fetch(args: WebFetchCommand) -> Result<(), String> {
+    use rt_core_contracts::web_fetch_guard;
+    let max_bytes = args.max_bytes.unwrap_or(50000).min(50000);
+    let (parsed_url, initial_addrs) = web_fetch_guard::validate_and_resolve_web_fetch_url(&args.url)
+        .map_err(|e| e.to_string())?;
+    let final_url = web_fetch_guard::resolve_web_fetch_redirect(&parsed_url, &args.url)
+        .map_err(|e| e.to_string())?;
+    let client = reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .map_err(|e| e.to_string())?;
+    let resp = client.get(&final_url)
+        .header("User-Agent", "router-rs-cli/0.1")
+        .send()
+        .map_err(|e| e.to_string())?;
+    let status = resp.status().as_u16();
+    let body_bytes = resp.bytes()
+        .map_err(|e| e.to_string())?
+        .to_vec();
+    let truncated = body_bytes.len() > max_bytes;
+    let body = if truncated {
+        body_bytes[..max_bytes].to_vec()
+    } else {
+        body_bytes
+    };
+    let text = String::from_utf8_lossy(&body).to_string();
+    print_json_value(&serde_json::json!({
+        "url": final_url,
+        "status": status,
+        "headers": { "content_type": "" },
+        "body": text,
+        "truncated": truncated,
+    }))
+}
