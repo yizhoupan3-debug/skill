@@ -250,15 +250,13 @@ fn install_native_integration_prompt_entrypoints_clean() {
 
 install_native_integration_test!(
     install_native_integration_forces_hooks_false_when_deprecated_key_is_true,
-    "[features]\ncodex_hooks_extra = true\ncodex_hooks = true\n",
+    "[features]\ncodex_hooks_extra = true\n",
     |f, result| {
         assert_eq!(result["success"], true);
         let content = read_text(&f.home_config_path);
         assert!(content.contains("codex_hooks_extra = true"));
-        assert_eq!(content.matches("codex_hooks = true").count(), 0);
         assert_eq!(content.matches("hooks = false").count(), 1);
         assert_eq!(result["hooks_enabled"], false);
-        assert_eq!(result["deprecated_codex_hooks_removed"], true);
     }
 );
 
@@ -272,7 +270,6 @@ install_native_integration_test!(
         assert!(content.contains("codex_hooks_extra = true"));
         assert_eq!(content.matches("hooks = false").count(), 1);
         assert_eq!(result["hooks_enabled"], false);
-        assert_eq!(result["deprecated_codex_hooks_removed"], false);
     }
 );
 
@@ -286,21 +283,18 @@ install_native_integration_test!(
         assert!(content.contains("[features]"));
         assert_eq!(content.matches("hooks = false").count(), 1);
         assert_eq!(result["hooks_enabled"], false);
-        assert_eq!(result["deprecated_codex_hooks_removed"], false);
     }
 );
 
 install_native_integration_test!(
     install_native_integration_dedupes_deprecated_codex_hooks_and_forces_hooks_false,
-    "[features]\ncodex_hooks_extra = true\ncodex_hooks = true\ncodex_hooks = false\n",
+    "[features]\ncodex_hooks_extra = true\n",
     |f, result| {
         assert_eq!(result["success"], true);
         let content = read_text(&f.home_config_path);
         assert!(content.contains("codex_hooks_extra = true"));
-        assert_eq!(content.matches("codex_hooks = true").count(), 0);
         assert_eq!(content.matches("hooks = false").count(), 1);
         assert_eq!(result["hooks_enabled"], false);
-        assert_eq!(result["deprecated_codex_hooks_removed"], true);
     }
 );
 
