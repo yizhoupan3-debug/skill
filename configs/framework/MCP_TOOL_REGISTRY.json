@@ -1,8 +1,8 @@
 {
   "schema_version": "mcp-tool-registry-v2",
   "scope": {
-    "total_count": 66,
-    "builtin_count": 11,
+    "total_count": 74,
+    "builtin_count": 19,
     "research_count": 21,
     "independent_count": 23,
     "external_count": 11
@@ -29,9 +29,7 @@
       ],
       "host_platforms": [],
       "mcp_server": "router-rs",
-      "tool_flags": [
-        "behavior:core_routing_tool"
-      ],
+      "tool_flags": [],
       "input_schema": {
         "type": "object",
         "required": [
@@ -69,9 +67,7 @@
       ],
       "host_platforms": [],
       "mcp_server": "router-rs",
-      "tool_flags": [
-        "behavior:core_routing_tool"
-      ],
+      "tool_flags": [],
       "input_schema": {
         "type": "object",
         "properties": {
@@ -97,9 +93,7 @@
       ],
       "host_platforms": [],
       "mcp_server": "router-rs",
-      "tool_flags": [
-        "behavior:core_routing_tool"
-      ],
+      "tool_flags": [],
       "input_schema": {
         "type": "object",
         "required": [
@@ -145,9 +139,7 @@
       ],
       "host_platforms": [],
       "mcp_server": "router-rs",
-      "tool_flags": [
-        "behavior:core_routing_tool"
-      ],
+      "tool_flags": [],
       "input_schema": {
         "type": "object",
         "required": [
@@ -188,9 +180,7 @@
       ],
       "host_platforms": [],
       "mcp_server": "router-rs",
-      "tool_flags": [
-        "behavior:core_routing_tool"
-      ],
+      "tool_flags": [],
       "input_schema": {
         "type": "object",
         "properties": {
@@ -223,9 +213,7 @@
       ],
       "host_platforms": [],
       "mcp_server": "router-rs",
-      "tool_flags": [
-        "behavior:core_routing_tool"
-      ],
+      "tool_flags": [],
       "input_schema": {
         "type": "object",
         "required": [
@@ -297,9 +285,7 @@
       ],
       "host_platforms": [],
       "mcp_server": "router-rs",
-      "tool_flags": [
-        "behavior:core_routing_tool"
-      ],
+      "tool_flags": [],
       "input_schema": {
         "type": "object",
         "required": [
@@ -312,6 +298,8 @@
           },
           "maxChars": {
             "type": "integer",
+            "minimum": 1,
+            "maximum": 50000,
             "description": "最大返回字符数"
           }
         }
@@ -333,9 +321,7 @@
       ],
       "host_platforms": [],
       "mcp_server": "router-rs",
-      "tool_flags": [
-        "behavior:core_routing_tool"
-      ],
+      "tool_flags": [],
       "input_schema": {
         "type": "object",
         "required": [
@@ -365,9 +351,7 @@
       ],
       "host_platforms": [],
       "mcp_server": "router-rs",
-      "tool_flags": [
-        "behavior:core_routing_tool"
-      ],
+      "tool_flags": [],
       "input_schema": {
         "type": "object",
         "required": [
@@ -407,9 +391,7 @@
       ],
       "host_platforms": [],
       "mcp_server": "router-rs",
-      "tool_flags": [
-        "behavior:core_routing_tool"
-      ],
+      "tool_flags": [],
       "input_schema": {
         "type": "object",
         "properties": {}
@@ -432,9 +414,7 @@
       ],
       "host_platforms": [],
       "mcp_server": "router-rs-cli",
-      "tool_flags": [
-        "behavior:core_routing_tool"
-      ],
+      "tool_flags": [],
       "input_schema": {
         "type": "object",
         "required": [
@@ -450,6 +430,254 @@
             "description": "最大返回字节数"
           }
         }
+      }
+    },
+    {
+      "slug": "task_create",
+      "display_name": "任务创建",
+      "description": "创建新 task（定义 todo）。幂等：已存在则跳过。",
+      "layer": "builtin",
+      "dispatch_domain": "domain:framework",
+      "owner": "framework",
+      "trigger_hints": [
+        "task",
+        "任务",
+        "创建",
+        "todo",
+        "待办"
+      ],
+      "host_platforms": [],
+      "mcp_server": "router-rs",
+      "tool_flags": [
+        "no_routing"
+      ],
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "task_id"
+        ],
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "description": "任务 ID"
+          },
+          "title": {
+            "type": "string",
+            "description": "任务标题（可选，默认等于 task_id）"
+          }
+        }
+      }
+    },
+    {
+      "slug": "task_list",
+      "display_name": "任务列表",
+      "description": "列出所有已知 task 及其状态。",
+      "layer": "builtin",
+      "dispatch_domain": "domain:framework",
+      "owner": "framework",
+      "trigger_hints": [
+        "task",
+        "任务",
+        "列表",
+        "查看",
+        "所有"
+      ],
+      "host_platforms": [],
+      "mcp_server": "router-rs",
+      "tool_flags": [
+        "no_routing"
+      ],
+      "input_schema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "slug": "task_complete",
+      "display_name": "任务完成",
+      "description": "完成一个 task。有 GOAL_STATE 时委托 goal_state_manage(complete)。",
+      "layer": "builtin",
+      "dispatch_domain": "domain:framework",
+      "owner": "framework",
+      "trigger_hints": [
+        "task",
+        "任务",
+        "完成",
+        "结束",
+        "完工"
+      ],
+      "host_platforms": [],
+      "mcp_server": "router-rs",
+      "tool_flags": [
+        "no_routing"
+      ],
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "task_id"
+        ],
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "description": "任务 ID"
+          }
+        }
+      }
+    },
+    {
+      "slug": "task_focus",
+      "display_name": "任务切换焦点",
+      "description": "切换 focus 到指定 task。",
+      "layer": "builtin",
+      "dispatch_domain": "domain:framework",
+      "owner": "framework",
+      "trigger_hints": [
+        "task",
+        "任务",
+        "焦点",
+        "切换",
+        "fokus",
+        "active"
+      ],
+      "host_platforms": [],
+      "mcp_server": "router-rs",
+      "tool_flags": [
+        "no_routing"
+      ],
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "task_id"
+        ],
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "description": "任务 ID"
+          }
+        }
+      }
+    },
+    {
+      "slug": "task_chain_advance",
+      "display_name": "任务链推进",
+      "description": "将 task chain 推进到下一个 task：标记当前为 completed、切换 focus 到下一项。",
+      "layer": "builtin",
+      "dispatch_domain": "domain:framework",
+      "owner": "framework",
+      "trigger_hints": [
+        "task chain",
+        "任务链",
+        "推进",
+        "chain",
+        "下一个"
+      ],
+      "host_platforms": [],
+      "mcp_server": "router-rs",
+      "tool_flags": [
+        "no_routing"
+      ],
+      "input_schema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "slug": "route_tool",
+      "display_name": "工具路由",
+      "description": "将自然语言查询路由到最佳匹配的 MCP 工具。",
+      "layer": "builtin",
+      "dispatch_domain": "domain:framework",
+      "owner": "framework",
+      "trigger_hints": [
+        "路由",
+        "工具",
+        "route",
+        "查询",
+        "匹配"
+      ],
+      "host_platforms": [],
+      "mcp_server": "router-rs",
+      "tool_flags": [
+        "no_routing"
+      ],
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "query"
+        ],
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "自然语言查询文本"
+          },
+          "host_id": {
+            "type": "string",
+            "description": "宿主平台 ID（可选，默认使用连接级 host_id）"
+          }
+        }
+      }
+    },
+    {
+      "slug": "search_tools",
+      "display_name": "工具搜索",
+      "description": "搜索 MCP 工具注册表并返回 top-k 结果。",
+      "layer": "builtin",
+      "dispatch_domain": "domain:framework",
+      "owner": "framework",
+      "trigger_hints": [
+        "搜索",
+        "查找",
+        "search",
+        "工具"
+      ],
+      "host_platforms": [],
+      "mcp_server": "router-rs",
+      "tool_flags": [
+        "no_routing"
+      ],
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "query"
+        ],
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "搜索查询文本"
+          },
+          "top_k": {
+            "type": "integer",
+            "description": "返回结果数量（默认 5）"
+          },
+          "host_id": {
+            "type": "string",
+            "description": "宿主平台 ID（可选）"
+          }
+        }
+      }
+    },
+    {
+      "slug": "tool_registry_status",
+      "display_name": "工具注册表状态",
+      "description": "报告工具注册表元数据（计数、schema 版本、层级分布）。",
+      "layer": "builtin",
+      "dispatch_domain": "domain:framework",
+      "owner": "framework",
+      "trigger_hints": [
+        "注册表",
+        "状态",
+        "tools",
+        "统计",
+        "registry"
+      ],
+      "host_platforms": [],
+      "mcp_server": "router-rs",
+      "tool_flags": [
+        "no_routing"
+      ],
+      "input_schema": {
+        "type": "object",
+        "properties": {}
       }
     },
     {

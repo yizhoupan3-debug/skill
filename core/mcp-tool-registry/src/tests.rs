@@ -37,7 +37,6 @@ fn test_mcp_tool_record_serde_roundtrip() {
         layer: "builtin".into(),
         dispatch_domain: "domain:goal".into(),
         owner: "framework".into(),
-        gate: "sandbox".into(),
         trigger_hints: vec!["hint1".into(), "hint2".into()],
         host_platforms: vec!["macos".into()],
         mcp_server: "test-server".into(),
@@ -58,7 +57,6 @@ fn test_mcp_tool_record_serde_roundtrip() {
     assert_eq!(json["slug"], "test_tool");
     assert_eq!(json["display_name"], "Test Tool");
     assert_eq!(json["layer"], "builtin");
-    assert_eq!(json["gate"], "sandbox");
     assert_eq!(json["trigger_hints"], serde_json::json!(["hint1", "hint2"]));
     assert_eq!(json["host_platforms"], serde_json::json!(["macos"]));
     assert_eq!(json["tool_flags"], serde_json::json!(["experimental"]));
@@ -71,7 +69,6 @@ fn test_mcp_tool_record_serde_roundtrip() {
     let deserialized: McpToolRecord = serde_json::from_value(json).unwrap();
     assert_eq!(deserialized.slug, "test_tool");
     assert_eq!(deserialized.display_name, "Test Tool");
-    assert_eq!(deserialized.gate, "sandbox");
     assert_eq!(deserialized.trigger_hints, vec!["hint1", "hint2"]);
     assert_eq!(deserialized.host_platforms, vec!["macos"]);
     assert_eq!(deserialized.tool_flags, vec!["experimental"]);
@@ -80,24 +77,6 @@ fn test_mcp_tool_record_serde_roundtrip() {
     assert_eq!(schema.schema_type, "object");
     assert!(schema.properties.contains_key("path"));
     assert_eq!(schema.required, vec!["path"]);
-}
-
-#[test]
-fn test_default_gate_on_missing_field() {
-    let json = serde_json::json!({
-        "slug": "tool_no_gate",
-        "display_name": "No Gate",
-        "description": "desc",
-        "layer": "builtin",
-        "dispatch_domain": "domain:goal",
-        "owner": "framework",
-        "trigger_hints": [],
-        "host_platforms": [],
-        "mcp_server": "srv"
-    });
-
-    let record: McpToolRecord = serde_json::from_value(json).unwrap();
-    assert_eq!(record.gate, "none");
 }
 
 #[test]
@@ -153,7 +132,6 @@ fn test_minimal_record_deserialization() {
 
     let record: McpToolRecord = serde_json::from_value(json).unwrap();
     assert_eq!(record.slug, "minimal");
-    assert_eq!(record.gate, "none");
     assert!(record.trigger_hints.is_empty());
     assert!(record.host_platforms.is_empty());
     assert!(record.tool_flags.is_empty());
@@ -208,7 +186,6 @@ fn test_load_v2_with_full_fields() {
     assert_eq!(r.layer, "external");
     assert_eq!(r.dispatch_domain, "research");
     assert_eq!(r.owner, "research-team");
-    assert_eq!(r.gate, "sandbox");
     assert_eq!(r.trigger_hints, vec!["hint_a", "hint_b"]);
     assert_eq!(r.host_platforms, vec!["linux", "macos"]);
     assert_eq!(r.tool_flags, vec!["deprecated"]);
@@ -235,80 +212,6 @@ fn test_load_v2_with_input_schema() {
     assert_eq!(schema.schema_type, "object");
     assert!(schema.properties.contains_key("file"));
     assert_eq!(schema.required, vec!["file"]);
-}
-
-// ── v1 (columnar) format ─────────────────────────────────────────────────────
-
-#[test]
-fn test_load_v1_format() {
-    let dir = tempfile::tempdir().unwrap();
-    let path = dir.path().join("registry.json");
-
-    write_json(&path, JSON_V1_SINGLE);
-
-    let records = load_tool_records(&path).unwrap();
-    assert_eq!(records.len(), 1);
-    assert_eq!(records[0].slug, "v1_tool");
-    assert_eq!(records[0].display_name, "V1 Tool");
-    assert_eq!(records[0].mcp_server, "server-v1");
-}
-
-#[test]
-fn test_load_v1_input_schema() {
-    let dir = tempfile::tempdir().unwrap();
-    let path = dir.path().join("registry.json");
-
-    write_json(&path, JSON_V1_WITH_SCHEMA);
-
-    let records = load_tool_records(&path).unwrap();
-    let schema = records[0]
-        .input_schema_json
-        .as_ref()
-        .expect("should have input_schema");
-    assert_eq!(schema.schema_type, "object");
-    assert!(schema.properties.contains_key("file"));
-    assert_eq!(schema.required, vec!["file"]);
-}
-
-#[test]
-fn test_load_v1_non_string_value_is_empty_string() {
-    // When a columnar tool entry has a non-string value for a non-input_schema key,
-    // the code emits a warning and treats it as "".
-    // This test verifies the function does not crash and produces reasonable results.
-    let dir = tempfile::tempdir().unwrap();
-    let path = dir.path().join("registry.json");
-
-    write_json(&path, JSON_V1_NON_STRING);
-
-    let records = load_tool_records(&path).unwrap();
-    assert_eq!(records.len(), 1);
-    // description was the number 42 — treated as ""
-    assert_eq!(records[0].description, "");
-    assert_eq!(records[0].slug, "nonstring_tool");
-}
-
-#[test]
-fn test_load_v1_all_fields_populated() {
-    let dir = tempfile::tempdir().unwrap();
-    let path = dir.path().join("registry.json");
-
-    write_json(&path, JSON_V1_ALL_FIELDS);
-
-    let records = load_tool_records(&path).unwrap();
-    assert_eq!(records.len(), 1);
-    let r = &records[0];
-    assert_eq!(r.slug, "full_tool");
-    assert_eq!(r.display_name, "Full Tool");
-    assert_eq!(r.description, "A fully populated tool");
-    assert_eq!(r.layer, "external");
-    assert_eq!(r.dispatch_domain, "research");
-    assert_eq!(r.owner, "research-team");
-    assert_eq!(r.gate, "sandbox");
-    assert_eq!(r.trigger_hints, vec!["hint_a", "hint_b"]);
-    assert_eq!(r.host_platforms, vec!["linux", "macos"]);
-    assert_eq!(r.mcp_server, "research-server");
-    assert_eq!(r.tool_flags, vec!["deprecated"]);
-    assert!(r.input_schema_json.is_some());
 }
 
 // ── Error paths ───────────────────────────────────────────────────────────────
@@ -347,40 +250,6 @@ fn test_empty_tools_list() {
 }
 
 #[test]
-fn test_v1_missing_keys_array_error() {
-    let dir = tempfile::tempdir().unwrap();
-    let path = dir.path().join("registry.json");
-
-    // Has tools but no "keys" array (required for v1)
-    write_json(&path, JSON_V1_MISSING_KEYS);
-
-    let err = load_tool_records(&path).unwrap_err();
-    assert!(err.to_string().contains("missing 'keys'"), "error: {err}");
-}
-
-#[test]
-fn test_v1_empty_keys_array_error() {
-    let dir = tempfile::tempdir().unwrap();
-    let path = dir.path().join("registry.json");
-
-    write_json(&path, JSON_V1_EMPTY_KEYS);
-
-    let err = load_tool_records(&path).unwrap_err();
-    assert!(err.to_string().contains("empty 'keys'"), "error: {err}");
-}
-
-#[test]
-fn test_v1_missing_slug_error() {
-    let dir = tempfile::tempdir().unwrap();
-    let path = dir.path().join("registry.json");
-
-    write_json(&path, JSON_V1_MISSING_SLUG);
-
-    let err = load_tool_records(&path).unwrap_err();
-    assert!(err.to_string().contains("missing slug"), "error: {err}");
-}
-
-#[test]
 fn test_v2_missing_required_slug_error() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("registry.json");
@@ -400,7 +269,7 @@ fn test_invalid_json_error() {
     write_json(&path, "this is not valid json");
 
     let err = load_tool_records(&path).unwrap_err();
-    assert!(err.to_string().contains("failed to parse"), "error: {err}");
+    assert!(err.to_string().contains("JSON error"), "error: {err}");
 }
 
 #[test]
@@ -409,19 +278,7 @@ fn test_nonexistent_file_error() {
     let path = dir.path().join("nonexistent_file.json");
 
     let err = load_tool_records(&path).unwrap_err();
-    assert!(err.to_string().contains("failed to read"), "error: {err}");
-}
-
-#[test]
-fn test_v1_tool_not_array_nor_object_error() {
-    let dir = tempfile::tempdir().unwrap();
-    let path = dir.path().join("registry.json");
-
-    // First tool entry is a string, not array or object
-    write_json(&path, JSON_V1_ENTRY_NOT_ARRAY);
-
-    let err = load_tool_records(&path).unwrap_err();
-    assert!(err.to_string().contains("must be arrays"), "error: {err}");
+    assert!(err.to_string().contains("I/O error"), "error: {err}");
 }
 
 // ── Cache behavior ────────────────────────────────────────────────────────────
@@ -557,7 +414,6 @@ const JSON_V2_FULL: &str = r#"{
             "layer": "external",
             "dispatch_domain": "research",
             "owner": "research-team",
-            "gate": "sandbox",
             "trigger_hints": ["hint_a", "hint_b"],
             "host_platforms": ["linux", "macos"],
             "mcp_server": "research-server",
@@ -585,38 +441,6 @@ const JSON_V2_WITH_SCHEMA: &str = r#"{
     ]
 }"#;
 
-const JSON_V1_SINGLE: &str = r#"{
-    "schema_version": "mcp-tool-registry-v1",
-    "keys": ["slug", "display_name", "description", "layer", "dispatch_domain", "owner", "mcp_server"],
-    "tools": [
-        ["v1_tool", "V1 Tool", "A v1 format tool", "builtin", "domain:goal", "framework", "server-v1"]
-    ]
-}"#;
-
-const JSON_V1_WITH_SCHEMA: &str = r#"{
-    "schema_version": "mcp-tool-registry-v1",
-    "keys": ["slug", "display_name", "description", "layer", "dispatch_domain", "owner", "mcp_server", "input_schema"],
-    "tools": [
-        ["schema_tool", "Schema Tool", "Has schema", "builtin", "domain:goal", "framework", "srv", {"type": "object", "properties": {"file": {"type": "string"}}, "required": ["file"]}]
-    ]
-}"#;
-
-const JSON_V1_NON_STRING: &str = r#"{
-    "schema_version": "mcp-tool-registry-v1",
-    "keys": ["slug", "display_name", "description", "layer", "dispatch_domain", "owner", "mcp_server"],
-    "tools": [
-        ["nonstring_tool", "Non-String", 42, "builtin", "domain:goal", "framework", "srv"]
-    ]
-}"#;
-
-const JSON_V1_ALL_FIELDS: &str = r#"{
-    "schema_version": "mcp-tool-registry-v1",
-    "keys": ["slug", "display_name", "description", "layer", "dispatch_domain", "owner", "gate", "trigger_hints", "host_platforms", "mcp_server", "tool_flags", "input_schema"],
-    "tools": [
-        ["full_tool", "Full Tool", "A fully populated tool", "external", "research", "research-team", "sandbox", ["hint_a", "hint_b"], ["linux", "macos"], "research-server", ["deprecated"], {"type": "object", "properties": {}, "required": []}]
-    ]
-}"#;
-
 const JSON_SCHEMA_MISMATCH: &str = r#"{
     "schema_version": "unknown-schema-v99",
     "tools": []
@@ -631,41 +455,10 @@ const JSON_EMPTY_TOOLS: &str = r#"{
     "tools": []
 }"#;
 
-const JSON_V1_MISSING_KEYS: &str = r#"{
-    "schema_version": "mcp-tool-registry-v1",
-    "tools": [
-        ["v1_tool", "V1 Tool", "desc", "builtin", "domain:goal", "framework", "srv"]
-    ]
-}"#;
-
-const JSON_V1_EMPTY_KEYS: &str = r#"{
-    "schema_version": "mcp-tool-registry-v1",
-    "keys": [],
-    "tools": [
-        ["tool", "desc"]
-    ]
-}"#;
-
-const JSON_V1_MISSING_SLUG: &str = r#"{
-    "schema_version": "mcp-tool-registry-v1",
-    "keys": ["slug", "display_name"],
-    "tools": [
-        ["", "No Slug"]
-    ]
-}"#;
-
 const JSON_V2_MISSING_SLUG: &str = r#"{
     "schema_version": "mcp-tool-registry-v2",
     "tools": [
         {"display_name": "No Slug", "description": "missing slug", "layer": "builtin", "dispatch_domain": "domain:goal", "owner": "framework", "trigger_hints": [], "host_platforms": [], "mcp_server": "srv"}
-    ]
-}"#;
-
-const JSON_V1_ENTRY_NOT_ARRAY: &str = r#"{
-    "schema_version": "mcp-tool-registry-v1",
-    "keys": ["slug"],
-    "tools": [
-        "not_an_array"
     ]
 }"#;
 

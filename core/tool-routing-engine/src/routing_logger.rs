@@ -68,23 +68,53 @@ impl ToolRoutingLogger {
     }
 }
 
+/// Initialize the tool routing logger. Creates the log directory and opens
+/// the audit log file for appending. Idempotent — safe to call multiple times;
+/// subsequent calls are silently ignored once the logger is active.
+///
+/// Should be called during runtime-core bootstrap with the repo root's log path.
+pub fn init_tool_routing_logger(log_dir: &str) -> Result<(), String> {
+    let mut guard = LOGGER.lock().map_err(|_| "routing logger mutex poisoned".to_string())?;
+    if guard.is_some() {
+        return Ok(()); // Already initialized — idempotent
+    }
+    *guard = Some(ToolRoutingLogger::new(log_dir)?);
+    Ok(())
+}
+
+/// Check whether the tool routing logger is active (has been initialized).
+pub fn is_tool_routing_logger_active() -> bool {
+    LOGGER.lock().ok().map(|g| g.is_some()).unwrap_or(false)
+}
+
 /// Write a tool routing decision to the structured audit log.
 ///
-/// This is a no-op when the logger has not been initialized.
+/// Auto-initializes with default log directory on first call if
+/// `init_tool_routing_logger` was not called explicitly.
 pub fn log_tool_decision(decision: &McpToolDecision, query: &str) {
+    let entry = serde_json::json!({
+        "ts": iso_timestamp_now(),
+        "query": query,
+        "selected_tool": decision.selected_tool,
+        "score": decision.score,
+        "fuzzy_match": decision.fuzzy_match,
+        "matched_token_count": decision.matched_token_count,
+        "dispatch_domain": decision.dispatch_domain,
+        "mcp_server": decision.mcp_server,
+        "top_3_reasons": &decision.reasons.iter().take(3).cloned().collect::<Vec<_>>(),
+    });
     if let Ok(mut guard) = LOGGER.lock() {
+        if guard.is_none() {
+            // Auto-init with default path on first use
+            match ToolRoutingLogger::new(LOG_DIR) {
+                Ok(logger) => { *guard = Some(logger); }
+                Err(e) => {
+                    tracing::warn!("failed to auto-init tool routing logger: {e}");
+                    return;
+                }
+            }
+        }
         if let Some(ref mut logger) = *guard {
-            let entry = serde_json::json!({
-                "ts": iso_timestamp_now(),
-                "query": query,
-                "selected_tool": decision.selected_tool,
-                "score": decision.score,
-                "fuzzy_match": decision.fuzzy_match,
-                "matched_token_count": decision.matched_token_count,
-                "dispatch_domain": decision.dispatch_domain,
-                "mcp_server": decision.mcp_server,
-                "top_3_reasons": &decision.reasons.iter().take(3).cloned().collect::<Vec<_>>(),
-            });
             let _ = logger.write_entry(&entry.to_string());
         }
     }

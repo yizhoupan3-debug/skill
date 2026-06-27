@@ -41,18 +41,21 @@ pub fn search_tools(
     // Pre-compute host filter for efficiency
     let hid_lower = host_id.map(|h| h.to_lowercase());
 
-    // Primary: token-based scoring
+    // Primary: token-based scoring (skip no_routing, deprecated, host-mismatched)
     let mut results: Vec<McpToolDecision> = records
         .iter()
         .filter_map(|record| {
-            // Apply host filtering: penalize host-mismatched records
-            if let Some(ref hid) = hid_lower {
-                if !record.host_platforms.is_empty()
+            // Exclude deprecated and no_routing tools from search results
+            if record.tool_flags.iter().any(|f| f == "deprecated" || f == "no_routing") {
+                return None;
+            }
+            // Apply host filtering: exclude host-mismatched records
+            if let Some(ref hid) = hid_lower
+                && !record.host_platforms.is_empty()
                     && !record.host_platforms.iter().any(|p| p.to_lowercase() == *hid)
                 {
-                    return None; // Exclude host-mismatched records from results
+                    return None;
                 }
-            }
 
             let (score, reasons, matched_token_count) =
                 score_tool(record, &query_lower, &query_tokens, &weights);
@@ -78,12 +81,15 @@ pub fn search_tools(
     if results.is_empty() {
         for record in records {
             // Apply host filtering in fuzzy rescue too
-            if let Some(ref hid) = hid_lower {
-                if !record.host_platforms.is_empty()
+            if let Some(ref hid) = hid_lower
+                && !record.host_platforms.is_empty()
                     && !record.host_platforms.iter().any(|p| p.to_lowercase() == *hid)
                 {
                     continue;
                 }
+            // Skip deprecated and no_routing tools in fuzzy rescue
+            if record.tool_flags.iter().any(|f| f == "deprecated" || f == "no_routing") {
+                continue;
             }
             if let Some(fuzzy_score) = best_fuzzy_score(&query_lower, &record.trigger_hints) {
                 results.push(McpToolDecision {
@@ -121,7 +127,6 @@ mod tests {
             layer: "builtin".to_string(),
             dispatch_domain: "composite".to_string(),
             owner: "framework".to_string(),
-            gate: "none".to_string(),
             trigger_hints: keywords.iter().map(|s| s.to_string()).collect(),
             host_platforms: vec!["claude".to_string()],
             mcp_server: "router-rs".to_string(),
@@ -190,5 +195,23 @@ mod tests {
         // Fuzzy match but host mismatch — must not appear in results
         let results = search_tools("screeenshot", &records, 5, Some("cursor"));
         assert!(results.is_empty(), "fuzzy rescue must not bypass host filter");
+    }
+
+    #[test]
+    fn search_excludes_deprecated() {
+        let mut record = test_tool_record("old_tool", &["legacy", "old"]);
+        record.tool_flags = vec!["deprecated".to_string()];
+        let records = vec![record];
+        let results = search_tools("legacy old_tool", &records, 5, None);
+        assert!(results.is_empty(), "deprecated tool must be excluded from search");
+    }
+
+    #[test]
+    fn search_excludes_no_routing() {
+        let mut record = test_tool_record("task_create", &["task", "创建"]);
+        record.tool_flags = vec!["no_routing".to_string()];
+        let records = vec![record];
+        let results = search_tools("task_create", &records, 5, None);
+        assert!(results.is_empty(), "no_routing tool must be excluded from search");
     }
 }

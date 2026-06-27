@@ -63,7 +63,6 @@ fn make_tool_records(count: usize) -> Vec<McpToolRecord> {
                 layer: "builtin".to_string(),
                 dispatch_domain: domains[cat].to_string(),
                 owner: owners[cat].to_string(),
-                gate: "none".to_string(),
                 trigger_hints: hints[cat].iter().map(|s| s.to_string()).collect(),
                 host_platforms: vec![],
                 mcp_server: format!("server-{}", domains[cat]),

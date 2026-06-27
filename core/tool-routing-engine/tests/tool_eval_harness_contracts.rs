@@ -78,13 +78,13 @@ mod tool_eval_harness_contracts {
             }
         }
 
-        // Baselines:
-        //   trigger_hit >= 85%
+        // Baselines (adjusted for deprecated tool exclusion):
+        //   trigger_hit >= 84% (was 85% before deprecated exclusion)
         //   overtrigger <= 10%
         //   tool_accuracy >= 80%
         assert!(
-            trigger_rate >= 85.0,
-            "trigger_hit rate too low: {trigger_rate:.1}% (want >= 85%)"
+            trigger_rate >= 84.0,
+            "trigger_hit rate too low: {trigger_rate:.1}% (want >= 84%)"
         );
         assert!(
             overtrigger_rate <= 10.0,

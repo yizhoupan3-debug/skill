@@ -1,6 +1,6 @@
 {
   "schema_version": "tool-scoring-weights-v2",
-  "exact_name_boost": 100.0,
+  "exact_name_boost": 50.0,
   "name_tokens_base": 14.0,
   "name_tokens_per_token": 4.0,
   "trigger_hint_per_match": 20.0,

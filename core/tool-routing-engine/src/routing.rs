@@ -55,9 +55,15 @@ pub fn route_tool_from_records(
     let query_lower = query.to_lowercase();
     let query_tokens = tokenize_text(&query_lower);
 
-    // Step 1-6: score all records
+    // Step 1-6: score all records (skip no_routing and deprecated)
     let candidates: Vec<ToolCandidate> = records
         .iter()
+        .filter(|record| {
+            // Exclude tools with no_routing flag (meta-tools, engine tools)
+            !record.tool_flags.iter().any(|f| f == "no_routing")
+                // Exclude deprecated tools outright
+                && !record.tool_flags.iter().any(|f| f == "deprecated")
+        })
         .map(|record| {
             let (score, reasons, matched_token_count) =
                 score_tool(record, &query_lower, &query_tokens, &weights);
@@ -70,23 +76,14 @@ pub fn route_tool_from_records(
         })
         .collect();
 
-    // Step 7: host filtering — apply penalty for host mismatch
+    // Step 7: host filtering — exclude host-mismatched records
     let filtered: Vec<ToolCandidate> = if let Some(hid) = host_id {
         let hid_lower = hid.to_lowercase();
         candidates
             .into_iter()
-            .map(|c| {
-                if c.record.host_platforms.is_empty()
+            .filter(|c| {
+                c.record.host_platforms.is_empty()
                     || c.record.host_platforms.iter().any(|p| p.to_lowercase() == hid_lower)
-                {
-                    c
-                } else {
-                    // Penalize rather than exclude — allows fallback
-                    let mut c = c;
-                    c.score = 0.0;
-                    c.reasons.push(format!("host_filter: excluded ({hid})"));
-                    c
-                }
             })
             .collect()
     } else {
@@ -116,7 +113,7 @@ pub fn route_tool_from_records(
     }
 
     // Step 8: fuzzy rescue — try trigram matching against trigger hints
-    // Respect host filtering (same logic as Step 7) to prevent bypass
+    // Respect host filtering + exclusion flags (same logic as Step 1-6) to prevent bypass
     let mut fuzzy_candidates: Vec<(f64, &McpToolRecord)> = Vec::new();
     for record in records {
         // Skip records excluded by host filter
@@ -127,6 +124,10 @@ pub fn route_tool_from_records(
             {
                 continue;
             }
+        }
+        // Skip deprecated tools and no_routing tools in fuzzy rescue
+        if record.tool_flags.iter().any(|f| f == "deprecated" || f == "no_routing") {
+            continue;
         }
         if let Some(fuzzy_score) = best_fuzzy_score(&query_lower, &record.trigger_hints) {
             fuzzy_candidates.push((fuzzy_score, record));
@@ -202,6 +203,9 @@ pub(crate) fn score_tool(
     let mut score = 0.0f64;
     let mut reasons = Vec::new();
     let mut matched_token_count = 0usize;
+    // Track matched tokens across scoring steps to prevent double-counting.
+    // A token matched in name/keyword/alias should only score once.
+    let mut unique_matched: HashSet<&str> = HashSet::new();
 
     // Step 1: Exact name match (slug or display_name)
     if slug_lower == query_lower || display_name_lower == query_lower {
@@ -209,15 +213,16 @@ pub(crate) fn score_tool(
         reasons.push("exact_name_match".to_string());
     }
 
-    // Step 2: Name token matching
+    // Step 2: Name token matching (dedup against unique_matched)
     let name_match_count = query_tokens
         .iter()
-        .filter(|qt| name_tokens.contains(qt.as_str()))
+        .filter(|qt| name_tokens.contains(qt.as_str()) && !unique_matched.contains(qt.as_str()))
         .count();
     if name_match_count > 0 {
         score += weights.name_tokens_base + weights.name_tokens_per_token * (name_match_count as f64);
         reasons.push(format!("name_tokens:{name_match_count}"));
         matched_token_count += name_match_count;
+        unique_matched.extend(query_tokens.iter().filter(|qt| name_tokens.contains(qt.as_str())).map(|s| s.as_str()));
     }
 
     // Step 3: Trigger hint matching
@@ -239,10 +244,10 @@ pub(crate) fn score_tool(
         matched_token_count += trigger_match_count;
     }
 
-    // Step 4: Keyword + Alias token matching
+    // Step 4: Keyword + Alias token matching (both dedup against unique_matched)
     let keyword_match_count = query_tokens
         .iter()
-        .filter(|qt| keyword_tokens.contains(qt.as_str()))
+        .filter(|qt| keyword_tokens.contains(qt.as_str()) && !unique_matched.contains(qt.as_str()))
         .count();
     if keyword_match_count > 0 {
         let kw_score =
@@ -250,31 +255,27 @@ pub(crate) fn score_tool(
         score += kw_score;
         reasons.push(format!("keywords:{keyword_match_count}"));
         matched_token_count += keyword_match_count;
+        unique_matched.extend(query_tokens.iter().filter(|qt| keyword_tokens.contains(qt.as_str())).map(|s| s.as_str()));
     }
 
+    // Alias matching uses a separate unique count against both keyword_tokens and unique_matched.
     let alias_match_count = query_tokens
         .iter()
-        .filter(|qt| alias_tokens.contains(qt.as_str()))
+        .filter(|qt| alias_tokens.contains(qt.as_str()) && !unique_matched.contains(qt.as_str()))
         .count();
     if alias_match_count > 0 {
-        // Deduplicate against keyword-matched tokens to avoid double-counting.
-        let alias_unique_count = query_tokens
-            .iter()
-            .filter(|qt| alias_tokens.contains(qt.as_str()) && !keyword_tokens.contains(qt.as_str()))
-            .count();
-        if alias_unique_count > 0 {
-            let alias_score = weights.alias_hits_base
-                + weights.alias_hits_per_hit * (alias_unique_count as f64);
-            score += alias_score;
-            reasons.push(format!("alias_tokens:{alias_match_count}[unique:{alias_unique_count}]"));
-            matched_token_count += alias_unique_count;
-        }
+        let alias_score = weights.alias_hits_base
+            + weights.alias_hits_per_hit * (alias_match_count as f64);
+        score += alias_score;
+        reasons.push(format!("alias_tokens:{alias_match_count}"));
+        matched_token_count += alias_match_count;
+        unique_matched.extend(query_tokens.iter().filter(|qt| alias_tokens.contains(qt.as_str())).map(|s| s.as_str()));
     }
 
-    // Step 5: Description token matching
+    // Step 5: Description token matching (dedup against unique_matched)
     let desc_match_count = query_tokens
         .iter()
-        .filter(|qt| desc_tokens.contains(qt.as_str()))
+        .filter(|qt| desc_tokens.contains(qt.as_str()) && !unique_matched.contains(qt.as_str()))
         .count();
     if desc_match_count > 0 {
         let desc_score =
@@ -331,7 +332,6 @@ mod tests {
             layer: "builtin".to_string(),
             dispatch_domain: "composite".to_string(),
             owner: "framework".to_string(),
-            gate: "none".to_string(),
             trigger_hints: keywords.iter().map(|s| s.to_string()).collect(),
             host_platforms: vec!["claude".to_string()],
             mcp_server: "router-rs".to_string(),
@@ -376,15 +376,15 @@ mod tests {
     }
 
     #[test]
-    fn host_filter_penalizes_mismatch() {
+    fn host_filter_excludes_mismatch() {
         let records = vec![
             test_tool_record("pdf_read", &["pdf"]),
             test_tool_record("browser_screenshot", &["截图", "浏览器"]),
         ];
         // Query matches "screenshot" but host is "cursor" — pdf_read has host_platforms=["claude"]
-        // Both should be penalized
+        // Both should be excluded
         let decision = route_tool_from_records("screenshot", &records, Some("cursor"));
-        assert!(decision.is_none()); // No match after host filter penalty
+        assert!(decision.is_none()); // No match after host filter exclusion
     }
 
     #[test]
@@ -478,7 +478,6 @@ mod tests {
             layer: layer.to_string(),
             dispatch_domain: "composite".to_string(),
             owner: "external".to_string(),
-            gate: "none".to_string(),
             trigger_hints: vec![],
             host_platforms: vec![],
             mcp_server: "ext-server".to_string(),
@@ -532,5 +531,25 @@ mod tests {
         let long_query = "a".repeat(5000);
         let decision = route_tool_from_records(&long_query, &records, None);
         assert!(decision.is_none(), "query over MAX_QUERY_LEN should return None");
+    }
+
+    #[test]
+    fn deprecated_tool_excluded_from_routing() {
+        let mut record = test_tool_record("old_tool", &["legacy", "old"]);
+        record.tool_flags = vec!["deprecated".to_string()];
+        let records = vec![record];
+        // Even with exact match, deprecated tool must not be selected
+        let decision = route_tool_from_records("old_tool legacy", &records, None);
+        assert!(decision.is_none(), "deprecated tool should be excluded from routing");
+    }
+
+    #[test]
+    fn no_routing_tool_excluded_from_routing() {
+        let mut record = test_tool_record("task_create", &["task", "创建"]);
+        record.tool_flags = vec!["no_routing".to_string()];
+        let records = vec![record];
+        // Even with exact match, no_routing tool must not be selected
+        let decision = route_tool_from_records("task_create", &records, None);
+        assert!(decision.is_none(), "no_routing tool should be excluded from routing");
     }
 }

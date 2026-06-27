@@ -14,11 +14,6 @@
 
 use serde::{Deserialize, Serialize};
 
-/// Default gate value for serde(default) when field is absent from JSON.
-fn default_gate() -> String {
-    "none".to_string()
-}
-
 // ── Core types ──────────────────────────────────────────────────────────────
 
 /// A single MCP tool record in the unified registry.
@@ -38,11 +33,6 @@ pub struct McpToolRecord {
     pub dispatch_domain: String,
     /// Owning team/component: "framework" | "research" | "browser" | "codegraph" | "rust-tools".
     pub owner: String,
-    /// Gate requirement: "none" | "guard" | "sandbox".
-    /// Retained for future safety policy integration.
-    #[doc(hidden)]
-    #[serde(default = "default_gate")]
-    pub gate: String,
     /// Natural language trigger phrases for routing.
     pub trigger_hints: Vec<String>,
     /// Supported host platforms. Empty = all platforms supported.

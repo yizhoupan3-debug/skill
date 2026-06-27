@@ -10,7 +10,6 @@ mod routing_integration_tests {
             layer: "builtin".to_string(),
             dispatch_domain: "composite".to_string(),
             owner: "framework".to_string(),
-            gate: "none".to_string(),
             trigger_hints: keywords.iter().map(|s| s.to_string()).collect(),
             host_platforms: vec!["claude".to_string()],
             mcp_server: "router-rs".to_string(),
@@ -125,6 +124,10 @@ mod routing_integration_tests {
             .expect("should load real registry");
 
         for record in &records {
+            // Skip tools excluded from routing (deprecated or no_routing)
+            if record.tool_flags.iter().any(|f| f == "deprecated" || f == "no_routing") {
+                continue;
+            }
             let decision = tool_routing_engine::routing::route_tool_from_records(
                 &record.slug,
                 &records,

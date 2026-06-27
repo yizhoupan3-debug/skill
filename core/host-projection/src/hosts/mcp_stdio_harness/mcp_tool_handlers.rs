@@ -132,20 +132,6 @@ impl ToolHandler for FrameworkTools {
 }
 
 // ---------------------------------------------------------------------------
-// InfraTools (now empty — web_fetch migrated to router-rs-cli subprocess)
-// ---------------------------------------------------------------------------
-
-pub struct InfraTools;
-impl ToolHandler for InfraTools {
-    fn tool_names(&self) -> &[&'static str] {
-        &[]
-    }
-    fn dispatch(&self, _tool_name: &str, _args: &Value, _ctx: &ToolCallContext) -> Result<String, String> {
-        Err("InfraTools: no tools registered".to_string())
-    }
-}
-
-// ---------------------------------------------------------------------------
 // ToolDomainTools (tool registry: route, search, status)
 // ---------------------------------------------------------------------------
 
@@ -228,22 +214,48 @@ impl ToolHandler for OrchestratorTools {
     }
 }
 
+// ── Orchestrator operation constants ──
+//
+// These operation strings are consumed by runtime-core's orchestrator handler.
+// They form a shared contract between this crate (host-projection, L0) and
+// runtime-core (L4). Any change here must be mirrored in the orchestrator's
+// operation dispatch in `runtime_core::orchestrator`.
+//
+// To fully remove this coupling, migrate these constant names to a shared
+// crate (e.g. framework-kernel) with a canonical enum or string constants
+// used by both consumers.
+
+const ORCH_OP_TEAM_CREATE: &str = "team_create";
+const ORCH_OP_TEAM_ADD_MEMBER: &str = "team_add_member";
+const ORCH_OP_TEAM_REMOVE_MEMBER: &str = "team_remove_member";
+const ORCH_OP_TEAM_COMPLETE: &str = "team_complete";
+const ORCH_OP_TEAM_SEND_MESSAGE: &str = "team_send_message";
+const ORCH_OP_TEAM_READ_MESSAGES: &str = "team_read_messages";
+const ORCH_OP_TEAM_ALIVE_MEMBERS: &str = "team_alive_members";
+const ORCH_OP_TEAM_LIST: &str = "team_list";
+const ORCH_OP_AGENT_REGISTER: &str = "agent_register";
+const ORCH_OP_AGENT_UNREGISTER: &str = "agent_unregister";
+const ORCH_OP_AGENT_LIST_RUNNING: &str = "agent_list_running";
+const ORCH_OP_WORKER_LAUNCH: &str = "launch";
+const ORCH_OP_WORKER_LIST: &str = "list";
+const ORCH_OP_WORKER_TERMINATE: &str = "terminate";
+
 fn orchestrator_operation_for_tool(tool_name: &str) -> Result<&'static str, String> {
     match tool_name {
-        "orchestrator_team_create" => Ok("team_create"),
-        "orchestrator_team_add_member" => Ok("team_add_member"),
-        "orchestrator_team_remove_member" => Ok("team_remove_member"),
-        "orchestrator_team_complete" => Ok("team_complete"),
-        "orchestrator_team_send_message" => Ok("team_send_message"),
-        "orchestrator_team_read_messages" => Ok("team_read_messages"),
-        "orchestrator_team_alive_members" => Ok("team_alive_members"),
-        "orchestrator_team_list" => Ok("team_list"),
-        "orchestrator_agent_register" => Ok("agent_register"),
-        "orchestrator_agent_unregister" => Ok("agent_unregister"),
-        "orchestrator_agent_list_running" => Ok("agent_list_running"),
-        "orchestrator_worker_launch" => Ok("launch"),
-        "orchestrator_worker_list" => Ok("list"),
-        "orchestrator_worker_terminate" => Ok("terminate"),
+        "orchestrator_team_create" => Ok(ORCH_OP_TEAM_CREATE),
+        "orchestrator_team_add_member" => Ok(ORCH_OP_TEAM_ADD_MEMBER),
+        "orchestrator_team_remove_member" => Ok(ORCH_OP_TEAM_REMOVE_MEMBER),
+        "orchestrator_team_complete" => Ok(ORCH_OP_TEAM_COMPLETE),
+        "orchestrator_team_send_message" => Ok(ORCH_OP_TEAM_SEND_MESSAGE),
+        "orchestrator_team_read_messages" => Ok(ORCH_OP_TEAM_READ_MESSAGES),
+        "orchestrator_team_alive_members" => Ok(ORCH_OP_TEAM_ALIVE_MEMBERS),
+        "orchestrator_team_list" => Ok(ORCH_OP_TEAM_LIST),
+        "orchestrator_agent_register" => Ok(ORCH_OP_AGENT_REGISTER),
+        "orchestrator_agent_unregister" => Ok(ORCH_OP_AGENT_UNREGISTER),
+        "orchestrator_agent_list_running" => Ok(ORCH_OP_AGENT_LIST_RUNNING),
+        "orchestrator_worker_launch" => Ok(ORCH_OP_WORKER_LAUNCH),
+        "orchestrator_worker_list" => Ok(ORCH_OP_WORKER_LIST),
+        "orchestrator_worker_terminate" => Ok(ORCH_OP_WORKER_TERMINATE),
         _ => Err(format!("OrchestratorTools: unknown tool: {tool_name}")),
     }
 }
