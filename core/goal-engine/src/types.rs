@@ -475,7 +475,7 @@ pub struct CircuitBreaker {
 
 // ── Error ──
 
-/// Error type for loop-engine operations, covering profile mismatches, kill signals,
+/// Error type for goal-engine operations, covering profile mismatches, kill signals,
 /// timeouts, spawn failures, serialization errors, action failures, and research escalations.
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum LoopError {

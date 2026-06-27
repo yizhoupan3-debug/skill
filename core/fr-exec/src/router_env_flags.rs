@@ -22,8 +22,6 @@ use std::env;
 
 const ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE_ENV: &str = "ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE";
 const ROUTER_RS_HOOK_TIMING_ENV: &str = "ROUTER_RS_HOOK_TIMING";
-const ROUTER_RS_SESSION_CALL_TRACKER_TOOL_KEYS_MAX_ENV: &str =
-    "ROUTER_RS_SESSION_CALL_TRACKER_TOOL_KEYS_MAX";
 const ROUTER_RS_SESSION_SUPERVISOR_REAL_PROCESS_SMOKE_ENV: &str =
     "ROUTER_RS_SESSION_SUPERVISOR_REAL_PROCESS_SMOKE";
 
@@ -70,15 +68,6 @@ pub fn router_rs_task_ledger_flock_enabled() -> bool {
 /// `ROUTER_RS_HOOK_TIMING=1`: emit `hook_timing …` lines on stderr per hook invocation.
 pub fn router_rs_hook_timing_enabled() -> bool {
     router_rs_env_enabled_default_false(ROUTER_RS_HOOK_TIMING_ENV)
-}
-
-pub fn router_rs_session_call_tracker_tool_keys_max() -> usize {
-    parse_router_rs_usize_clamped(
-        ROUTER_RS_SESSION_CALL_TRACKER_TOOL_KEYS_MAX_ENV,
-        128,
-        16,
-        4096,
-    )
 }
 
 pub fn router_rs_continuity_post_tool_evidence_enabled() -> bool {

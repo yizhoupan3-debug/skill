@@ -9,7 +9,6 @@ workspace = true
 [dependencies]
 fr-utils = { path = "../fr-utils" }
 core-policy = { path = "../core-policy" }
-core-state-types = { path = "../core-state-types" }
 framework-kernel = { path = "../framework-kernel" }
 hex.workspace = true
 serde.workspace = true
@@ -19,5 +18,3 @@ tracing.workspace = true
 
 [dev-dependencies]
 ctor = "0.2"
-insta.workspace = true
-tempfile.workspace = true

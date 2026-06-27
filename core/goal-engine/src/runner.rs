@@ -129,7 +129,7 @@ pub fn run_loop(ctx: &RunContext) -> Result<LoopCloseoutAggregate, LoopError> {
             }
             Err(LoopError::ResearchEscalation(msg)) => {
                 // Research completed with candidates: restart the loop to consume them
-                tracing::info!("[loop-engine] {msg}");
+                tracing::info!("[goal-engine] {msg}");
                 state.circuit_breaker.consecutive_failures = 0;
                 if let Err(e) = write_loop_state(ctx.repo_root, loop_id, &state) {
                     tracing::error!("failed to write loop state on research escalation: {e}");
@@ -313,7 +313,7 @@ fn run_loop_inner(
     let current_goal = read_goal_snapshot(ctx.repo_root, entry);
     if current_goal.is_none() && should_check && state.anti_drift.original_goal_snapshot.is_some() {
         tracing::warn!(
-            "[loop-engine] anti-drift check at cycle {} skipped: cannot read current goal (GOAL_STATE.json not found at artifacts/current/{}/)",
+            "[goal-engine] anti-drift check at cycle {} skipped: cannot read current goal (GOAL_STATE.json not found at artifacts/current/{}/)",
             state.anti_drift.review_cycle_count,
             entry.loop_id,
         );
@@ -323,7 +323,7 @@ fn run_loop_inner(
     {
         let result = crate::drift::perform_drift_check(&mut state.anti_drift, &current_goal_text);
         tracing::warn!(
-            "[loop-engine] anti-drift check at cycle {}: drift_detected={}, score={:.2}",
+            "[goal-engine] anti-drift check at cycle {}: drift_detected={}, score={:.2}",
             result.review_cycle,
             result.drift_detected,
             result.drift_score
@@ -480,7 +480,7 @@ fn barrier_escalation(
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        tracing::warn!("[loop-engine] autoresearch barrier failed: {stderr}");
+        tracing::warn!("[goal-engine] autoresearch barrier failed: {stderr}");
         return Ok(BarrierResult {
             candidates: vec![],
             will_resume: false,
@@ -500,7 +500,7 @@ fn barrier_escalation(
     let candidates = discover_barrier_candidates(repo_root);
 
     tracing::info!(
-        "[loop-engine] barrier escalation to {escalation_target}: {} candidates, auto_resume={auto_resume}",
+        "[goal-engine] barrier escalation to {escalation_target}: {} candidates, auto_resume={auto_resume}",
         candidates.len()
     );
 

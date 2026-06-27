@@ -45,7 +45,7 @@ pub use quality_gate_ops::{
 };
 // Re-export from goal_ops
 pub use goal_ops::{
-    framework_goal_drive, register_qg_entry_trigger, task_evidence_artifacts_summary_for_task,
+    framework_goal_drive, task_evidence_artifacts_summary_for_task,
     task_evidence_success_only_self_attested,
 };
 
@@ -223,43 +223,25 @@ pub fn read_goal_state_pair_if_valid(repo_root: &Path, task_id: &str) -> Option<
 }
 
 /// `GOAL_STATE` 是否处于「宏控制应续跑」态。
-/// Linear: `drive_until_done` + `status=running`。
-/// Loop: 只依赖 `status=running`（不依赖 drive_until_done）。
+/// 只依赖 `status=running`（不依赖 drive_until_done）。
 /// Stale goals (session_id mismatch) do NOT request continuation.
 pub fn goal_state_requests_continuation(state: &Value) -> bool {
     if state.get("stale").and_then(Value::as_bool) == Some(true) {
         return false;
     }
-    // Loop goal: 只依赖 status=running
-    if read_goal_type_from_state(state) == GoalType::Loop {
-        return state.get("status").and_then(Value::as_str) == Some("running");
-    }
-    // Linear goal: drive_until_done + running
-    let drive = state
-        .get("drive_until_done")
-        .and_then(Value::as_bool)
-        .unwrap_or(false);
-    let status = state.get("status").and_then(Value::as_str).unwrap_or("");
-    drive && status == "running"
+    state.get("status").and_then(Value::as_str) == Some("running")
 }
 
-/// Read `GoalType` from a parsed GOAL_STATE Value. Defaults to `Linear` when absent.
-pub fn read_goal_type_from_state(state: &Value) -> GoalType {
-    match state.get("goal_type").and_then(Value::as_str) {
-        Some("loop") => GoalType::Loop,
-        _ => GoalType::Linear,
-    }
+/// Read `GoalType` from a parsed GOAL_STATE Value. Always returns `Loop` since
+/// `GoalType::Linear` was removed in v10 cleanup.
+pub fn read_goal_type_from_state(_state: &Value) -> GoalType {
+    GoalType::Loop
 }
 
-/// Convenience: read `GoalType` for a task_id from disk. Returns `Linear` when GOAL_STATE
-/// is missing or unreadable (safe fallback).
-pub fn read_goal_type_by_id(repo_root: &Path, task_id: &str) -> GoalType {
-    read_goal_state(repo_root, Some(task_id))
-        .ok()
-        .flatten()
-        .as_ref()
-        .map(|s| read_goal_type_from_state(s))
-        .unwrap_or(GoalType::Linear)
+/// Convenience: read `GoalType` for a task_id from disk. Always returns `Loop` since
+/// `GoalType::Linear` was removed in v10 cleanup.
+pub fn read_goal_type_by_id(_repo_root: &Path, _task_id: &str) -> GoalType {
+    GoalType::Loop
 }
 
 // ── Hydration ──
@@ -884,22 +866,26 @@ mod tests {
             "requires_completion_evidence": false,
         }))
         .expect("start");
-        framework_goal_drive(json!({
+        let out = framework_goal_drive(json!({
             "repo_root": rr,
             "operation": "complete",
             "task_id": "nogate",
         }))
         .expect("complete without evidence");
-        // complete archives GOAL_STATE.json (does not delete)
+        assert_eq!(out["operation"], json!("iteration_completed"));
+        // Goal stays running after iteration complete (loop semantics)
         let goal_path = goal_state_path_for_task(&repo, "nogate").expect("goal path");
         assert!(
             goal_path.is_file(),
-            "GOAL_STATE should persist (archived) after complete"
+            "GOAL_STATE should persist after iteration complete"
         );
-        let archived = read_goal_state(&repo, Some("nogate"))
+        let result = read_goal_state(&repo, Some("nogate"))
             .expect("read")
             .expect("state");
-        assert_eq!(archived["archived"], json!(true));
+        assert_eq!(result["status"], json!("running"),
+            "goal must stay running after iteration complete");
+        assert!(result.get("archived").is_none(),
+            "goal must NOT be archived after iteration complete");
         let _ = fs::remove_dir_all(&repo);
     }
 
@@ -1042,24 +1028,27 @@ mod tests {
             r#"{"schema_version":"router-rs-quality-gate-v1","loop_status":"active","goal":"g","max_rounds":3,"current_round":1,"rounds":[{"round":1,"verify_result":"PASS"}]}"#,
         )
         .expect("rfv");
-        crate::task_state_aggregate::sync_task_state_aggregate(&repo, "gok").expect("sync agg");
-        framework_goal_drive(json!({
+        let out = framework_goal_drive(json!({
             "repo_root": rr,
             "operation": "complete",
             "task_id": "gok",
         }))
         .expect("complete ok");
-        // complete archives GOAL_STATE.json (does not delete)
+        assert_eq!(out["operation"], json!("iteration_completed"));
+        // Goal stays running after iteration complete (loop semantics)
         let goal_path = goal_state_path_for_task(&repo, "gok").expect("goal path");
         assert!(
             goal_path.is_file(),
-            "GOAL_STATE should persist (archived) after complete"
+            "GOAL_STATE should persist after iteration complete"
         );
-        let archived = read_goal_state(&repo, Some("gok"))
+        let result = read_goal_state(&repo, Some("gok"))
             .expect("read")
             .expect("state");
-        assert_eq!(archived["archived"], json!(true));
-        assert!(archived.get("completed_at").and_then(Value::as_str).is_some());
+        assert_eq!(result["status"], json!("running"),
+            "goal must stay running after iteration complete");
+        assert_eq!(result["iteration_count"], json!(1));
+        assert!(result.get("archived").is_none(),
+            "goal must NOT be archived after iteration complete");
         let _ = fs::remove_dir_all(&repo);
     }
 
@@ -1142,24 +1131,27 @@ mod tests {
         )
         .expect("evidence");
 
-        // Complete and verify GOAL_STATE.json is archived (not deleted)
-        framework_goal_drive(json!({
+        // Complete and verify GOAL_STATE.json is persists (iteration_complete, not archive)
+        let out = framework_goal_drive(json!({
             "repo_root": rr,
             "operation": "complete",
             "task_id": "sess-task",
         }))
         .expect("complete");
+        assert_eq!(out["operation"], json!("iteration_completed"));
         let goal_path = goal_state_path_for_task(&repo, "sess-task").expect("goal path");
         assert!(
             goal_path.is_file(),
-            "GOAL_STATE.json should persist (archived) after complete"
+            "GOAL_STATE.json should persist after iteration complete"
         );
-        // Verify archive markers
-        let archived = read_goal_state(&repo, Some("sess-task"))
+        // Verify goal stays running (not archived)
+        let result = read_goal_state(&repo, Some("sess-task"))
             .expect("read")
             .expect("state");
-        assert_eq!(archived["archived"], json!(true));
-        assert!(archived.get("completed_at").and_then(Value::as_str).is_some());
+        assert_eq!(result["status"], json!("running"),
+            "goal must stay running after iteration complete");
+        assert!(result.get("archived").is_none(),
+            "goal must NOT be archived after iteration complete");
 
         let _ = fs::remove_dir_all(&repo);
     }
@@ -1436,12 +1428,12 @@ mod tests {
     }
 
     #[test]
-    fn amend_rejected_for_completed_goal() {
+    fn amend_succeeds_after_iteration_complete() {
         let suffix = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("time")
             .as_nanos();
-        let repo = std::env::temp_dir().join(format!("router-rs-amend-fail-{suffix}"));
+        let repo = std::env::temp_dir().join(format!("router-rs-amend-after-iter-{suffix}"));
         let _ = fs::remove_dir_all(&repo);
         fs::create_dir_all(repo.join("artifacts/current/amend-done")).expect("mkdir");
         let rr = repo.display().to_string();
@@ -1465,15 +1457,15 @@ mod tests {
         }))
         .expect("complete");
 
-        // Amend should fail on completed goal
-        let err = framework_goal_drive(json!({
+        // Amend should succeed after iteration complete (goals stay running)
+        let amend = framework_goal_drive(json!({
             "repo_root": rr.clone(),
             "operation": "amend",
             "task_id": "amend-done",
-            "goal": "new goal",
+            "goal": "revised after iteration",
         }))
-        .expect_err("amend should fail on completed");
-        assert!(err.contains("cannot amend a completed"), "err: {err}");
+        .expect("amend should succeed after iteration complete");
+        assert_eq!(amend["ok"], json!(true));
 
         let _ = fs::remove_dir_all(&repo);
     }
@@ -1622,27 +1614,25 @@ mod tests {
         }))
         .expect("checkpoint 2");
 
-        // 5. complete
-        framework_goal_drive(json!({
+        // 5. complete (iteration_completed — loop semantics)
+        let out = framework_goal_drive(json!({
             "repo_root": rr.clone(),
             "operation": "complete",
             "task_id": "lifecycle-task",
         }))
         .expect("complete");
+        assert_eq!(out["operation"], json!("iteration_completed"));
 
         // 6. Verify
         let goal_path = goal_state_path_for_task(&repo, "lifecycle-task").expect("goal path");
-        assert!(goal_path.is_file(), "GOAL_STATE.json must still exist after complete");
+        assert!(goal_path.is_file(), "GOAL_STATE.json must still exist after iteration complete");
 
         let state = read_goal_state(&repo, Some("lifecycle-task"))
             .expect("read goal state")
             .expect("state exists");
-        assert_eq!(state["archived"], json!(true), "archived must be true");
-        assert!(
-            state.get("completed_at").and_then(Value::as_str).is_some(),
-            "completed_at must be present"
-        );
-        assert_eq!(state["status"], json!("completed"));
+        assert!(state.get("archived").is_none(), "archived must NOT be present (loop semantics)");
+        assert_eq!(state["status"], json!("running"),
+            "goal must stay running after iteration complete");
         assert_eq!(state["goal"], json!("updated goal"), "amend goal must persist");
         assert_eq!(
             state["checkpoints"].as_array().map(|a| a.len()),
@@ -1693,20 +1683,22 @@ mod tests {
         // File must still physically exist
         assert!(
             goal_path.is_file(),
-            "GOAL_STATE.json must be physically present after complete"
+            "GOAL_STATE.json must be physically present after iteration complete"
         );
 
-        // Verify archived: true and structural fields
+        // Verify loop semantics: stays running, no archived flag
         let state = read_goal_state(&repo, Some("cp-task"))
             .expect("read after complete")
             .expect("state exists");
-        assert_eq!(state["archived"], json!(true));
-        assert!(state.get("completed_at").and_then(Value::as_str).is_some());
-        assert_eq!(state["status"], json!("completed"));
+        assert_eq!(state["status"], json!("running"),
+            "goal must stay running after iteration complete");
+        assert!(state.get("archived").is_none(),
+            "goal must NOT be archived after iteration complete");
+        assert_eq!(state["iteration_count"], json!(1));
 
-        // File content changed (archived status injected)
+        // File content changed (iteration_count updated)
         let raw_after = fs::read_to_string(&goal_path).expect("read after");
-        assert_ne!(raw_before, raw_after, "file content must change after archiving");
+        assert_ne!(raw_before, raw_after, "file content must change after iteration complete");
 
         let _ = fs::remove_dir_all(&repo);
     }
@@ -1798,15 +1790,15 @@ mod tests {
     }
 
     #[test]
-    fn read_goal_type_missing_defaults_to_linear() {
+    fn read_goal_type_missing_still_loop() {
         let state = json!({"status": "running"});
-        assert_eq!(read_goal_type_from_state(&state), GoalType::Linear);
+        assert_eq!(read_goal_type_from_state(&state), GoalType::Loop);
     }
 
     #[test]
-    fn read_goal_type_unknown_value_defaults_to_linear() {
+    fn read_goal_type_unknown_value_still_loop() {
         let state = json!({"goal_type": "banana"});
-        assert_eq!(read_goal_type_from_state(&state), GoalType::Linear);
+        assert_eq!(read_goal_type_from_state(&state), GoalType::Loop);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -1860,21 +1852,4 @@ mod tests {
             "stale loop goal must NOT request continuation");
     }
 
-    #[test]
-    fn linear_goal_requests_continuation_only_when_drive_and_running() {
-        let state = json!({
-            "status": "running",
-            "goal_type": "linear",
-            "drive_until_done": true,
-        });
-        assert!(goal_state_requests_continuation(&state),
-            "linear drive goal must request continuation");
-
-        let no_drive = json!({
-            "status": "running",
-            "drive_until_done": false,
-        });
-        assert!(!goal_state_requests_continuation(&no_drive),
-            "linear non-drive goal must NOT request continuation");
-    }
 }

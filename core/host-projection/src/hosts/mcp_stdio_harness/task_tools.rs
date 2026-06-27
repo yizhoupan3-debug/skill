@@ -5,7 +5,6 @@
 use super::*;
 use core_state::task_ledger::{append_transaction_assuming_l1_held, LedgerTransaction};
 use core_state_utils::task_write_lock::apply_task_ledger_mutation;
-use core_state_types::task_state_types::GoalType;
 use serde_json::{json, Value};
 use std::path::Path;
 
@@ -201,10 +200,7 @@ pub(crate) fn tool_task_complete(arguments: &Value, repo_root: &Path) -> std::re
         Ok(())
     })?;
 
-    core_state::task_state_aggregate::sync_task_state_aggregate_best_effort(
-        repo_root,
-        &task_id_owned,
-    );
+    // TASK_STATE.json aggregate was removed in Wave 2b.
     invalidate_evidence_caches();
 
     Ok(json!({
@@ -278,17 +274,16 @@ pub(crate) fn tool_task_chain_advance(_arguments: &Value, repo_root: &Path) -> s
         return Err("TASK_CHAIN.json not found — create one first to use task_chain_advance".to_string());
     }
 
-    // Loop goal: skip chain advance — loop goals restart in place
+    // Goals always follow loop semantics (GoalType::Linear removed in v10).
+    // Chain advance is skipped — loop iteration is managed by explicit tool call.
     let (active, _) = core_state::state_manager::read_task_pointer_pair(repo_root);
     if let Some(ref tid) = active {
-        if core_state::state_manager::read_goal_type_by_id(repo_root, tid) == GoalType::Loop {
-            return Ok(json!({
-                "ok": true,
-                "status": "loop_goal_skipped",
-                "message": "current task has goal_type=loop — task chain advance skipped",
-                "task_id": tid,
-            }).to_string());
-        }
+        return Ok(json!({
+            "ok": true,
+            "status": "loop_goal_skipped",
+            "message": "current task follows loop semantics — task chain advance skipped",
+            "task_id": tid,
+        }).to_string());
     }
 
     let raw = std::fs::read_to_string(&chain_path).map_err(|e| format!("read TASK_CHAIN.json: {e}"))?;

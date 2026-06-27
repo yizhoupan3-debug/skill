@@ -89,9 +89,7 @@ impl ToolHandler for LifecycleTools {
             "session_checkpoint",
             "closeout_gate",
             "goal_state_read",
-            "quality_gate_status",
 
-            "quality_gate_manage",
             "goal_state_manage",
             "closeout_record_write",
         ]
@@ -102,8 +100,6 @@ impl ToolHandler for LifecycleTools {
             "session_checkpoint" => tool_session_checkpoint(args, &ctx.repo_root),
             "closeout_gate" => tool_closeout_gate(args, &ctx.repo_root, &ctx.host_id),
             "goal_state_read" => tool_goal_state_read(args, &ctx.repo_root),
-            "quality_gate_status" => tool_quality_gate_status(args, &ctx.repo_root),
-            "quality_gate_manage" => tool_quality_gate_manage(args, &ctx.repo_root, &ctx.connection_session_id),
             "goal_state_manage" => tool_goal_state_manage(args, &ctx.repo_root, &ctx.connection_session_id),
             "closeout_record_write" => tool_closeout_record_write(args, &ctx.repo_root, &ctx.host_id),
             _ => Err(format!("LifecycleTools: unknown tool: {tool_name}")),

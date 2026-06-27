@@ -210,12 +210,6 @@ pub trait HostHookDispatcher: HostHookConfig {
         crate::hooks::ensure_kernel_bootstrap();
         let tool_name = crate::hosts::hook_dispatch::extract_tool_name(event.payload);
         let normalized = core_policy::hook_common::normalize_tool_name(Some(&tool_name));
-        crate::hosts::hook_dispatch::record_tool_call_emission(
-            event.repo_root,
-            &normalized,
-            crate::hooks::extract_post_tool_duration_ms(event.payload).unwrap_or(0),
-            crate::hooks::post_tool_call_succeeded(event.payload),
-        );
         crate::hosts::host_state::auto_record_verification_evidence(event.repo_root, event.payload);
         crate::hosts::host_state::auto_record_research_activity(event.repo_root, event.payload);
 

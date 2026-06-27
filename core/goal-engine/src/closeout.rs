@@ -2,7 +2,7 @@ use crate::state::closeout_path;
 use crate::types::{
     AggregateActionEntry, LoopAction, LoopActionRecord, LoopCloseoutAggregate, LoopError,
 };
-use fr_contracts::closeout_enforcement::evaluate_closeout_record_value;
+use core_state::closeout_validation::evaluate_closeout_record_value;
 use std::fs;
 use std::path::Path;
 
@@ -453,7 +453,7 @@ mod tests {
     }
 
     /// B9 cross-path equivalence: the same closeout JSON must produce the same
-    /// `closeout_allowed` when evaluated by both loop-engine's `verify_closeout_value`
+    /// `closeout_allowed` when evaluated by both goal-engine's `verify_closeout_value`
     /// (which now delegates to fr-contracts) and the raw
     /// `evaluate_closeout_record_value` function directly.
     #[test]
@@ -464,7 +464,7 @@ mod tests {
             "summary": "cross-path equivalence test",
             "verification_status": "passed",
             "changed_files": ["src/closeout.rs"],
-            "commands_run": [{"command": "cargo test -p loop-engine", "exit_code": 0}],
+            "commands_run": [{"command": "cargo test -p goal-engine", "exit_code": 0}],
             "blockers": [],
             "risks": []
         });
@@ -472,7 +472,7 @@ mod tests {
         let le_resp = verify_closeout_value(&record);
         // Direct fr-contracts path
         let fr_resp =
-            fr_contracts::closeout_enforcement::evaluate_closeout_record_value(record.clone())
+            core_state::closeout_validation::evaluate_closeout_record_value(record.clone())
                 .expect("fr-contracts should return Ok");
         let fr_allowed = fr_resp
             .get("closeout_allowed")
@@ -498,7 +498,7 @@ mod tests {
         });
         let le_resp = verify_closeout_value(&record);
         let fr_resp =
-            fr_contracts::closeout_enforcement::evaluate_closeout_record_value(record.clone())
+            core_state::closeout_validation::evaluate_closeout_record_value(record.clone())
                 .expect("fr-contracts should return Ok");
         let fr_allowed = fr_resp
             .get("closeout_allowed")

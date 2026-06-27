@@ -382,17 +382,7 @@ pub fn task_view_has_active_goal_focus_mismatch_note(view: &ResolvedTaskView) ->
 }
 
 
-pub(crate) fn classify_control_mode(
-    goal: Option<&Value>,
-    _qg: Option<&Value>,
-    _notes: &mut Vec<String>,
-) -> TaskControlMode {
-    if goal.is_some_and(goal_state_requests_continuation) {
-        TaskControlMode::GoalDrive
-    } else {
-        TaskControlMode::Idle
-    }
-}
+
 
 fn push_resolution_read_err(notes: &mut Vec<String>, prefix: &'static str, err: String) {
     let mut line = format!("{prefix}: {err}");
@@ -474,59 +464,25 @@ pub fn hydrate_task_state_hybrid(
     let mut rfv_loop_state: Option<Value> = None;
     let mut evidence_rows_non_empty = false;
     let mut has_successful_verification = false;
-    let mut base_loaded = false;
-    let mut last_seq: Option<u64> = None;
-
-    // 1. Try to load from TASK_STATE.json
-    let agg_path = crate::task_state_aggregate::task_state_aggregate_path(repo_root, task_id);
-    if agg_path.is_file()
-        && let Ok(raw) = std::fs::read_to_string(&agg_path)
-            && let Ok(agg) = serde_json::from_str::<Value>(&raw) {
-                goal_state = agg.get("goal_state").cloned().filter(|v| !v.is_null());
-                rfv_loop_state = agg.get("rfv_loop_state").cloned().filter(|v| !v.is_null());
-                // Fallback: old TASK_STATE.json had quality_gate_state key
-                if rfv_loop_state.is_none() {
-                    rfv_loop_state = agg.get("quality_gate_state").cloned().filter(|v| !v.is_null());
-                }
-                if let Some(ev) = agg.get("evidence") {
-                    evidence_rows_non_empty = ev
-                        .get("evidence_rows_non_empty")
-                        .and_then(Value::as_bool)
-                        .unwrap_or(false);
-                    has_successful_verification = ev
-                        .get("has_successful_verification")
-                        .and_then(Value::as_bool)
-                        .unwrap_or(false);
-                }
-                last_seq = agg.get("last_seq").and_then(Value::as_u64);
-                base_loaded = true;
-            }
-
-    // 2. If TASK_STATE.json not found or failed, fall back to raw physical files
-    if !base_loaded {
-        match read_goal_state(repo_root, Some(task_id)) {
-            Ok(g) => goal_state = g,
-            Err(e) => push_resolution_read_err(&mut resolution_notes, "goal_state_read_failed", e),
-        }
-        match read_quality_gate_state(repo_root, Some(task_id)) {
-            Ok(v) => rfv_loop_state = v,
-            Err(e) => {
-                push_resolution_read_err(&mut resolution_notes, "rfv_loop_state_read_failed", e)
-            }
-        }
-        let (rows, ok) = task_evidence_artifacts_summary_for_task(repo_root, task_id);
-        evidence_rows_non_empty = rows;
-        has_successful_verification = ok;
+    // TASK_STATE.json aggregate was removed in Wave 2b.
+    // Always read directly from physical files.
+    match read_goal_state(repo_root, Some(task_id)) {
+        Ok(g) => goal_state = g,
+        Err(e) => push_resolution_read_err(&mut resolution_notes, "goal_state_read_failed", e),
     }
+    match read_quality_gate_state(repo_root, Some(task_id)) {
+        Ok(v) => rfv_loop_state = v,
+        Err(e) => {
+            push_resolution_read_err(&mut resolution_notes, "rfv_loop_state_read_failed", e)
+        }
+    }
+    let (rows, ok) = task_evidence_artifacts_summary_for_task(repo_root, task_id);
+    evidence_rows_non_empty = rows;
+    has_successful_verification = ok;
 
-    // 3. Read TASK_LEDGER.jsonl and replay transactions beyond last_seq
+    // Read TASK_LEDGER.jsonl and replay all transactions (TASK_STATE.json aggregate was removed in Wave 2b, so no last_seq filtering)
     let txs = read_task_ledger_transactions(repo_root, task_id);
     for tx in txs {
-        if let Some(seq) = tx.seq
-            && let Some(l_seq) = last_seq
-                && seq <= l_seq {
-                    continue;
-                }
         // Replay
         match tx.tx_type.as_str() {
             "goal_state" => {
@@ -579,7 +535,6 @@ pub fn resolve_task_view_with_pointers(
             rfv_loop_state: None,
             evidence: None,
             depth_compliance: None,
-            control_mode: TaskControlMode::Idle,
             resolution_notes: vec![
                 "no_task_id: override empty and no active/focus pointer".to_string(),
             ],
@@ -600,12 +555,6 @@ pub fn resolve_task_view_with_pointers(
         rfv_loop_state.as_ref(),
         evidence_ok,
     ));
-
-    let control_mode = classify_control_mode(
-        goal_state.as_ref(),
-        rfv_loop_state.as_ref(),
-        &mut resolution_notes,
-    );
 
     maybe_note_active_goal_missing_focus_has_goal(
         repo_root,
@@ -631,7 +580,6 @@ pub fn resolve_task_view_with_pointers(
         rfv_loop_state,
         evidence,
         depth_compliance,
-        control_mode,
         resolution_notes,
     }
 }
@@ -774,7 +722,6 @@ mod tests {
         fs::create_dir_all(&tmp).unwrap();
         let v = resolve_task_view(&tmp, None);
         assert_eq!(v.task_id, None);
-        assert!(matches!(v.control_mode, TaskControlMode::Idle));
         assert!(!v.resolution_notes.is_empty());
         let _ = fs::remove_dir_all(&tmp);
     }
@@ -818,7 +765,6 @@ mod tests {
 
         let v = resolve_task_view(&tmp, Some(tid));
         assert_eq!(v.task_id.as_deref(), Some(tid));
-        assert!(matches!(v.control_mode, TaskControlMode::GoalDrive));
         let ev = v.evidence.as_ref().expect("evidence");
         assert!(!ev.evidence_rows_non_empty);
         assert!(!ev.has_successful_verification);
@@ -1005,7 +951,6 @@ mod tests {
         .unwrap();
 
         let v = resolve_task_view(&tmp, Some(tid));
-        assert!(matches!(v.control_mode, TaskControlMode::GoalDrive));
         let _ = fs::remove_dir_all(&tmp);
     }
 
@@ -1329,7 +1274,6 @@ mod tests {
 
         let v = resolve_task_view(&tmp, Some(other));
         assert_eq!(v.task_id.as_deref(), Some(other));
-        assert!(matches!(v.control_mode, TaskControlMode::Idle));
         let _ = fs::remove_dir_all(&tmp);
     }
 

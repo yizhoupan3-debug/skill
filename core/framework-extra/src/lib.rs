@@ -21,4 +21,3 @@ pub mod session_artifacts;
 pub mod snapshot;
 pub mod statusline;
 pub mod util;
-pub mod session_call;

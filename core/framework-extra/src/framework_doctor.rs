@@ -592,7 +592,8 @@ pub fn run_continuity_audit(repo_root: &Path) -> Result<Value, FrameworkError> {
     let task_view = resolve_task_view(repo_root, None);
     if let Some(tid) = &task_view.task_id {
         info.push(format!("resolved task_id: {}", tid));
-        info.push(format!("control_mode: {:?}", task_view.control_mode));
+        let has_goal = task_view.goal_state.is_some();
+        info.push(format!("has_active_goal: {}", has_goal));
 
         if let Some(dc) = &task_view.depth_compliance {
             info.push(format!("depth_score: {}/3", dc.depth_score));

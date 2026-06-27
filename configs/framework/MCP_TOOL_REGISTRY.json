@@ -83,75 +83,6 @@
       }
     },
     {
-      "slug": "quality_gate_manage",
-      "display_name": "质量门管理",
-      "description": "管理 Quality Gate 循环（start/append_round）",
-      "layer": "builtin",
-      "dispatch_domain": "domain:quality-gate",
-      "owner": "framework",
-      "trigger_hints": [
-        "质量",
-        "quality",
-        "gate",
-        "审查",
-        "循环"
-      ],
-      "host_platforms": [],
-      "mcp_server": "router-rs",
-      "tool_flags": [
-        "behavior:core_routing_tool"
-      ],
-      "input_schema": {
-        "type": "object",
-        "required": [
-          "operation"
-        ],
-        "properties": {
-          "operation": {
-            "type": "string",
-            "description": "操作类型：start/append_round"
-          },
-          "task_id": {
-            "type": "string",
-            "description": "任务 ID"
-          },
-          "goal": {
-            "type": "string",
-            "description": "目标描述文本"
-          }
-        }
-      }
-    },
-    {
-      "slug": "quality_gate_status",
-      "display_name": "质量门状态",
-      "description": "查看 Quality Gate 循环状态",
-      "layer": "builtin",
-      "dispatch_domain": "domain:quality-gate",
-      "owner": "framework",
-      "trigger_hints": [
-        "质量",
-        "quality",
-        "gate",
-        "状态",
-        "查看"
-      ],
-      "host_platforms": [],
-      "mcp_server": "router-rs",
-      "tool_flags": [
-        "behavior:core_routing_tool"
-      ],
-      "input_schema": {
-        "type": "object",
-        "properties": {
-          "task_id": {
-            "type": "string",
-            "description": "任务 ID"
-          }
-        }
-      }
-    },
-    {
       "slug": "record_evidence",
       "display_name": "记录证据",
       "description": "追加 evidence 到 EVIDENCE_INDEX",
@@ -655,7 +586,7 @@
     {
       "slug": "research_review_loop",
       "display_name": "对抗审稿循环",
-      "description": "对抗审稿循环——适配器工具，提供审稿维度/prompt/checklist。循环状态由 quality_gate_manage 在运行层管理",
+      "description": "对抗审稿循环——适配器工具，提供审稿维度/prompt/checklist。循环状态由 GoalEngine QGEntry 管理",
       "layer": "research",
       "dispatch_domain": "research",
       "owner": "research",

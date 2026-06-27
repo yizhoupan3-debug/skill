@@ -236,7 +236,7 @@ pub fn build_baseline(repo_root: &Path, task_id: &str) -> Result<SchemaDriftBase
         host_hooks: snapshot_all_host_hooks(repo_root),
         task_artifacts: snapshot_task_artifacts(repo_root, task_id),
         contracts: ContractVersionsSnapshot {
-            closeout_record: fr_contracts::closeout_enforcement::types::CLOSEOUT_RECORD_SCHEMA_VERSION.to_string(),
+            closeout_record: core_state::closeout_validation::closeout_record_schema_version().to_string(),
             hook_observation: ROUTER_RS_HOOK_OBSERVATION_SCHEMA_VERSION.to_string(),
         },
     })
@@ -285,7 +285,7 @@ pub fn check_against_baseline(repo_root: &Path, task_id: &str) -> SchemaDriftChe
     let current_hooks = snapshot_all_host_hooks(repo_root);
     let current_artifacts = snapshot_task_artifacts(repo_root, task_id);
     let current_contracts = ContractVersionsSnapshot {
-        closeout_record: fr_contracts::closeout_enforcement::types::CLOSEOUT_RECORD_SCHEMA_VERSION.to_string(),
+        closeout_record: core_state::closeout_validation::closeout_record_schema_version().to_string(),
         hook_observation: ROUTER_RS_HOOK_OBSERVATION_SCHEMA_VERSION.to_string(),
     };
 

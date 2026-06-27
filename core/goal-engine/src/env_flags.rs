@@ -1,4 +1,4 @@
-//! Centralized environment variable access for loop-engine.
+//! Centralized environment variable access for goal-engine.
 //!
 //! All `ROUTER_RS_*` env var reads for this crate go through this module.
 //! String/integer values are parsed here; boolean flags (e.g. `_ENABLED`)

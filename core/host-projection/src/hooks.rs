@@ -1,7 +1,7 @@
 //! host-projection hooks proxy layer.
 //!
 //! Owns the shared function pointer OnceLock store and proxy functions.
-//! L4 crates (runtime-core, framework-runtime, loop-engine) register
+//! L4 crates (runtime-core, framework-runtime, goal-engine) register
 //! their callbacks into these slots during bootstrap.
 //!
 //! Proxy functions are re-exported for consumers that need them.
@@ -370,14 +370,6 @@ pub fn read_stdin_json_limited() -> Result<Value> {
 // The native functions are still defined in runtime-core/src/hook_timing.rs.
 
 // ────────────────────────────────────────────────────────────────
-// session_call_tracker: function-pointer proxies (OnceLock)
-// ────────────────────────────────────────────────────────────────
-
-runtime_hook_proxy! { fn init_tracker(repo_root: &Path) -> Result<()> = Ok(()); }
-runtime_hook_proxy! { fn record_tool_call(repo_root: &Path, tool_name: &str, cache_stats: Option<&Value>) -> Result<()> = Ok(()); }
-runtime_hook_proxy! { fn read_tracker_state(repo_root: &Path) -> Result<Value> = Ok(serde_json::json!({})); }
-
-// ────────────────────────────────────────────────────────────────
 
 runtime_hook_proxy! { fn closeout_record_path_for_task(repo_root: &Path, task_id: &str) -> Result<PathBuf> = err("CLOSEOUT_RECORD_PATH not registered — runtime-core boot required"); }
 runtime_hook_proxy! { fn evaluate_closeout_record_file_for_task(repo_root: &Path, task_id: &str, record_path: &Path) -> Result<Value> = err("hook framework_runtime not registered — runtime-core boot required"); }
@@ -503,16 +495,12 @@ pub fn ensure_kernel_bootstrap() {
 
 // ── framework_runtime_extra ──
 
-/// Check anomalies: (repo_root) -> Result<anomaly_list>
-type CheckAnomaliesFn = fn(&Path) -> Result<Vec<String>>;
-
 runtime_hook_proxy! { fn current_local_timestamp() -> String = "1970-01-01T00:00:00Z".into(); }
 runtime_hook_proxy! { fn write_framework_session_artifacts(payload: Value) -> Result<Value> = err("WRITE_FRAMEWORK_SESSION_ARTIFACTS not registered — runtime-core boot required"); }
 runtime_hook_proxy! { fn route_task_with_manifest_fallback(runtime_records: &[serde_json::Value], host_id: Option<&str>, query: &str, session_id: &str, allow_overlay: bool, first_turn: bool) -> Result<RouteDecision> = err("ROUTE_TASK_WITH_MANIFEST_FALLBACK not registered — runtime-core boot required"); }
 runtime_hook_proxy! { fn build_automatic_continuity_checkpoint_payload(repo_root: &Path, task_line: &str, summary_text: &str, task_id: Option<&str>, repointer_focus: bool, update_registry_only_if_known: bool) -> Value = Value::Null; }
 runtime_hook_proxy! { fn append_evidence_index(repo_root: &Path, task_id: Option<&str>, entry: serde_json::Map<String, Value>) -> Result<()> = err("APPEND_EVIDENCE_INDEX not registered — runtime-core boot required"); }
 runtime_hook_proxy! { fn closeout_record_schema_version() -> &'static str = "closeout-record-v1"; }
-runtime_hook_proxy! { fn check_anomalies(repo_root: &Path) -> Result<Vec<String>> = Ok(vec![]); }
 
 // ── web_fetch_guard ──
 
@@ -537,12 +525,6 @@ runtime_hook_proxy! { fn evaluate_mcp_pre_guard_safe(tool_name: &str, arguments:
 
 // ── Test-only re-exports from test_helpers (for host_extensions::cursor test code) ──
 
-
-// ── Quality Gate full implementation hook (registered by runtime-core) ──
-// Returns None if not registered (caller should fall back to core-state).
-pub fn quality_gate_drive_registered() -> Option<fn(Value) -> Result<Value>> {
-    get_runtime_hooks().map(|h| h.quality_gate_drive)
-}
 
 // ── Host-projection-specific OnceLock slots ──
 
@@ -618,12 +600,10 @@ runtime_hook_proxy! { fn inspect_trace_stream(payload: framework_kernel::stdio_p
 // host-projection retains MCP parameter type-checking; runtime-core owns domain logic.
 
 type GoalStateManageDispatchFn = fn(&Value, &Path, &str) -> std::result::Result<String, FrameworkError>;
-type QualityGateManageDispatchFn = fn(&Value, &Path, &str) -> std::result::Result<String, FrameworkError>;
 type CloseoutRecordWriteDispatchFn = fn(&Value, &Path) -> std::result::Result<String, FrameworkError>;
 type CloseoutGateEvaluateFn = fn(&Value, &Path, &str) -> std::result::Result<String, FrameworkError>;
 
 runtime_hook_proxy! { fn tool_goal_state_manage_dispatch(args: &Value, repo_root: &Path, session_id: &str) -> Result<String> = err("GOAL_STATE_MANAGE_DISPATCH not registered — runtime-core boot required"); }
-runtime_hook_proxy! { fn tool_quality_gate_manage_dispatch(args: &Value, repo_root: &Path, session_id: &str) -> Result<String> = err("QUALITY_GATE_MANAGE_DISPATCH not registered — runtime-core boot required"); }
 runtime_hook_proxy! { fn tool_closeout_record_write_dispatch(args: &Value, repo_root: &Path) -> Result<String> = err("CLOSEOUT_RECORD_WRITE_DISPATCH not registered — runtime-core boot required"); }
 runtime_hook_proxy! { fn tool_closeout_gate_evaluate(args: &Value, repo_root: &Path, host_id: &str) -> Result<String> = err("CLOSEOUT_GATE_EVALUATE not registered — runtime-core boot required"); }
 
@@ -637,10 +617,6 @@ runtime_hook_proxy! { fn tool_closeout_gate_evaluate(args: &Value, repo_root: &P
 /// Phase B: migrate consumers from proxy functions to `get_runtime_hooks()?.field`.
 /// Phase C: remove old `once_lock_hook!` macro and individual OnceLock slots.
 pub struct RuntimeHooks {
-    // session_call_tracker (3 fields)
-    pub init_tracker: fn(&Path) -> Result<()>,
-    pub record_tool_call: fn(&Path, &str, Option<&Value>) -> Result<()>,
-    pub read_tracker_state: fn(&Path) -> Result<Value>,
     // framework_runtime (5 fields)
     pub closeout_record_path_for_task: fn(&Path, &str) -> Result<PathBuf>,
     pub evaluate_closeout_record_file_for_task: fn(&Path, &str, &Path) -> Result<Value>,
@@ -656,30 +632,26 @@ pub struct RuntimeHooks {
     pub maybe_record_research_activity: fn(&Path, &str, &str),
     // kernel bootstrap (1 field)
     pub ensure_kernel_bootstrap: fn(),
-    // framework_runtime_extra (7 fields)
+    // framework_runtime_extra (6 fields)
     pub current_local_timestamp: fn() -> String,
     pub write_framework_session_artifacts: fn(Value) -> Result<Value>,
     pub route_task_with_manifest_fallback: RouteTaskFn,
     pub build_automatic_continuity_checkpoint_payload: BuildCheckpointFn,
     pub append_evidence_index: AppendEvidenceFn,
     pub closeout_record_schema_version: fn() -> &'static str,
-    pub check_anomalies: CheckAnomaliesFn,
     // web_fetch_guard (3 fields)
     pub validate_and_resolve_web_fetch_url: ValidateWebFetchUrlFn,
     pub resolve_web_fetch_redirect: ResolveWebFetchRedirectFn,
     pub resolve_web_fetch_addresses: ResolveWebFetchAddressesFn,
     // mcp_pre_guard (1 field)
     pub evaluate_mcp_pre_guard_safe: fn(&str, &Value, &Path) -> McpPreGuardVerdict,
-    // quality_gate_drive (1 field)
-    pub quality_gate_drive: fn(Value) -> Result<Value>,
     // research_tool_dispatch (1 field)
     pub research_tool_dispatch: ResearchToolDispatchFn,
     // mcp_tool_routing (2 fields)
     pub mcp_tool_skill_route: McpToolSkillRouteFn,
     pub mcp_tool_search_skills: McpToolSearchSkillsFn,
-    // tool_dispatch (4 fields)
+    // tool_dispatch (3 fields)
     pub tool_goal_state_manage_dispatch: GoalStateManageDispatchFn,
-    pub tool_quality_gate_manage_dispatch: QualityGateManageDispatchFn,
     pub tool_closeout_record_write_dispatch: CloseoutRecordWriteDispatchFn,
     pub tool_closeout_gate_evaluate: CloseoutGateEvaluateFn,
     // browser_dispatch (1 field)

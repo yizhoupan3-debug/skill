@@ -25,7 +25,7 @@ host-projection = { path = "../host-projection" }
 framework-extra = { path = "../framework-extra" }
 fr-utils = { path = "../fr-utils" }
 fr-exec = { path = "../fr-exec" }
-loop-engine = { path = "../loop-engine" }
+goal-engine = { path = "../goal-engine" }
 browser-mcp = { path = "../../tools/browser-mcp", optional = true }
 browser-mcp-dispatch = { path = "../browser-mcp-dispatch", optional = true }
 research-harness = { path = "../research-harness", optional = true }

@@ -1,5 +1,5 @@
 [package]
-name = "loop-engine"
+name = "goal-engine"
 version = "0.1.0"
 edition = "2024"
 description = "L6 optional automation engine: RFV loop for loop-auto profile"
@@ -7,7 +7,7 @@ description = "L6 optional automation engine: RFV loop for loop-auto profile"
 workspace = true
 
 [lib]
-name = "loop_engine"
+name = "goal_engine"
 path = "src/lib.rs"
 
 [dependencies]

@@ -150,9 +150,7 @@ fn append_step_ledger_entry(payload: Value) -> Result<Value, FrameworkError> {
             {
                 tracing::warn!(task_id = %task_id, error = %e, "failed to append step transaction to TASK_LEDGER");
             }
-            if let Err(e) = crate::task_state_aggregate::sync_task_state_aggregate(&repo_root, &task_id) {
-                tracing::warn!(task_id = %task_id, error = %e, "failed to sync task state aggregate after step append");
-            }
+            // TASK_STATE.json aggregate was removed in Wave 2b.
         }
         Ok(inner_changed)
     })?;
@@ -572,10 +570,7 @@ mod tests {
         assert_eq!(summary["entry_count"], json!(1));
         assert_eq!(summary["status_counts"]["pass"], json!(1));
         assert_eq!(summary["latest"]["step_id"], json!("s1"));
-        assert!(
-            repo.join("artifacts/current/task-a/TASK_STATE.json")
-                .is_file()
-        );
+        // TASK_STATE.json aggregate was removed in Wave 2b; no aggregate file written.
         let _ = fs::remove_dir_all(repo);
     }
 

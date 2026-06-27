@@ -5,15 +5,11 @@ use crate::utils::atomic_write::write_atomic_json;
 use serde_json::{Map, Value, json};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::OnceLock;
-use tracing::warn;
 
 use super::pointer_ops::{
     ensure_task_directory, neutralize_task_pointers_for_task, sync_task_pointers_after_goal_drive,
 };
-use super::quality_gate_ops::deactivate_quality_gate_for_conflict_with_goal_drive;
-use super::{REQUIRES_COMPLETION_EVIDENCE_KEY, goal_state_path_for_task, read_goal_state, read_goal_type_from_state};
-use core_state_types::task_state_types::GoalType;
+use super::{REQUIRES_COMPLETION_EVIDENCE_KEY, goal_state_path_for_task, read_goal_state};
 
 fn resolve_task_id_strict(payload: &Value) -> Result<String, String> {
     payload
@@ -335,36 +331,6 @@ pub fn task_evidence_artifacts_summary_for_task(repo_root: &Path, task_id: &str)
     (true, any_ok)
 }
 
-/// Function pointer type for the QGEntry two-stage exit gate.
-/// Returns a JSON-serialized `GateVerdict` from quality-gate::types.
-pub type QgEntryTriggerFn = fn(
-    repo_root: &str,
-    task_id: &str,
-    scene: &str,
-    goal: &str,
-    round: u64,
-) -> serde_json::Value;
-
-static QG_ENTRY_TRIGGER: OnceLock<QgEntryTriggerFn> = OnceLock::new();
-
-/// Register the QGEntry trigger function pointer.
-/// Called once during bootstrap from `runtime_core::init_hooks()`.
-pub fn register_qg_entry_trigger(f: QgEntryTriggerFn) {
-    QG_ENTRY_TRIGGER.set(f).ok();
-}
-
-fn invoke_qg_entry_trigger(
-    repo_root: &str,
-    task_id: &str,
-    scene: &str,
-    goal: &str,
-    round: u64,
-) -> Option<serde_json::Value> {
-    QG_ENTRY_TRIGGER
-        .get()
-        .map(|f| f(repo_root, task_id, scene, goal, round))
-}
-
 fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
     let repo_root = payload
         .get("repo_root")
@@ -484,11 +450,6 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
             };
             crate::task_ledger::append_transaction_assuming_l1_held(&repo_root, &task_id, tx)
                 .map_err(|e| format!("TASK_LEDGER append failed: {e}"))?;
-            let _ =
-                deactivate_quality_gate_for_conflict_with_goal_drive(&repo_root, &task_id)?;
-            crate::task_state_aggregate::sync_task_state_aggregate_best_effort(
-                &repo_root, &task_id,
-            );
             sync_task_pointers_after_goal_drive(&repo_root, &task_id, goal, &payload)?;
             Ok(json!({
                 "ok": true,
@@ -501,8 +462,6 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
         "checkpoint" => {
             let task_id = resolve_task_id_strict(&payload)?;
             crate::utils::path_guard::validate_task_id_component(&task_id)?;
-            let _ =
-                deactivate_quality_gate_for_conflict_with_goal_drive(&repo_root, &task_id)?;
             let note = payload
                 .get("note")
                 .and_then(Value::as_str)
@@ -541,9 +500,6 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
             };
             crate::task_ledger::append_transaction_assuming_l1_held(&repo_root, &task_id, tx)
                 .map_err(|e| format!("TASK_LEDGER append failed: {e}"))?;
-            crate::task_state_aggregate::sync_task_state_aggregate_best_effort(
-                &repo_root, &task_id,
-            );
             Ok(json!({
                 "ok": true,
                 "operation": "checkpoint",
@@ -589,125 +545,38 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
                 crate::task_state::validate_goal_completion_gates(&view, &gates)?;
             }
 
-            // Loop goal: complete = iteration complete, NOT goal termination.
+            // Complete = iteration complete, NOT goal termination.
             // Keep status=running, do NOT archive or neutralize pointers.
-            let goal_type = read_goal_type_from_state(&state);
-            if goal_type == GoalType::Loop {
-                let goal_path = goal_state_path_for_task(&repo_root, &task_id)?;
-                let mut loop_state = read_goal_state(&repo_root, Some(&task_id))?
-                    .ok_or_else(|| format!("GOAL_STATE missing at {}", goal_path.display()))?;
-                if let Some(obj) = loop_state.as_object_mut() {
-                    let count = obj.get("iteration_count").and_then(Value::as_u64).unwrap_or(0);
-                    obj.insert("iteration_count".to_string(), json!(count + 1));
-                    obj.insert("last_iteration_completed_at".to_string(), json!(framework_kernel::time::now_iso()));
-                    obj.insert("updated_at".to_string(), json!(framework_kernel::time::now_iso()));
-                }
-                write_atomic_json(&goal_path, &loop_state)?;
-                let tx = crate::task_ledger::LedgerTransaction {
-                    ts: framework_kernel::time::now_iso(),
-                    tx_type: "goal_iteration_completed".to_string(),
-                    payload: loop_state.clone(),
-                    idempotency_key: None,
-                    seq: None,
-                    schema_version: Some(1),
-                };
-                crate::task_ledger::append_transaction_assuming_l1_held(&repo_root, &task_id, tx)
-                    .map_err(|e| format!("TASK_LEDGER append failed: {e}"))?;
-                crate::task_state_aggregate::sync_task_state_aggregate_best_effort(&repo_root, &task_id);
-                return Ok(json!({
-                    "ok": true,
-                    "operation": "iteration_completed",
-                    "task_id": task_id,
-                    "iteration_count": loop_state.get("iteration_count").and_then(Value::as_u64).unwrap_or(0),
-                }));
-            }
-
-            // ── QGEntry exit gate ──
-            // Only for linear goals (loop goals return early above).
-            let goal = state.get("goal").and_then(Value::as_str).unwrap_or("");
-            let scene = payload.get("scene").and_then(Value::as_str).unwrap_or("general");
-            let round = payload.get("round").and_then(Value::as_u64).unwrap_or(1);
-            if let Some(verdict) = invoke_qg_entry_trigger(
-                &repo_root.display().to_string(),
-                &task_id,
-                scene,
-                goal,
-                round,
-            ) {
-                if !verdict.get("passed").and_then(Value::as_bool).unwrap_or(true) {
-                    // Gate did NOT pass — transition to review_pending with blockers.
-                    let blockers = verdict.get("blockers").cloned().unwrap_or(Value::Null);
-                    let path = goal_state_path_for_task(&repo_root, &task_id)?;
-                    let mut pending_state = read_goal_state(&repo_root, Some(&task_id))?
-                        .ok_or_else(|| format!("GOAL_STATE missing at {}", path.display()))?;
-                    if let Some(obj) = pending_state.as_object_mut() {
-                        obj.insert("status".to_string(), json!("review_pending"));
-                        obj.insert("blockers".to_string(), blockers);
-                        obj.insert("updated_at".to_string(), json!(framework_kernel::time::now_iso()));
-                    }
-                    write_atomic_json(&path, &pending_state)?;
-                    let tx = crate::task_ledger::LedgerTransaction {
-                        ts: framework_kernel::time::now_iso(),
-                        tx_type: "goal_state".to_string(),
-                        payload: pending_state.clone(),
-                        idempotency_key: None,
-                        seq: None,
-                        schema_version: Some(1),
-                    };
-                    crate::task_ledger::append_transaction_assuming_l1_held(&repo_root, &task_id, tx)
-                        .map_err(|e| format!("TASK_LEDGER append failed: {e}"))?;
-                    crate::task_state_aggregate::sync_task_state_aggregate_best_effort(
-                        &repo_root, &task_id,
-                    );
-                    return Ok(json!({
-                        "ok": true,
-                        "operation": "review_pending",
-                        "task_id": task_id,
-                        "goal_state_path": path.display().to_string(),
-                        "review_required": true,
-                    }));
-                }
-                // Gate passed — proceed to complete below.
-            }
-
-            // Linear goal complete: terminal flags + neutralize + archive
-            let out = set_terminal_flags(
-                &repo_root,
-                Some(task_id.clone()),
-                "completed",
-                Some(false),
-                None,
-            )?;
-            neutralize_task_pointers_for_task(&repo_root, &task_id)?;
-            // Mark GOAL_STATE.json as archived (do NOT delete — preserve for tooling/queries)
             let goal_path = goal_state_path_for_task(&repo_root, &task_id)?;
-            if goal_path.is_file() {
-                match fs::read_to_string(&goal_path) {
-                    Ok(raw) => {
-                        if let Ok(mut goal_val) = serde_json::from_str::<Value>(&raw)
-                            && let Some(obj) = goal_val.as_object_mut() {
-                                obj.insert("archived".to_string(), json!(true));
-                                obj.insert(
-                                    "completed_at".to_string(),
-                                    json!(framework_kernel::time::now_iso()),
-                                );
-                                obj.insert(
-                                    "updated_at".to_string(),
-                                    json!(framework_kernel::time::now_iso()),
-                                );
-                                let _ = write_atomic_json(&goal_path, &goal_val);
-                            }
-                    }
-                    Err(e) => warn!("failed to read GOAL_STATE.json for archive annotation: {e}"),
-                }
+            let mut loop_state = read_goal_state(&repo_root, Some(&task_id))?
+                .ok_or_else(|| format!("GOAL_STATE missing at {}", goal_path.display()))?;
+            if let Some(obj) = loop_state.as_object_mut() {
+                let count = obj.get("iteration_count").and_then(Value::as_u64).unwrap_or(0);
+                obj.insert("iteration_count".to_string(), json!(count + 1));
+                obj.insert("last_iteration_completed_at".to_string(), json!(framework_kernel::time::now_iso()));
+                obj.insert("updated_at".to_string(), json!(framework_kernel::time::now_iso()));
             }
-            Ok(out)
+            write_atomic_json(&goal_path, &loop_state)?;
+            let tx = crate::task_ledger::LedgerTransaction {
+                ts: framework_kernel::time::now_iso(),
+                tx_type: "goal_iteration_completed".to_string(),
+                payload: loop_state.clone(),
+                idempotency_key: None,
+                seq: None,
+                schema_version: Some(1),
+            };
+            crate::task_ledger::append_transaction_assuming_l1_held(&repo_root, &task_id, tx)
+                .map_err(|e| format!("TASK_LEDGER append failed: {e}"))?;
+            Ok(json!({
+                "ok": true,
+                "operation": "iteration_completed",
+                "task_id": task_id,
+                "iteration_count": loop_state.get("iteration_count").and_then(Value::as_u64).unwrap_or(0),
+            }))
         }
         "continue_review" | "retry" => {
             let task_id = resolve_task_id_strict(&payload)?;
             crate::utils::path_guard::validate_task_id_component(&task_id)?;
-            let _ =
-                deactivate_quality_gate_for_conflict_with_goal_drive(&repo_root, &task_id)?;
             let path = goal_state_path_for_task(&repo_root, &task_id)?;
             let mut state = read_goal_state(&repo_root, Some(&task_id))?
                 .ok_or_else(|| format!("GOAL_STATE missing at {}", path.display()))?;
@@ -734,9 +603,6 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
             };
             crate::task_ledger::append_transaction_assuming_l1_held(&repo_root, &task_id, tx)
                 .map_err(|e| format!("TASK_LEDGER append failed: {e}"))?;
-            crate::task_state_aggregate::sync_task_state_aggregate_best_effort(
-                &repo_root, &task_id,
-            );
             let goal_label = state
                 .get("goal")
                 .and_then(Value::as_str)
@@ -898,9 +764,6 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
             };
             crate::task_ledger::append_transaction_assuming_l1_held(&repo_root, &task_id, tx)
                 .map_err(|e| format!("TASK_LEDGER append failed: {e}"))?;
-            crate::task_state_aggregate::sync_task_state_aggregate_best_effort(
-                &repo_root, &task_id,
-            );
             Ok(json!({
                 "ok": true,
                 "operation": "amend",
@@ -923,7 +786,6 @@ fn clear_goal_state(repo_root: &Path, task_id_resolved: Option<String>) -> Resul
     if existed {
         fs::remove_file(&path).map_err(|err| format!("remove GOAL_STATE: {err}"))?;
     }
-    crate::task_state_aggregate::sync_task_state_aggregate_best_effort(repo_root, &task_id);
     neutralize_task_pointers_for_task(repo_root, &task_id)?;
     Ok(json!({
         "ok": true,
@@ -983,8 +845,6 @@ fn resume_goal_running(
     };
     crate::task_ledger::append_transaction_assuming_l1_held(repo_root, &task_id, tx)
         .map_err(|e| format!("TASK_LEDGER append failed: {e}"))?;
-    let _ = deactivate_quality_gate_for_conflict_with_goal_drive(repo_root, &task_id)?;
-    crate::task_state_aggregate::sync_task_state_aggregate_best_effort(repo_root, &task_id);
     let goal_label = state
         .get("goal")
         .and_then(Value::as_str)
@@ -1036,7 +896,6 @@ fn set_terminal_flags(
     };
     crate::task_ledger::append_transaction_assuming_l1_held(repo_root, &task_id, tx)
         .map_err(|e| format!("TASK_LEDGER append failed: {e}"))?;
-    crate::task_state_aggregate::sync_task_state_aggregate_best_effort(repo_root, &task_id);
     Ok(json!({
         "ok": true,
         "operation": status,
@@ -1394,21 +1253,22 @@ mod tests {
         }))
         .expect("complete");
         assert_eq!(out["ok"], json!(true));
-        assert_eq!(out["operation"], json!("completed"));
+        assert_eq!(out["operation"], json!("iteration_completed"));
+        assert_eq!(out["iteration_count"], json!(1));
 
-        // Verify goal state is marked archived
+        // Goal stays running (not archived/neutralized) — loop semantics
         let raw = fs::read_to_string(repo.join("artifacts/current/t-ce/GOAL_STATE.json")).unwrap();
         let goal: Value = serde_json::from_str(&raw).unwrap();
-        assert_eq!(goal["archived"], json!(true));
-        assert!(goal["completed_at"].is_string());
-        assert_eq!(goal["status"], json!("completed"));
+        assert_eq!(goal["status"], json!("running"));
+        assert_eq!(goal["iteration_count"], json!(1));
+        assert!(goal.get("last_iteration_completed_at").and_then(Value::as_str).is_some());
+        assert!(goal.get("archived").is_none(),
+            "goal must NOT be archived after iteration complete");
 
-        // Verify pointers neutralized
+        // Pointers NOT neutralized
         let (active, focus) = super::super::pointer_ops::read_task_pointer_pair(&repo);
-        assert!(active.is_none() || active.as_deref() != Some("t-ce"),
-            "active pointer should be neutralized: {active:?}");
-        assert!(focus.is_none() || focus.as_deref() != Some("t-ce"),
-            "focus pointer should be neutralized: {focus:?}");
+        assert_eq!(active.as_deref(), Some("t-ce"),
+            "active pointer must not be neutralized: {active:?}");
 
         let _ = fs::remove_dir_all(&repo);
     }
@@ -1568,7 +1428,7 @@ mod tests {
     }
 
     #[test]
-    fn goal_amend_rejects_completed_goal() {
+    fn goal_amend_succeeds_after_iteration_complete() {
         let repo = unique_repo("amend-complete");
         fs::create_dir_all(repo.join("artifacts/current")).unwrap();
         // Non-drive goal — no evidence needed
@@ -1587,14 +1447,21 @@ mod tests {
         }))
         .expect("complete");
 
-        let err = framework_goal_drive(json!({
+        // Goals stay running after iteration complete — amend should succeed
+        let amend = framework_goal_drive(json!({
             "repo_root": repo.display().to_string(),
             "operation": "amend",
             "task_id": "t-ac",
-            "goal": "wont work",
+            "goal": "revised after iteration",
         }))
-        .unwrap_err();
-        assert!(err.contains("completed"), "{err}");
+        .expect("amend should succeed after iteration complete");
+        assert_eq!(amend["ok"], json!(true));
+
+        let raw = fs::read_to_string(repo.join("artifacts/current/t-ac/GOAL_STATE.json")).unwrap();
+        let goal: Value = serde_json::from_str(&raw).unwrap();
+        assert_eq!(goal["goal"], json!("revised after iteration"));
+        assert_eq!(goal["status"], json!("running"));
+
         let _ = fs::remove_dir_all(&repo);
     }
 

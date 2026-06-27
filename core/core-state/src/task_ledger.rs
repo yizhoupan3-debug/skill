@@ -121,19 +121,9 @@ pub fn append_transaction_assuming_l1_held(
                 &path, &content, 300,
             ) {
                 Ok(true) => {
-                    // Compaction renumbers seq to 0,1,2,…N-1. Sync the aggregate
-                    // immediately so TASK_STATE.json.last_seq matches the post-compact
-                    // file.  Without this, a crash between compact and the caller's
-                    // aggregate sync would leave last_seq > all post-compact seq,
-                    // causing ledger replay to skip every row on recovery.
-                    if let Err(e) =
-                        crate::task_state_aggregate::sync_task_state_aggregate(repo_root, task_id)
-                    {
-                        tracing::warn!(
-                            error = %e,
-                            "sync_task_state_aggregate failed after TASK_LEDGER compaction",
-                        );
-                    }
+                    // Compaction renumbers seq to 0,1,2,…N-1.
+                    // TASK_STATE.json aggregate was removed in Wave 2b so there
+                    // is nothing to sync here any longer.
                 }
                 Ok(false) => {}
                 Err(e) => {

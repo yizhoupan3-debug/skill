@@ -12,7 +12,8 @@ pub use rt_storage::background_state;
 pub use trace_runtime;
 
 // ── migrated modules (B3) ──
-pub use fr_contracts::{closeout_enforcement, execution_contract};
+pub use core_state::closeout_validation as closeout_enforcement;
+pub use fr_contracts::execution_contract;
 pub mod framework_runtime;
 pub use session_supervisor;
 pub use framework_kernel::framework_profile;
@@ -45,7 +46,6 @@ pub use fr_exec::router_env_flags::{
     router_rs_env_enabled_default_true, router_rs_env_enabled_default_false,
     router_rs_review_fork_context_missing_infer_false_enabled,
     router_rs_task_ledger_flock_enabled, router_rs_hook_timing_enabled,
-    router_rs_session_call_tracker_tool_keys_max,
     router_rs_continuity_post_tool_evidence_enabled,
     router_rs_review_gate_stop_max_nudges_cap, router_rs_qg_max_rounds_cap,
     router_rs_session_supervisor_real_process_smoke_enabled,
@@ -59,7 +59,7 @@ pub use rt_core_contracts::{
 
 // ── re-exports from core-state (flattened) ──
 pub use core_state::{
-    step_ledger, task_state, task_state_aggregate,
+    step_ledger, task_state,
     state_manager as goal_drive,
 };
 // ── local contract modules (remain in runtime-core due to internal coupling) ──
@@ -141,15 +141,6 @@ pub fn init_hooks() {
         // 3. Host-projection hooks (RuntimeHooks struct, direct construction)
         host_projection::hooks::set_runtime_hooks(
             host_projection::hooks::RuntimeHooks {
-                // session_call_tracker (3 fields)
-                init_tracker: |repo_root| framework_extra::session_call::init_tracker(repo_root).map_err(Into::into),
-                record_tool_call: |root, name, stats_json| {
-                    let stats = stats_json.and_then(|v| {
-                        serde_json::from_value::<framework_extra::session_call::CacheStats>(v.clone()).ok()
-                    });
-                    Ok(framework_extra::session_call::record_tool_call(root, name, stats)?)
-                },
-                read_tracker_state: |repo_root| framework_extra::session_call::read_tracker_state(repo_root).map_err(Into::into),
                 // framework_runtime (5 fields)
                 closeout_record_path_for_task: |repo_root, task_id| framework_extra::closeout::closeout_record_path_for_task(repo_root, task_id).map_err(Into::into),
                 evaluate_closeout_record_file_for_task: |repo_root, task_id, record_path| framework_extra::closeout::evaluate_closeout_record_file_for_task(repo_root, task_id, record_path).map_err(Into::into),
@@ -186,7 +177,6 @@ pub fn init_hooks() {
                 build_automatic_continuity_checkpoint_payload: framework_runtime::build_automatic_continuity_checkpoint_payload_with_task_id,
                 append_evidence_index: framework_extra::evidence::append_evidence_index_merged_row,
                 closeout_record_schema_version: || closeout_enforcement::CLOSEOUT_RECORD_SCHEMA_VERSION,
-                check_anomalies: |repo_root| framework_extra::session_call::check_anomalies(repo_root).map_err(Into::into),
                 // web_fetch_guard (3 fields)
                 validate_and_resolve_web_fetch_url: |url| {
                     web_fetch_guard::validate_and_resolve_web_fetch_url(url).map(|(u, addrs)| {
@@ -210,17 +200,6 @@ pub fn init_hooks() {
                         blocked: v.blocked,
                         reason: v.reason,
                     }
-                },
-                // quality_gate_drive (1 field)
-                quality_gate_drive: |payload| {
-                    let repo_root = std::path::Path::new(
-                        payload.get("repo_root").and_then(|v| v.as_str()).unwrap_or(".")
-                    );
-                    let task_id = payload.get("task_id").and_then(|v| v.as_str()).unwrap_or("");
-                    let goal = payload.get("goal").and_then(|v| v.as_str()).unwrap_or("");
-                    let round = payload.get("round").and_then(|v| v.as_u64()).unwrap_or(1);
-                    let verdict = qg_entry::trigger(repo_root, task_id, quality_gate::scene::GENERAL, goal, None, round, None);
-                    serde_json::to_value(&verdict).map_err(|e| core_policy::error::FrameworkError::validation(e.to_string()))
                 },
                 // research_tool_dispatch (1 field) — default; research-harness overrides via OnceLock
                 research_tool_dispatch: |_, _| Err(core_policy::error::FrameworkError::validation("research_tool_dispatch not registered")),
@@ -276,7 +255,6 @@ pub fn init_hooks() {
                 },
                 // tool_dispatch (4 fields)
                 tool_goal_state_manage_dispatch: framework_runtime::tool_handlers::goal_state_manage_dispatch,
-                tool_quality_gate_manage_dispatch: framework_runtime::tool_handlers::quality_gate_manage_dispatch,
                 tool_closeout_record_write_dispatch: framework_runtime::tool_handlers::closeout_record_write_dispatch,
                 tool_closeout_gate_evaluate: framework_runtime::tool_handlers::closeout_gate_evaluate,
                 // browser_dispatch (1 field) — default; set_browser_dispatch overrides via OnceLock
@@ -289,21 +267,6 @@ pub fn init_hooks() {
 
         // ── framework_kernel::runtime_hooks (pre_tool_use_guard, closeout, etc.) ──
         framework_kernel::runtime_hooks::register(framework_kernel::runtime_hooks::RuntimeCoreHooks {
-            telemetry: framework_kernel::runtime_hooks::TelemetryHooks {
-                hook_fired: |_, _| {},
-                tool_call: |_, _, _| {},
-                route_decision: |query, decision, reroute| {
-                    let selected = decision.get("selected_skill").and_then(|v| v.as_str()).unwrap_or("none");
-                    tracing::debug!(
-                        query_len = query.len(),
-                        reroute,
-                        selected_skill = %selected,
-                        "route decision registered"
-                    );
-                },
-                prediction_outcome: |_task_id, _checks_summary, _verification_status, _checks_count| {},
-                rfv_round: |_, _| {},
-            },
             host_provider: framework_kernel::runtime_hooks::HostProviderHooks {
                 for_routing_spelling: |host_id| {
                     host_id.and_then(|id| {
@@ -354,24 +317,7 @@ pub fn init_hooks() {
         // 4. QG Route: scene-dispatched CheckerRegistry
         qg_route::init_qg_route();
 
-        // 5. QGEntry hook: GoalEngine integration
-        core_state::state_manager::register_qg_entry_trigger(
-            |repo_root, task_id, scene, goal, round| {
-                let repo = std::path::Path::new(repo_root);
-                let verdict =
-                    qg_entry::trigger(repo, task_id, scene, goal, None, round, None);
-                serde_json::to_value(&verdict).unwrap_or_else(|_| {
-                    serde_json::json!({
-                        "passed": true,
-                        "checkers_ran": 0,
-                        "blockers": [],
-                        "advisories": [],
-                    })
-                })
-            },
-        );
-
-        // 6. Stdio transport dispatch (decouples runtime-infra from cli/)
+        // 5. Stdio transport dispatch (decouples runtime-infra from cli/)
         runtime_infra::stdio_transport::register_stdio_dispatch(
             crate::framework_runtime::stdio_dispatch::dispatch_stdio_json_request_payload,
             |key| {

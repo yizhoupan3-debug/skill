@@ -208,25 +208,6 @@ pub fn dispatch_framework_command(command: FrameworkCommand) -> Result<(), Strin
                 envelope,
             )?)
         }
-        FrameworkCommand::TaskStateAggregateSync(command) => {
-            let repo_root = resolve_repo_root_arg(command.repo_root.as_deref())?;
-            let task_id = command
-                .task_id
-                .as_deref()
-                .map(str::trim)
-                .filter(|s| !s.is_empty())
-                .map(str::to_string)
-                .ok_or_else(|| {
-                    "framework task-state-aggregate-sync requires --task-id (pointer fallback removed)"
-                        .to_string()
-                })?;
-            runtime_core::task_state_aggregate::sync_task_state_aggregate(&repo_root, &task_id)?;
-            print_json_value(&json!({
-                "ok": true,
-                "task_id": task_id,
-                "task_state_path": runtime_core::task_state_aggregate::task_state_aggregate_path(&repo_root, &task_id).display().to_string(),
-            }))
-        }
         FrameworkCommand::StepLedger(command) => {
             let payload = parse_json_input::<Value>(&command.input_json, "framework step ledger")?;
             print_json_value(&handle_step_ledger_operation(payload)?)
@@ -758,7 +739,7 @@ pub fn dispatch_closeout_command(command: CloseoutCommand) -> Result<(), String>
                     )?
                 }
                 (Some(repo_root), Some(task_id), None) => {
-                    let (rows_non_empty, has_success) =
+                    let (_rows_non_empty, has_success) =
                         runtime_core::goal_drive::task_evidence_artifacts_summary_for_task(
                             repo_root, task_id,
                         );
@@ -771,7 +752,6 @@ pub fn dispatch_closeout_command(command: CloseoutCommand) -> Result<(), String>
                         .and_then(core_state::goal_prediction::read_goal_prediction);
                     let ctx = CloseoutEvidenceContext {
                         task_id: Some(task_id.trim().to_string()),
-                        _evidence_rows_non_empty: rows_non_empty,
                         has_successful_verification: has_success,
                         goal_prediction,
                     };
@@ -846,20 +826,20 @@ pub fn dispatch_loop_command(command: LoopCommand) -> Result<(), String> {
             let registry_path = repo_root.join("configs/framework/LOOP_REGISTRY.json");
             let raw = fs::read_to_string(&registry_path)
                 .map_err(|e| format!("read LOOP_REGISTRY.json: {e}"))?;
-            let registry: loop_engine::LoopRegistryRoot = serde_json::from_str(&raw)
+            let registry: goal_engine::LoopRegistryRoot = serde_json::from_str(&raw)
                 .map_err(|e| format!("parse LOOP_REGISTRY.json: {e}"))?;
             let entry = registry.loops.iter()
                 .find(|e| e.loop_id == args.loop_id)
                 .ok_or_else(|| format!("loop '{}' not found in LOOP_REGISTRY.json", args.loop_id))?;
             let timeout = std::time::Duration::from_secs(args.timeout);
-            let ctx = loop_engine::runner::RunContext {
+            let ctx = goal_engine::runner::RunContext {
                 repo_root: &repo_root,
                 entry,
                 dry_run: args.dry_run,
                 timeout: Some(timeout),
-                depth_remaining: loop_engine::runner::RunContext::default_max_depth(),
+                depth_remaining: goal_engine::runner::RunContext::default_max_depth(),
             };
-            let aggregate = loop_engine::runner::run_loop(&ctx)
+            let aggregate = goal_engine::runner::run_loop(&ctx)
                 .map_err(|e| format!("loop run failed: {e}"))?;
             print_json_value(&serde_json::json!({
                 "ok": true,
@@ -871,7 +851,7 @@ pub fn dispatch_loop_command(command: LoopCommand) -> Result<(), String> {
         }
         LoopCommand::Status(args) => {
             let repo_root = resolve_repo_root_arg(None)?;
-            match loop_engine::runner::run_loop_status(&repo_root, &args.loop_id)
+            match goal_engine::runner::run_loop_status(&repo_root, &args.loop_id)
                 .map_err(|e| format!("loop status failed: {e}"))? {
                 Some(state) => print_json_value(&serde_json::json!({
                     "ok": true,
@@ -893,14 +873,14 @@ pub fn dispatch_loop_command(command: LoopCommand) -> Result<(), String> {
         LoopCommand::Kill(args) => {
             let repo_root = resolve_repo_root_arg(None)?;
             if args.all {
-                loop_engine::runner::run_loop_kill_all(&repo_root)
+                goal_engine::runner::run_loop_kill_all(&repo_root)
                     .map_err(|e| format!("loop kill --all failed: {e}"))?;
                 print_json_value(&serde_json::json!({
                     "ok": true,
                     "message": "All kill signals sent",
                 }))
             } else {
-                loop_engine::runner::run_loop_kill(&repo_root, &args.loop_id)
+                goal_engine::runner::run_loop_kill(&repo_root, &args.loop_id)
                     .map_err(|e| format!("loop kill failed: {e}"))?;
                 print_json_value(&serde_json::json!({
                     "ok": true,

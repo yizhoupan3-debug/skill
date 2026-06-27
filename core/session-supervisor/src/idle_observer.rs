@@ -1,10 +1,9 @@
-//! Idle-window side-effect: spawn observer-rs analyze when no workers are running (EV-5).
+//! Idle-window side-effect: observer checks when no workers are running (EV-5).
 
 use crate::types::WorkerSessionRecord;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::Path;
-use std::process::{Command, Stdio};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 const COOLDOWN_SECS: u64 = 300;
@@ -50,18 +49,11 @@ pub fn maybe_trigger_idle_observation(
             status: "dry_run".to_string(),
         };
     }
-    match spawn_observer_analyze(repo_cwd) {
-        Ok(pid) => {
-            let _ = stamp_cooldown(repo_cwd);
-            IdleTriggerResult {
-                triggered: true,
-                status: format!("spawned:{pid}"),
-            }
-        }
-        Err(err) => IdleTriggerResult {
-            triggered: false,
-            status: format!("spawn_failed:{err}"),
-        },
+    // Telemetry removed per v10 Wave 2d — observer-rs no longer spawned.
+    let _ = stamp_cooldown(repo_cwd);
+    IdleTriggerResult {
+        triggered: true,
+        status: "telemetry_removed".to_string(),
     }
 }
 
@@ -95,52 +87,6 @@ fn stamp_cooldown(repo_cwd: &Path) -> Result<(), String> {
     writeln!(file, "{now}").map_err(|e| format!("write cooldown stamp: {e}"))?;
     Ok(())
 }
-
-fn spawn_observer_analyze(repo_cwd: &Path) -> Result<u32, String> {
-    let journal = repo_cwd.join("artifacts/telemetry/events.jsonl");
-    let output_dir = repo_cwd.join("artifacts/observer");
-    let config = repo_cwd.join("configs/observer/observer.toml");
-    let mut cmd = Command::new("observer-rs");
-    cmd.current_dir(repo_cwd)
-        .arg("analyze")
-        .arg("--journal")
-        .arg(&journal)
-        .arg("--output-dir")
-        .arg(&output_dir)
-        .stdout(Stdio::null())
-        .stderr(Stdio::null());
-    if config.is_file() {
-        cmd.arg("--config").arg(&config);
-    }
-    if let Ok(child) = cmd.spawn() {
-        return Ok(child.id());
-    }
-    let mut cargo = Command::new("cargo");
-    cargo
-        .current_dir(repo_cwd)
-        .args([
-            "run",
-            "--quiet",
-            "--manifest-path",
-            "tools/observer-rs/Cargo.toml",
-            "--",
-            "analyze",
-            "--journal",
-        ])
-        .arg(&journal)
-        .args(["--output-dir"])
-        .arg(&output_dir)
-        .stdout(Stdio::null())
-        .stderr(Stdio::null());
-    if config.is_file() {
-        cargo.arg("--config").arg(&config);
-    }
-    cargo
-        .spawn()
-        .map(|child| child.id())
-        .map_err(|e| format!("spawn observer-rs analyze failed: {e}"))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

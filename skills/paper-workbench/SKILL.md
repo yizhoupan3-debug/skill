@@ -435,7 +435,7 @@ RFV 引擎在 Rust 层强制执行 `min_rounds` 和 `consecutive_stable_required
 - reviewer subagent 不知道总轮数（渐进披露）
 - reviewer subagent 不知道前几轮的 findings（防止锚定偏差）
 - 主会话负责修复（不 spawn fixer subagent）
-- 收敛后写 closeout record 供 loop-engine 验证
+- 收敛后写 closeout record 供 goal-engine 验证
 
 ## Exit Criteria
 

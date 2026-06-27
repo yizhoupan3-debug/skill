@@ -30,8 +30,6 @@ mod desktop_mcp_tests {
             "session_checkpoint",
             "closeout_gate",
             "goal_state_read",
-            "quality_gate_status",
-            "quality_gate_manage",
             "closeout_record_write",
             "web_fetch",
             "goal_state_manage",
@@ -360,18 +358,6 @@ mod desktop_mcp_tests {
     }
 
     #[test]
-    fn tools_list_append_round_round_is_integer_schema() {
-        let response = crate::mcp_stdio_harness::handle_tools_list(Some(json!(1)));
-        let tools = response["result"]["tools"].as_array().expect("tools");
-        let rfv = tools
-            .iter()
-            .find(|t| t["name"] == "quality_gate_manage")
-            .expect("quality_gate_manage");
-        let round = &rfv["inputSchema"]["properties"]["round"];
-        assert_eq!(round["type"], "integer");
-    }
-
-    #[test]
     fn evidence_records_exit_code_correctly() {
         let repo = test_repo_dir();
 
@@ -593,55 +579,10 @@ mod parameter_validation_tests {
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(
-            err.contains("quality_gate_manage"),
-            "expected error about 'quality_gate_manage', got: {err}"
-        );
-    }
-
-    #[test]
-    fn unknown_goal_operation_returns_error() {
-        let args = json!({"task_id": "t1"});
-        let result = crate::mcp_stdio_harness::tool_goal_state_manage_test_helper(
-            &args,
-            "invalid_operation",
-        );
-        assert!(result.is_err());
-        let err = result.unwrap_err();
-        assert!(
             err.contains("Unknown goal operation"),
             "expected 'Unknown goal operation', got: {err}"
         );
         assert!(err.contains("start") && err.contains("checkpoint"));
-    }
-
-    #[test]
-    fn rfv_start_requires_goal_argument() {
-        let args = json!({});
-        let result = crate::mcp_stdio_harness::tool_quality_gate_manage_test_helper(&args, "start");
-        assert!(result.is_err());
-        let err = result.unwrap_err();
-        assert!(err.contains("goal"));
-    }
-
-    #[test]
-    fn rfv_append_round_requires_all_arguments() {
-        let args = json!({"round": 1});
-        let result =
-            crate::mcp_stdio_harness::tool_quality_gate_manage_test_helper(&args, "append_round");
-        assert!(result.is_err());
-        let err = result.unwrap_err();
-        assert!(err.contains("review_summary"));
-    }
-
-    #[test]
-    fn unknown_rfv_operation_returns_error() {
-        let args = json!({});
-        let result =
-            crate::mcp_stdio_harness::tool_quality_gate_manage_test_helper(&args, "invalid_operation");
-        assert!(result.is_err());
-        let err = result.unwrap_err();
-        assert!(err.contains("Unknown quality gate operation"));
-        assert!(err.contains("start") && err.contains("append_round"));
     }
 
     #[test]
@@ -794,32 +735,6 @@ mod transport_mode_read_tests {
         assert!(result.is_ok());
         let msg = result.unwrap().unwrap();
         assert!(msg.contains("jsonrpc"));
-    }
-}
-
-#[cfg(test)]
-mod init_tracker_error_handling_tests {
-    use std::os::unix::fs::PermissionsExt;
-
-    #[test]
-    fn init_tracker_failure_is_non_fatal() {
-        // M6: Non-writable path error handling
-        let temp_dir = std::env::temp_dir();
-        let test_path = temp_dir.join("router-rs-test-non-writable").join("nested");
-        let _ = std::fs::create_dir_all(&test_path);
-        let _ = std::fs::set_permissions(&test_path, std::fs::Permissions::from_mode(0o444));
-
-        // init_tracker should return an error (not panic) for non-writable directories
-        let result = crate::mcp_stdio_harness::init_tracker_for_test(&test_path);
-
-        let _ = std::fs::set_permissions(&test_path, std::fs::Permissions::from_mode(0o755));
-        let _ = std::fs::remove_dir_all(test_path.parent().unwrap());
-
-        // The key assertion: function returned (didn't panic), result should be Err
-        assert!(
-            result.is_err(),
-            "init_tracker should return error for non-writable path, not panic"
-        );
     }
 }
 

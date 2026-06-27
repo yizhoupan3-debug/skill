@@ -235,15 +235,6 @@ pub fn evaluate_pre_tool_use_guard(
             request.approval_digest.as_deref(),
             &digest,
         );
-        framework_kernel::runtime_hooks::hooks().emit_tool_call(
-            &tool_name,
-            0,
-            approved && verdict != PreToolUseGuardVerdict::Block,
-        );
-        framework_kernel::runtime_hooks::hooks().emit_hook_fired(
-            "pre_tool_use_guard",
-            if approved { "approve" } else { "deny" },
-        );
         return Ok(build_response(
             &host_id,
             &tool_name,
@@ -288,12 +279,6 @@ pub fn evaluate_pre_tool_use_guard(
     } else {
         None
     };
-    let action = match final_verdict {
-        PreToolUseGuardVerdict::Allow => "allow",
-        PreToolUseGuardVerdict::Block => "block",
-        PreToolUseGuardVerdict::RequiresStdioApproval => "require_approval",
-    };
-    framework_kernel::runtime_hooks::hooks().emit_hook_fired("pre_tool_use_guard", action);
     Ok(build_response(
         &host_id,
         &tool_name,
@@ -524,15 +509,8 @@ fn has_path_traversal(tool_input: &Value) -> bool {
 #[cfg(test)]
 #[ctor::ctor]
 fn register_test_hooks() {
-    use framework_kernel::runtime_hooks::{RuntimeCoreHooks, TelemetryHooks, HostProviderHooks};
+    use framework_kernel::runtime_hooks::{RuntimeCoreHooks, HostProviderHooks};
     framework_kernel::runtime_hooks::register(RuntimeCoreHooks {
-        telemetry: TelemetryHooks {
-            hook_fired: |_, _| {},
-            tool_call: |_, _, _| {},
-            route_decision: |_, _, _| {},
-            prediction_outcome: |_, _, _, _| {},
-            rfv_round: |_, _| {},
-        },
         host_provider: HostProviderHooks {
             for_routing_spelling: |_| None,
             strict_pre_tool_fallback_hint: |_| None,

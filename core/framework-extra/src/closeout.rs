@@ -4,9 +4,9 @@
 //! enforcement gates, and caching task-registry lookups.
 
 use core_policy::error::FrameworkError;
-use fr_contracts::closeout_enforcement::{
-    CloseoutEvidenceContext, evaluate_closeout_record_value,
-    evaluate_closeout_record_value_with_context,
+use core_state::closeout_validation::{
+    evaluate_closeout_record_value, evaluate_closeout_record_value_with_context,
+    CloseoutEvidenceContext,
 };
 use fr_utils::constants::CLOSEOUT_COMPLETION_STATUSES;
 use fr_utils::json_value::value_text;
@@ -175,7 +175,7 @@ pub fn evaluate_closeout_record_file_for_task(
             record_path.display()
         ))
     })?;
-    let (rows_non_empty, has_success) =
+    let (_rows_non_empty, has_success) =
         core_state::state_manager::task_evidence_artifacts_summary_for_task(repo_root, tid);
     let goal_state = core_state::state_manager::read_goal_state(repo_root, Some(tid))
         .ok()
@@ -185,7 +185,6 @@ pub fn evaluate_closeout_record_file_for_task(
         .and_then(core_state::goal_prediction::read_goal_prediction);
     let ctx = CloseoutEvidenceContext {
         task_id: Some(tid.to_string()),
-        _evidence_rows_non_empty: rows_non_empty,
         has_successful_verification: has_success,
         goal_prediction,
     };
@@ -268,7 +267,7 @@ pub(super) fn enforce_closeout_for_session_payload(payload: &Value) -> Result<Op
     let task_id_str = value_text(payload.get("task_id"));
     let evaluation = if !repo_root_str.is_empty() && !task_id_str.is_empty() {
         let repo_root = PathBuf::from(&repo_root_str);
-        let (rows_non_empty, has_success) =
+        let (_rows_non_empty, has_success) =
             core_state::state_manager::task_evidence_artifacts_summary_for_task(
                 &repo_root,
                 &task_id_str,
@@ -281,7 +280,6 @@ pub(super) fn enforce_closeout_for_session_payload(payload: &Value) -> Result<Op
             .and_then(core_state::goal_prediction::read_goal_prediction);
         let ctx = CloseoutEvidenceContext {
             task_id: Some(task_id_str.trim().to_string()),
-            _evidence_rows_non_empty: rows_non_empty,
             has_successful_verification: has_success,
             goal_prediction,
         };

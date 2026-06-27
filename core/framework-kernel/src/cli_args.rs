@@ -206,8 +206,6 @@ pub enum FrameworkCommand {
     TaskStateResolve(FrameworkTaskStateResolveCommand),
     /// 统一任务账本写分发（envelope：`kind` + `payload`）；见 `core/runtime-core/src/task_command.rs`。
     TaskLedgerDispatch(JsonInputCommand),
-    /// 将 GOAL/RFV/Evidence 投影写入 `TASK_STATE.json`（阶段 3）；见 `core/core-state/src/task_state_aggregate.rs`。
-    TaskStateAggregateSync(FrameworkTaskStateAggregateSyncCommand),
     /// Append or summarize task-scoped `STEP_LEDGER.jsonl` recovery records.
     StepLedger(JsonInputCommand),
     HostIntegration(ForwardedArgsCommand),
@@ -519,14 +517,6 @@ pub struct FrameworkAliasCommand {
 
 #[derive(Args, Debug, Clone)]
 pub struct FrameworkTaskStateResolveCommand {
-    #[arg(long)]
-    pub repo_root: Option<PathBuf>,
-    #[arg(long)]
-    pub task_id: Option<String>,
-}
-
-#[derive(Args, Debug, Clone)]
-pub struct FrameworkTaskStateAggregateSyncCommand {
     #[arg(long)]
     pub repo_root: Option<PathBuf>,
     #[arg(long)]
@@ -1560,31 +1550,6 @@ mod tests {
                 assert_eq!(cmd.task_id.as_deref(), Some("t1"));
             }
             other => panic!("expected TaskStateResolve, got {:?}", other),
-        }
-    }
-
-    // ── FrameworkTaskStateAggregateSyncCommand tested via task-state-aggregate-sync ──
-
-    #[test]
-    fn task_state_aggregate_sync_via_cli() {
-        let cli = Cli::try_parse_from([
-            "router-rs-cli",
-            "framework",
-            "task-state-aggregate-sync",
-            "--repo-root",
-            "/tmp",
-            "--task-id",
-            "t1",
-        ])
-        .unwrap();
-        match cli.command {
-            Some(RouterCommand::Framework {
-                command: FrameworkCommand::TaskStateAggregateSync(cmd),
-            }) => {
-                assert_eq!(cmd.repo_root, Some(PathBuf::from("/tmp")));
-                assert_eq!(cmd.task_id.as_deref(), Some("t1"));
-            }
-            other => panic!("expected TaskStateAggregateSync, got {:?}", other),
         }
     }
 

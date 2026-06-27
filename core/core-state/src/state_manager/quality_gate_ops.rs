@@ -1,8 +1,7 @@
-// Quality Gate state management: path helpers, read, and QG supersede by goal.
-// (deactivate_goal_for_conflict_with_quality_gate removed — Wave 4a-ii: QG is Goal's internal mode, no mutual exclusion needed.)
+// Quality Gate state management: path helpers and read (kept for backward compat).
+// deactivate_quality_gate_for_conflict_with_goal_drive removed — Wave 4a-ii: QG is Goal's internal mode, no mutual exclusion needed.
 
-use crate::utils::atomic_write::write_atomic_json;
-use serde_json::{Value, json};
+use serde_json::Value;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -15,42 +14,6 @@ pub fn quality_gate_state_path(repo_root: &Path, task_id: &str) -> Result<PathBu
         .join("artifacts/current")
         .join(tid)
         .join(QUALITY_GATE_STATE_FILENAME))
-}
-
-pub(crate) fn deactivate_quality_gate_for_conflict_with_goal_drive(
-    repo_root: &Path,
-    task_id: &str,
-) -> Result<bool, String> {
-    if task_id.trim().is_empty() {
-        return Ok(false);
-    }
-    if crate::utils::path_guard::safe_task_id_component(task_id).is_none() {
-        return Ok(false);
-    }
-    let path = quality_gate_state_path(repo_root, task_id)?;
-    if !path.is_file() {
-        return Ok(false);
-    }
-    let mut state = read_quality_gate_state(repo_root, Some(task_id))?
-        .ok_or_else(|| format!("QUALITY_GATE_STATE missing at {}", path.display()))?;
-    let obj = state
-        .as_object_mut()
-        .ok_or_else(|| "QUALITY_GATE_STATE root must be object".to_string())?;
-    let active = obj
-        .get("loop_status")
-        .and_then(Value::as_str)
-        .is_some_and(|s| s.eq_ignore_ascii_case("active"));
-    if !active {
-        return Ok(false);
-    }
-    obj.insert("loop_status".to_string(), json!("superseded"));
-    obj.insert("superseded_by".to_string(), json!("goal_drive"));
-    obj.insert(
-        "updated_at".to_string(),
-        json!(framework_kernel::time::now_iso()),
-    );
-    write_atomic_json(&path, &state)?;
-    Ok(true)
 }
 
 /// 供 Cursor hook / 工具读取当前 task 的 Quality Gate 账本（无覆盖则用 `active_task.json`）。

@@ -26,8 +26,6 @@ const DEV_EXEMPT_ENV: &str = "ROUTER_RS_DEV_EXEMPT";
 const DEV_EXEMPT_ALL_ENV: &str = "ROUTER_RS_DEV_EXEMPT_ALL";
 
 #[cfg(feature = "dev-exempt")]
-use framework_kernel::{TelemetryEvent, emit_telemetry};
-#[cfg(feature = "dev-exempt")]
 use std::env;
 #[cfg(feature = "dev-exempt")]
 use std::fs;
@@ -102,22 +100,12 @@ pub fn should_dev_exempt(path: &Path, repo_root: &Path) -> bool {
         // Mode 1: all-repo — every path under repo_root is exempt.
         if dev_exempt_all_enabled() {
             if canonical.starts_with(&canonical_root) {
-                emit_telemetry(&TelemetryEvent::DevExempt {
-                    path: canonical.display().to_string(),
-                    action: "all_repo".into(),
-                });
                 return true;
             }
             return false;
         }
         // Mode 2: prefix match — only build/host dirs are exempt.
         let exempt = path_matches_exempt_prefix(&canonical, repo_root);
-        if exempt {
-            emit_telemetry(&TelemetryEvent::DevExempt {
-                path: canonical.display().to_string(),
-                action: "fast_tunnel".into(),
-            });
-        }
         exempt
     }
 }

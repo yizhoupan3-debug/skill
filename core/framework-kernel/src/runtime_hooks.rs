@@ -51,15 +51,6 @@ pub fn register(h: RuntimeCoreHooks) {
     RUNTIME_CORE_HOOKS.get_or_init(|| h);
 }
 
-// ── Telemetry hook group ──
-pub struct TelemetryHooks {
-    pub hook_fired: fn(hook_name: &str, action: &str),
-    pub tool_call: fn(tool: &str, duration_ms: u64, success: bool),
-    pub route_decision: fn(query: &str, decision: &Value, reroute: bool),
-    pub prediction_outcome: fn(task_id: &str, checks_summary: &str, verification_status: &str, checks_count: usize),
-    pub rfv_round: fn(round: u32, verdict: &str),
-}
-
 // ── Host provider hook group ──
 pub struct HostProviderHooks {
     pub for_routing_spelling: fn(host_id: Option<&str>) -> Option<&'static str>,
@@ -70,11 +61,6 @@ pub struct HostProviderHooks {
 
 // ── Method wrappers for function pointer calls ──
 impl RuntimeCoreHooks {
-    pub fn emit_hook_fired(&self, name: &str, action: &str) { (self.telemetry.hook_fired)(name, action); }
-    pub fn emit_tool_call(&self, tool: &str, duration_ms: u64, success: bool) { (self.telemetry.tool_call)(tool, duration_ms, success); }
-    pub fn emit_route_decision(&self, query: &str, decision: &Value, reroute: bool) { (self.telemetry.route_decision)(query, decision, reroute); }
-    pub fn emit_prediction_outcome(&self, task_id: &str, checks_summary: &str, verification_status: &str, checks_count: usize) { (self.telemetry.prediction_outcome)(task_id, checks_summary, verification_status, checks_count); }
-    pub fn emit_rfv_round(&self, round: u32, verdict: &str) { (self.telemetry.rfv_round)(round, verdict); }
     pub fn host_provider_strict_pre_tool_fallback_hint(&self, host_id: &str) -> Option<bool> { (self.host_provider.strict_pre_tool_fallback_hint)(host_id) }
     pub fn host_provider_for_routing_spelling(&self, host_id: Option<&str>) -> Option<&'static str> { (self.host_provider.for_routing_spelling)(host_id) }
     pub fn host_provider_registry(&self) -> Vec<(&'static str, Option<&'static str>)> { (self.host_provider.registry)() }
@@ -90,11 +76,8 @@ impl RuntimeCoreHooks {
 
 /// All hooks that require callbacks into runtime-core.
 ///
-/// Uses grouped sub-structs to reduce cognitive load (17 flat fields → 5 groups + 8 independent fields).
+/// Uses grouped sub-structs to reduce cognitive load.
 pub struct RuntimeCoreHooks {
-    // ── Telemetry (5 fields → 1 group) ──
-    pub telemetry: TelemetryHooks,
-
     // ── Host (3 fields → 1 group) ──
     pub host_provider: HostProviderHooks,
 

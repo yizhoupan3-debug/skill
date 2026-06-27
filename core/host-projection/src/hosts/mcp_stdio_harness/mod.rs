@@ -28,7 +28,6 @@ macro_rules! env_cache_typed {
 
 // route_task_with_manifest_fallback — not needed in host-projection; skill routing via framework_kernel
 // framework_runtime functions accessed via crate::hooks
-use crate::hooks::{check_anomalies, init_tracker, read_tracker_state, record_tool_call};
 use core_state::task_state::resolve_task_view;
 use serde_json::{Value, json};
 use std::collections::HashMap;
@@ -311,14 +310,6 @@ pub fn run_mcp_stdio<R: BufRead, W: Write>(
     repo_root: &Path,
     host_id: &str,
 ) -> Result<(), String> {
-    // 初始化 session tracker（session 级别，只执行一次）
-    // 注意：init_tracker 失败不会阻塞 MCP 服务，因为某些环境可能不支持 tracker 文件
-    if let Err(e) = init_tracker(repo_root) {
-        tracing::warn!(
-            "init_tracker failed: session call tracking may not work. \
-             Error: {e}. This is non-fatal for MCP operation.",
-        );
-    }
     // v6: 生成连接级 session_id，用于 goal state session 隔离。
     // 每次 MCP stdio 连接 = 一个天然 session 边界。
     let connection_session_id = generate_connection_session_id(host_id);
@@ -916,22 +907,6 @@ pub fn tool_closeout_record_write_for_test(
     tool_closeout_record_write(arguments, repo_path, "opencode")
 }
 
-#[cfg(any(test, feature = "test-support"))]
-pub fn tool_quality_gate_manage_test_helper(
-    arguments: &Value,
-    operation: &str,
-) -> Result<String, String> {
-    let path = crate::hosts::test_shim::unique_temp_repo("rfv-manage");
-    let _ = std::fs::create_dir_all(&path);
-
-    let mut args_with_op = arguments.clone();
-    args_with_op["operation"] = json!(operation);
-
-    let result = tool_quality_gate_manage(&args_with_op, &path, "test-session-auto");
-    let _ = std::fs::remove_dir_all(&path);
-    result
-}
-
 pub fn get_task_view_ttl_for_test() -> u64 {
     task_view_cache_ttl_secs()
 }
@@ -942,11 +917,6 @@ pub fn read_mcp_message_test_helper<R: std::io::BufRead>(
     transport_mode: &mut Option<McpTransportMode>,
 ) -> Result<Option<String>, String> {
     read_mcp_message(input, transport_mode)
-}
-
-#[cfg(any(test, feature = "test-support"))]
-pub fn init_tracker_for_test(path: &std::path::Path) -> Result<(), String> {
-    Ok(crate::hooks::init_tracker(path)?)
 }
 
 #[cfg(any(test, feature = "test-support"))]

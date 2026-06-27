@@ -306,7 +306,7 @@ pub fn append_evidence_index_merged_row(
         if let Err(e) = core_state::task_ledger::append_transaction(repo_root, &tid, tx) {
             tracing::error!(task_id = %tid, error = %e, "failed to append evidence transaction to TASK_LEDGER");
         }
-        core_state::task_state_aggregate::sync_task_state_aggregate_best_effort(repo_root, &tid);
+        // TASK_STATE.json aggregate was removed in Wave 2b.
     }
     Ok(())
 }
@@ -343,10 +343,6 @@ pub fn framework_hook_evidence_append(payload: Value) -> Result<Value> {
     let cursor_hook = source.trim().to_ascii_lowercase().starts_with("cursor_");
     let preview_lower = preview_trim.to_ascii_lowercase();
     if !cursor_hook && !shell_command_looks_like_verification(&preview_lower) {
-        framework_kernel::emit_telemetry(&framework_kernel::TelemetryEvent::HookFired {
-            hook_name: "hook_evidence_append".to_string(),
-            action: "skip".to_string(),
-        });
         return Ok(json!({
             "ok": true,
             "skipped": true,
@@ -376,11 +372,6 @@ pub fn framework_hook_evidence_append(payload: Value) -> Result<Value> {
         entry.insert("success".to_string(), json!(artifact_ok));
     }
     append_evidence_index_merged_row(&repo_root, task_id.as_deref(), entry)?;
-    let success = exit_code.map(|ec| ec == 0).unwrap_or(true) && artifact_ok;
-    framework_kernel::emit_telemetry(&framework_kernel::TelemetryEvent::HookFired {
-        hook_name: "hook_evidence_append".to_string(),
-        action: if success { "append:ok" } else { "append:warn" }.to_string(),
-    });
     Ok(json!({
         "ok": true,
         "skipped": false,

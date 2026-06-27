@@ -162,7 +162,7 @@ fn dispatch_stdio_closeout_evaluate(payload: Value) -> Result<Value, String> {
             .cloned()
             .unwrap_or_else(|| payload.clone());
         if let (Some(repo_root), Some(task_id)) = (repo_root.as_deref(), task_id.as_deref()) {
-            let (rows_non_empty, has_success) =
+            let (_rows_non_empty, has_success) =
                 goal_drive::task_evidence_artifacts_summary_for_task(
                     Path::new(repo_root),
                     task_id,
@@ -175,7 +175,6 @@ fn dispatch_stdio_closeout_evaluate(payload: Value) -> Result<Value, String> {
                 .and_then(core_state::goal_prediction::read_goal_prediction);
             let ctx = CloseoutEvidenceContext {
                 task_id: Some(task_id.trim().to_string()),
-                _evidence_rows_non_empty: rows_non_empty,
                 has_successful_verification: has_success,
                 goal_prediction,
             };

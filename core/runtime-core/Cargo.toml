@@ -48,7 +48,7 @@ tracing.workspace = true
 which.workspace = true
 codegraph-rs = { path = "../codegraph-rs", optional = true }
 eval-route = { path = "../eval-route" }
-loop-engine = { path = "../loop-engine" }
+goal-engine = { path = "../goal-engine" }
 mcp-tool-registry = { path = "../mcp-tool-registry" }
 quality-gate = { path = "../quality-gate" }
 tool-routing-engine = { path = "../tool-routing-engine" }

@@ -154,13 +154,9 @@ pub(crate) fn install_test_deps() {
                 record_path.display()
             ))
         }
-        // Set RuntimeHooks directly (replaces old register_framework_runtime + register_session_call_tracker).
+        // Set RuntimeHooks directly (replaces old register_framework_runtime).
         // Paper hooks and research mode inference use individual OnceLock below (external override pattern).
         hooks::set_runtime_hooks(hooks::RuntimeHooks {
-            // session_call_tracker
-            init_tracker: test_init_tracker,
-            record_tool_call: test_record_tool_call,
-            read_tracker_state: test_read_tracker_state,
             // framework_runtime
             closeout_record_path_for_task: test_closeout_record_path,
             evaluate_closeout_record_file_for_task: test_evaluate_closeout_record,
@@ -183,15 +179,12 @@ pub(crate) fn install_test_deps() {
             build_automatic_continuity_checkpoint_payload: |_, _, _, _, _, _| Value::Null,
             append_evidence_index: |_, _, _| Err(FrameworkError::validation("not registered in test")),
             closeout_record_schema_version: || "closeout-record-v1",
-            check_anomalies: |_| Ok(vec![]),
             // web_fetch_guard
             validate_and_resolve_web_fetch_url: |_| Err(FrameworkError::validation("not registered in test")),
             resolve_web_fetch_redirect: |_, _| Err(FrameworkError::validation("not registered in test")),
             resolve_web_fetch_addresses: |_, _| Err(FrameworkError::validation("not registered in test")),
             // mcp_pre_guard
             evaluate_mcp_pre_guard_safe: |_, _, _| hooks::McpPreGuardVerdict { blocked: false, reason: None },
-            // quality_gate_drive
-            quality_gate_drive: |_| Err(FrameworkError::validation("not registered in test")),
             // research_tool_dispatch
             research_tool_dispatch: |_, _| Err(FrameworkError::validation("not registered in test")),
             // mcp_tool_routing
@@ -199,7 +192,6 @@ pub(crate) fn install_test_deps() {
             mcp_tool_search_skills: |_, _, _, _| Err(FrameworkError::validation("not registered in test")),
             // tool_dispatch
             tool_goal_state_manage_dispatch: |_, _, _| Err(FrameworkError::validation("not registered in test")),
-            tool_quality_gate_manage_dispatch: |_, _, _| Err(FrameworkError::validation("not registered in test")),
             tool_closeout_record_write_dispatch: |_, _| Err(FrameworkError::validation("not registered in test")),
             tool_closeout_gate_evaluate: |_, _, _| Err(FrameworkError::validation("not registered in test")),
             // browser_dispatch
@@ -323,40 +315,5 @@ pub(crate) fn install_test_deps() {
             test_merge_adversarial_before_submit,
         );
 
-        // Register session call tracker hooks for tests (function definitions kept for RuntimeHooks above).
-        fn test_init_tracker(repo_root: &std::path::Path) -> Result<(), FrameworkError> {
-            let dir = repo_root.join("artifacts/current");
-            std::fs::create_dir_all(&dir)?;
-            let path = dir.join("session_call_tracker.json");
-            let state = serde_json::json!({
-                "schema_version": "session-call-tracker-v1",
-                "total_calls": 0,
-                "per_tool": {},
-            });
-            std::fs::write(&path, serde_json::to_string_pretty(&state).unwrap())?;
-            Ok(())
-        }
-        fn test_record_tool_call(
-            repo_root: &std::path::Path,
-            tool_name: &str,
-            _cache_stats: Option<&Value>,
-        ) -> Result<(), FrameworkError> {
-            let path = repo_root.join("artifacts/current/session_call_tracker.json");
-            let data = std::fs::read_to_string(&path)?;
-            let mut state: Value = serde_json::from_str(&data)?;
-            let total = state["total_calls"].as_u64().unwrap_or(0) + 1;
-            state["total_calls"] = serde_json::json!(total);
-            let tool_key = tool_name.to_string();
-            let per_tool = state["per_tool"].as_object_mut().unwrap();
-            let count = per_tool.get(&tool_key).and_then(Value::as_u64).unwrap_or(0) + 1;
-            per_tool.insert(tool_key, serde_json::json!(count));
-            std::fs::write(&path, serde_json::to_string_pretty(&state).unwrap())?;
-            Ok(())
-        }
-        fn test_read_tracker_state(repo_root: &std::path::Path) -> Result<Value, FrameworkError> {
-            let path = repo_root.join("artifacts/current/session_call_tracker.json");
-            let data = std::fs::read_to_string(&path)?;
-            Ok(serde_json::from_str(&data)?)
-        }
     });
 }

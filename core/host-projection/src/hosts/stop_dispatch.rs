@@ -251,19 +251,9 @@ pub fn run_unified_stop(
             let task_id = core_state::state_manager::read_primary_task_id(repo_root)
                 .unwrap_or_default();
             if !task_id.is_empty() {
-                // Loop goal: skip auto-complete — loop iteration is managed by explicit tool call
-                if core_state::state_manager::read_goal_type_by_id(repo_root, &task_id) == core_state_types::task_state_types::GoalType::Loop {
-                    tracing::info!("stop_dispatch: skipping auto-complete for loop goal '{task_id}'");
-                } else {
-                    let complete_payload = serde_json::json!({
-                        "repo_root": repo_root.to_string_lossy().to_string(),
-                        "operation": "complete",
-                        "task_id": task_id,
-                    });
-                    if let Err(e) = core_state::state_manager::framework_goal_drive(complete_payload) {
-                        tracing::warn!("auto-complete failed: {e}");
-                    }
-                }
+                // GoalType::Linear removed in v10 — all goals follow loop semantics,
+                // so auto-complete is skipped (loop iteration is managed by explicit tool call).
+                tracing::info!("stop_dispatch: skipping auto-complete (all goals treated as loop after GoalType::Linear removal)");
             }
             // After completion, check if the conversation describes a new complex task
             let next_goal = core_policy::goal_auto_detect::analyze_complexity(&prompt);

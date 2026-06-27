@@ -8,9 +8,8 @@ use serde_json::{Map, Value, json};
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-/// In-memory fallback for `first_turn` detection when the tracker file is unavailable.
-/// Once `skill_route` succeeds once, this is set to `true` and the fallback value
-/// for `read_tracker_state` errors becomes `false` (not first turn).
+/// In-memory fallback for `first_turn` detection.
+/// Once `skill_route` succeeds once, this is set to `true`.
 static SKILL_ROUTE_EVER_CALLED: AtomicBool = AtomicBool::new(false);
 
 pub(super) fn handle_tools_call(
@@ -58,30 +57,15 @@ pub(super) fn handle_tools_call(
         });
     }
 
-    // Track every tool call for anomaly detection.
-    if let Err(e) = record_tool_call(repo_root, tool_name, None) {
-        tracing::warn!("record_tool_call failed: {e}");
-    }
-
     let result = dispatch_tool(tool_name, arguments, repo_root, host_id, connection_session_id);
 
     match result {
         Ok(content) => {
-            // Check for anomalies and append warnings if detected
-            let warnings = check_anomalies(repo_root).unwrap_or_default();
-
-            let final_content = if warnings.is_empty() {
-                content
-            } else {
-                let warning_text = warnings.join("; ");
-                format!("{}\n\n[Session Warning] {}", content, warning_text)
-            };
-
             json!({
                 "jsonrpc": "2.0",
                 "id": id,
                 "result": {
-                    "content": [{ "type": "text", "text": final_content }],
+                    "content": [{ "type": "text", "text": content }],
                 },
             })
         }
@@ -116,33 +100,7 @@ pub(super) fn tool_skill_route(
 
     // Dynamically determine first_turn: true only if no routing tools have been called yet.
     // This prevents stale routing behavior on subsequent calls within the same session.
-    //
-    // Uses SKILL_ROUTE_EVER_CALLED as in-memory backup when the tracker file is
-    // unavailable (corrupted, lock contention, etc.) — avoids falsely returning
-    // first_turn=true on a tracker read error after the first successful route.
-    let tracker_first_turn = read_tracker_state(repo_root)
-        .map(|state| {
-            let per_tool = state.get("per_tool").and_then(|v| v.as_object());
-            let has_routing = per_tool
-                .map(|m| m.contains_key("skill_route"))
-                .unwrap_or(false);
-            !has_routing
-        });
-    let first_turn = match tracker_first_turn {
-        Ok(v) => v,
-        Err(_) => {
-            // Tracker unavailable — rely on the in-memory flag.
-            // If we have ever successfully completed a route call, this is NOT the first turn.
-            let ever_called = SKILL_ROUTE_EVER_CALLED.load(Ordering::Acquire);
-            if ever_called {
-                false
-            } else {
-                // First encounter: default to first_turn=true so session-start boosts
-                // are applied. On success, the flag below will be set to true.
-                true
-            }
-        }
-    };
+    let first_turn = !SKILL_ROUTE_EVER_CALLED.load(Ordering::Acquire);
 
     let route_result = crate::hooks::mcp_tool_skill_route(
         query,
@@ -413,24 +371,6 @@ pub(super) fn tool_goal_state_read(arguments: &Value, repo_root: &Path) -> Resul
     let task_id = arguments.get("task_id").and_then(Value::as_str);
     let state = core_state::state_manager::read_goal_state(repo_root, task_id);
     serde_json::to_string_pretty(&state).map_err(|e| e.to_string())
-}
-
-pub(super) fn tool_quality_gate_status(arguments: &Value, repo_root: &Path) -> Result<String, String> {
-    let task_id = arguments.get("task_id").and_then(Value::as_str);
-    let state = core_state::state_manager::read_quality_gate_state(repo_root, task_id)?;
-    serde_json::to_string_pretty(&state).map_err(|e| e.to_string())
-}
-
-
-pub(super) fn tool_quality_gate_manage(
-    arguments: &Value,
-    repo_root: &Path,
-    connection_session_id: &str,
-) -> Result<String, String> {
-    let result = crate::hooks::tool_quality_gate_manage_dispatch(arguments, repo_root, connection_session_id)?;
-    // Invalidate snapshot/task_view caches after quality gate state change
-    invalidate_evidence_caches();
-    Ok(result)
 }
 
 pub(super) fn tool_goal_state_manage(

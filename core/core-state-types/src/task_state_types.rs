@@ -47,13 +47,9 @@ pub struct DepthCompliance {
 }
 
 /// High-level macro-controller mode for the resolved task id.
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
-#[serde(tag = "kind", rename_all = "snake_case")]
-pub enum TaskControlMode {
-    Idle,
-    GoalDrive,
-}
-
+/// Removed in v10 Wave 2a — GoalType::Linear was the only distinct mode;
+/// control_mode is always GoalDrive when a goal is active (Idle otherwise).
+/// The struct field was removed; consumers derive state from goal_state presence.
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct ResolvedTaskView {
     pub schema_version: String,
@@ -70,7 +66,6 @@ pub struct ResolvedTaskView {
     /// with a resolved id. `None` when no task id resolves.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub depth_compliance: Option<DepthCompliance>,
-    pub control_mode: TaskControlMode,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub resolution_notes: Vec<String>,
 }
@@ -86,14 +81,12 @@ pub struct GoalCompletionGates {
 }
 
 /// Goal execution type: determines the goal lifecycle strategy.
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+/// After v10 cleanup, only Loop remains.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
-#[derive(Default)]
 pub enum GoalType {
-    /// Linear goal: plan → execute → review. Default when absent.
+    /// Loop goal: review → implement (with task splitting), uses goal engine.
     #[default]
-    Linear,
-    /// Loop goal: review → implement (with task splitting), uses loop engine.
     Loop,
 }
 

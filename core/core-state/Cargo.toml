@@ -8,6 +8,7 @@ workspace = true
 
 [dependencies]
 core-errors = { path = "../core-errors" }
+core-policy = { path = "../core-policy" }
 chrono.workspace = true
 core-state-types = { path = "../core-state-types" }
 core-state-utils = { path = "../core-state-utils" }

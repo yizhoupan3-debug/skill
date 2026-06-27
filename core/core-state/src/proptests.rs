@@ -13,8 +13,7 @@ pub(crate) mod proptests {
         count_nonempty_string_items, validate_drive_contract, value_string_list,
     };
     use crate::state_manager::{evidence_index_entry_implies_success, goal_state_requests_continuation};
-    use crate::task_state::classify_control_mode;
-    use crate::task_state::TaskControlMode;
+
 
     // ── Strategy helpers ────────────────────────────────────────────────
 
@@ -146,7 +145,7 @@ pub(crate) mod proptests {
             prop_assert!(!goal_state_requests_continuation(&state));
         }
 
-        /// I2b: goal_state_requests_continuation — only drive_until_done && running.
+        /// I2b: goal_state_requests_continuation — only status=running (loop semantics, GoalType::Linear removed).
         #[test]
         fn prop_goal_continuation_truth_table(
             drive in any::<bool>(),
@@ -160,39 +159,10 @@ pub(crate) mod proptests {
                 "drive_until_done": drive,
                 "status": status,
             });
-            let expected = drive && status == "running";
+            let expected = status == "running";
             prop_assert_eq!(goal_state_requests_continuation(&state), expected);
         }
 
-        /// I3: classify_control_mode truth table — 2 input combinations → 2 outputs.
-        #[test]
-        fn prop_classify_control_mode_truth_table(
-            g_drive in any::<bool>(),
-            g_running in any::<bool>(),
-            qg_active in any::<bool>(),
-        ) {
-            let goal = if g_drive && g_running {
-                Some(json!({"drive_until_done": true, "status": "running", "stale": false}))
-            } else if g_drive {
-                Some(json!({"drive_until_done": true, "status": "paused", "stale": false}))
-            } else if g_running {
-                Some(json!({"drive_until_done": false, "status": "running", "stale": false}))
-            } else {
-                None
-            };
-            let _ = qg_active; // suppress unused warning — qg input is ignored by classify_control_mode
-            let mut notes = Vec::new();
-            let mode = classify_control_mode(goal.as_ref(), None, &mut notes);
-
-            match goal_state_requests_continuation(goal.as_ref().unwrap_or(&json!(null))) {
-                true => {
-                    prop_assert!(matches!(mode, TaskControlMode::GoalDrive));
-                }
-                false => {
-                    prop_assert!(matches!(mode, TaskControlMode::Idle));
-                }
-            }
-        }
 
         /// I4: evidence_index_entry_implies_success — only success=true or exit_code=0.
         #[test]
@@ -242,16 +212,6 @@ pub(crate) mod proptests {
         #[test]
         fn prop_evidence_success_no_panic(entry in arb_json_value()) {
             let _ = evidence_index_entry_implies_success(&entry);
-        }
-
-        /// Verify classify_control_mode never panics on arbitrary JSON inputs.
-        #[test]
-        fn prop_classify_control_mode_no_panic(
-            goal in arb_json_value(),
-            qg in arb_json_value(),
-        ) {
-            let mut notes = Vec::new();
-            let _ = classify_control_mode(Some(&goal), Some(&qg), &mut notes);
         }
 
         /// Verify value_string_list never panics on arbitrary JSON.

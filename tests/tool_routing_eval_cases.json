@@ -18,22 +18,6 @@
       "notes": "known: goal_state_read vs manage ambiguity — share most hints"
     },
     {
-      "id": "builtin-quality-gate-manage",
-      "category": "should-trigger",
-      "task": "启动quality gate审查，开始review cycle",
-      "expected_tool": "quality_gate_manage",
-      "forbidden_tools": [],
-      "notes": "质量审查门禁管理：启动review cycle"
-    },
-    {
-      "id": "builtin-quality-gate-status",
-      "category": "should-trigger",
-      "task": "看看当前的quality gate审查关卡通过了几个",
-      "expected_tool": "quality_gate_status",
-      "forbidden_tools": [],
-      "notes": "known: quality_gate_status vs manage ambiguity — share most hints"
-    },
-    {
       "id": "builtin-record-evidence",
       "category": "should-trigger",
       "task": "追加一条evidence：API压测QPS达到5000，延迟P99=120ms",
