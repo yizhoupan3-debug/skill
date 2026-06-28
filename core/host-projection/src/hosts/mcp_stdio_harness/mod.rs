@@ -236,7 +236,7 @@ pub(super) fn dispatch_tool(
     args: &Value,
     repo_root: &Path,
     host_id: &str,
-    connection_session_id: &str,
+    _connection_session_id: &str,
 ) -> Result<String, FrameworkError> {
     // CLI-routed tools: spawn as subprocess (process isolation for blocking I/O).
     // Mapped via mcp_server="router-rs-cli" in MCP_TOOL_REGISTRY.
@@ -265,17 +265,12 @@ pub(super) fn dispatch_tool(
         let a = args.clone();
         let repo_root = repo_root.to_path_buf();
         let host_id = host_id.to_string();
-        let connection_session_id = connection_session_id.to_string();
         let (tx, rx) = mpsc::channel();
         std::thread::spawn(move || {
             let reg = REGISTRY
                 .get()
                 .unwrap_or_else(|| panic!("REGISTRY not initialized before dispatch"));
-            let ctx = ToolCallContext {
-                repo_root,
-                host_id,
-                connection_session_id: Arc::new(connection_session_id),
-            };
+            let ctx = ToolCallContext { repo_root, host_id };
             let result = reg.dispatch(&tn, &a, &ctx);
             let _ = tx.send(result);
         });
@@ -617,6 +612,26 @@ fn handle_prompts_list(id: Option<Value>) -> Value {
                     "description": "closeout checklist",
                     "arguments": [],
                 },
+                {
+                    "name": "goalx",
+                    "description": "Goal management: create, checkpoint, amend, resume, complete goals",
+                    "arguments": [],
+                },
+                {
+                    "name": "gitx",
+                    "description": "Git closeout workflow: review, fix, tidy, commit, merge",
+                    "arguments": [],
+                },
+                {
+                    "name": "deepinterview",
+                    "description": "Evidence-first requirement clarification and convergence review",
+                    "arguments": [],
+                },
+                {
+                    "name": "update",
+                    "description": "Refresh key docs, git tracking, and stale/dead repo surfaces",
+                    "arguments": [],
+                },
             ],
         },
     })
@@ -638,6 +653,10 @@ fn handle_prompts_get(
         "framework_routing" => "framework routing",
         "review_gate" => "review gate advisory",
         "closeout_checklist" => "closeout checklist",
+        "goalx" => "goal management — create, checkpoint, amend, resume, complete goals",
+        "gitx" => "git closeout workflow — review, fix, tidy, commit, merge",
+        "deepinterview" => "evidence-first requirement clarification and convergence review",
+        "update" => "refresh docs, git tracking, and stale repo surfaces",
         _ => "",
     };
 
@@ -685,6 +704,26 @@ fn handle_prompts_get(
              - [ ] Blockers in NEXT_ACTIONS\n\n\
              Call closeout_gate for machine-readable check."
             .to_string(),
+        "goalx" => {
+            "Use skill_route(query: \"/goalx\") to load the Goal management skill. \
+             Then follow SKILL.md: read goal state, create/checkpoint/amend/resume/complete as needed."
+                .to_string()
+        }
+        "gitx" => {
+            "Use skill_route(query: \"/gitx\") to load the Git closeout workflow skill. \
+             Then follow SKILL.md: review, fix, tidy, commit, merge."
+                .to_string()
+        }
+        "deepinterview" => {
+            "Use skill_route(query: \"/deepinterview\") to load the requirement clarification skill. \
+             Then follow SKILL.md for evidence-first convergence review."
+                .to_string()
+        }
+        "update" => {
+            "Use skill_route(query: \"/update\") to load the repo refresh skill. \
+             Then follow SKILL.md to update docs, git tracking, and stale surfaces."
+                .to_string()
+        }
         _ => format!("Unknown prompt: {prompt_name}"),
     };
 
@@ -1074,6 +1113,10 @@ mod tests {
         assert!(names.contains(&"framework_routing"));
         assert!(names.contains(&"review_gate"));
         assert!(names.contains(&"closeout_checklist"));
+        assert!(names.contains(&"goalx"));
+        assert!(names.contains(&"gitx"));
+        assert!(names.contains(&"deepinterview"));
+        assert!(names.contains(&"update"));
     }
 
     #[test]

@@ -53,7 +53,6 @@ pub fn scrub_spoof_host_followup_lines(text: &str) -> String {
         .join("\n")
 }
 
-
 /// 去掉 `followup_message` 中以某前缀开头的段落（`\n\n` 分隔），用于刷新 GOAL/RFV 合并文案。
 pub fn strip_followup_paragraphs_with_line_prefix(text: &str, first_line_prefix: &str) -> String {
     text.split("\n\n")

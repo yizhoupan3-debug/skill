@@ -5,7 +5,6 @@
 use core_errors::FrameworkError;
 use serde_json::{Value, json};
 use std::collections::HashMap;
-use std::path::Path;
 
 /// Handle a research MCP tool call.
 /// Delegates to the appropriate research-harness module.
@@ -699,36 +698,6 @@ fn review_loop_status(arguments: &Value) -> Result<String, FrameworkError> {
         "next_step": "Call research_review_loop(operation=status) for convergence state.",
     }))
     .map_err(FrameworkError::Json)
-}
-
-/// Academic data source freshness smoke test.
-/// Requires the `smoke` feature; returns descriptive error otherwise.
-#[cfg_attr(not(feature = "smoke"), allow(unused_variables))]
-fn tool_research_smoke(arguments: &Value) -> Result<String, FrameworkError> {
-    #[cfg(feature = "smoke")]
-    {
-        let repo_root = arguments
-            .get("repo_root")
-            .and_then(Value::as_str)
-            .map(std::path::Path::new)
-            .unwrap_or_else(|| {
-                // Lazy static to avoid repeated current_dir() calls
-                static CWD: std::sync::LazyLock<std::path::PathBuf> =
-                    std::sync::LazyLock::new(|| std::env::current_dir().unwrap_or_default());
-                &*CWD
-            });
-        let source = arguments.get("source").and_then(Value::as_str);
-        let barrier_id = arguments.get("barrier_id").and_then(Value::as_str);
-        let result = crate::smoke::run_smoke_tests(repo_root, source, barrier_id)
-            .map_err(|e| FrameworkError::validation(format!("research_smoke failed: {e}")))?;
-        Ok(result)
-    }
-    #[cfg(not(feature = "smoke"))]
-    {
-        Err(FrameworkError::validation(
-            "research_smoke: not available (crate was built without 'smoke' feature)",
-        ))
-    }
 }
 
 #[cfg(test)]
