@@ -94,6 +94,23 @@ pub(crate) use core_policy::hook_policy;
 use std::sync::OnceLock;
 static RUNTIME_INIT: OnceLock<()> = OnceLock::new();
 
+/// Combined orchestrator handler: background control operations → framework-extra,
+/// team/agent/worker/session operations → session-supervisor.
+fn combined_orchestrator_handler(payload: serde_json::Value) -> Result<serde_json::Value, core_errors::FrameworkError> {
+    let operation = payload.get("operation").and_then(serde_json::Value::as_str);
+    match operation {
+        Some("batch-plan" | "enqueue" | "interrupt" | "claim" | "complete"
+            | "completion-race" | "retry-claim" | "interrupt-finalize"
+            | "retry" | "session-release") => {
+            framework_extra::orchestration_controller::handle_orchestrator_operation(payload)
+        }
+        Some(_) => {
+            session_supervisor::handle_session_supervisor_operation(payload)
+        }
+        None => Err(core_errors::FrameworkError::validation("orchestrator: missing 'operation' field")),
+    }
+}
+
 /// Initialize all runtime-core subsystems. Safe to call multiple times.
 pub fn init_hooks() {
     RUNTIME_INIT.get_or_init(|| {
@@ -275,7 +292,7 @@ pub fn init_hooks() {
                 },
             },
             framework_goal_drive: core_state::state_manager::framework_goal_drive,
-            handle_orchestrator_operation: framework_extra::orchestration_controller::handle_orchestrator_operation,
+            handle_orchestrator_operation: combined_orchestrator_handler,
             #[cfg(feature = "l5-state")]
             handle_background_state_operation: rt_storage::background_state::handle_background_state_operation,
             #[cfg(not(feature = "l5-state"))]

@@ -93,16 +93,16 @@ impl RateLimiter {
         }
     }
 
-    pub fn check_and_record(&mut self, tool_name: &str) -> Result<(), String> {
+    pub fn check_and_record(&mut self, tool_name: &str) -> Result<(), FrameworkError> {
         let now = Instant::now();
         if let Some(last) = self.last_call.get(tool_name)
             && now.duration_since(*last) < self.min_interval
         {
-            return Err(format!(
+            return Err(FrameworkError::from(format!(
                 "Rate limit exceeded for {}. Wait {}ms between calls.",
                 tool_name,
                 self.min_interval.as_millis()
-            ));
+            )));
         }
         self.last_call.insert(tool_name.to_string(), now);
         Ok(())
@@ -161,7 +161,7 @@ struct ToolDispatchTable {
 
 impl ToolDispatchTable {
     /// Build the dispatch table from the tool registry.
-    /// Only includes tools handled by this MCP server process (router-rs, research-harness, router-rs-cli).
+    /// Only includes tools handled by this MCP server process (router-rs, router-rs-framework, research-harness, router-rs-cli).
     fn from_registry() -> Self {
         let registry_path = mcp_tool_registry::resolve_tool_registry_path().unwrap_or_else(|| {
             std::path::PathBuf::from(framework_kernel::constants::MCP_TOOL_REGISTRY_RELATIVE_PATH)
@@ -183,7 +183,7 @@ impl ToolDispatchTable {
         let mut targets = HashMap::new();
         for r in &records {
             let target = match r.mcp_server.as_str() {
-                "router-rs" => Some(McpDispatchTarget::Builtin),
+                "router-rs" | "router-rs-framework" => Some(McpDispatchTarget::Builtin),
                 "research-harness" => Some(McpDispatchTarget::ResearchHarness),
                 "router-rs-cli" => Some(McpDispatchTarget::CliSubprocess),
                 _ => None,
@@ -252,8 +252,7 @@ pub(super) fn dispatch_tool(
         .get_or_init(ToolDispatchTable::from_registry)
         .is_cli_tool(tool_name)
     {
-        return spawn_cli_tool(tool_name, args, repo_root)
-            .map_err(|e| FrameworkError::validation(e));
+        return spawn_cli_tool(tool_name, args, repo_root);
     }
 
     let registry = REGISTRY.get_or_init(|| {
@@ -280,7 +279,8 @@ pub(super) fn dispatch_tool(
         let connection_session_id = connection_session_id.to_string();
         let (tx, rx) = mpsc::channel();
         std::thread::spawn(move || {
-            let reg = REGISTRY.get().expect("REGISTRY initialized above");
+            let reg = REGISTRY.get()
+                .unwrap_or_else(|| panic!("REGISTRY not initialized before dispatch"));
             let ctx = ToolCallContext {
                 repo_root,
                 host_id,
@@ -300,17 +300,19 @@ pub(super) fn dispatch_tool(
     // Not found in built-in registry → try externally-registered dispatch
     // (research-harness tools registered via hooks.rs at runtime-core startup)
     //
-    // NOTE: 9 CLI-routed tools (research_aigc_check, research_smoke,
-    // math_prove_inequality, math_backend_available, math_asymptotic_chain,
-    // math_lean_verify, research_verification_literature,
-    // research_verification_structure, research_verification_reproducibility)
-    // have handlers in research-harness that are effectively dead code since
-    // the CLI dispatch at line 226 returns early. They are retained in case
-    // mcp_server is changed back from "router-rs-cli" to "research-harness".
+    // NOTE: 3 tools (research_aigc_check, research_smoke, web_fetch) previously had
+    // mcp_server "router-rs" with no CompositeRegistry handler, which caused them to
+    // fall through to research-harness fallback (web_fetch was broken, others worked
+    // because research-harness had handlers for research_aigc_check/research_smoke).
+    // This has been fixed:
+    //   - web_fetch:  mcp_server changed to "router-rs-cli" → CLI subprocess dispatch
+    //   - research_aigc_check, research_smoke: mcp_server changed to "research-harness"
     //
-    // HPM-17: compile-time assertion — these tools are CLI-routed. If their
-    // mcp_server changes back to "research-harness", remove this note and
-    // re-enable the research-harness handlers.
+    // The remaining 7 tools listed below have mcp_server "research-harness" in the
+    // registry and their research-harness handlers are the intended dispatch path:
+    //   math_prove_inequality, math_backend_available, math_asymptotic_chain,
+    //   math_lean_verify, research_verification_literature,
+    //   research_verification_structure, research_verification_reproducibility
     if let Some(dispatch) = crate::hooks::get_research_tool_dispatch() {
         dispatch(tool_name, args).map_err(|e| FrameworkError::validation(e.to_string()))
     } else {
@@ -356,7 +358,7 @@ pub fn run_mcp_stdio<R: BufRead, W: Write>(
 fn read_mcp_message<R: BufRead>(
     input: &mut R,
     transport_mode: &mut Option<McpTransportMode>,
-) -> Result<Option<String>, String> {
+) -> Result<Option<String>, FrameworkError> {
     const MAX_HEADER_LINE: usize = 8192;
 
     let mut first_line = String::new();
@@ -364,15 +366,15 @@ fn read_mcp_message<R: BufRead>(
         first_line.clear();
         let bytes = input
             .read_line(&mut first_line)
-            .map_err(|err| format!("read MCP request failed: {err}"))?;
+            .map_err(|err| FrameworkError::from(format!("read MCP request failed: {err}")))?;
         if bytes == 0 {
             return Ok(None);
         }
         // HPM-7: enforce 8KB per header line
         if first_line.len() > MAX_HEADER_LINE {
-            return Err(format!(
+            return Err(FrameworkError::from(format!(
                 "MCP header line exceeds {MAX_HEADER_LINE} byte limit"
-            ));
+            )));
         }
         if !first_line.trim().is_empty() {
             break;
@@ -397,23 +399,23 @@ fn read_mcp_message<R: BufRead>(
 
         let content_length = parse_content_length(&first_line)?;
         if content_length > MAX_MCP_CONTENT_LENGTH {
-            return Err(format!(
+            return Err(FrameworkError::from(format!(
                 "MCP Content-Length {content_length} exceeds max {MAX_MCP_CONTENT_LENGTH}"
-            ));
+            )));
         }
         loop {
             let mut header = String::new();
             let bytes = input
                 .read_line(&mut header)
-                .map_err(|err| format!("read MCP header failed: {err}"))?;
+                .map_err(|err| FrameworkError::from(format!("read MCP header failed: {err}")))?;
             if bytes == 0 {
-                return Err("MCP header ended before blank line".to_string());
+                return Err(FrameworkError::from("MCP header ended before blank line".to_string()));
             }
             // HPM-7: enforce 8KB per header line
             if header.len() > MAX_HEADER_LINE {
-                return Err(format!(
+                return Err(FrameworkError::from(format!(
                     "MCP header line exceeds {MAX_HEADER_LINE} byte limit"
-                ));
+                )));
             }
             if header.trim().is_empty() {
                 break;
@@ -422,12 +424,12 @@ fn read_mcp_message<R: BufRead>(
         let mut body = vec![0_u8; content_length];
         input
             .read_exact(&mut body)
-            .map_err(|err| format!("read MCP body failed: {err}"))?;
+            .map_err(|err| FrameworkError::from(format!("read MCP body failed: {err}")))?;
         // Strip UTF-8 BOM if present (some clients send it)
         let body = body.strip_prefix(&[0xEF, 0xBB, 0xBF]).unwrap_or(&body);
         return String::from_utf8(body.to_vec())
             .map(Some)
-            .map_err(|err| format!("decode MCP body failed: {err}"));
+            .map_err(|err| FrameworkError::from(format!("decode MCP body failed: {err}")));
     }
 
     // NOTE: 不再锁定传输模式。每次读取都重新检测 Content-Length 头，
@@ -440,38 +442,38 @@ fn read_mcp_message<R: BufRead>(
     Ok(Some(first_line.trim_end().to_string()))
 }
 
-fn parse_content_length(line: &str) -> Result<usize, String> {
+fn parse_content_length(line: &str) -> Result<usize, FrameworkError> {
     // HPM-13: use find(':') to locate the colon position, supporting arbitrary
     // optional whitespace (OWS) before the colon per RFC 7230.
     let lower = line.to_ascii_lowercase();
     let colon_pos = lower.find(':').ok_or_else(|| {
-        format!("invalid Content-Length header (no colon): {line}")
+        FrameworkError::from(format!("invalid Content-Length header (no colon): {line}"))
     })?;
     let header_name = lower[..colon_pos].trim();
     if header_name != "content-length" {
-        return Err(format!("invalid Content-Length header: {line}"));
+        return Err(FrameworkError::from(format!("invalid Content-Length header: {line}")));
     }
     let value_str = line[colon_pos + 1..].trim();
     value_str
         .parse::<usize>()
-        .map_err(|err| format!("invalid MCP content length '{value_str}': {err}"))
+        .map_err(|err| FrameworkError::from(format!("invalid MCP content length '{value_str}': {err}")))
 }
 
 fn write_mcp_response<W: Write>(
     output: &mut W,
     transport_mode: McpTransportMode,
     response: &Value,
-) -> Result<(), String> {
+) -> Result<(), FrameworkError> {
     let encoded = serde_json::to_string(response)
-        .map_err(|err| format!("serialize MCP response failed: {err}"))?;
+        .map_err(|err| FrameworkError::from(format!("serialize MCP response failed: {err}")))?;
     match transport_mode {
         McpTransportMode::ContentLength => {
             write!(output, "Content-Length: {}\r\n\r\n{encoded}", encoded.len())
-                .map_err(|err| format!("write MCP response failed: {err}"))?;
+                .map_err(|err| FrameworkError::from(format!("write MCP response failed: {err}")))?;
         }
         McpTransportMode::NewlineDelimited => {
             writeln!(output, "{encoded}")
-                .map_err(|err| format!("write MCP response failed: {err}"))?;
+                .map_err(|err| FrameworkError::from(format!("write MCP response failed: {err}")))?;
         }
     }
     Ok(())
@@ -583,12 +585,12 @@ fn build_tools_from_registry() -> Vec<Value> {
 
     records
         .iter()
-        // Include tools handled by this MCP server (router-rs/research-harness/router-rs-cli)
+        // Include tools handled by this MCP server (router-rs/router-rs-framework/research-harness/router-rs-cli)
         // based on mcp_server as the authoritative field, not dispatch_domain.
         .filter(|r| {
             matches!(
                 r.mcp_server.as_str(),
-                "router-rs" | "research-harness" | "router-rs-cli"
+                "router-rs" | "router-rs-framework" | "research-harness" | "router-rs-cli"
             )
         })
         .filter(|r| !r.tool_flags.iter().any(|f| f == "deprecated"))
@@ -862,7 +864,7 @@ fn handle_resources_read(id: Option<Value>, request: &Value, repo_root: &Path) -
 pub fn tool_goal_state_manage_test_helper(
     arguments: &Value,
     operation: &str,
-) -> Result<String, String> {
+) -> Result<String, FrameworkError> {
     let path = crate::hosts::test_shim::unique_temp_repo("goal-manage");
     let _ = std::fs::create_dir_all(&path);
 
@@ -878,7 +880,7 @@ pub fn tool_goal_state_manage_test_helper(
 pub fn tool_closeout_record_write_for_test(
     arguments: &Value,
     repo_path: &Path,
-) -> Result<String, String> {
+) -> Result<String, FrameworkError> {
     tool_closeout_record_write(arguments, repo_path, "opencode")
 }
 
@@ -887,22 +889,22 @@ pub fn tool_closeout_record_write_for_test(
 /// Validate and sanitize a CLI argument value to prevent argument injection:
 /// 1. Reject values starting with `--` (could be interpreted as flags)
 /// 2. Cap at `max_len` bytes (prevent oversized payloads)
-fn validate_cli_arg(value: &str, max_len: usize) -> Result<String, String> {
+fn validate_cli_arg(value: &str, max_len: usize) -> Result<String, FrameworkError> {
     if value.len() > max_len {
-        return Err(format!("argument too long (max {max_len} bytes)"));
+        return Err(FrameworkError::from(format!("argument too long (max {max_len} bytes)")));
     }
     if value.starts_with("--") {
-        return Err("argument cannot start with '--'".to_string());
+        return Err(FrameworkError::from("argument cannot start with '--'".to_string()));
     }
     Ok(value.to_string())
 }
 
 /// Validate and serialize a JSON array/object CLI argument (64KB serialized limit).
-fn validate_cli_json_arg(value: &Value) -> Result<String, String> {
+fn validate_cli_json_arg(value: &Value) -> Result<String, FrameworkError> {
     let json_str = serde_json::to_string(value)
-        .map_err(|e| format!("argument serialization failed: {e}"))?;
+        .map_err(|e| FrameworkError::from(format!("argument serialization failed: {e}")))?;
     if json_str.len() > 64 * 1024 {
-        return Err("JSON argument exceeds 64KB limit".to_string());
+        return Err(FrameworkError::from("JSON argument exceeds 64KB limit".to_string()));
     }
     Ok(json_str)
 }
@@ -910,7 +912,7 @@ fn validate_cli_json_arg(value: &Value) -> Result<String, String> {
 /// Map MCP tool name and JSON arguments to `router-rs-cli` subcommand arguments.
 /// Each tool name maps to its corresponding CLI subcommand tree with flags
 /// derived from the MCP tool's JSON input schema.
-fn map_tool_to_cli_args(tool_name: &str, args: &Value) -> Result<Vec<String>, String> {
+fn map_tool_to_cli_args(tool_name: &str, args: &Value) -> Result<Vec<String>, FrameworkError> {
     // HPM-1: validate all user-supplied parameter values for injection safety
     const MAX_ARG_LEN: usize = 4096;
     match tool_name {
@@ -918,7 +920,7 @@ fn map_tool_to_cli_args(tool_name: &str, args: &Value) -> Result<Vec<String>, St
             let url = args
                 .get("url")
                 .and_then(Value::as_str)
-                .ok_or("Missing required argument: url")?;
+                .ok_or_else(|| FrameworkError::from("Missing required argument: url".to_string()))?;
             let url = validate_cli_arg(url, MAX_ARG_LEN)?;
             let mut cmd = vec!["web".to_string(), "fetch".to_string(), url];
             if let Some(max_bytes) = args.get("max_bytes").and_then(Value::as_u64) {
@@ -931,7 +933,7 @@ fn map_tool_to_cli_args(tool_name: &str, args: &Value) -> Result<Vec<String>, St
             let text = args
                 .get("text")
                 .and_then(Value::as_str)
-                .ok_or("Missing required argument: text")?;
+                .ok_or_else(|| FrameworkError::from("Missing required argument: text".to_string()))?;
             let text = validate_cli_arg(text, MAX_ARG_LEN)?;
             let mut cmd = vec![
                 "research".to_string(),
@@ -966,7 +968,7 @@ fn map_tool_to_cli_args(tool_name: &str, args: &Value) -> Result<Vec<String>, St
             let check = args
                 .get("check")
                 .and_then(Value::as_str)
-                .ok_or("Missing required argument: check")?;
+                .ok_or_else(|| FrameworkError::from("Missing required argument: check".to_string()))?;
             let check = validate_cli_arg(check, MAX_ARG_LEN)?;
             let mut cmd = vec![
                 "research".to_string(),
@@ -993,12 +995,12 @@ fn map_tool_to_cli_args(tool_name: &str, args: &Value) -> Result<Vec<String>, St
             let check = args
                 .get("check")
                 .and_then(Value::as_str)
-                .ok_or("Missing required argument: check")?;
+                .ok_or_else(|| FrameworkError::from("Missing required argument: check".to_string()))?;
             let check = validate_cli_arg(check, MAX_ARG_LEN)?;
             let path = args
                 .get("path")
                 .and_then(Value::as_str)
-                .ok_or("Missing required argument: path")?;
+                .ok_or_else(|| FrameworkError::from("Missing required argument: path".to_string()))?;
             let path = validate_cli_arg(path, MAX_ARG_LEN)?;
             Ok(vec![
                 "research".to_string(),
@@ -1013,7 +1015,7 @@ fn map_tool_to_cli_args(tool_name: &str, args: &Value) -> Result<Vec<String>, St
             let dir = args
                 .get("experiment_dir")
                 .and_then(Value::as_str)
-                .ok_or("Missing required argument: experiment_dir")?;
+                .ok_or_else(|| FrameworkError::from("Missing required argument: experiment_dir".to_string()))?;
             let dir = validate_cli_arg(dir, MAX_ARG_LEN)?;
             let mut cmd = vec![
                 "research".to_string(),
@@ -1031,7 +1033,7 @@ fn map_tool_to_cli_args(tool_name: &str, args: &Value) -> Result<Vec<String>, St
             let expr = args
                 .get("expression")
                 .and_then(Value::as_str)
-                .ok_or("Missing required argument: expression")?;
+                .ok_or_else(|| FrameworkError::from("Missing required argument: expression".to_string()))?;
             let expr = validate_cli_arg(expr, MAX_ARG_LEN)?;
             let mut cmd = vec!["math".to_string(), "prove".to_string(), expr];
             if let Some(timeout) = args.get("timeout_ms").and_then(Value::as_u64) {
@@ -1045,7 +1047,7 @@ fn map_tool_to_cli_args(tool_name: &str, args: &Value) -> Result<Vec<String>, St
             let steps = args
                 .get("steps")
                 .and_then(Value::as_array)
-                .ok_or("Missing required argument: steps")?;
+                .ok_or_else(|| FrameworkError::from("Missing required argument: steps".to_string()))?;
             let steps_json = validate_cli_json_arg(&Value::Array(steps.clone()))?;
             let mut cmd = vec![
                 "math".to_string(),
@@ -1072,7 +1074,7 @@ fn map_tool_to_cli_args(tool_name: &str, args: &Value) -> Result<Vec<String>, St
             let script = args
                 .get("script")
                 .and_then(Value::as_str)
-                .ok_or("Missing required argument: script")?;
+                .ok_or_else(|| FrameworkError::from("Missing required argument: script".to_string()))?;
             // HPM-8: use timestamp-based suffix instead of predictable PID
             let nanos = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -1081,21 +1083,21 @@ fn map_tool_to_cli_args(tool_name: &str, args: &Value) -> Result<Vec<String>, St
             let tmp_path =
                 std::env::temp_dir().join(format!("router_rs_lean_{nanos}.lean"));
             std::fs::write(&tmp_path, script)
-                .map_err(|e| format!("failed to write lean script to temp file: {e}"))?;
+                .map_err(|e| FrameworkError::from(format!("failed to write lean script to temp file: {e}")))?;
             Ok(vec![
                 "math".to_string(),
                 "lean-verify".to_string(),
                 tmp_path.to_string_lossy().to_string(),
             ])
         }
-        _ => Err(format!("Unknown CLI-routed tool: {tool_name}")),
+        _ => Err(FrameworkError::from(format!("Unknown CLI-routed tool: {tool_name}"))),
     }
 }
 
 /// Spawn a `router-rs-cli` subprocess for the given tool name and arguments.
 /// The subprocess is spawned with the repo_root as the current directory.
 /// Temp files (e.g., for lean-verify) are cleaned up after the subprocess finishes.
-fn spawn_cli_tool(tool_name: &str, args: &Value, repo_root: &Path) -> Result<String, String> {
+fn spawn_cli_tool(tool_name: &str, args: &Value, repo_root: &Path) -> Result<String, FrameworkError> {
     use std::io::Read;
 
     let cli_args = map_tool_to_cli_args(tool_name, args)?;
@@ -1108,7 +1110,7 @@ fn spawn_cli_tool(tool_name: &str, args: &Value, repo_root: &Path) -> Result<Str
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .spawn()
-        .map_err(|e| format!("router-rs-cli subprocess failed (is it in PATH or built?): {e}"))?;
+        .map_err(|e| FrameworkError::from(format!("router-rs-cli subprocess failed (is it in PATH or built?): {e}")))?;
 
     // HPM-10: take stdout/stderr handles before moving child into wait thread
     let mut child_stdout = child.stdout.take();
@@ -1125,7 +1127,7 @@ fn spawn_cli_tool(tool_name: &str, args: &Value, repo_root: &Path) -> Result<Str
     // Block until child exits or timeout expires
     let status = match rx.recv_timeout(timeout) {
         Ok(Ok(status)) => status,
-        Ok(Err(e)) => return Err(format!("router-rs-cli subprocess wait error: {e}")),
+        Ok(Err(e)) => return Err(FrameworkError::from(format!("router-rs-cli subprocess wait error: {e}"))),
         Err(_) => {
             // Timed out: kill child process via OS signal
             #[cfg(unix)]
@@ -1134,11 +1136,11 @@ fn spawn_cli_tool(tool_name: &str, args: &Value, repo_root: &Path) -> Result<Str
             }
             // Wait for the reaper thread to finish
             let _ = rx.recv();
-            return Err(format!(
+            return Err(FrameworkError::from(format!(
                 "router-rs-cli {} timed out after {}s",
                 tool_name,
                 timeout.as_secs()
-            ));
+            )));
         }
     };
 
@@ -1160,12 +1162,12 @@ fn spawn_cli_tool(tool_name: &str, args: &Value, repo_root: &Path) -> Result<Str
     }
 
     if !status.success() {
-        return Err(format!(
+        return Err(FrameworkError::from(format!(
             "router-rs-cli {} failed ({}): {}",
             tool_name,
             status,
             stderr.trim()
-        ));
+        )));
     }
 
     Ok(stdout)
@@ -1175,7 +1177,7 @@ fn spawn_cli_tool(tool_name: &str, args: &Value, repo_root: &Path) -> Result<Str
 pub fn read_mcp_message_test_helper<R: std::io::BufRead>(
     input: &mut R,
     transport_mode: &mut Option<McpTransportMode>,
-) -> Result<Option<String>, String> {
+) -> Result<Option<String>, FrameworkError> {
     read_mcp_message(input, transport_mode)
 }
 

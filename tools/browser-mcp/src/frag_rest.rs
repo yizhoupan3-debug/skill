@@ -416,7 +416,7 @@ fn assert_attach_descriptor_leaf_matches_canonical(
     canonical: &Value,
     path_parts: &[&str],
     path_like: bool,
-) -> Result<(), String> {
+) -> Result<(), FrameworkError> {
     let Some(requested) = descriptor_leaf(original, path_parts) else {
         return Ok(());
     };
@@ -424,18 +424,18 @@ fn assert_attach_descriptor_leaf_matches_canonical(
         return Ok(());
     }
     let resolved = descriptor_leaf(canonical, path_parts).ok_or_else(|| {
-        format!(
+        FrameworkError::from(format!(
             "runtime attach descriptor must already carry canonical {}",
             path_parts.join(".")
-        )
+        ))
     })?;
     if normalized_descriptor_value(Some(requested), path_like)
         != normalized_descriptor_value(Some(resolved), path_like)
     {
-        return Err(format!(
+        return Err(FrameworkError::from(format!(
             "runtime attach descriptor must already match canonical {}",
             path_parts.join(".")
-        ));
+        )));
     }
     Ok(())
 }
@@ -443,7 +443,7 @@ fn assert_attach_descriptor_leaf_matches_canonical(
 fn assert_attach_descriptor_matches_canonical(
     original: &Value,
     canonical: &Value,
-) -> Result<(), String> {
+) -> Result<(), FrameworkError> {
     for field in [
         ["requested_artifacts", "binding_artifact_path"],
         ["requested_artifacts", "handoff_path"],
@@ -479,7 +479,7 @@ fn assert_attach_descriptor_matches_canonical(
     Ok(())
 }
 
-fn assert_attach_descriptor_contract(descriptor: &Value) -> Result<(), String> {
+fn assert_attach_descriptor_contract(descriptor: &Value) -> Result<(), FrameworkError> {
     for (field, expected) in [
         ("attach_mode", RUNTIME_ATTACH_MODE),
         (
@@ -497,34 +497,34 @@ fn assert_attach_descriptor_contract(descriptor: &Value) -> Result<(), String> {
     ] {
         if let Some(value) = descriptor_string(descriptor, &[field])
             && value != expected {
-                return Err(format!(
+                return Err(FrameworkError::from(format!(
                     "runtime attach descriptor must use {field}={expected}"
-                ));
+                )));
             }
     }
     if let Some(value) = descriptor_bool(descriptor, &["attach_capabilities", "artifact_replay"])
         && !value {
-            return Err(
+            return Err(FrameworkError::from(
                 "runtime attach descriptor must advertise attach_capabilities.artifact_replay=true"
                     .to_string(),
-            );
+            ));
         }
     if let Some(value) = descriptor_bool(
         descriptor,
         &["attach_capabilities", "cleanup_preserves_replay"],
     )
         && !value {
-            return Err(
+            return Err(FrameworkError::from(
                 "runtime attach descriptor must advertise attach_capabilities.cleanup_preserves_replay=true"
                     .to_string(),
-            );
+            ));
         }
     if let Some(value) = descriptor_bool(descriptor, &["attach_capabilities", "live_remote_stream"])
         && value {
-            return Err(
+            return Err(FrameworkError::from(
                 "runtime attach descriptor must advertise attach_capabilities.live_remote_stream=false"
                     .to_string(),
-            );
+            ));
         }
     Ok(())
 }
@@ -1054,13 +1054,13 @@ fn json_string_literal(value: &str) -> String {
     serde_json::to_string(value).unwrap_or_else(|_| "\"\"".to_string())
 }
 
-fn decode_base64(input: &str) -> Result<Vec<u8>, String> {
+fn decode_base64(input: &str) -> Result<Vec<u8>, FrameworkError> {
     use base64::Engine as _;
     let engine = base64::engine::general_purpose::STANDARD_NO_PAD;
     // Strip padding so both padded and unpadded base64 decode cleanly.
     let cleaned: String = input.chars().filter(|c| !c.is_ascii_whitespace()).collect();
     let trimmed = cleaned.trim_end_matches('=');
-    engine.decode(trimmed.as_bytes()).map_err(|e| format!("decode base64 failed: {e}"))
+    engine.decode(trimmed.as_bytes()).map_err(|e| FrameworkError::from(format!("decode base64 failed: {e}")))
 }
 
 #[cfg(test)]

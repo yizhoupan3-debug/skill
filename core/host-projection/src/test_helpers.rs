@@ -41,13 +41,6 @@ pub(crate) fn install_test_deps() {
                     .map(|s| s.to_ascii_lowercase())
                     .collect()
             }
-            fn has_parallel_review_candidate_context(
-                &self,
-                _query: &str,
-                _tokens: &[String],
-            ) -> bool {
-                false
-            }
         }
         framework_kernel::install_tokenizer_provider(Box::new(WhitespaceTokenizer));
         // Install no-op review context probes (the test version in core-policy is cfg(test)-only).

@@ -20,7 +20,9 @@ pub fn embedded_schema_version() -> &'static str {
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
+    use serde_json::Value;
     use std::collections::HashMap;
+    use std::sync::OnceLock;
 
     const RULES_EMBED: &str = include_str!(concat!(
         env!("CARGO_MANIFEST_DIR"),

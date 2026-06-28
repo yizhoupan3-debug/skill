@@ -106,7 +106,7 @@ Task 是框架的**底层执行引擎**，不是可选组件。用户层表现�
 
 ## Review 通用协议
 
-所有 review 类 skill/workflow 的输出约束与幻觉分类标准。
+所有 review 类 skill 的输出约束与幻觉分类标准。
 
 **Confirmed-only 输出**：最终输出**只包含 confirmed findings**（事实核查通过 + 判断通过）。rejected 和 hallucinated 不出现在用户输出中。可选统计摘要：`N confirmed / M rejected / K hallucinated`。
 

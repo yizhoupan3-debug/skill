@@ -163,9 +163,9 @@ Deep review 在 Merge 和 Verify 之间插入独立 **Factcheck 阶段**，专�
   { "name": "factcheck-verifier", "tools": ["Read", "Bash"], "prompt": "仅核查事实——代码是否存在、evidence 是否原文引用、行号是否准确、行为描述是否与代码一致。不做判断（是否是 bug、severity 如何）。" }
   ```
 
-## Adversarial verification workflow（Workflow 强制执行）
+## Adversarial verification
 
-Deep review 在 Factcheck 之后插入 **对抗性验证（Adversarial verification）**阶段，使用 Workflow 形式强制执行（不可跳过）。目标：对整合后的 findings 进行敌意反驳，只有 survived 的 finding 进入最终输出。
+Deep review 在 Factcheck 之后插入 **对抗性验证（Adversarial verification）**阶段，不可跳过。目标：对整合后的 findings 进行敌意反驳，只有 survived 的 finding 进入最终输出。
 
 ### 流程
 

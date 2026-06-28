@@ -74,7 +74,7 @@ trigger_hints:
 - 需要更新关键文档、科研文档、docs 索引、计划状态或 artifact 索引
 - 需要检查 git 跟踪面：未跟踪文件、误跟踪生成物、ignore 漂移、tracked Markdown 纳管
 - 需要定位并清理旧代码、旧文件、旧文档、重复入口或历史残留
-- 改了 `AGENTS.md`、`.cursor/rules/*`、`configs/framework/*.json`、`skills/*`、`docs/*`、`router-rs` 任一，并需要框架生成物/契约测试一起收口
+- 改了 `AGENTS.md`、`configs/framework/*.json`、`skills/*`、`docs/*`、`router-rs` 任一，并需要框架生成物/契约测试一起收口
 
 ## Do not use
 

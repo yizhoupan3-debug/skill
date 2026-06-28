@@ -16,14 +16,14 @@ use std::path::Path;
 pub(crate) fn tool_task_create(
     arguments: &Value,
     repo_root: &Path,
-) -> std::result::Result<String, String> {
+) -> std::result::Result<String, FrameworkError> {
     let task_id = arguments
         .get("task_id")
         .and_then(Value::as_str)
-        .ok_or("task_create: missing required argument 'task_id'")?
+        .ok_or_else(|| FrameworkError::from("task_create: missing required argument 'task_id'".to_string()))?
         .trim();
     if task_id.is_empty() {
-        return Err("task_create: task_id must not be empty".to_string());
+        return Err(FrameworkError::from("task_create: task_id must not be empty".to_string()));
     }
 
     let title = arguments
@@ -98,7 +98,7 @@ pub(crate) fn tool_task_create(
 }
 
 /// List all known tasks with status, goal summary, and active/focus flags.
-pub(crate) fn tool_task_list(repo_root: &Path) -> std::result::Result<String, String> {
+pub(crate) fn tool_task_list(repo_root: &Path) -> std::result::Result<String, FrameworkError> {
     let task_ids = list_known_task_ids(repo_root);
     let (active_task_id, focus_task_id) =
         core_state::state_manager::read_task_pointer_pair(repo_root);
@@ -190,7 +190,7 @@ pub(crate) fn tool_task_list(repo_root: &Path) -> std::result::Result<String, St
 pub(crate) fn tool_task_complete(
     arguments: &Value,
     repo_root: &Path,
-) -> std::result::Result<String, String> {
+) -> std::result::Result<String, FrameworkError> {
     let task_id = arguments
         .get("task_id")
         .and_then(Value::as_str)
@@ -198,7 +198,7 @@ pub(crate) fn tool_task_complete(
         .filter(|s| !s.is_empty())
         .map(str::to_string)
         .or_else(|| core_state::state_manager::read_active_task_id(repo_root))
-        .ok_or("task_complete: no task_id provided and no active task")?;
+        .ok_or_else(|| FrameworkError::from("task_complete: no task_id provided and no active task".to_string()))?;
 
     let task_id_owned = task_id.clone();
     let repo_root_owned = repo_root.to_path_buf();
@@ -228,7 +228,7 @@ pub(crate) fn tool_task_complete(
         return Err(FrameworkError::validation(format!(
             "task_complete blocked by evidence gate: {}",
             transition_v.reason
-        )).to_string());
+        )));
     }
     apply_task_ledger_mutation(repo_root, || {
         core_state::state_manager::neutralize_task_pointers_for_task(
@@ -274,26 +274,26 @@ pub(crate) fn tool_task_complete(
 pub(crate) fn tool_task_focus(
     arguments: &Value,
     repo_root: &Path,
-) -> std::result::Result<String, String> {
+) -> std::result::Result<String, FrameworkError> {
     let task_id = arguments
         .get("task_id")
         .and_then(Value::as_str)
-        .ok_or("task_focus: missing required argument 'task_id'")?
+        .ok_or_else(|| FrameworkError::from("task_focus: missing required argument 'task_id'".to_string()))?
         .trim();
     if task_id.is_empty() {
-        return Err("task_focus: task_id must not be empty".to_string());
+        return Err(FrameworkError::from("task_focus: task_id must not be empty".to_string()));
     }
 
     // Validate task_id is a safe path component before using it in filesystem ops
     let task_id = core_state_utils::path_guard::validate_task_id_component(task_id)
-        .map_err(|_| format!("task_focus: invalid task_id '{task_id}'"))?;
+        .map_err(|_| FrameworkError::from(format!("task_focus: invalid task_id '{task_id}'")))?;
 
     // Validate directory exists (cheap read — outside the lock)
     let task_dir = repo_root.join("artifacts/current").join(task_id);
     if !task_dir.is_dir() {
-        return Err(format!(
+        return Err(FrameworkError::from(format!(
             "task_focus: task directory '{task_id}' does not exist. Use task_create first."
-        ));
+        )));
     }
 
     // Acquire task write lock: prevents RMW race on TASK_POINTERS.json with
@@ -327,12 +327,12 @@ pub(crate) fn tool_task_focus(
 pub(crate) fn tool_task_chain_advance(
     _arguments: &Value,
     repo_root: &Path,
-) -> std::result::Result<String, String> {
+) -> std::result::Result<String, FrameworkError> {
     let chain_path = repo_root.join("artifacts/current/TASK_CHAIN.json");
     if !chain_path.is_file() {
-        return Err(
+        return Err(FrameworkError::from(
             "TASK_CHAIN.json not found — create one first to use task_chain_advance".to_string(),
-        );
+        ));
     }
 
     // Goals always follow loop semantics (GoalType::Linear removed in v10).

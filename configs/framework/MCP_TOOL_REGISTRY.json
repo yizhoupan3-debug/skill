@@ -1,10 +1,10 @@
 {
   "schema_version": "mcp-tool-registry-v2",
   "scope": {
-    "total_count": 100,
+    "total_count": 95,
     "builtin_count": 33,
     "research_count": 21,
-    "independent_count": 35,
+    "independent_count": 30,
     "external_count": 11,
     "_comment": "scope counts are auto-generated — update this when adding/removing scopes"
   },
@@ -403,7 +403,7 @@
         "HTTP",
         "链接"
       ],
-      "mcp_server": "router-rs",
+      "mcp_server": "router-rs-cli",
       "tool_flags": [
         "readonly",
         "network"
@@ -1152,7 +1152,7 @@
         "抄袭风险",
         "AI文本"
       ],
-      "mcp_server": "router-rs",
+      "mcp_server": "research-harness",
       "tool_flags": [
         "readonly"
       ],
@@ -1358,7 +1358,7 @@
         "连接测试",
         "学术数据"
       ],
-      "mcp_server": "router-rs",
+      "mcp_server": "research-harness",
       "tool_flags": [
         "deprecated",
         "readonly"
@@ -2748,40 +2748,6 @@
       "tool_flags": []
     },
     {
-      "slug": "browser_get_attached_runtime_events",
-      "display_name": "获取附加运行时事件",
-      "description": "获取浏览器运行时事件流",
-      "layer": "independent",
-      "dispatch_domain": "browser",
-      "owner": "browser",
-      "trigger_hints": [
-        "事件",
-        "event",
-        "runtime",
-        "浏览器"
-      ],
-      "host_platforms": [],
-      "mcp_server": "browser-mcp",
-      "tool_flags": []
-    },
-    {
-      "slug": "runtime_heartbeat",
-      "display_name": "运行时心跳",
-      "description": "返回运行时健康状态",
-      "layer": "independent",
-      "dispatch_domain": "browser",
-      "owner": "browser",
-      "trigger_hints": [
-        "心跳",
-        "heartbeat",
-        "运行时",
-        "健康"
-      ],
-      "host_platforms": [],
-      "mcp_server": "browser-mcp",
-      "tool_flags": []
-    },
-    {
       "slug": "session_launch",
       "display_name": "会话启动",
       "description": "启动新浏览器会话",
@@ -2795,8 +2761,37 @@
         "session"
       ],
       "host_platforms": [],
-      "mcp_server": "browser-mcp",
-      "tool_flags": []
+      "mcp_server": "router-rs-framework",
+      "tool_flags": [],
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "host",
+          "cwd"
+        ],
+        "properties": {
+          "host": {
+            "type": "string",
+            "description": "启动宿主标识（claude/cursor/opencode/codex）"
+          },
+          "cwd": {
+            "type": "string",
+            "description": "工作目录"
+          },
+          "prompt": {
+            "type": "string",
+            "description": "启动提示文本（可选）"
+          },
+          "worker_id": {
+            "type": "string",
+            "description": "指定 worker ID（可选，自动生成）"
+          },
+          "worktree_name": {
+            "type": "string",
+            "description": "worktree 名称（可选）"
+          }
+        }
+      }
     },
     {
       "slug": "session_list",
@@ -2812,8 +2807,17 @@
         "session"
       ],
       "host_platforms": [],
-      "mcp_server": "browser-mcp",
-      "tool_flags": []
+      "mcp_server": "router-rs-framework",
+      "tool_flags": [],
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "stale_after_secs": {
+            "type": "integer",
+            "description": "worker 过期秒数（可选，默认 3600）"
+          }
+        }
+      }
     },
     {
       "slug": "session_inspect",
@@ -2829,8 +2833,20 @@
         "session"
       ],
       "host_platforms": [],
-      "mcp_server": "browser-mcp",
-      "tool_flags": []
+      "mcp_server": "router-rs-framework",
+      "tool_flags": [],
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "worker_id"
+        ],
+        "properties": {
+          "worker_id": {
+            "type": "string",
+            "description": "要检查的 worker ID"
+          }
+        }
+      }
     },
     {
       "slug": "session_terminate",
@@ -2846,8 +2862,24 @@
         "session"
       ],
       "host_platforms": [],
-      "mcp_server": "browser-mcp",
-      "tool_flags": []
+      "mcp_server": "router-rs-framework",
+      "tool_flags": [],
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "worker_id"
+        ],
+        "properties": {
+          "worker_id": {
+            "type": "string",
+            "description": "要终止的 worker ID"
+          },
+          "dry_run": {
+            "type": "boolean",
+            "description": "仅模拟（可选）"
+          }
+        }
+      }
     },
     {
       "slug": "session_mark_blocked",
@@ -2863,8 +2895,20 @@
         "会话"
       ],
       "host_platforms": [],
-      "mcp_server": "browser-mcp",
-      "tool_flags": []
+      "mcp_server": "router-rs-framework",
+      "tool_flags": [],
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "worker_id"
+        ],
+        "properties": {
+          "worker_id": {
+            "type": "string",
+            "description": "要标记阻塞的 worker ID"
+          }
+        }
+      }
     },
     {
       "slug": "session_resume_due",
@@ -2881,59 +2925,21 @@
         "会话"
       ],
       "host_platforms": [],
-      "mcp_server": "browser-mcp",
-      "tool_flags": []
-    },
-    {
-      "slug": "background_list",
-      "display_name": "后台任务列表",
-      "description": "列出所有后台浏览器任务",
-      "layer": "independent",
-      "dispatch_domain": "browser",
-      "owner": "browser",
-      "trigger_hints": [
-        "后台",
-        "background",
-        "列表",
-        "任务"
-      ],
-      "host_platforms": [],
-      "mcp_server": "browser-mcp",
-      "tool_flags": []
-    },
-    {
-      "slug": "background_inspect",
-      "display_name": "后台任务检查",
-      "description": "检查后台浏览器任务详情",
-      "layer": "independent",
-      "dispatch_domain": "browser",
-      "owner": "browser",
-      "trigger_hints": [
-        "后台",
-        "background",
-        "检查",
-        "inspect"
-      ],
-      "host_platforms": [],
-      "mcp_server": "browser-mcp",
-      "tool_flags": []
-    },
-    {
-      "slug": "background_terminate",
-      "display_name": "后台任务终止",
-      "description": "终止后台浏览器任务",
-      "layer": "independent",
-      "dispatch_domain": "browser",
-      "owner": "browser",
-      "trigger_hints": [
-        "后台",
-        "background",
-        "终止",
-        "terminate"
-      ],
-      "host_platforms": [],
-      "mcp_server": "browser-mcp",
-      "tool_flags": []
+      "mcp_server": "router-rs-framework",
+      "tool_flags": [],
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "dry_run": {
+            "type": "boolean",
+            "description": "仅模拟（可选）"
+          },
+          "stale_after_secs": {
+            "type": "integer",
+            "description": "worker 过期秒数（可选，默认 3600）"
+          }
+        }
+      }
     },
     {
       "slug": "session_classify_block",
@@ -2950,8 +2956,25 @@
         "会话"
       ],
       "host_platforms": [],
-      "mcp_server": "browser-mcp",
-      "tool_flags": []
+      "mcp_server": "router-rs-framework",
+      "tool_flags": [],
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "host",
+          "evidence_text"
+        ],
+        "properties": {
+          "host": {
+            "type": "string",
+            "description": "触发阻塞的宿主标识"
+          },
+          "evidence_text": {
+            "type": "string",
+            "description": "阻塞触发的证据文本"
+          }
+        }
+      }
     }
   ]
 }

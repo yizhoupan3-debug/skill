@@ -1,5 +1,6 @@
 // MCP 常量、transport、JSON-RPC、`BrowserRuntime`/会话类型与 `struct CdpClient`（须整体移动，不得在函数中途截断）。
 use anyhow::{bail, Context as _};
+use core_errors::FrameworkError;
 use framework_kernel::repo_roots::resolve_repo_root_arg;
 use framework_kernel::stdio_payload_types::TraceStreamInspectRequestPayload;
 // attach_runtime_event_transport / inspect_trace_stream: resolved via browser_mcp_dispatch::hooks()
@@ -81,7 +82,7 @@ pub fn run_browser_mcp_stdio<R: BufRead, W: Write>(
 ) -> anyhow::Result<()> {
     let mut transport_mode = None;
     while let Some(message) = read_browser_mcp_message(&mut input, &mut transport_mode)
-        .map_err(anyhow::Error::msg)?
+        .map_err(|e| anyhow::Error::msg(format!("{e}")))?
     {
         if let Some(response) = handle_browser_mcp_line(&message, runtime) {
             write_browser_mcp_response(
@@ -98,13 +99,13 @@ pub fn run_browser_mcp_stdio<R: BufRead, W: Write>(
 fn read_browser_mcp_message<R: BufRead>(
     input: &mut R,
     transport_mode: &mut Option<BrowserMcpTransportMode>,
-) -> Result<Option<String>, String> {
+) -> Result<Option<String>, FrameworkError> {
     let mut first_line = String::new();
     loop {
         first_line.clear();
         let bytes = input
             .read_line(&mut first_line)
-            .map_err(|err| format!("read browser MCP request failed: {err}"))?;
+            .map_err(|err| FrameworkError::from(format!("read browser MCP request failed: {err}")))?;
         if bytes == 0 {
             return Ok(None);
         }
@@ -118,19 +119,20 @@ fn read_browser_mcp_message<R: BufRead>(
         .starts_with("content-length:")
     {
         *transport_mode = Some(BrowserMcpTransportMode::ContentLength);
-        let content_length = parse_content_length_header(&first_line).map_err(|e| e.to_string())?;
+        let content_length = parse_content_length_header(&first_line)
+            .map_err(|e| FrameworkError::from(e.to_string()))?;
         if content_length > MAX_BROWSER_MCP_CONTENT_LENGTH {
-            return Err(format!(
+            return Err(FrameworkError::from(format!(
                 "browser MCP Content-Length {content_length} exceeds max {MAX_BROWSER_MCP_CONTENT_LENGTH}"
-            ));
+            )));
         }
         loop {
             let mut header = String::new();
             let bytes = input
                 .read_line(&mut header)
-                .map_err(|err| format!("read browser MCP header failed: {err}"))?;
+                .map_err(|err| FrameworkError::from(format!("read browser MCP header failed: {err}")))?;
             if bytes == 0 {
-                return Err("browser MCP header ended before blank line".to_string());
+                return Err(FrameworkError::from("browser MCP header ended before blank line".to_string()));
             }
             if header.trim().is_empty() {
                 break;
@@ -139,10 +141,10 @@ fn read_browser_mcp_message<R: BufRead>(
         let mut body = vec![0_u8; content_length];
         input
             .read_exact(&mut body)
-            .map_err(|err| format!("read browser MCP body failed: {err}"))?;
+            .map_err(|err| FrameworkError::from(format!("read browser MCP body failed: {err}")))?;
         return String::from_utf8(body)
             .map(Some)
-            .map_err(|err| format!("decode browser MCP body failed: {err}"));
+            .map_err(|err| FrameworkError::from(format!("decode browser MCP body failed: {err}")));
     }
 
     if transport_mode.is_none() {
@@ -268,6 +270,24 @@ fn handle_tools_call(params: &Value, runtime: &mut BrowserRuntime) -> Result<Val
         "browser_save_session" => runtime.save_session(&arguments),
         "browser_restore_session" => runtime.restore_session(&arguments),
         "browser_diagnostics" => runtime.diagnostics(&arguments),
+        // Registered but not yet implemented — return clear NOT_IMPLEMENTED instead of UNKNOWN_TOOL
+        "browser_get_attached_runtime_events"
+        | "runtime_heartbeat"
+        | "session_launch"
+        | "session_list"
+        | "session_inspect"
+        | "session_terminate"
+        | "session_mark_blocked"
+        | "session_resume_due"
+        | "session_classify_block"
+        | "background_list"
+        | "background_inspect"
+        | "background_terminate" => Err(browser_error(
+            "NOT_IMPLEMENTED",
+            &format!("Tool {tool_name} is registered but not yet implemented in browser-mcp handler"),
+            &["check framework release notes for implementation status"],
+            true,
+        )),
         _ => Err(browser_error(
             "UNKNOWN_TOOL",
             &format!("Unknown tool name: {tool_name}"),
@@ -395,6 +415,90 @@ fn tool_definitions(_repo_root: &Path) -> Vec<Value> {
             "Restore Browser Session",
             "Restore a previously saved browser session from disk.",
             json!({"type": "object", "properties": {"sessionPath": {"type": "string"}}, "required": ["sessionPath"]}),
+            empty_output.clone(),
+        ),
+        tool_definition(
+            "browser_get_attached_runtime_events",
+            "Get Attached Runtime Events",
+            "获取浏览器运行时事件流",
+            json!({"type": "object", "properties": {}}),
+            empty_output.clone(),
+        ),
+        tool_definition(
+            "runtime_heartbeat",
+            "Runtime Heartbeat",
+            "返回运行时健康状态",
+            json!({"type": "object", "properties": {}}),
+            empty_output.clone(),
+        ),
+        tool_definition(
+            "session_launch",
+            "Session Launch",
+            "启动新浏览器会话",
+            json!({"type": "object", "properties": {"sessionId": {"type": "string"}}}),
+            empty_output.clone(),
+        ),
+        tool_definition(
+            "session_list",
+            "Session List",
+            "列出所有浏览器会话",
+            json!({"type": "object", "properties": {}}),
+            empty_output.clone(),
+        ),
+        tool_definition(
+            "session_inspect",
+            "Session Inspect",
+            "检查浏览器会话详情",
+            json!({"type": "object", "properties": {"sessionId": {"type": "string"}}, "required": ["sessionId"]}),
+            empty_output.clone(),
+        ),
+        tool_definition(
+            "session_terminate",
+            "Session Terminate",
+            "终止浏览器会话",
+            json!({"type": "object", "properties": {"sessionId": {"type": "string"}}, "required": ["sessionId"]}),
+            empty_output.clone(),
+        ),
+        tool_definition(
+            "session_mark_blocked",
+            "Session Mark Blocked",
+            "标记浏览器会话为阻塞状态",
+            json!({"type": "object", "properties": {"sessionId": {"type": "string"}, "reason": {"type": "string"}}, "required": ["sessionId"]}),
+            empty_output.clone(),
+        ),
+        tool_definition(
+            "session_resume_due",
+            "Session Resume Due",
+            "恢复到期浏览器会话",
+            json!({"type": "object", "properties": {"sessionId": {"type": "string"}}, "required": ["sessionId"]}),
+            empty_output.clone(),
+        ),
+        tool_definition(
+            "session_classify_block",
+            "Session Classify Block",
+            "对浏览器会话阻塞原因进行分类",
+            json!({"type": "object", "properties": {"sessionId": {"type": "string"}}, "required": ["sessionId"]}),
+            empty_output.clone(),
+        ),
+        tool_definition(
+            "background_list",
+            "Background Task List",
+            "列出所有后台浏览器任务",
+            json!({"type": "object", "properties": {}}),
+            empty_output.clone(),
+        ),
+        tool_definition(
+            "background_inspect",
+            "Background Task Inspect",
+            "检查后台浏览器任务详情",
+            json!({"type": "object", "properties": {"jobId": {"type": "string"}}, "required": ["jobId"]}),
+            empty_output.clone(),
+        ),
+        tool_definition(
+            "background_terminate",
+            "Background Task Terminate",
+            "终止后台浏览器任务",
+            json!({"type": "object", "properties": {"jobId": {"type": "string"}}, "required": ["jobId"]}),
             empty_output.clone(),
         ),
     ];
@@ -613,6 +717,6 @@ mod browser_mcp_body_limit_tests {
         ));
         let mut mode = None;
         let err = read_browser_mcp_message(&mut input, &mut mode).unwrap_err();
-        assert!(err.contains("exceeds max"), "{err}");
+        assert!(format!("{err}").contains("exceeds max"), "err={err}");
     }
 }

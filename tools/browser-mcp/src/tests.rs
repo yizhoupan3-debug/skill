@@ -60,6 +60,18 @@ fn browser_mcp_stdio_lists_full_tool_surface() {
             "browser_wait_for",
             "browser_save_session",
             "browser_restore_session",
+            "browser_get_attached_runtime_events",
+            "runtime_heartbeat",
+            "session_launch",
+            "session_list",
+            "session_inspect",
+            "session_terminate",
+            "session_mark_blocked",
+            "session_resume_due",
+            "session_classify_block",
+            "background_list",
+            "background_inspect",
+            "background_terminate",
             "browser_diagnostics",
         ]
     );
@@ -1518,7 +1530,7 @@ fn browser_mcp_tool_definitions_include_output_schema() {
 }
 
 #[test]
-fn browser_mcp_session_inspect_requires_worker_id() {
+fn browser_mcp_session_inspect_returns_not_implemented() {
     let repo_root = temp_root("inspect-no-id");
     let mut runtime = BrowserRuntime::new(repo_root.clone());
     let response = handle_browser_mcp_request(
@@ -1527,11 +1539,12 @@ fn browser_mcp_session_inspect_requires_worker_id() {
     )
     .expect("response");
     assert_eq!(response["result"]["isError"], true);
+    assert_eq!(response["result"]["structuredContent"]["error"]["code"], "NOT_IMPLEMENTED");
     fs::remove_dir_all(repo_root).expect("cleanup");
 }
 
 #[test]
-fn browser_mcp_session_terminate_requires_worker_id() {
+fn browser_mcp_session_terminate_returns_not_implemented() {
     let repo_root = temp_root("terminate-no-id");
     let mut runtime = BrowserRuntime::new(repo_root.clone());
     let response = handle_browser_mcp_request(
@@ -1540,11 +1553,12 @@ fn browser_mcp_session_terminate_requires_worker_id() {
     )
     .expect("response");
     assert_eq!(response["result"]["isError"], true);
+    assert_eq!(response["result"]["structuredContent"]["error"]["code"], "NOT_IMPLEMENTED");
     fs::remove_dir_all(repo_root).expect("cleanup");
 }
 
 #[test]
-fn browser_mcp_session_mark_blocked_requires_fields() {
+fn browser_mcp_session_mark_blocked_returns_not_implemented() {
     let repo_root = temp_root("mark-blocked");
     let mut runtime = BrowserRuntime::new(repo_root.clone());
     let response = handle_browser_mcp_request(
@@ -1553,11 +1567,12 @@ fn browser_mcp_session_mark_blocked_requires_fields() {
     )
     .expect("response");
     assert_eq!(response["result"]["isError"], true);
+    assert_eq!(response["result"]["structuredContent"]["error"]["code"], "NOT_IMPLEMENTED");
     fs::remove_dir_all(repo_root).expect("cleanup");
 }
 
 #[test]
-fn browser_mcp_background_inspect_requires_job_id() {
+fn browser_mcp_background_inspect_returns_not_implemented() {
     let repo_root = temp_root("bg-inspect-no-id");
     let mut runtime = BrowserRuntime::new(repo_root.clone());
     let response = handle_browser_mcp_request(
@@ -1566,11 +1581,12 @@ fn browser_mcp_background_inspect_requires_job_id() {
     )
     .expect("response");
     assert_eq!(response["result"]["isError"], true);
+    assert_eq!(response["result"]["structuredContent"]["error"]["code"], "NOT_IMPLEMENTED");
     fs::remove_dir_all(repo_root).expect("cleanup");
 }
 
 #[test]
-fn browser_mcp_background_terminate_requires_job_id() {
+fn browser_mcp_background_terminate_returns_not_implemented() {
     let repo_root = temp_root("bg-terminate-no-id");
     let mut runtime = BrowserRuntime::new(repo_root.clone());
     let response = handle_browser_mcp_request(
@@ -1579,6 +1595,7 @@ fn browser_mcp_background_terminate_requires_job_id() {
     )
     .expect("response");
     assert_eq!(response["result"]["isError"], true);
+    assert_eq!(response["result"]["structuredContent"]["error"]["code"], "NOT_IMPLEMENTED");
     fs::remove_dir_all(repo_root).expect("cleanup");
 }
 

@@ -89,10 +89,10 @@ impl ToolHandler for RoutingTools {
         ctx: &ToolCallContext,
     ) -> Result<String, FrameworkError> {
         match tool_name {
-            "skill_route" => tool_skill_route(args, &ctx.repo_root, &ctx.host_id).map_err(Into::into),
-            "skill_search" => tool_skill_search(args, &ctx.repo_root, &ctx.host_id).map_err(Into::into),
-            "skill_read" => tool_skill_read(args, &ctx.repo_root).map_err(Into::into),
-            "skill_route_status" => tool_skill_route_status(&ctx.repo_root).map_err(Into::into),
+            "skill_route" => tool_skill_route(args, &ctx.repo_root, &ctx.host_id),
+            "skill_search" => tool_skill_search(args, &ctx.repo_root, &ctx.host_id),
+            "skill_read" => tool_skill_read(args, &ctx.repo_root),
+            "skill_route_status" => tool_skill_route_status(&ctx.repo_root),
             _ => Err(FrameworkError::not_found(format!("RoutingTools: unknown tool: {tool_name}"))),
         }
     }
@@ -114,9 +114,9 @@ impl ToolHandler for GoalTools {
         ctx: &ToolCallContext,
     ) -> Result<String, FrameworkError> {
         match tool_name {
-            "goal_state_read" => tool_goal_state_read(args, &ctx.repo_root).map_err(Into::into),
+            "goal_state_read" => tool_goal_state_read(args, &ctx.repo_root),
             "goal_state_manage" => {
-                tool_goal_state_manage(args, &ctx.repo_root, &ctx.connection_session_id).map_err(Into::into)
+                tool_goal_state_manage(args, &ctx.repo_root, &ctx.connection_session_id)
             }
             _ => Err(FrameworkError::not_found(format!("GoalTools: unknown tool: {tool_name}"))),
         }
@@ -139,9 +139,9 @@ impl ToolHandler for CloseoutTools {
         ctx: &ToolCallContext,
     ) -> Result<String, FrameworkError> {
         match tool_name {
-            "closeout_gate" => tool_closeout_gate(args, &ctx.repo_root, &ctx.host_id).map_err(Into::into),
+            "closeout_gate" => tool_closeout_gate(args, &ctx.repo_root, &ctx.host_id),
             "closeout_record_write" => {
-                tool_closeout_record_write(args, &ctx.repo_root, &ctx.host_id).map_err(Into::into)
+                tool_closeout_record_write(args, &ctx.repo_root, &ctx.host_id)
             }
             _ => Err(FrameworkError::not_found(format!("CloseoutTools: unknown tool: {tool_name}"))),
         }
@@ -164,8 +164,8 @@ impl ToolHandler for FrameworkTools {
         ctx: &ToolCallContext,
     ) -> Result<String, FrameworkError> {
         match tool_name {
-            "record_evidence" => tool_record_evidence(args, &ctx.repo_root).map_err(Into::into),
-            "session_checkpoint" => tool_session_checkpoint(args, &ctx.repo_root).map_err(Into::into),
+            "record_evidence" => tool_record_evidence(args, &ctx.repo_root),
+            "session_checkpoint" => tool_session_checkpoint(args, &ctx.repo_root),
             _ => Err(FrameworkError::not_found(format!("FrameworkTools: unknown tool: {tool_name}"))),
         }
     }
@@ -187,9 +187,9 @@ impl ToolHandler for ToolDomainTools {
         ctx: &ToolCallContext,
     ) -> Result<String, FrameworkError> {
         match tool_name {
-            "route_tool" => tool_route_tool(args, &ctx.repo_root, &ctx.host_id).map_err(Into::into),
-            "search_tools" => tool_search_tools(args, &ctx.repo_root, &ctx.host_id).map_err(Into::into),
-            "tool_registry_status" => tool_registry_status().map_err(Into::into),
+            "route_tool" => tool_route_tool(args, &ctx.repo_root, &ctx.host_id),
+            "search_tools" => tool_search_tools(args, &ctx.repo_root, &ctx.host_id),
+            "tool_registry_status" => tool_registry_status(),
             _ => Err(FrameworkError::not_found(format!("ToolDomainTools: unknown tool: {tool_name}"))),
         }
     }
@@ -256,6 +256,14 @@ impl ToolHandler for OrchestratorTools {
             "orchestrator_worker_launch",
             "orchestrator_worker_list",
             "orchestrator_worker_terminate",
+            // Session/worker management tools (route to session-supervisor)
+            "session_launch",
+            "session_list",
+            "session_inspect",
+            "session_terminate",
+            "session_mark_blocked",
+            "session_resume_due",
+            "session_classify_block",
         ]
     }
     fn dispatch(
@@ -304,6 +312,12 @@ const ORCH_OP_AGENT_LIST_RUNNING: &str = "agent_list_running";
 const ORCH_OP_WORKER_LAUNCH: &str = "launch";
 const ORCH_OP_WORKER_LIST: &str = "list";
 const ORCH_OP_WORKER_TERMINATE: &str = "terminate";
+const ORCH_OP_SESSION_LIST: &str = "list";
+const ORCH_OP_SESSION_INSPECT: &str = "inspect";
+const ORCH_OP_SESSION_TERMINATE: &str = "terminate";
+const ORCH_OP_SESSION_MARK_BLOCKED: &str = "mark_blocked";
+const ORCH_OP_SESSION_RESUME_DUE: &str = "resume_due";
+const ORCH_OP_SESSION_CLASSIFY_BLOCK: &str = "classify_block";
 
 fn orchestrator_operation_for_tool(tool_name: &str) -> Result<&'static str, FrameworkError> {
     match tool_name {
@@ -321,6 +335,14 @@ fn orchestrator_operation_for_tool(tool_name: &str) -> Result<&'static str, Fram
         "orchestrator_worker_launch" => Ok(ORCH_OP_WORKER_LAUNCH),
         "orchestrator_worker_list" => Ok(ORCH_OP_WORKER_LIST),
         "orchestrator_worker_terminate" => Ok(ORCH_OP_WORKER_TERMINATE),
+        // Session/worker management tools → session-supervisor
+        "session_launch" => Ok(ORCH_OP_WORKER_LAUNCH),
+        "session_list" => Ok(ORCH_OP_SESSION_LIST),
+        "session_inspect" => Ok(ORCH_OP_SESSION_INSPECT),
+        "session_terminate" => Ok(ORCH_OP_SESSION_TERMINATE),
+        "session_mark_blocked" => Ok(ORCH_OP_SESSION_MARK_BLOCKED),
+        "session_resume_due" => Ok(ORCH_OP_SESSION_RESUME_DUE),
+        "session_classify_block" => Ok(ORCH_OP_SESSION_CLASSIFY_BLOCK),
         _ => Err(FrameworkError::unsupported(format!("OrchestratorTools: unknown tool: {tool_name}"))),
     }
 }
@@ -331,11 +353,11 @@ fn tool_route_tool(
     args: &Value,
     ctx_repo_root: &std::path::Path,
     host_id: &str,
-) -> Result<String, String> {
+) -> Result<String, FrameworkError> {
     let query = args
         .get("query")
         .and_then(|v| v.as_str())
-        .ok_or("route_tool: missing 'query' parameter")?;
+        .ok_or_else(|| FrameworkError::from("route_tool: missing 'query' parameter".to_string()))?;
     let effective_host = args
         .get("host_id")
         .and_then(Value::as_str)
@@ -344,8 +366,8 @@ fn tool_route_tool(
     let registry_path = resolve_tool_registry_path(ctx_repo_root);
     let decision =
         tool_routing_engine::routing::route_tool(query, &registry_path, Some(effective_host))?
-            .ok_or_else(|| format!("route_tool: no matching tool found for query '{query}'"))?;
-    serde_json::to_string(&decision).map_err(|e| e.to_string())
+            .ok_or_else(|| FrameworkError::from(format!("route_tool: no matching tool found for query '{query}'")))?;
+    serde_json::to_string(&decision).map_err(|e| FrameworkError::from(e.to_string()))
 }
 
 /// search_tools: search the tool registry and return top-k results.
@@ -354,11 +376,11 @@ fn tool_search_tools(
     args: &Value,
     ctx_repo_root: &std::path::Path,
     host_id: &str,
-) -> Result<String, String> {
+) -> Result<String, FrameworkError> {
     let query = args
         .get("query")
         .and_then(|v| v.as_str())
-        .ok_or("search_tools: missing 'query' parameter")?;
+        .ok_or_else(|| FrameworkError::from("search_tools: missing 'query' parameter".to_string()))?;
     let top_k = args.get("top_k").and_then(|v| v.as_u64()).unwrap_or(5) as usize;
     let effective_host = args
         .get("host_id")
@@ -367,18 +389,18 @@ fn tool_search_tools(
         .unwrap_or(host_id);
     let registry_path = resolve_tool_registry_path(ctx_repo_root);
     let records = mcp_tool_registry::load_tool_records_cached(&registry_path)
-        .map_err(|e| format!("search_tools: failed to load registry: {e}"))?;
+        .map_err(|e| FrameworkError::from(format!("search_tools: failed to load registry: {e}")))?;
     let results =
         tool_routing_engine::search::search_tools(query, &records, top_k, Some(effective_host));
-    serde_json::to_string(&results).map_err(|e| e.to_string())
+    serde_json::to_string(&results).map_err(|e| FrameworkError::from(e.to_string()))
 }
 
 /// tool_registry_status: report registry metadata (count, schema version, layers).
-fn tool_registry_status() -> Result<String, String> {
+fn tool_registry_status() -> Result<String, FrameworkError> {
     let registry_path = mcp_tool_registry::resolve_tool_registry_path()
-        .ok_or("tool_registry_status: registry path not configured (hooks not registered)")?;
+        .ok_or_else(|| FrameworkError::from("tool_registry_status: registry path not configured (hooks not registered)".to_string()))?;
     let records = mcp_tool_registry::load_tool_records_cached(&registry_path)
-        .map_err(|e| format!("tool_registry_status: failed to load registry: {e}"))?;
+        .map_err(|e| FrameworkError::from(format!("tool_registry_status: failed to load registry: {e}")))?;
     let total = records.len();
     let builtin = records.iter().filter(|r| r.layer == "builtin").count();
     let research = records.iter().filter(|r| r.layer == "research").count();
@@ -393,5 +415,5 @@ fn tool_registry_status() -> Result<String, String> {
         "external_count": external,
         "registry_path": registry_path,
     });
-    serde_json::to_string(&status).map_err(|e| e.to_string())
+    serde_json::to_string(&status).map_err(|e| FrameworkError::from(e.to_string()))
 }

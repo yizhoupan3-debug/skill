@@ -34,20 +34,20 @@ static RUNTIME_CORE_HOOKS: RwLock<Option<RuntimeCoreHooks>> = RwLock::new(None);
 pub fn hooks() -> RuntimeCoreHooks {
     RUNTIME_CORE_HOOKS
         .read()
-        .unwrap()
+        .unwrap_or_else(|e| e.into_inner())
         .clone()
-        .expect("RuntimeCoreHooks not registered (call register() before use)")
+        .unwrap_or_else(|| panic!("RuntimeCoreHooks not registered (call register() before use)"))
 }
 
 /// Try to get registered hooks without panicking.
 /// Returns `None` if `register()` has not been called yet.
 pub fn try_hooks() -> Option<RuntimeCoreHooks> {
-    RUNTIME_CORE_HOOKS.read().unwrap().clone()
+    RUNTIME_CORE_HOOKS.read().unwrap_or_else(|e| e.into_inner()).clone()
 }
 
 /// Register hooks. Only the first call takes effect; subsequent calls are logged as warnings.
 pub fn register(h: RuntimeCoreHooks) {
-    let mut guard = RUNTIME_CORE_HOOKS.write().unwrap();
+    let mut guard = RUNTIME_CORE_HOOKS.write().unwrap_or_else(|e| e.into_inner());
     if guard.is_some() {
         tracing::warn!("RuntimeCoreHooks already registered — ignoring duplicate");
         return;
@@ -60,7 +60,7 @@ pub fn register(h: RuntimeCoreHooks) {
 /// Thread-safe via `RwLock` — no `unsafe` required.
 #[cfg(test)]
 pub fn unregister_hooks() {
-    *RUNTIME_CORE_HOOKS.write().unwrap() = None;
+    *RUNTIME_CORE_HOOKS.write().unwrap_or_else(|e| e.into_inner()) = None;
 }
 
 // ── Host provider hook group ──

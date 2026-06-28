@@ -91,11 +91,11 @@ pub(super) fn tool_skill_route(
     arguments: &Value,
     repo_root: &Path,
     host_id: &str,
-) -> Result<String, String> {
+) -> Result<String, FrameworkError> {
     let query = arguments
         .get("query")
         .and_then(Value::as_str)
-        .ok_or("Missing required argument: query")?;
+        .ok_or_else(|| FrameworkError::from("Missing required argument: query".to_string()))?;
 
     // Dynamically determine first_turn: true only if no routing tools have been called yet.
     // This prevents stale routing behavior on subsequent calls within the same session.
@@ -120,11 +120,11 @@ pub(super) fn tool_skill_search(
     arguments: &Value,
     repo_root: &Path,
     host_id: &str,
-) -> Result<String, String> {
+) -> Result<String, FrameworkError> {
     let query = arguments
         .get("query")
         .and_then(Value::as_str)
-        .ok_or("Missing required argument: query")?;
+        .ok_or_else(|| FrameworkError::from("Missing required argument: query".to_string()))?;
     let limit = arguments
         .get("limit")
         .and_then(Value::as_u64)
@@ -138,10 +138,10 @@ pub(super) fn tool_skill_search(
 
     let runtime_path = skill_routing_runtime_json(repo_root);
     if !runtime_path.is_file() {
-        return Err(format!(
+        return Err(FrameworkError::from(format!(
             "Missing repository skill runtime ({})",
             runtime_path.display()
-        ));
+        )));
     }
     Ok(crate::hooks::mcp_tool_search_skills(
         query,
@@ -151,11 +151,11 @@ pub(super) fn tool_skill_search(
     )?)
 }
 
-pub(super) fn tool_skill_read(arguments: &Value, repo_root: &Path) -> Result<String, String> {
+pub(super) fn tool_skill_read(arguments: &Value, repo_root: &Path) -> Result<String, FrameworkError> {
     let slug = arguments
         .get("skill")
         .and_then(Value::as_str)
-        .ok_or("Missing required argument: skill")?;
+        .ok_or_else(|| FrameworkError::from("Missing required argument: skill".to_string()))?;
     let max_chars = arguments
         .get("maxChars")
         .and_then(Value::as_u64)
@@ -163,7 +163,7 @@ pub(super) fn tool_skill_read(arguments: &Value, repo_root: &Path) -> Result<Str
         .clamp(1, 50_000) as usize;
 
     let path = skill_body_path(repo_root, slug)?;
-    let content = fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let content = fs::read_to_string(&path).map_err(|e| FrameworkError::from(format!("{}: {e}", path.display())))?;
     let truncated = content.chars().count() > max_chars;
     let truncated_content: String = content.chars().take(max_chars).collect();
 
@@ -182,7 +182,7 @@ fn skill_runtime_available(repo_root: &Path) -> bool {
     skill_routing_runtime_json(repo_root).is_file() && repo_root.join("skills").is_dir()
 }
 
-fn skill_body_path(repo_root: &Path, slug: &str) -> Result<PathBuf, String> {
+fn skill_body_path(repo_root: &Path, slug: &str) -> Result<PathBuf, FrameworkError> {
     let clean = slug.trim();
     if clean.is_empty()
         || clean.contains('/')
@@ -191,7 +191,7 @@ fn skill_body_path(repo_root: &Path, slug: &str) -> Result<PathBuf, String> {
         || clean.contains('\0')
         || clean.starts_with('.')
     {
-        return Err(format!("invalid skill slug: {slug}"));
+        return Err(FrameworkError::from(format!("invalid skill slug: {slug}")));
     }
 
     let path = repo_root.join("skills").join(clean).join("SKILL.md");
@@ -202,41 +202,41 @@ fn skill_body_path(repo_root: &Path, slug: &str) -> Result<PathBuf, String> {
 /// Additionally checks that symlink-resolved paths remain within the
 /// skills directory (catches redirections in intermediate components).
 /// Returns the path on success.
-fn finalize_skill_path(repo_root: &Path, path: &Path, slug: &str) -> Result<PathBuf, String> {
+fn finalize_skill_path(repo_root: &Path, path: &Path, slug: &str) -> Result<PathBuf, FrameworkError> {
     use core_state_utils::path_guard::{path_is_within_repo_root, reject_unsafe_path};
 
     reject_unsafe_path(path)?;
 
     // HPM-15: canonicalize first to detect symlink swaps before the is_file check.
     let canonical_path = path.canonicalize().map_err(|_| {
-        format!("skill path not found or unresolvable: {}", path.display())
+        FrameworkError::from(format!("skill path not found or unresolvable: {}", path.display()))
     })?;
 
     let skills_dir = repo_root.join("skills");
     // Use canonicalized path for the in-repo check as well
     if !canonical_path.starts_with(&skills_dir) {
-        return Err(format!(
+        return Err(FrameworkError::from(format!(
             "skill path for {slug} resolves outside skills directory via symlink: {}",
             canonical_path.display()
-        ));
+        )));
     }
 
     let is_under_skills = path_is_within_repo_root(repo_root, &canonical_path);
     if !is_under_skills {
-        return Err(format!(
+        return Err(FrameworkError::from(format!(
             "skill path for {slug} escapes repo root: {}",
             canonical_path.display()
-        ));
+        )));
     }
 
     if !canonical_path.is_file() {
-        return Err(format!("skill body not found: {}", path.display()));
+        return Err(FrameworkError::from(format!("skill body not found: {}", path.display())));
     }
 
     Ok(canonical_path)
 }
 
-pub(super) fn tool_skill_route_status(repo_root: &Path) -> Result<String, String> {
+pub(super) fn tool_skill_route_status(repo_root: &Path) -> Result<String, FrameworkError> {
     let runtime_path = skill_routing_runtime_json(repo_root);
     let mut remediation = Vec::new();
     if !runtime_path.is_file() {
@@ -259,7 +259,7 @@ pub(super) fn tool_skill_route_status(repo_root: &Path) -> Result<String, String
     .to_string())
 }
 
-pub fn build_evidence_entry(arguments: &Value) -> Result<Map<String, Value>, String> {
+pub fn build_evidence_entry(arguments: &Value) -> Result<Map<String, Value>, FrameworkError> {
     // HPM-16: TODO — this function currently accepts any input without validation.
     // Callers can supply arbitrary evidence records (fake exit codes, forged tool names).
     // A verification layer should be added that cross-references tool_name and exit_code
@@ -267,11 +267,11 @@ pub fn build_evidence_entry(arguments: &Value) -> Result<Map<String, Value>, Str
     let tool_name = arguments
         .get("tool_name")
         .and_then(Value::as_str)
-        .ok_or("Missing required argument: tool_name")?;
+        .ok_or_else(|| FrameworkError::from("Missing required argument: tool_name".to_string()))?;
     let command = arguments
         .get("command")
         .and_then(Value::as_str)
-        .ok_or("Missing required argument: command")?;
+        .ok_or_else(|| FrameworkError::from("Missing required argument: command".to_string()))?;
     let exit_code = arguments.get("exit_code").and_then(Value::as_i64);
     let output = arguments.get("output").and_then(Value::as_str);
 
@@ -296,7 +296,7 @@ pub fn build_evidence_entry(arguments: &Value) -> Result<Map<String, Value>, Str
     Ok(entry)
 }
 
-pub(super) fn tool_record_evidence(arguments: &Value, repo_root: &Path) -> Result<String, String> {
+pub(super) fn tool_record_evidence(arguments: &Value, repo_root: &Path) -> Result<String, FrameworkError> {
     let entry = build_evidence_entry(arguments)?;
     let tool_name = entry
         .get("tool_name")
@@ -330,11 +330,11 @@ pub(super) fn evidence_output_max_chars() -> usize {
 pub(super) fn tool_session_checkpoint(
     arguments: &Value,
     repo_root: &Path,
-) -> Result<String, String> {
+) -> Result<String, FrameworkError> {
     let summary = arguments
         .get("summary")
         .and_then(Value::as_str)
-        .ok_or("Missing required argument: summary")?;
+        .ok_or_else(|| FrameworkError::from("Missing required argument: summary".to_string()))?;
     let next_actions: Vec<String> = arguments
         .get("next_actions")
         .and_then(Value::as_array)
@@ -355,7 +355,7 @@ pub(super) fn tool_session_checkpoint(
         false,
     );
     crate::hooks::write_framework_session_artifacts(payload)
-        .map_err(|e| format!("Checkpoint write failed: {e}"))?;
+        .map_err(|e| FrameworkError::from(format!("Checkpoint write failed: {e}")))?;
 
     Ok(json!({"result": format!(
         "Checkpoint written: summary={}, next_actions_count={}",
@@ -369,7 +369,7 @@ pub fn tool_closeout_gate(
     arguments: &Value,
     repo_root: &Path,
     host_id: &str,
-) -> Result<String, String> {
+) -> Result<String, FrameworkError> {
     Ok(crate::hooks::tool_closeout_gate_evaluate(
         arguments, repo_root, host_id,
     )?)
@@ -379,24 +379,24 @@ pub(super) fn tool_closeout_record_write(
     arguments: &Value,
     repo_root: &Path,
     _host_id: &str,
-) -> Result<String, String> {
+) -> Result<String, FrameworkError> {
     Ok(crate::hooks::tool_closeout_record_write_dispatch(
         arguments, repo_root,
     )?)
 }
 
-pub(super) fn tool_goal_state_read(arguments: &Value, repo_root: &Path) -> Result<String, String> {
+pub(super) fn tool_goal_state_read(arguments: &Value, repo_root: &Path) -> Result<String, FrameworkError> {
     let task_id = arguments.get("task_id").and_then(Value::as_str);
     let state = core_state::state_manager::read_goal_state(repo_root, task_id)
-        .map_err(|e| e.to_string())?;
-    serde_json::to_string_pretty(&state).map_err(|e| e.to_string())
+        .map_err(|e| FrameworkError::from(e.to_string()))?;
+    serde_json::to_string_pretty(&state).map_err(|e| FrameworkError::from(e.to_string()))
 }
 
 pub(super) fn tool_goal_state_manage(
     arguments: &Value,
     repo_root: &Path,
     connection_session_id: &str,
-) -> Result<String, String> {
+) -> Result<String, FrameworkError> {
     let result =
         crate::hooks::tool_goal_state_manage_dispatch(arguments, repo_root, connection_session_id)?;
     Ok(result)

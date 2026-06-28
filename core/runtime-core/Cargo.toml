@@ -26,6 +26,7 @@ fr-contracts = { path = "../fr-contracts" }
 fr-exec = { path = "../fr-exec" }
 routing-core = { path = "../routing-core" }
 routing-engine = { path = "../routing-engine" }
+session-supervisor = { path = "../session-supervisor" }
 runtime-core-contracts = { path = "../runtime-core-contracts" }
 runtime-infra = { path = "../runtime-infra" }
 runtime-storage = { path = "../runtime-storage" }

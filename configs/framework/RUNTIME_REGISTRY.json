@@ -651,6 +651,13 @@
         "route_tool",
         "search_tools",
         "session_checkpoint",
+        "session_classify_block",
+        "session_inspect",
+        "session_launch",
+        "session_list",
+        "session_mark_blocked",
+        "session_resume_due",
+        "session_terminate",
         "skill_read",
         "skill_route",
         "skill_route_status",
@@ -687,14 +694,10 @@
         "mcp-stdio"
       ],
       "tools": [
-        "background_inspect",
-        "background_list",
-        "background_terminate",
         "browser_click",
         "browser_close",
         "browser_diagnostics",
         "browser_fill",
-        "browser_get_attached_runtime_events",
         "browser_get_elements",
         "browser_get_network",
         "browser_get_state",
@@ -705,15 +708,7 @@
         "browser_save_session",
         "browser_screenshot",
         "browser_tabs",
-        "browser_wait_for",
-        "runtime_heartbeat",
-        "session_classify_block",
-        "session_inspect",
-        "session_launch",
-        "session_list",
-        "session_mark_blocked",
-        "session_resume_due",
-        "session_terminate"
+        "browser_wait_for"
       ],
       "host_config_keys": {
         "cursor": "mcp_servers.browser-mcp",
@@ -729,6 +724,45 @@
       },
       "env_var_override": "ROUTER_RS_BIN",
       "repo_root": "framework_root"
+    },
+    "research-harness": {
+      "server_id": "research-harness",
+      "process": "independent",
+      "binary": "research-harness",
+      "crate": "research-harness",
+      "tools": [
+        "math_asymptotic_chain",
+        "math_asymptotic_estimate",
+        "math_backend_available",
+        "math_lean_verify",
+        "math_proof_dag_decompose",
+        "math_proof_dag_init",
+        "math_proof_dag_status",
+        "math_proof_dag_verify",
+        "math_prove_inequality",
+        "math_sympy_simplify",
+        "math_sympy_verify",
+        "research_claim_drift",
+        "research_review_dimensions",
+        "research_review_loop",
+        "research_verification_literature",
+        "research_verification_prose",
+        "research_verification_reproducibility",
+        "research_verification_statistical",
+        "research_verification_structure"
+      ],
+      "host_config_keys": {
+        "cursor": "mcp_servers.research-harness",
+        "opencode": "mcpServers.research-harness",
+        "codex": "mcp_servers.research-harness",
+        "claude": "mcpServers.research-harness"
+      },
+      "install_surfaces": {
+        "cursor": "user mcp.json",
+        "opencode": "opencode.json mcpServers",
+        "codex": "project .codex/config.toml",
+        "claude": "project .mcp.json"
+      }
     },
     "mcp-codegraph": {
       "server_id": "mcp-codegraph",
@@ -973,7 +1007,8 @@
         "mcp-pptx",
         "mcp-financial-data",
         "mcp-citation",
-        "mcp-gh-source-gate"
+        "mcp-gh-source-gate",
+        "research-harness"
       ]
     },
     "opencode": {
@@ -1033,7 +1068,8 @@
         "mcp-pptx",
         "mcp-financial-data",
         "mcp-citation",
-        "mcp-gh-source-gate"
+        "mcp-gh-source-gate",
+        "research-harness"
       ]
     },
     "codex": {
@@ -1095,7 +1131,8 @@
         "mcp-pptx",
         "mcp-financial-data",
         "mcp-citation",
-        "mcp-gh-source-gate"
+        "mcp-gh-source-gate",
+        "research-harness"
       ]
     },
     "claude": {
@@ -1154,7 +1191,8 @@
         "mcp-pptx",
         "mcp-financial-data",
         "mcp-citation",
-        "mcp-gh-source-gate"
+        "mcp-gh-source-gate",
+        "research-harness"
       ]
     }
   },

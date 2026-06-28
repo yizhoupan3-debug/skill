@@ -391,9 +391,6 @@ pub(crate) fn install_review_prompt_test_deps() {
                 .collect()
         }
 
-        fn has_parallel_review_candidate_context(&self, _query: &str, _tokens: &[String]) -> bool {
-            false
-        }
     }
 
     framework_kernel::install_tokenizer_provider(Box::new(WhitespaceTokenizer));

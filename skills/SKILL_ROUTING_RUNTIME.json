@@ -1523,13 +1523,10 @@
       "owner",
       "none",
       "P2",
-      "跨宿主 Plan / 策划文档闸门：先用本地证据起草可执行计划，再产出可验收 todo；默认轻量五行证据；高风险时 audit plan。plan_profile: execution（缺省）末条须做计划 vs 实际 + Git 状态证据收口（宿主支持时使用 /gitx plan）；plan_profile: 跨宿主 Plan 闸门，产出可验收 todo，非 lifecycle 专用。",
+      "跨宿主 Plan / 策划文档闸门：先用本地证据起草可执行计划，再产出可验收 todo；默认轻量五行证据；高风险时 audit plan。",
       "preferred",
       [
-        "CreatePlan",
-        "Cursor Plan",
         "Plan 模式",
-        "gitx plan 收口",
         "research-only plan",
         "可验收 todo",
         "策划文档闸门",
@@ -1548,7 +1545,7 @@
       ],
       "skill",
       [],
-      "Cross-host plan gate with actionable todo output",
+      "Plan 门控：证据先行、可验收 todo、计划 vs 实际收口",
       null,
       null,
       null,
@@ -1558,7 +1555,6 @@
         ],
         "tags": [
           "plan",
-          "workflow",
           "gate",
           "closeout"
         ],
@@ -2335,7 +2331,9 @@
       ],
       "skill",
       [
-        "artifact_exception:slides_design_contract"
+        "artifact_exception:slides_design_contract",
+        "artifact_exception:ppt_beamer",
+        "artifact_exception:source_slide_formats"
       ],
       "Create and edit PPT, PPTX, and slide deck presentations",
       null,
