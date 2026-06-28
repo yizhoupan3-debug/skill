@@ -4,6 +4,7 @@
 //! safety levels, LoopActionRecord, LoopCloseoutAggregate, and related types.
 
 use serde::{Deserialize, Serialize};
+use core_errors::FrameworkError;
 
 // ── Phase ──
 
@@ -11,7 +12,7 @@ use serde::{Deserialize, Serialize};
 ///
 /// ```text
 /// PENDING → DISCOVERING → PREFLIGHT → RUNNING → VERIFYING → COMPLETED
-///                                                      ↘ ESCALATED
+///                                                      ↘ ESCALATED → COMPLETED / INTERRUPTED
 /// 任意阶段 → INTERRUPTED（kill/超时）
 /// ```
 /// Phase transitions:
@@ -533,6 +534,23 @@ pub enum LoopError {
 impl From<serde_json::Error> for LoopError {
     fn from(e: serde_json::Error) -> Self {
         LoopError::Serde(e.to_string())
+    }
+}
+
+impl From<LoopError> for FrameworkError {
+    fn from(e: LoopError) -> Self {
+        match e {
+            LoopError::ProfileMismatch(msg)
+            | LoopError::UnknownProfile(msg)
+            | LoopError::ActionFailed(msg) => FrameworkError::validation(msg),
+            LoopError::Timeout(secs) => FrameworkError::validation(format!("Timeout after {secs}s")),
+            LoopError::KillSignaled(msg)
+            | LoopError::ResearchEscalation(msg) => FrameworkError::hook(msg),
+            LoopError::SpawnFailed(msg)
+            | LoopError::Io(msg) => FrameworkError::Io(std::io::Error::other(msg)),
+            LoopError::Serde(msg) => FrameworkError::validation(format!("serde: {msg}")),
+            LoopError::BudgetExceeded(msg) => FrameworkError::config(msg),
+        }
     }
 }
 

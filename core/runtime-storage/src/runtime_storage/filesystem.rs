@@ -15,9 +15,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 /// could otherwise interleave bytes on the same logical path.
 pub static MEMORY_APPEND_MUTEX: OnceLock<Mutex<()>> = OnceLock::new();
 #[tracing::instrument(level = "debug", skip_all)]
-pub fn memory_storage_root() -> Result<PathBuf, String> {
+pub fn memory_storage_root() -> Result<PathBuf, FrameworkError> {
     let cwd =
-        std::env::current_dir().map_err(|err| format!("resolve current dir failed: {err}"))?;
+        std::env::current_dir().map_err(FrameworkError::Io)?;
     let mut digest = Sha256::new();
     digest.update(cwd.display().to_string().as_bytes());
     let namespace = hex::encode(digest.finalize());
@@ -27,7 +27,7 @@ pub fn memory_storage_root() -> Result<PathBuf, String> {
 }
 
 #[tracing::instrument(level = "debug", skip_all)]
-pub fn memory_artifact_path(path: &Path) -> Result<PathBuf, String> {
+pub fn memory_artifact_path(path: &Path) -> Result<PathBuf, FrameworkError> {
     let stable_key = stable_memory_key(path)?;
     let mut digest = Sha256::new();
     digest.update(stable_key.as_bytes());
@@ -39,22 +39,22 @@ pub fn memory_artifact_path(path: &Path) -> Result<PathBuf, String> {
 /// This avoids following a symlink on append and makes the write target explicit
 /// (callers must write to a normal file path, not an alias).
 #[tracing::instrument(level = "debug", skip_all)]
-pub fn filesystem_reject_symlink_write_target(path: &Path) -> Result<(), String> {
+pub fn filesystem_reject_symlink_write_target(path: &Path) -> Result<(), FrameworkError> {
     match fs::symlink_metadata(path) {
         Ok(meta) => {
             if meta.is_symlink() {
-                return Err(format!(
+                return Err(FrameworkError::validation(format!(
                     "runtime storage path {} must not be a symlink",
                     path.display()
-                ));
+                )));
             }
             Ok(())
         }
         Err(err) if err.kind() == ErrorKind::NotFound => Ok(()),
-        Err(err) => Err(format!(
+        Err(err) => Err(FrameworkError::validation(format!(
             "stat runtime storage path {} failed: {err}",
             path.display()
-        )),
+        ))),
     }
 }
 
@@ -80,19 +80,16 @@ const LOCK_RETRY_INTERVAL_MS: u64 = 100;
 const LOCK_MAX_ATTEMPTS: u64 = LOCK_ACQUIRE_TIMEOUT_MS / LOCK_RETRY_INTERVAL_MS;
 
 #[tracing::instrument(level = "debug", skip_all)]
-pub fn acquire_runtime_path_lock(path: &Path) -> Result<RuntimePathLockGuard, String> {
+pub fn acquire_runtime_path_lock(path: &Path) -> Result<RuntimePathLockGuard, FrameworkError> {
     let parent = path.parent().ok_or_else(|| {
-        format!(
+        FrameworkError::validation(format!(
             "runtime path {} has no parent directory for lock placement",
             path.display()
-        )
+        ))
     })?;
     if !parent.as_os_str().is_empty() {
         fs::create_dir_all(parent).map_err(|err| {
-            format!(
-                "create runtime lock parent directory failed for {}: {err}",
-                path.display()
-            )
+            FrameworkError::Io(err)
         })?;
     }
     let file_name = path
@@ -107,10 +104,7 @@ pub fn acquire_runtime_path_lock(path: &Path) -> Result<RuntimePathLockGuard, St
         .write(true)
         .open(&lock_path)
         .map_err(|err| {
-            format!(
-                "open runtime path lock {} failed: {err}",
-                lock_path.display()
-            )
+            FrameworkError::Io(err)
         })?;
     let mut attempt = 0u64;
     loop {
@@ -119,20 +113,20 @@ pub fn acquire_runtime_path_lock(path: &Path) -> Result<RuntimePathLockGuard, St
             Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
                 attempt += 1;
                 if attempt >= LOCK_MAX_ATTEMPTS {
-                    return Err(format!(
+                    return Err(FrameworkError::lock(format!(
                         "acquire runtime path lock {} timed out after {}ms ({} attempts)",
                         lock_path.display(),
                         LOCK_ACQUIRE_TIMEOUT_MS,
                         attempt,
-                    ));
+                    )));
                 }
                 std::thread::sleep(std::time::Duration::from_millis(LOCK_RETRY_INTERVAL_MS));
             }
             Err(err) => {
-                return Err(format!(
+                return Err(FrameworkError::lock(format!(
                     "acquire runtime path lock {} failed: {err}",
                     lock_path.display()
-                ));
+                )));
             }
         }
     }
@@ -143,14 +137,9 @@ pub fn filesystem_write_text_inner(
     path: &Path,
     payload_text: &str,
     _nanos: u128,
-) -> Result<(), String> {
+) -> Result<(), FrameworkError> {
     if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).map_err(|err| {
-            format!(
-                "create runtime storage parent directory failed for {}: {err}",
-                path.display()
-            )
-        })?;
+        fs::create_dir_all(parent).map_err(FrameworkError::Io)?;
     }
     // Cross-process lock: serialize concurrent writers (codex+cursor+tests)
     // sharing the same artifact path to prevent last-writer-wins overwrites.
@@ -158,74 +147,49 @@ pub fn filesystem_write_text_inner(
     filesystem_reject_symlink_write_target(path)?;
 
     // Delegate to core-state-utils's canonical atomic write (temp + write + fsync + rename + fsync_parent_dir).
-    core_state_utils::atomic_write::write_atomic_text(path, payload_text).map_err(|e| e.to_string())
+    core_state_utils::atomic_write::write_atomic_text(path, payload_text)?;
+    Ok(())
 }
 
 #[tracing::instrument(level = "debug", skip_all)]
 pub fn filesystem_write_text(path: &Path, payload_text: &str) -> Result<(), FrameworkError> {
     let nanos = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map_err(|err| format!("system time before unix epoch: {err}"))?
+        .map_err(|err| FrameworkError::validation(format!("system time before unix epoch: {err}")))?
         .as_nanos();
     filesystem_write_text_inner(path, payload_text, nanos)
-        .map_err(|e| FrameworkError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))
 }
 
 #[tracing::instrument(level = "debug", skip_all)]
-pub fn filesystem_append_text(path: &Path, payload_text: &str) -> Result<(), String> {
+pub fn filesystem_append_text(path: &Path, payload_text: &str) -> Result<(), FrameworkError> {
     if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).map_err(|err| {
-            format!(
-                "create runtime storage parent directory failed for {}: {err}",
-                path.display()
-            )
-        })?;
+        fs::create_dir_all(parent).map_err(FrameworkError::Io)?;
     }
     // Cross-process append lock prevents JSONL line-interleaving when codex
     // and cursor (or parallel tests) tail the same trace/event stream.
     let _path_lock = acquire_runtime_path_lock(path)?;
     filesystem_reject_symlink_write_target(path)?;
     let mut file = filesystem_open_append_text(path)?;
-    file.write_all(payload_text.as_bytes()).map_err(|err| {
-        format!(
-            "append runtime storage payload failed for {}: {err}",
-            path.display()
-        )
-    })?;
-    file.sync_data().map_err(|err| {
-        format!(
-            "sync runtime storage append failed for {}: {err}",
-            path.display()
-        )
-    })?;
+    file.write_all(payload_text.as_bytes()).map_err(FrameworkError::Io)?;
+    file.sync_data().map_err(FrameworkError::Io)?;
     Ok(())
 }
 
 #[cfg(unix)]
-pub fn filesystem_open_append_text(path: &Path) -> Result<fs::File, String> {
+pub fn filesystem_open_append_text(path: &Path) -> Result<fs::File, FrameworkError> {
     OpenOptions::new()
         .create(true)
         .append(true)
         .custom_flags(libc::O_NOFOLLOW)
         .open(path)
-        .map_err(|err| {
-            format!(
-                "open runtime storage payload for append failed for {}: {err}",
-                path.display()
-            )
-        })
+        .map_err(FrameworkError::Io)
 }
 
 #[cfg(not(unix))]
-pub fn filesystem_open_append_text(path: &Path) -> Result<fs::File, String> {
+pub fn filesystem_open_append_text(path: &Path) -> Result<fs::File, FrameworkError> {
     OpenOptions::new()
         .create(true)
         .append(true)
         .open(path)
-        .map_err(|err| {
-            format!(
-                "open runtime storage payload for append failed for {}: {err}",
-                path.display()
-            )
-        })
+        .map_err(FrameworkError::Io)
 }

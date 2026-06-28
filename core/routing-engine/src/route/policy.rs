@@ -7,17 +7,22 @@ use super::types::{
     RouteDecision, RouteDecisionSnapshotPayload, RouteDiffReportPayload,
     RouteExecutionPolicyPayload, RouteResolutionPayload,
 };
+use core_errors::FrameworkError;
 
 pub fn build_route_diff_report(
     mode: &str,
     rust_snapshot: RouteDecisionSnapshotPayload,
     route_decision: Option<&RouteDecision>,
-) -> Result<RouteDiffReportPayload, String> {
+) -> Result<RouteDiffReportPayload, FrameworkError> {
     let normalized_mode = mode.trim().to_ascii_lowercase();
     let strict_verification = match normalized_mode.as_str() {
         "shadow" => false,
         "verify" => true,
-        _ => return Err(format!("unsupported route report mode: {mode}")),
+        _ => {
+            return Err(FrameworkError::Unsupported {
+                what: format!("unsupported route report mode: {mode}"),
+            })
+        }
     };
     let (verified_contract_fields, contract_mismatch_fields) =
         compare_route_contract_to_snapshot(route_decision, &rust_snapshot);
@@ -39,7 +44,7 @@ pub fn build_route_diff_report(
 pub fn build_route_resolution(
     mode: &str,
     route_decision: &RouteDecision,
-) -> Result<RouteResolutionPayload, String> {
+) -> Result<RouteResolutionPayload, FrameworkError> {
     let policy = build_route_policy(mode)?;
     let report = if policy.diagnostic_report_required {
         Some(build_route_diff_report(
@@ -61,9 +66,11 @@ pub fn build_route_resolution(
             .map(|value| value.contract_mismatch_fields.join(", "))
             .filter(|value| !value.is_empty())
             .unwrap_or_else(|| "unknown".to_string());
-        return Err(format!(
-            "Rust verification route report detected contract drift: {mismatch_fields}."
-        ));
+        return Err(FrameworkError::Validation {
+            message: format!(
+                "Rust verification route report detected contract drift: {mismatch_fields}."
+            ),
+        });
     }
     Ok(RouteResolutionPayload {
         schema_version: ROUTE_RESOLUTION_SCHEMA_VERSION.to_string(),
@@ -118,7 +125,7 @@ fn compare_route_contract_to_snapshot(
     (verified_fields, mismatch_fields)
 }
 
-pub fn build_route_policy(mode: &str) -> Result<RouteExecutionPolicyPayload, String> {
+pub fn build_route_policy(mode: &str) -> Result<RouteExecutionPolicyPayload, FrameworkError> {
     let normalized_mode = mode.trim().to_ascii_lowercase();
     let base = RouteExecutionPolicyPayload {
         policy_schema_version: ROUTE_POLICY_SCHEMA_VERSION.to_string(),
@@ -143,17 +150,23 @@ pub fn build_route_policy(mode: &str) -> Result<RouteExecutionPolicyPayload, Str
             ..base
         },
         "rust" => base,
-        _ => return Err(format!("unsupported route policy mode: {mode}")),
+        _ => {
+            return Err(FrameworkError::Unsupported {
+                what: format!("unsupported route policy mode: {mode}"),
+            })
+        }
     };
     if policy.diagnostic_report_required && policy.diagnostic_route_mode == "none" {
-        return Err(
-            "route policy declared diagnostics outside the diagnostic route mode".to_string(),
-        );
+        return Err(FrameworkError::Validation {
+            message: "route policy declared diagnostics outside the diagnostic route mode"
+                .into(),
+        });
     }
     if policy.strict_verification_required && !policy.diagnostic_report_required {
-        return Err(
-            "route policy declared strict verification without diagnostic reporting".to_string(),
-        );
+        return Err(FrameworkError::Validation {
+            message: "route policy declared strict verification without diagnostic reporting"
+                .into(),
+        });
     }
     Ok(policy)
 }

@@ -4,6 +4,7 @@ use mimalloc::MiMalloc;
 static GLOBAL: MiMalloc = MiMalloc;
 
 use clap::Parser;
+use core_errors::FrameworkError;
 
 #[cfg(feature = "browser")]
 /// Wire browser-mcp dispatch hooks between core/browser-mcp-dispatch and tools/browser-mcp.
@@ -48,7 +49,7 @@ fn init_browser_mcp_dispatch() {
     // host_projection::hooks::dispatch_browser_command's fallback.
 }
 
-fn main() -> Result<(), String> {
+fn main() -> Result<(), FrameworkError> {
     // Wire research-harness gate checkers into the QG Route bridge (before init_hooks).
     #[cfg(feature = "research")]
     runtime_core::qg_route::set_extern_checkers(research_harness::register_qg_checkers);
@@ -104,5 +105,5 @@ fn main() -> Result<(), String> {
     }
     let args = router_rs::cli::Cli::parse_from(args);
     init_browser_mcp_dispatch();
-    router_rs::cli::run(&args).map_err(|e| e.to_string())
+    router_rs::cli::run(&args)
 }

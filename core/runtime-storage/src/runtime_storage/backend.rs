@@ -60,7 +60,7 @@ pub fn runtime_backend_capabilities(
 }
 
 #[tracing::instrument(level = "debug", skip_all)]
-pub fn runtime_backend_capabilities_payload(backend_family: &str) -> Result<Value, String> {
+pub fn runtime_backend_capabilities_payload(backend_family: &str) -> Result<Value, FrameworkError> {
     let capabilities = runtime_backend_capabilities(backend_family)?;
     Ok(json!({
         "backend_family": capabilities.backend_family,

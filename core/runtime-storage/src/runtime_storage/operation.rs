@@ -43,25 +43,19 @@ pub fn digest_after_append_text(
     path: &Path,
     backend: &ResolvedStorageBackend,
     constrained_storage_root: &Path,
-) -> Result<Option<String>, String> {
+) -> Result<Option<String>, FrameworkError> {
     match backend {
         ResolvedStorageBackend::Filesystem => match stream_sha256_hex_path(path) {
             Ok(hex) => Ok(Some(hex)),
             Err(err) if err.kind() == ErrorKind::PermissionDenied => Ok(None),
-            Err(err) => Err(format!(
-                "runtime_storage append_text digest read failed for {}: {err}",
-                path.display()
-            )),
+            Err(err) => Err(FrameworkError::Io(err)),
         },
         ResolvedStorageBackend::Memory => {
             let artifact_path = memory_artifact_path(path)?;
             match stream_sha256_hex_path(&artifact_path) {
                 Ok(hex) => Ok(Some(hex)),
                 Err(err) if err.kind() == ErrorKind::PermissionDenied => Ok(None),
-                Err(err) => Err(format!(
-                    "runtime_storage append_text digest read failed for {}: {err}",
-                    artifact_path.display()
-                )),
+                Err(err) => Err(FrameworkError::Io(err)),
             }
         }
         ResolvedStorageBackend::Sqlite {
@@ -154,7 +148,7 @@ pub fn storage_artifact_exists(
 pub fn storage_read_text(
     path: &Path,
     storage_backend: Option<&ResolvedStorageBackend>,
-) -> Result<String, String> {
+) -> Result<String, FrameworkError> {
     // Route to the correct backend based on the storage_backend parameter.
     // The path.exists() filesystem check must NOT run for Sqlite or Memory
     // backends, as that would return stale filesystem data for paths that
@@ -163,17 +157,15 @@ pub fn storage_read_text(
         Some(ResolvedStorageBackend::Filesystem) | None => {
             if path.exists() {
                 return fs::read_to_string(path)
-                    .map_err(|err| format!("read artifact failed for {}: {err}", path.display()));
+                    .map_err(FrameworkError::Io);
             }
-            Err(format!("artifact does not exist: {}", path.display()))
+            Err(FrameworkError::not_found(format!(
+                "artifact does not exist: {}",
+                path.display()
+            )))
         }
         Some(ResolvedStorageBackend::Memory) => fs::read_to_string(memory_artifact_path(path)?)
-            .map_err(|err| {
-                format!(
-                    "read memory storage payload failed for {}: {err}",
-                    path.display()
-                )
-            }),
+            .map_err(FrameworkError::Io),
         Some(ResolvedStorageBackend::Sqlite {
             db_path,
             storage_root,
@@ -295,7 +287,7 @@ pub fn resolve_runtime_storage_backend(
         Option<String>,
         Option<String>,
     ),
-    String,
+    FrameworkError,
 > {
     let backend_family = normalized_backend_family(&request.backend_family);
     let capabilities = runtime_backend_capabilities(&backend_family)?;
@@ -316,7 +308,11 @@ pub fn resolve_runtime_storage_backend(
             let db_path = request
                 .sqlite_db_path
                 .as_ref()
-                .ok_or_else(|| "runtime_storage sqlite backend requires sqlite_db_path".to_string())
+                .ok_or_else(|| {
+                    FrameworkError::validation(
+                        "runtime_storage sqlite backend requires sqlite_db_path",
+                    )
+                })
                 .and_then(|value| normalize_runtime_path(value))?;
             let storage_root = constrained_storage_root.to_path_buf();
             Ok((
@@ -329,14 +325,16 @@ pub fn resolve_runtime_storage_backend(
                 Some(storage_root.display().to_string()),
             ))
         }
-        other => Err(format!("unsupported runtime storage backend: {other}")),
+        other => Err(FrameworkError::unsupported(format!(
+            "unsupported runtime storage backend: {other}"
+        ))),
     }
 }
 
 #[tracing::instrument(level = "debug", skip_all)]
 pub fn runtime_storage_operation(
     request: RuntimeStorageRequestPayload,
-) -> Result<RuntimeStorageResponsePayload, String> {
+) -> Result<RuntimeStorageResponsePayload, FrameworkError> {
     let effective_storage_root = effective_storage_root_for_request(&request);
     let (path, constrained_storage_root) =
         resolve_runtime_storage_path_with_root(&request.path, effective_storage_root.as_deref())?;
@@ -387,8 +385,9 @@ pub fn runtime_storage_operation(
             let expected = expected_sha256
                 .or_else(|| payload_text.as_deref().map(payload_sha256))
                 .ok_or_else(|| {
-                    "runtime_storage verify_text requires expected_sha256 or payload_text"
-                        .to_string()
+                    FrameworkError::validation(
+                        "runtime_storage verify_text requires expected_sha256 or payload_text",
+                    )
                 })?;
             if !storage_artifact_exists(&path, Some(&backend)) {
                 (false, None, None, None, None, Some(false), None)
@@ -408,26 +407,16 @@ pub fn runtime_storage_operation(
         }
         "write_text" => {
             let payload = payload_text
-                .ok_or_else(|| "runtime_storage write_text requires payload_text".to_string())?;
+                .ok_or_else(|| FrameworkError::validation("runtime_storage write_text requires payload_text"))?;
             let digest = payload_sha256(&payload);
             match &backend {
                 ResolvedStorageBackend::Filesystem => filesystem_write_text(&path, &payload)?,
                 ResolvedStorageBackend::Memory => {
                     let artifact_path = memory_artifact_path(&path)?;
                     if let Some(parent) = artifact_path.parent() {
-                        fs::create_dir_all(parent).map_err(|err| {
-                            format!(
-                                "create memory storage parent directory failed for {}: {err}",
-                                artifact_path.display()
-                            )
-                        })?;
+                        fs::create_dir_all(parent).map_err(FrameworkError::Io)?;
                     }
-                    fs::write(&artifact_path, payload.as_bytes()).map_err(|err| {
-                        format!(
-                            "write memory storage payload failed for {}: {err}",
-                            path.display()
-                        )
-                    })?;
+                    fs::write(&artifact_path, payload.as_bytes()).map_err(FrameworkError::Io)?;
                 }
                 ResolvedStorageBackend::Sqlite { db_path, .. } => {
                     sqlite_write_text(&path, db_path, &constrained_storage_root, &payload)?
@@ -445,7 +434,7 @@ pub fn runtime_storage_operation(
         }
         "append_text" => {
             let payload = payload_text
-                .ok_or_else(|| "runtime_storage append_text requires payload_text".to_string())?;
+                .ok_or_else(|| FrameworkError::validation("runtime_storage append_text requires payload_text"))?;
             let bytes_written = payload.len();
             match &backend {
                 ResolvedStorageBackend::Filesystem => {
@@ -456,34 +445,20 @@ pub fn runtime_storage_operation(
                         .get_or_init(|| Mutex::new(()))
                         .lock()
                         .map_err(|_| {
-                            "runtime_storage memory append mutex poisoned (parallel append aborted)"
-                                .to_string()
+                            FrameworkError::lock(
+                                "runtime_storage memory append mutex poisoned (parallel append aborted)",
+                            )
                         })?;
                     let artifact_path = memory_artifact_path(&path)?;
                     if let Some(parent) = artifact_path.parent() {
-                        fs::create_dir_all(parent).map_err(|err| {
-                            format!(
-                                "create memory storage parent directory failed for {}: {err}",
-                                artifact_path.display()
-                            )
-                        })?;
+                        fs::create_dir_all(parent).map_err(FrameworkError::Io)?;
                     }
                     let mut file = OpenOptions::new()
                         .create(true)
                         .append(true)
                         .open(&artifact_path)
-                        .map_err(|err| {
-                            format!(
-                                "open memory storage payload for append failed for {}: {err}",
-                                path.display()
-                            )
-                        })?;
-                    file.write_all(payload.as_bytes()).map_err(|err| {
-                        format!(
-                            "append memory storage payload failed for {}: {err}",
-                            path.display()
-                        )
-                    })?;
+                        .map_err(FrameworkError::Io)?;
+                    file.write_all(payload.as_bytes()).map_err(FrameworkError::Io)?;
                 }
                 ResolvedStorageBackend::Sqlite { db_path, .. } => {
                     sqlite_append_text(&path, db_path, &constrained_storage_root, &payload)?;
@@ -492,7 +467,9 @@ pub fn runtime_storage_operation(
             let digest = digest_after_append_text(&path, &backend, &constrained_storage_root)?;
             (true, None, Some(bytes_written), None, digest, None, None)
         }
-        other => return Err(format!("unsupported runtime_storage operation: {other:?}")),
+        other => return Err(FrameworkError::unsupported(format!(
+            "unsupported runtime_storage operation: {other:?}"
+        ))),
     };
 
     Ok(RuntimeStorageResponsePayload {
@@ -575,21 +552,21 @@ fn build_service_projection_for_backend(
 }
 
 #[tracing::instrument(level = "debug", skip_all)]
-pub fn build_checkpoint_control_plane_compiler_payload(payload: Value) -> Result<Value, String> {
+pub fn build_checkpoint_control_plane_compiler_payload(payload: Value) -> Result<Value, FrameworkError> {
     let control_plane_descriptor = payload.get("control_plane_descriptor");
     let paths = payload
         .get("paths")
         .and_then(Value::as_object)
-        .ok_or_else(|| "runtime checkpoint control plane requires paths".to_string())?;
+        .ok_or_else(|| FrameworkError::validation("runtime checkpoint control plane requires paths"))?;
     let capabilities = payload
         .get("capabilities")
         .and_then(Value::as_object)
-        .ok_or_else(|| "runtime checkpoint control plane requires capabilities".to_string())?;
+        .ok_or_else(|| FrameworkError::validation("runtime checkpoint control plane requires capabilities"))?;
     let raw_backend_family = capabilities
         .get("backend_family")
         .and_then(Value::as_str)
         .ok_or_else(|| {
-            "runtime checkpoint control plane capabilities must include backend_family".to_string()
+            FrameworkError::validation("runtime checkpoint control plane capabilities must include backend_family")
         })?;
     let backend_capabilities = runtime_backend_capabilities(raw_backend_family)?;
     let backend_family = backend_capabilities.backend_family;
@@ -609,13 +586,13 @@ pub fn build_checkpoint_control_plane_compiler_payload(payload: Value) -> Result
             .and_then(Value::as_str),
     )?;
     if parity.get("aligned").and_then(Value::as_bool) != Some(true) {
-        return Err(format!(
+        return Err(FrameworkError::validation(format!(
             "runtime checkpoint control plane backend family mismatch: {}",
             parity
                 .get("mismatch_reason")
                 .and_then(Value::as_str)
                 .unwrap_or("backend families are not aligned")
-        ));
+        )));
     }
 
     // Inlined: build_runtime_control_plane_payload().authority == RUNTIME_CONTROL_PLANE_AUTHORITY
@@ -687,14 +664,12 @@ pub fn build_checkpoint_control_plane_compiler_payload(payload: Value) -> Result
             &Value::Object(paths.clone()),
             "background_state_path",
             "runtime checkpoint control plane",
-        )
-        .map_err(|e| FrameworkError::Validation { message: e.to_string() })?,
+        )?,
         "event_transport_dir": required_non_empty_string(
             &Value::Object(paths.clone()),
             "event_transport_dir",
             "runtime checkpoint control plane",
-        )
-        .map_err(|e| FrameworkError::Validation { message: e.to_string() })?,
+        )?,
     });
 
     Ok(json!({

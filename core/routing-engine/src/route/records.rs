@@ -1,4 +1,5 @@
 //! Runtime record loading and cache.
+use core_errors::FrameworkError;
 use rayon::prelude::*;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -15,7 +16,7 @@ use super::types::{
     RecordsCacheState, RouteMetadataPatch, SkillRecord,
 };
 
-pub fn load_records(runtime_path: Option<&Path>) -> Result<Vec<SkillRecord>, String> {
+pub fn load_records(runtime_path: Option<&Path>) -> Result<Vec<SkillRecord>, FrameworkError> {
     let default_runtime_path = default_runtime_path();
     let runtime_path = runtime_path.or(default_runtime_path.as_deref());
     if let Some(path) = runtime_path
@@ -23,28 +24,34 @@ pub fn load_records(runtime_path: Option<&Path>) -> Result<Vec<SkillRecord>, Str
     {
         return load_records_from_runtime(path);
     }
-    Err("No routing runtime found.".to_string())
+    Err(FrameworkError::NotFound {
+        what: "No routing runtime found.".into(),
+    })
 }
 
-pub fn load_inline_records(payload: &Value) -> Result<Vec<SkillRecord>, String> {
+pub fn load_inline_records(payload: &Value) -> Result<Vec<SkillRecord>, FrameworkError> {
     let rows = payload
         .get("skills")
         .and_then(Value::as_array)
-        .ok_or_else(|| "inline route requires a skills array".to_string())?;
+        .ok_or_else(|| FrameworkError::Validation {
+            message: "inline route requires a skills array".into(),
+        })?;
     if rows.len() < PARALLEL_RECORD_SCAN_MIN {
         return rows.iter().map(inline_skill_record).collect();
     }
     rows.par_iter().map(inline_skill_record).collect()
 }
 
-fn inline_skill_record(row: &Value) -> Result<SkillRecord, String> {
+fn inline_skill_record(row: &Value) -> Result<SkillRecord, FrameworkError> {
     let name = row
         .get("name")
         .and_then(Value::as_str)
         .unwrap_or("")
         .to_string();
     if name.is_empty() {
-        return Err("inline skill payload missing name".to_string());
+        return Err(FrameworkError::Validation {
+            message: "inline skill payload missing name".into(),
+        });
     }
     let skill = InlineSkillRecordPayload {
         name,
@@ -264,7 +271,7 @@ fn merge_sidecar_route_metadata(
     config_path: &Path,
     sidecar_fn: fn(&Path) -> Option<PathBuf>,
     meta: &mut HashMap<String, RouteMetadataPatch>,
-) -> Result<(), String> {
+) -> Result<(), FrameworkError> {
     let Some(sidecar) = sidecar_fn(config_path) else {
         return Ok(());
     };
@@ -279,7 +286,7 @@ fn merge_sidecar_route_metadata(
 fn merge_route_metadata_payload(
     payload: &Value,
     meta: &mut HashMap<String, RouteMetadataPatch>,
-) -> Result<(), String> {
+) -> Result<(), FrameworkError> {
     let Some(skills) = payload.get("skills").and_then(Value::as_object) else {
         return Ok(());
     };
@@ -321,9 +328,11 @@ fn merge_route_metadata_payload(
                 "eligible-in-runtime" | "explicit-or-fallback" | "explicit-only" | "never"
             )
         {
-            return Err(format!(
-                "unsupported fallback_policy.mode `{mode}` for skill `{slug}`"
-            ));
+            return Err(FrameworkError::Validation {
+                message: format!(
+                    "unsupported fallback_policy.mode `{mode}` for skill `{slug}`"
+                ),
+            });
         }
         if positive_triggers.is_empty()
             && negative_triggers.is_empty()
@@ -350,7 +359,7 @@ fn merge_route_metadata_payload(
 // ---------------------------------------------------------------------------
 
 /// Create a `(key → position)` index from a JSON `keys` array.
-fn build_key_index(keys: &[Value], path: &Path) -> Result<HashMap<String, usize>, String> {
+fn build_key_index(keys: &[Value], path: &Path) -> Result<HashMap<String, usize>, FrameworkError> {
     let mut index: HashMap<String, usize> = HashMap::new();
     for (pos, key) in keys.iter().enumerate() {
         if let Some(raw) = key.as_str() {
@@ -358,48 +367,66 @@ fn build_key_index(keys: &[Value], path: &Path) -> Result<HashMap<String, usize>
         }
     }
     if index.is_empty() {
-        return Err(format!("empty keys array: {}", path.display()));
+        return Err(FrameworkError::Validation {
+            message: format!("empty keys array: {}", path.display()),
+        });
     }
     Ok(index)
 }
 
-pub fn load_records_from_runtime(path: &Path) -> Result<Vec<SkillRecord>, String> {
+pub fn load_records_from_runtime(path: &Path) -> Result<Vec<SkillRecord>, FrameworkError> {
     let payload = read_json(path)?;
     let rows = payload
         .get("skills")
         .and_then(Value::as_array)
-        .ok_or_else(|| format!("runtime index missing skills rows: {}", path.display()))?;
+        .ok_or_else(|| FrameworkError::NotFound {
+            what: format!("runtime index missing skills rows: {}", path.display()),
+        })?;
     let keys = payload
         .get("keys")
         .and_then(Value::as_array)
-        .ok_or_else(|| format!("runtime index missing keys: {}", path.display()))?;
+        .ok_or_else(|| FrameworkError::NotFound {
+            what: format!("runtime index missing keys: {}", path.display()),
+        })?;
 
     let index = build_key_index(keys, path)?;
 
     let idx_slug = *index
         .get("slug")
-        .ok_or_else(|| format!("runtime index missing slug key: {}", path.display()))?;
+        .ok_or_else(|| FrameworkError::NotFound {
+            what: format!("runtime index missing slug key: {}", path.display()),
+        })?;
     let idx_layer = *index
         .get("layer")
-        .ok_or_else(|| format!("runtime index missing layer key: {}", path.display()))?;
+        .ok_or_else(|| FrameworkError::NotFound {
+            what: format!("runtime index missing layer key: {}", path.display()),
+        })?;
     let idx_owner = *index
         .get("owner")
-        .ok_or_else(|| format!("runtime index missing owner key: {}", path.display()))?;
+        .ok_or_else(|| FrameworkError::NotFound {
+            what: format!("runtime index missing owner key: {}", path.display()),
+        })?;
     let idx_gate = *index
         .get("gate")
-        .ok_or_else(|| format!("runtime index missing gate key: {}", path.display()))?;
+        .ok_or_else(|| FrameworkError::NotFound {
+            what: format!("runtime index missing gate key: {}", path.display()),
+        })?;
     let idx_summary = *index
         .get("summary")
         .or_else(|| index.get("description"))
-        .ok_or_else(|| format!("runtime index missing summary key: {}", path.display()))?;
+        .ok_or_else(|| FrameworkError::NotFound {
+            what: format!("runtime index missing summary key: {}", path.display()),
+        })?;
     let idx_trigger_hints = *index
         .get("trigger_hints")
         .or_else(|| index.get("triggers"))
         .ok_or_else(|| {
-            format!(
-                "runtime index missing trigger_hints key: {}",
-                path.display()
-            )
+            FrameworkError::NotFound {
+                what: format!(
+                    "runtime index missing trigger_hints key: {}",
+                    path.display()
+                ),
+            }
         })?;
     let idx_priority = index.get("priority").copied();
     let idx_session_start = index.get("session_start").copied();
@@ -476,10 +503,12 @@ fn evict_records_cache_over_capacity(state: &mut RecordsCacheState) {
     }
 }
 
-pub fn invalidate_records_cache() -> Result<(), String> {
+pub fn invalidate_records_cache() -> Result<(), FrameworkError> {
     let mut state = records_cache_state().write().map_err(|e| {
         tracing::warn!("[router-rs] route records cache lock poisoned: {e}");
-        "route records cache lock poisoned".to_string()
+        FrameworkError::Lock {
+            message: "route records cache lock poisoned".into(),
+        }
     })?;
     state.map.clear();
     state.fifo.clear();
@@ -488,7 +517,7 @@ pub fn invalidate_records_cache() -> Result<(), String> {
 
 pub fn load_records_cached_for_stdio(
     runtime_path: Option<&Path>,
-) -> Result<Arc<Vec<SkillRecord>>, String> {
+) -> Result<Arc<Vec<SkillRecord>>, FrameworkError> {
     let runtime_path = effective_runtime_path(runtime_path);
     let runtime_path = runtime_path.as_deref();
     load_records_cached_for_stdio_resolved(runtime_path)
@@ -496,7 +525,7 @@ pub fn load_records_cached_for_stdio(
 
 pub fn load_records_cached_for_stdio_resolved(
     runtime_path: Option<&Path>,
-) -> Result<Arc<Vec<SkillRecord>>, String> {
+) -> Result<Arc<Vec<SkillRecord>>, FrameworkError> {
     let key = records_cache_key(runtime_path);
     let runtime_mtime = file_modified_at(runtime_path);
     let metadata_sidecar = runtime_path.and_then(route_metadata_sidecar_for_runtime);
@@ -505,7 +534,9 @@ pub fn load_records_cached_for_stdio_resolved(
     {
         let state = records_cache_state().read().map_err(|e| {
             tracing::warn!("[router-rs] route records cache lock poisoned: {e}");
-            "route records cache lock poisoned".to_string()
+            FrameworkError::Lock {
+                message: "route records cache lock poisoned".into(),
+            }
         })?;
         if let Some(entry) = state.map.get(&key)
             && entry.runtime_mtime == runtime_mtime
@@ -525,7 +556,9 @@ pub fn load_records_cached_for_stdio_resolved(
     };
     let mut state = records_cache_state().write().map_err(|e| {
         tracing::warn!("[router-rs] route records cache lock poisoned: {e}");
-        "route records cache lock poisoned".to_string()
+        FrameworkError::Lock {
+            message: "route records cache lock poisoned".into(),
+        }
     })?;
     let is_new_key = !state.map.contains_key(&key);
     state.map.insert(key.clone(), entry);
@@ -538,6 +571,6 @@ pub fn load_records_cached_for_stdio_resolved(
 
 pub fn load_records_cached_for_stdio_with_default_runtime_path(
     default_runtime_path: &Path,
-) -> Result<Arc<Vec<SkillRecord>>, String> {
+) -> Result<Arc<Vec<SkillRecord>>, FrameworkError> {
     load_records_cached_for_stdio_resolved(Some(default_runtime_path))
 }

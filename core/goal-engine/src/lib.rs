@@ -33,3 +33,17 @@ pub use types::{
     LoopAction, LoopActionRecord, LoopCloseoutAggregate, LoopError, LoopPhase, LoopProfileConfig,
     LoopRegistryEntry, LoopRegistryRoot, LoopRunState, SafetyLevel,
 };
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn smoke_goal_engine_types_accessible() {
+        // Verify crate types are importable and constructible
+        let phase = LoopPhase::Running;
+        assert_eq!(phase.as_str(), "running");
+        assert!(phase.valid_transitions().contains(&LoopPhase::Verifying));
+    }
+}

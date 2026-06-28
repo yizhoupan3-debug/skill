@@ -559,9 +559,9 @@ fn trace_compaction_recovery_fails_closed_on_artifact_digest_mismatch() {
     })
     .expect_err("digest mismatch must fail closed");
 
-    assert_eq!(
-        err,
-        "Compaction recovery failed closed because state_ref artifact digest mismatched."
+    assert!(
+        err.to_string().contains("artifact digest mismatched"),
+        "expected digest mismatch error, got: {err}"
     );
 
     fs::remove_dir_all(&trace_root).expect("cleanup digest mismatch compaction root");

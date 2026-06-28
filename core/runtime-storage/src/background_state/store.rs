@@ -10,6 +10,13 @@ use core_errors::FrameworkError;
 use serde_json::{Map, Value, json};
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::Mutex;
+
+/// Guards `load()` against running reap passes within [`REAP_CACHE_TTL_SECS`].
+static LAST_REAPED_AT: std::sync::OnceLock<Mutex<Option<DateTime<Utc>>>> =
+    std::sync::OnceLock::new();
+/// How long to defer a full reap pass after the previous one, in seconds.
+const REAP_CACHE_TTL_SECS: i64 = 60;
 
 impl BackgroundStateStore {
     pub(super) fn load(request: &BackgroundStateRequestPayload) -> Result<Self, FrameworkError> {
@@ -50,23 +57,32 @@ impl BackgroundStateStore {
             store.merge_persisted(persisted)?;
         }
         // Reap zombie / over-aged jobs into the in-memory view so every
-        // operation sees a clean snapshot. We deliberately do **not** persist
-        // here: that would turn pure-read operations (snapshot/get/health)
-        // into silent disk writers, breaking the "read = read-only" contract
-        // and forcing every reader through the path-lock + filesystem rename
-        // machinery. Instead, `reaped_dirty` is set so mutating handlers
-        // (`apply_mutation`, arbitration, reservation) flush the cleanup as
-        // part of their normal persist step. Pure readers keep the cleanup
-        // in their local view and re-derive it on the next load — cheap,
-        // since the reap is an in-memory HashMap scan.
-        let now = Utc::now();
-        let reaped_active = store.reap_stale_active_jobs(now);
-        let reaped_terminal = store.reap_stale_terminal_jobs(now);
-        let reaped_ghost = store.reap_ghost_status_jobs(now);
-        if reaped_active + reaped_terminal + reaped_ghost > 0 {
-            store.reaped_dirty = true;
+        // operation sees a clean snapshot. ...
+        // Short-circuit if we reaped within the last REAP_CACHE_TTL_SECS seconds.
+        let reap_ok = {
+            let mut guard = LAST_REAPED_AT
+                .get_or_init(|| Mutex::new(None))
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
+            let now = Utc::now();
+            match *guard {
+                Some(last) if (now - last).num_seconds() < REAP_CACHE_TTL_SECS => false,
+                _ => {
+                    *guard = Some(now);
+                    true
+                }
+            }
+        };
+        if reap_ok {
+            let now = Utc::now();
+            let reaped_active = store.reap_stale_active_jobs(now);
+            let reaped_terminal = store.reap_stale_terminal_jobs(now);
+            let reaped_ghost = store.reap_ghost_status_jobs(now);
+            if reaped_active + reaped_terminal + reaped_ghost > 0 {
+                store.reaped_dirty = true;
+            }
+            store.compact_terminal_over_capacity(request.capacity_limit);
         }
-        store.compact_terminal_over_capacity(request.capacity_limit);
         Ok(store)
     }
 
@@ -206,7 +222,7 @@ impl BackgroundStateStore {
     pub(super) fn merge_persisted(
         &mut self,
         persisted: PersistedBackgroundState,
-    ) -> Result<(), String> {
+    ) -> Result<(), FrameworkError> {
         if let Some(Value::Object(persisted_control_plane)) = persisted.control_plane
             && let Value::Object(ref mut current) = self.control_plane
         {
@@ -321,7 +337,7 @@ impl BackgroundStateStore {
         &mut self,
         job_id: &str,
         mutation: &BackgroundJobStatusMutation,
-    ) -> Result<(BackgroundRunStatus, Option<String>), String> {
+    ) -> Result<(BackgroundRunStatus, Option<String>), FrameworkError> {
         let existing = self.jobs.get(job_id).cloned();
         let previous_status = existing.as_ref().map(|job| job.status.as_str());
         validate_transition(previous_status, &mutation.status)?;
@@ -373,7 +389,7 @@ impl BackgroundStateStore {
         job_id: &str,
         session_id: Option<&str>,
         status: &str,
-    ) -> Result<(), String> {
+    ) -> Result<(), FrameworkError> {
         let Some(session_id) = session_id else {
             return Ok(());
         };
@@ -383,9 +399,9 @@ impl BackgroundStateStore {
         if let Some(owner) = self.active_sessions.get(session_id)
             && owner != job_id
         {
-            return Err(format!(
+            return Err(FrameworkError::validation(format!(
                 "Session {session_id:?} is already active in job {owner:?}."
-            ));
+            )));
         }
         self.active_sessions
             .insert(session_id.to_string(), job_id.to_string());
@@ -474,6 +490,7 @@ impl BackgroundStateStore {
             if self.jobs.len() <= limit {
                 break;
             }
+            let excess = self.jobs.len().saturating_sub(limit);
             let mut terminal_jobs = self
                 .jobs
                 .values()
@@ -491,7 +508,10 @@ impl BackgroundStateStore {
                 break; // No more terminal jobs to remove.
             }
             terminal_jobs.sort();
-            for (_, job_id) in terminal_jobs {
+            // Only remove the minimum number of terminal jobs needed to get
+            // under the capacity limit (oldest first), avoiding overshoot.
+            let to_remove = excess.min(terminal_jobs.len());
+            for (_, job_id) in terminal_jobs.into_iter().take(to_remove) {
                 self.jobs.remove(&job_id);
             }
             // Re-check; may need another pass if active jobs transitioned
@@ -546,7 +566,7 @@ impl BackgroundStateStore {
         operation: &str,
         session_id: &str,
         incoming_job_id: &str,
-    ) -> Result<(BackgroundSessionTakeoverArbitration, Option<String>), String> {
+    ) -> Result<(BackgroundSessionTakeoverArbitration, Option<String>), FrameworkError> {
         let previous_active_job_id = self.active_sessions.get(session_id).cloned();
         let previous_pending_job_id = self.pending_session_takeovers.get(session_id).cloned();
         let mut changed = false;
@@ -555,9 +575,9 @@ impl BackgroundStateStore {
                 if let Some(previous_pending) = previous_pending_job_id.as_deref()
                     && previous_pending != incoming_job_id
                 {
-                    return Err(format!(
+                    return Err(FrameworkError::validation(format!(
                         "Session {session_id:?} already has a pending takeover for job {previous_pending:?}."
-                    ));
+                    )));
                 }
                 match previous_active_job_id.as_deref() {
                     None => {
@@ -580,16 +600,16 @@ impl BackgroundStateStore {
             }
             "claim" => {
                 if previous_pending_job_id.as_deref() != Some(incoming_job_id) {
-                    return Err(format!(
+                    return Err(FrameworkError::validation(format!(
                         "Session {session_id:?} is not reserved for incoming job {incoming_job_id:?}."
-                    ));
+                    )));
                 }
                 if let Some(active_job_id) = previous_active_job_id.as_deref()
                     && active_job_id != incoming_job_id
                 {
-                    return Err(format!(
+                    return Err(FrameworkError::validation(format!(
                         "Session {session_id:?} is still active in job {active_job_id:?}."
-                    ));
+                    )));
                 }
                 if previous_active_job_id.as_deref() != Some(incoming_job_id) {
                     self.active_sessions
@@ -627,10 +647,10 @@ impl BackgroundStateStore {
                 }
             }
             other => {
-                return Err(format!(
+                return Err(FrameworkError::unsupported(format!(
                     "Unsupported takeover arbitration operation: {:?}",
                     other
-                ));
+                )));
             }
         };
         let persisted_payload_text = if changed { self.persist()? } else { None };

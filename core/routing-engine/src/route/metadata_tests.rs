@@ -349,7 +349,7 @@ mod route_metadata_tests {
         .expect("write metadata");
 
         let err = load_records_from_runtime(&runtime_path).expect_err("invalid mode must fail");
-        assert!(err.contains("unsupported fallback_policy.mode"));
+        assert!(err.to_string().contains("unsupported fallback_policy.mode"));
 
         fs::remove_dir_all(root).expect("cleanup route root");
     }

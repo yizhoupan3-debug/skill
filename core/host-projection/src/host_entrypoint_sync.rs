@@ -1,3 +1,4 @@
+use core_errors::FrameworkError;
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
 use std::env;
@@ -5,7 +6,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-type AfterApplyHook = fn(&Path) -> Result<Value, String>;
+type AfterApplyHook = fn(&Path) -> Result<Value, FrameworkError>;
 
 pub struct HostEntrypointPayloadProvider {
     pub files: BTreeMap<String, Vec<u8>>,
@@ -44,7 +45,7 @@ pub fn sync_host_entrypoints(
     repo_root: &Path,
     apply: bool,
     provider: HostEntrypointPayloadProvider,
-) -> Result<Value, String> {
+) -> Result<Value, FrameworkError> {
     let root = normalize_repo_root(repo_root)?;
     let desired_files = collect_host_sync_file_bytes(&root, provider)?;
     let partial_section =
@@ -138,7 +139,7 @@ struct DesiredHostEntrypointFiles {
 fn collect_host_sync_file_bytes(
     repo_root: &Path,
     provider: HostEntrypointPayloadProvider,
-) -> Result<DesiredHostEntrypointFiles, String> {
+) -> Result<DesiredHostEntrypointFiles, FrameworkError> {
     let mut files = provider.files.clone();
     files.insert(
         provider.manifest_relative_path.clone(),
@@ -153,7 +154,7 @@ fn build_host_entrypoint_sync_manifest(
     provider: &HostEntrypointPayloadProvider,
     desired_files: &BTreeMap<String, Vec<u8>>,
     repo_root: &Path,
-) -> Result<Value, String> {
+) -> Result<Value, FrameworkError> {
     let full_text_files = desired_host_entrypoint_text_files(provider, desired_files);
     let mut json_files = provider.json_relative_paths.clone();
     json_files.push(provider.manifest_relative_path.clone());
@@ -191,8 +192,8 @@ fn desired_host_entrypoint_text_files(
         .collect()
 }
 
-fn serialize_pretty_json_bytes(payload: &Value) -> Result<Vec<u8>, String> {
-    let mut bytes = serde_json::to_vec_pretty(payload).map_err(|err| err.to_string())?;
+fn serialize_pretty_json_bytes(payload: &Value) -> Result<Vec<u8>, FrameworkError> {
+    let mut bytes = serde_json::to_vec_pretty(payload).map_err(FrameworkError::Json)?;
     bytes.push(b'\n');
     Ok(bytes)
 }
@@ -203,13 +204,13 @@ fn sync_host_entrypoints_single_root(
     report_root: &Path,
     apply: bool,
     section: &HostEntrypointSyncSection,
-) -> Result<SingleSyncReport, String> {
+) -> Result<SingleSyncReport, FrameworkError> {
     let mut report = SingleSyncReport::default();
     for relative in section.text_files.iter().chain(section.json_files.iter()) {
         let desired = desired_files
             .files
             .get(relative)
-            .ok_or_else(|| format!("missing generated host-entrypoint payload for {}", relative))?;
+            .ok_or_else(|| FrameworkError::not_found(format!("missing generated host-entrypoint payload for {}", relative)))?;
         sync_host_entrypoint_file(
             desired,
             relative,
@@ -230,7 +231,7 @@ fn sync_host_entrypoint_file(
     report_root: &Path,
     apply: bool,
     report: &mut SingleSyncReport,
-) -> Result<(), String> {
+) -> Result<(), FrameworkError> {
     let destination =
         core_state_utils::path_guard::join_repo_relative_under_root(target_root, relative)?;
     let existing = fs::read(&destination).ok();
@@ -244,7 +245,7 @@ fn sync_host_entrypoint_file(
 
     if changed && apply {
         let text = std::str::from_utf8(desired).map_err(|_| {
-            format!("host entrypoint {relative} payload must be UTF-8 text for atomic write")
+            FrameworkError::validation(format!("host entrypoint {relative} payload must be UTF-8 text for atomic write"))
         })?;
         core_state_utils::atomic_write::write_atomic_text(&destination, text)?;
     }
@@ -290,20 +291,20 @@ fn semantic_json_changed(existing: &Option<Vec<u8>>, desired: &[u8]) -> bool {
     }
 }
 
-fn extend_report_array(report: &mut Value, key: &str, items: Vec<String>) -> Result<(), String> {
+fn extend_report_array(report: &mut Value, key: &str, items: Vec<String>) -> Result<(), FrameworkError> {
     let array = report
         .get_mut(key)
         .and_then(Value::as_array_mut)
-        .ok_or_else(|| format!("host-entrypoint sync report missing {key} array"))?;
+        .ok_or_else(|| FrameworkError::validation(format!("host-entrypoint sync report missing {key} array")))?;
     array.extend(items.into_iter().map(Value::String));
     Ok(())
 }
 
-fn sort_report_array(report: &mut Value, key: &str) -> Result<(), String> {
+fn sort_report_array(report: &mut Value, key: &str) -> Result<(), FrameworkError> {
     let array = report
         .get_mut(key)
         .and_then(Value::as_array_mut)
-        .ok_or_else(|| format!("host-entrypoint sync report missing {key} array"))?;
+        .ok_or_else(|| FrameworkError::validation(format!("host-entrypoint sync report missing {key} array")))?;
     let mut values = array
         .iter()
         .filter_map(Value::as_str)
@@ -314,12 +315,12 @@ fn sort_report_array(report: &mut Value, key: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn normalize_repo_root(path: &Path) -> Result<PathBuf, String> {
+fn normalize_repo_root(path: &Path) -> Result<PathBuf, FrameworkError> {
     if path.is_absolute() {
         Ok(path.to_path_buf())
     } else {
         Ok(env::current_dir()
-            .map_err(|err| err.to_string())?
+            .map_err(FrameworkError::Io)?
             .join(path))
     }
 }

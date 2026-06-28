@@ -5,6 +5,7 @@
 use std::collections::HashSet;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use core_errors::FrameworkError;
 use serde_json::{Value, json};
 
 use fr_utils::constants::{
@@ -115,7 +116,7 @@ fn base_response(
 fn handle_batch_plan(
     payload: BackgroundControlRequestPayload,
     supported_multitask_strategies: Vec<String>,
-) -> Result<BackgroundControlResponsePayload, String> {
+) -> Result<BackgroundControlResponsePayload, FrameworkError> {
     let batch_size = payload.batch_size.unwrap_or(0);
     if batch_size == 0 {
         let mut effect_plan = background_effect_plan("reject");
@@ -227,7 +228,7 @@ fn handle_batch_plan(
 fn handle_enqueue(
     payload: BackgroundControlRequestPayload,
     supported_multitask_strategies: Vec<String>,
-) -> Result<BackgroundControlResponsePayload, String> {
+) -> Result<BackgroundControlResponsePayload, FrameworkError> {
     let normalized_multitask_strategy =
         normalize_multitask_strategy(payload.multitask_strategy.as_deref());
     let strategy_supported = supported_multitask_strategies
@@ -281,7 +282,7 @@ fn handle_enqueue(
 fn handle_interrupt(
     payload: BackgroundControlRequestPayload,
     supported_multitask_strategies: Vec<String>,
-) -> Result<BackgroundControlResponsePayload, String> {
+) -> Result<BackgroundControlResponsePayload, FrameworkError> {
     let current_status = payload
         .current_status
         .unwrap_or_else(|| "queued".to_string());
@@ -326,7 +327,7 @@ fn handle_interrupt(
 fn handle_claim(
     payload: BackgroundControlRequestPayload,
     supported_multitask_strategies: Vec<String>,
-) -> Result<BackgroundControlResponsePayload, String> {
+) -> Result<BackgroundControlResponsePayload, FrameworkError> {
     let current_status = payload
         .current_status
         .unwrap_or_else(|| "queued".to_string());
@@ -379,7 +380,7 @@ fn handle_claim(
 fn handle_complete(
     _payload: BackgroundControlRequestPayload,
     supported_multitask_strategies: Vec<String>,
-) -> Result<BackgroundControlResponsePayload, String> {
+) -> Result<BackgroundControlResponsePayload, FrameworkError> {
     let mut effect_plan = background_effect_plan("finalize_completed");
     effect_plan.finalize_immediately = Some(true);
     effect_plan.terminal_status = Some("completed".to_string());
@@ -397,7 +398,7 @@ fn handle_complete(
 fn handle_completion_race(
     payload: BackgroundControlRequestPayload,
     supported_multitask_strategies: Vec<String>,
-) -> Result<BackgroundControlResponsePayload, String> {
+) -> Result<BackgroundControlResponsePayload, FrameworkError> {
     let current_status = payload
         .current_status
         .unwrap_or_else(|| "running".to_string());
@@ -436,7 +437,7 @@ fn handle_completion_race(
 fn handle_retry_claim(
     payload: BackgroundControlRequestPayload,
     supported_multitask_strategies: Vec<String>,
-) -> Result<BackgroundControlResponsePayload, String> {
+) -> Result<BackgroundControlResponsePayload, FrameworkError> {
     let current_status = payload
         .current_status
         .unwrap_or_else(|| "retry_scheduled".to_string());
@@ -475,7 +476,7 @@ fn handle_retry_claim(
 fn handle_interrupt_finalize(
     _payload: BackgroundControlRequestPayload,
     supported_multitask_strategies: Vec<String>,
-) -> Result<BackgroundControlResponsePayload, String> {
+) -> Result<BackgroundControlResponsePayload, FrameworkError> {
     let mut effect_plan = background_effect_plan("finalize_interrupted");
     effect_plan.finalize_immediately = Some(true);
     effect_plan.terminal_status = Some("interrupted".to_string());
@@ -493,7 +494,7 @@ fn handle_interrupt_finalize(
 fn handle_retry(
     payload: BackgroundControlRequestPayload,
     supported_multitask_strategies: Vec<String>,
-) -> Result<BackgroundControlResponsePayload, String> {
+) -> Result<BackgroundControlResponsePayload, FrameworkError> {
     let attempt = payload.attempt.unwrap_or(1).max(1);
     let retry_count = payload.retry_count.unwrap_or(0);
     let max_attempts = payload.max_attempts.unwrap_or(1).max(1);
@@ -538,7 +539,7 @@ fn handle_retry(
 fn handle_session_release(
     payload: BackgroundControlRequestPayload,
     supported_multitask_strategies: Vec<String>,
-) -> Result<BackgroundControlResponsePayload, String> {
+) -> Result<BackgroundControlResponsePayload, FrameworkError> {
     let mut effect_plan = background_effect_plan("wait_for_release");
     effect_plan.wait_timeout_seconds = Some(5.0);
     effect_plan.wait_poll_interval_seconds =
@@ -551,7 +552,7 @@ fn handle_session_release(
 
 pub fn build_background_control_response(
     payload: BackgroundControlRequestPayload,
-) -> Result<BackgroundControlResponsePayload, String> {
+) -> Result<BackgroundControlResponsePayload, FrameworkError> {
     let supported_multitask_strategies = vec!["interrupt".to_string(), "reject".to_string()];
     match payload.operation.as_str() {
         "batch-plan" => handle_batch_plan(payload, supported_multitask_strategies),
@@ -564,7 +565,9 @@ pub fn build_background_control_response(
         "interrupt-finalize" => handle_interrupt_finalize(payload, supported_multitask_strategies),
         "retry" => handle_retry(payload, supported_multitask_strategies),
         "session-release" => handle_session_release(payload, supported_multitask_strategies),
-        other => Err(format!("unsupported background control operation: {other}")),
+        other => Err(FrameworkError::unsupported(format!(
+            "unsupported background control operation: {other}"
+        ))),
     }
 }
 fn runtime_observability_resource_dimensions() -> Vec<&'static str> {

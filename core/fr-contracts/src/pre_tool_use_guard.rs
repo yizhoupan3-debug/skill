@@ -132,8 +132,8 @@ pub fn host_requires_strict_pre_tool_fallback(
 ) -> Result<bool> {
     let id = host_id.trim();
     // 1. HostProvider hint (highest priority after explicit overrides)
-    if let Some(strict) =
-        framework_kernel::runtime_hooks::hooks().host_provider_strict_pre_tool_fallback_hint(id)
+    if let Some(hooks) = framework_kernel::runtime_hooks::try_hooks()
+        && let Some(strict) = hooks.host_provider_strict_pre_tool_fallback_hint(id)
     {
         return Ok(strict);
     }
@@ -205,7 +205,9 @@ pub fn host_requires_strict_pre_tool_fallback(
 pub fn evaluate_pre_tool_use_guard(
     request: PreToolUseGuardRequest,
 ) -> Result<PreToolUseGuardResponse> {
-    framework_kernel::runtime_hooks::hooks().ensure_kernel_bootstrap();
+    if let Some(hooks) = framework_kernel::runtime_hooks::try_hooks() {
+        hooks.ensure_kernel_bootstrap();
+    }
     let repo_root = request
         .repo_root
         .as_deref()

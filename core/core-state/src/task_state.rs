@@ -5,6 +5,7 @@
 //! **Writes** serialize via `task_write_lock`
 //! (phase 2); this module only aggregates read models (`ResolvedTaskView`, `ContinuityFrame`).
 
+use core_errors::FrameworkError;
 use crate::state_manager::{read_goal_state, task_evidence_artifacts_summary_for_task};
 use crate::state_manager::{
     read_rfv_loop_state, validate_external_research_strict, validate_external_research_structured,
@@ -18,24 +19,41 @@ use std::sync::OnceLock;
 // Re-export pure type definitions from core-state-types (L2) for backward compatibility.
 pub use core_state_types::task_state_types::*;
 
+/// Macro: cached boolean environment variable checked once on first access.
+///
+/// Production (`#[cfg(not(test))]`): caches via `OnceLock` to avoid repeated OS syscalls.
+/// Test (`#[cfg(test)]`): reads directly so tests can set env vars per-test.
+///
+/// `$var`: the environment variable name (string literal).
+/// `$predicate`: a closure `fn(&Result<String, VarError>) -> bool`.
+macro_rules! cached_env_bool {
+    ($var:expr, $predicate:expr) => {{
+        #[cfg(not(test))]
+        {
+            static CACHED: OnceLock<bool> = OnceLock::new();
+            *CACHED.get_or_init(|| {
+                let v = std::env::var($var);
+                let result: bool = ($predicate)(&v);
+                result
+            })
+        }
+        #[cfg(test)]
+        {
+            let v = std::env::var($var);
+            let result: bool = ($predicate)(&v);
+            result
+        }
+    }};
+}
+
 // Cached env var lookups — avoid repeated OS syscalls in hot paths.
 // Disabled in test builds so tests can set env vars per-test.
 fn depth_score_mode_is_strict() -> bool {
-    #[cfg(not(test))]
-    {
-        static CACHED: OnceLock<bool> = OnceLock::new();
-        *CACHED.get_or_init(|| {
-            std::env::var("ROUTER_RS_DEPTH_SCORE_MODE")
-                .map(|v| v.trim() == "strict")
-                .unwrap_or(false)
-        })
-    }
-    #[cfg(test)]
-    {
-        std::env::var("ROUTER_RS_DEPTH_SCORE_MODE")
-            .map(|v| v.trim() == "strict")
+    cached_env_bool!("ROUTER_RS_DEPTH_SCORE_MODE", |v: &Result<String, std::env::VarError>| {
+        v.as_deref()
+            .map(|s| s.trim() == "strict")
             .unwrap_or(false)
-    }
+    })
 }
 
 pub const RESOLVED_TASK_VIEW_SCHEMA_VERSION: &str = "router-rs-resolved-task-view-v1";
@@ -56,6 +74,9 @@ pub const RESOLUTION_NOTE_ACTIVE_GOAL_NOT_DRIVING_FOCUS_DRIVES: &str =
 pub const RESOLUTION_NOTE_DUAL_GOAL_POINTER_CONFLICT: &str =
     "continuity:dual_goal_pointer_conflict";
 
+/// Marker string in RFV cross_check field indicating a PASS round without an evidence window.
+pub const NO_EVIDENCE_WINDOW_MARKER: &str = "no_evidence_window";
+
 /// Zh line appended to Codex continuity digest and Cursor SessionStart when
 /// [`task_view_has_active_goal_focus_mismatch_note`] is true (same bytes as legacy digest string).
 pub const CONTINUITY_ACTIVE_FOCUS_GOAL_MISMATCH_HINT_ZH: &str = concat!(
@@ -67,10 +88,11 @@ pub const CONTINUITY_ACTIVE_FOCUS_GOAL_MISMATCH_HINT_ZH: &str = concat!(
 /// have RFV or other task-scoped state with no readable GOAL; the note is about pointers vs
 /// hydration, not "goal_drive-only".
 fn maybe_note_active_goal_missing_focus_has_goal(
-    repo_root: &Path,
+    _repo_root: &Path,
     pointers: &TaskPointers,
     resolved_task_id: &str,
     goal_state: Option<&Value>,
+    focus_goal: Option<&Value>,
     notes: &mut Vec<String>,
 ) {
     let Some(active_id) = pointers.active_task_id.as_deref() else {
@@ -88,19 +110,20 @@ fn maybe_note_active_goal_missing_focus_has_goal(
     if focus_id == active_id {
         return;
     }
-    let Ok(Some(_)) = read_goal_state(repo_root, Some(focus_id)) else {
+    if focus_goal.is_none() {
         return;
-    };
+    }
     notes.push(format!(
         "{RESOLUTION_NOTE_ACTIVE_GOAL_MISSING_FOCUS_HAS_GOAL} active={active_id} focus={focus_id}"
     ));
 }
 
 fn maybe_note_active_goal_not_driving_focus_drives(
-    repo_root: &Path,
+    _repo_root: &Path,
     pointers: &TaskPointers,
     resolved_task_id: &str,
     goal_state: Option<&Value>,
+    focus_goal: Option<&Value>,
     notes: &mut Vec<String>,
 ) {
     let Some(active_id) = pointers.active_task_id.as_deref() else {
@@ -118,11 +141,10 @@ fn maybe_note_active_goal_not_driving_focus_drives(
     if crate::state_manager::goal_state_requests_continuation(active_goal) {
         return;
     }
-    let Ok(Some(focus_goal)) = crate::state_manager::read_goal_state(repo_root, Some(focus_id))
-    else {
+    let Some(focus_goal) = focus_goal else {
         return;
     };
-    if !crate::state_manager::goal_state_requests_continuation(&focus_goal) {
+    if !crate::state_manager::goal_state_requests_continuation(focus_goal) {
         return;
     }
     notes.push(format!(
@@ -164,42 +186,59 @@ fn maybe_note_dual_goal_pointer_conflict(
 /// Writes to `TASK_POINTERS.json` via `write_active_task_pointer`, not the legacy
 /// `active_task.json` — otherwise the promotion is invisible to readers that prefer
 /// the consolidated `TASK_POINTERS.json` file.
+///
+/// Protected by the task-ledger repo lock to prevent TOCTOU between read and write.
 pub fn maybe_promote_focus_to_active_pointer(repo_root: &Path) -> bool {
-    let pointers = read_task_pointers(repo_root);
-    let Some(active_id) = pointers.active_task_id.as_deref().filter(|s| !s.is_empty()) else {
+    // Acquire the cross-process task-ledger lock so that no other process modifies
+    // TASK_POINTERS.json between our read check and the write.
+    let Ok(lock_result) = core_state_utils::task_write_lock::apply_task_ledger_mutation(
+        repo_root,
+        || -> Result<Option<String>, core_errors::FrameworkError> {
+            let pointers = read_task_pointers(repo_root);
+            let Some(active_id) = pointers.active_task_id.as_deref().filter(|s| !s.is_empty())
+            else {
+                return Ok(None);
+            };
+            if read_goal_state(repo_root, Some(active_id))
+                .ok()
+                .flatten()
+                .is_some()
+            {
+                return Ok(None); // Active already has a goal → no promotion needed.
+            }
+            let Some(focus_id) = pointers.focus_task_id.as_deref().filter(|s| !s.is_empty())
+            else {
+                return Ok(None);
+            };
+            if active_id == focus_id {
+                return Ok(None);
+            }
+            if read_goal_state(repo_root, Some(focus_id))
+                .ok()
+                .flatten()
+                .is_none()
+            {
+                return Ok(None);
+            }
+            // All checks passed — promote focus to active under lock.
+            if crate::state_manager::write_active_task_pointer(repo_root, focus_id).is_err() {
+                return Ok(None);
+            }
+            Ok(Some(focus_id.to_string()))
+        },
+    ) else {
         return false;
     };
-    if read_goal_state(repo_root, Some(active_id))
-        .ok()
-        .flatten()
-        .is_some()
-    {
-        return false;
-    }
-    let Some(focus_id) = pointers.focus_task_id.as_deref().filter(|s| !s.is_empty()) else {
+
+    let Some(focus_id) = lock_result else {
         return false;
     };
-    if active_id == focus_id {
-        return false;
-    }
-    if read_goal_state(repo_root, Some(focus_id))
-        .ok()
-        .flatten()
-        .is_none()
-    {
-        return false;
-    }
-    // Write to TASK_POINTERS.json (consolidated file) so that read_task_pointer_pair
-    // and read_active_task_id both see the promoted value.
-    if crate::state_manager::write_active_task_pointer(repo_root, focus_id).is_err() {
-        return false;
-    }
     // Best-effort legacy file cleanup so the old file doesn't confuse tools.
     let legacy_path = repo_root.join("artifacts/current/active_task.json");
     if legacy_path.is_file() {
         let _ = std::fs::remove_file(&legacy_path);
     }
-    tracing::warn!(focus_id = %focus_id, active_id = %active_id, "promoted focus_task to active_task (active had no GOAL)");
+    tracing::warn!(focus_id = %focus_id, "promoted focus_task to active_task (active had no GOAL)");
     true
 }
 
@@ -238,29 +277,11 @@ fn goal_hydration_diagnostics_scan_fallback(repo_root: &Path) -> Option<(Value, 
 }
 
 fn goal_diagnostics_scan_hydrate_enabled() -> bool {
-    #[cfg(not(test))]
-    {
-        static CACHED: OnceLock<bool> = OnceLock::new();
-        *CACHED.get_or_init(
-            || match std::env::var("ROUTER_RS_GOAL_DIAGNOSTICS_SCAN_HYDRATE") {
-                Ok(v) => {
-                    let t = v.trim().to_lowercase();
-                    matches!(t.as_str(), "1" | "true" | "yes" | "on")
-                }
-                Err(_) => false,
-            },
-        )
-    }
-    #[cfg(test)]
-    {
-        match std::env::var("ROUTER_RS_GOAL_DIAGNOSTICS_SCAN_HYDRATE") {
-            Ok(v) => {
-                let t = v.trim().to_lowercase();
-                matches!(t.as_str(), "1" | "true" | "yes" | "on")
-            }
-            Err(_) => false,
-        }
-    }
+    cached_env_bool!("ROUTER_RS_GOAL_DIAGNOSTICS_SCAN_HYDRATE", |v: &Result<String, std::env::VarError>| {
+        v.as_deref()
+            .map(|s| matches!(s.trim().to_lowercase().as_str(), "1" | "true" | "yes" | "on"))
+            .unwrap_or(false)
+    })
 }
 
 /// `active_task.json` / `focus_task.json` 一次成对读取（比两次独立 open 的半态窗口更小）。
@@ -276,6 +297,106 @@ pub fn read_task_pointers(repo_root: &Path) -> TaskPointers {
     }
 }
 
+/// Extract goal checkpoint count from optional `GOAL_STATE` value.
+fn extract_goal_checkpoint_count(goal: Option<&Value>) -> u64 {
+    goal.and_then(|g| g.get("checkpoints").and_then(Value::as_array))
+        .map(|a| a.len() as u64)
+        .unwrap_or(0)
+}
+
+/// Accumulate RFV round metrics from optional `RFV_LOOP_STATE` value.
+///
+/// Populates all `qg_*` counters in [`DepthCompliance`] and returns the
+/// `external_research_strict` flag for downstream score computation.
+fn accumulate_rfv_round_metrics(qg: Option<&Value>) -> (bool, DepthCompliance) {
+    let mut c = DepthCompliance::default();
+    let Some(r) = qg else {
+        return (false, c);
+    };
+
+    let strict_task = r
+        .get("external_research_strict")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+
+    if let Some(rounds) = r.get("rounds").and_then(Value::as_array) {
+        for round in rounds {
+            if round
+                .get("adversarial_findings")
+                .and_then(Value::as_array)
+                .is_some_and(|a| !a.is_empty())
+            {
+                c.qg_adversarial_round_count += 1;
+            }
+            if let Some(arr) = round.get("falsification_tests").and_then(Value::as_array) {
+                c.qg_falsification_test_count += arr.len() as u64;
+            }
+            let vr = round
+                .get("verify_result")
+                .and_then(Value::as_str)
+                .unwrap_or("UNKNOWN")
+                .to_ascii_uppercase();
+            match vr.as_str() {
+                "PASS" => c.qg_pass_round_count += 1,
+                "FAIL" => c.qg_fail_round_count += 1,
+                "SKIPPED" => c.qg_skipped_round_count += 1,
+                _ => c.qg_unknown_round_count += 1,
+            }
+            if vr == "PASS"
+                && round
+                    .get("cross_check")
+                    .and_then(Value::as_str)
+                    .map(|s| s == NO_EVIDENCE_WINDOW_MARKER)
+                    .unwrap_or(false)
+            {
+                c.qg_pass_without_evidence_count += 1;
+            }
+            if round
+                .get("external_research")
+                .is_some_and(|v| !v.is_null() && v.is_object())
+            {
+                c.qg_external_deep_structured_round_count += 1;
+                if strict_task
+                    && let Some(er) = round.get("external_research")
+                    && validate_external_research_structured(er).is_ok()
+                    && validate_external_research_strict(er).is_ok()
+                {
+                    c.qg_external_strict_ok_round_count += 1;
+                }
+            }
+        }
+    }
+    (strict_task, c)
+}
+
+/// Compute the depth score (0–3) from the already-populated [`DepthCompliance`]
+/// counters and the `evidence_ok` flag.
+fn compute_depth_score(c: &DepthCompliance, evidence_ok: bool) -> u8 {
+    let mut score: u8 = 0;
+    if c.qg_pass_round_count > 0 {
+        score += 1;
+    }
+    if evidence_ok {
+        score += 1;
+    }
+    // Third point: checkpoints OR adversarial round OR strict external research.
+    // Legacy mode counts structured external research (strict_task + strict-pass rounds)
+    // to ensure pure external research tasks can achieve full score.
+    // strict mode additionally counts falsification tests.
+    let third = c.goal_checkpoint_count > 0
+        || c.qg_adversarial_round_count > 0
+        || (c.qg_external_strict_ok_round_count > 0);
+    let third = if depth_score_mode_is_strict() {
+        third || c.qg_falsification_test_count > 0
+    } else {
+        third
+    };
+    if third {
+        score += 1;
+    }
+    score
+}
+
 /// Roll up RFV rounds + optional GOAL checkpoints + evidence_ok into [`DepthCompliance`].
 ///
 /// Used by [`resolve_task_view`] and by RFV **`close_gates`** pre-write preview（显式 close 与
@@ -285,91 +406,25 @@ pub fn depth_compliance_aggregate(
     qg: Option<&Value>,
     evidence_ok: bool,
 ) -> DepthCompliance {
-    let mut c = DepthCompliance::default();
+    let goal_checkpoint_count = extract_goal_checkpoint_count(goal);
+    let (_strict_task, rfv) = accumulate_rfv_round_metrics(qg);
 
-    if let Some(g) = goal
-        && let Some(arr) = g.get("checkpoints").and_then(Value::as_array)
-    {
-        c.goal_checkpoint_count = arr.len() as u64;
-    }
-
-    let mut strict_task = false;
-    if let Some(r) = qg {
-        strict_task = r
-            .get("external_research_strict")
-            .and_then(Value::as_bool)
-            .unwrap_or(false);
-        if let Some(rounds) = r.get("rounds").and_then(Value::as_array) {
-            for round in rounds {
-                if round
-                    .get("adversarial_findings")
-                    .and_then(Value::as_array)
-                    .is_some_and(|a| !a.is_empty())
-                {
-                    c.qg_adversarial_round_count += 1;
-                }
-                if let Some(arr) = round.get("falsification_tests").and_then(Value::as_array) {
-                    c.qg_falsification_test_count += arr.len() as u64;
-                }
-                let vr = round
-                    .get("verify_result")
-                    .and_then(Value::as_str)
-                    .unwrap_or("UNKNOWN")
-                    .to_ascii_uppercase();
-                match vr.as_str() {
-                    "PASS" => c.qg_pass_round_count += 1,
-                    "FAIL" => c.qg_fail_round_count += 1,
-                    "SKIPPED" => c.qg_skipped_round_count += 1,
-                    _ => c.qg_unknown_round_count += 1,
-                }
-                if vr == "PASS"
-                    && round
-                        .get("cross_check")
-                        .and_then(Value::as_str)
-                        .map(|s| s == "no_evidence_window")
-                        .unwrap_or(false)
-                {
-                    c.qg_pass_without_evidence_count += 1;
-                }
-                if round
-                    .get("external_research")
-                    .is_some_and(|v| !v.is_null() && v.is_object())
-                {
-                    c.qg_external_deep_structured_round_count += 1;
-                    if strict_task
-                        && let Some(er) = round.get("external_research")
-                        && validate_external_research_structured(er).is_ok()
-                        && validate_external_research_strict(er).is_ok()
-                    {
-                        c.qg_external_strict_ok_round_count += 1;
-                    }
-                }
-            }
-        }
-    }
-
-    let mut score: u8 = 0;
-    if c.qg_pass_round_count > 0 {
-        score += 1;
-    }
-    if evidence_ok {
-        score += 1;
-    }
-    // Third point: checkpoints OR adversarial round OR strict external research. Legacy mode now counts
-    // structured external research (strict_task + strict-pass rounds) to ensure pure external research
-    // tasks can achieve full score. strict mode additionally counts falsification tests.
-    let third_legacy = c.goal_checkpoint_count > 0
-        || c.qg_adversarial_round_count > 0
-        || (strict_task && c.qg_external_strict_ok_round_count > 0);
-    let third = if depth_score_mode_is_strict() {
-        third_legacy || c.qg_falsification_test_count > 0
-    } else {
-        third_legacy
+    // Construct the full struct first so that compute_depth_score sees all fields
+    // (including goal_checkpoint_count from extract_goal_checkpoint_count).
+    let mut c = DepthCompliance {
+        goal_checkpoint_count,
+        qg_adversarial_round_count: rfv.qg_adversarial_round_count,
+        qg_falsification_test_count: rfv.qg_falsification_test_count,
+        qg_pass_round_count: rfv.qg_pass_round_count,
+        qg_fail_round_count: rfv.qg_fail_round_count,
+        qg_skipped_round_count: rfv.qg_skipped_round_count,
+        qg_unknown_round_count: rfv.qg_unknown_round_count,
+        qg_pass_without_evidence_count: rfv.qg_pass_without_evidence_count,
+        qg_external_deep_structured_round_count: rfv.qg_external_deep_structured_round_count,
+        qg_external_strict_ok_round_count: rfv.qg_external_strict_ok_round_count,
+        depth_score: 0,
     };
-    if third {
-        score += 1;
-    }
-    c.depth_score = score;
+    c.depth_score = compute_depth_score(&c, evidence_ok);
     c
 }
 
@@ -479,16 +534,45 @@ pub fn hydrate_task_state_hybrid(
     let (mut evidence_rows_non_empty, mut has_successful_verification) =
         task_evidence_artifacts_summary_for_task(repo_root, task_id);
 
-    // Read TASK_LEDGER.jsonl and replay all transactions (TASK_STATE.json aggregate was removed in Wave 2b, so no last_seq filtering)
+    // Read TASK_LEDGER.jsonl and replay transactions.
     let txs = read_task_ledger_transactions(repo_root, task_id);
-    for tx in txs {
+
+    // Find the last `state_checkpoint` entry. If one exists, use its state
+    // as the replay base so readers avoid replaying the full ledger from
+    // scratch on every hydrate call.
+    let replay_start = match txs.iter().rposition(|tx| {
+        tx.tx_type == crate::task_ledger::STATE_CHECKPOINT_TX_TYPE
+    }) {
+        Some(idx) => {
+            let cp = &txs[idx];
+            // Apply checkpoint state — overrides physical file state.
+            if let Some(goal) = cp.payload.get("goal_state").filter(|v| !v.is_null()) {
+                goal_state = Some(goal.clone());
+            }
+            if let Some(rfv) = cp.payload.get("rfv_loop_state").filter(|v| !v.is_null()) {
+                rfv_loop_state = Some(rfv.clone());
+            }
+            if let Some(ev) = cp.payload.get("evidence").filter(|v| !v.is_null()) {
+                if let Some(ern) = ev.get("evidence_rows_non_empty").and_then(Value::as_bool) {
+                    evidence_rows_non_empty = ern;
+                }
+                if let Some(hsv) = ev.get("has_successful_verification").and_then(Value::as_bool) {
+                    has_successful_verification = hsv;
+                }
+            }
+            idx + 1
+        }
+        None => 0,
+    };
+
+    for tx in &txs[replay_start..] {
         // Replay
         match tx.tx_type.as_str() {
             "goal_state" => {
-                goal_state = Some(tx.payload).filter(|v| !v.is_null());
+                goal_state = Some(tx.payload.clone()).filter(|v| !v.is_null());
             }
             "rfv_loop_state" | "quality_gate_state" => {
-                rfv_loop_state = Some(tx.payload).filter(|v| !v.is_null());
+                rfv_loop_state = Some(tx.payload.clone()).filter(|v| !v.is_null());
             }
             "evidence" => {
                 evidence_rows_non_empty = true;
@@ -555,11 +639,18 @@ pub fn resolve_task_view_with_pointers(
         evidence_ok,
     ));
 
+    // Pre-read focus goal once for both maybe_note helpers (eliminates duplicate I/O).
+    let focus_goal: Option<Value> = pointers
+        .focus_task_id
+        .as_deref()
+        .and_then(|fid| read_goal_state(repo_root, Some(fid)).ok().flatten());
+
     maybe_note_active_goal_missing_focus_has_goal(
         repo_root,
         &pointers,
         task_id.as_str(),
         goal_state.as_ref(),
+        focus_goal.as_ref(),
         &mut resolution_notes,
     );
     maybe_note_active_goal_not_driving_focus_drives(
@@ -567,6 +658,7 @@ pub fn resolve_task_view_with_pointers(
         &pointers,
         task_id.as_str(),
         goal_state.as_ref(),
+        focus_goal.as_ref(),
         &mut resolution_notes,
     );
     maybe_note_dual_goal_pointer_conflict(repo_root, &pointers, &mut resolution_notes);
@@ -631,23 +723,22 @@ pub fn parse_goal_completion_gates(goal: &Value) -> Option<GoalCompletionGates> 
 pub fn validate_goal_completion_gates(
     view: &ResolvedTaskView,
     gates: &GoalCompletionGates,
-) -> Result<(), String> {
+) -> Result<(), FrameworkError> {
     if !gates.enabled {
         return Ok(());
     }
     let Some(dc) = view.depth_compliance.as_ref() else {
-        return Err(
-            "GOAL completion_gates: missing depth rollup (no resolved task_id / idle view)"
-                .to_string(),
-        );
+        return Err(FrameworkError::validation(
+            "GOAL completion_gates: missing depth rollup (no resolved task_id / idle view)",
+        ));
     };
     if let Some(min) = gates.min_depth_score
         && dc.depth_score < min
     {
-        return Err(format!(
+        return Err(FrameworkError::validation(format!(
             "GOAL completion_gates: depth_score={} < min_depth_score={} (fix RFV/EVIDENCE/checkpoints or lower the gate; rollup from resolve_task_view)",
             dc.depth_score, min
-        ));
+        )));
     }
     if gates.require_successful_evidence_row {
         let ok = view
@@ -655,10 +746,9 @@ pub fn validate_goal_completion_gates(
             .as_ref()
             .is_some_and(|e| e.has_successful_verification);
         if !ok {
-            return Err(
-                "GOAL completion_gates: require_successful_evidence_row but EVIDENCE_INDEX has no successful row"
-                    .to_string(),
-            );
+            return Err(FrameworkError::validation(
+                "GOAL completion_gates: require_successful_evidence_row but EVIDENCE_INDEX has no successful row",
+            ));
         }
     }
     if let Some(min_ck) = gates.min_goal_checkpoints {
@@ -670,16 +760,16 @@ pub fn validate_goal_completion_gates(
             .map(|a| a.len() as u64)
             .unwrap_or(0);
         if n < min_ck {
-            return Err(format!(
+            return Err(FrameworkError::validation(format!(
                 "GOAL completion_gates: checkpoints.len()={n} < min_goal_checkpoints={min_ck}"
-            ));
+            )));
         }
     }
     if gates.block_on_rfv_pass_without_evidence && dc.qg_pass_without_evidence_count > 0 {
-        return Err(format!(
+        return Err(FrameworkError::validation(format!(
             "GOAL completion_gates: block_on_rfv_pass_without_evidence but qg_pass_without_evidence_count={}",
             dc.qg_pass_without_evidence_count
-        ));
+        )));
     }
     Ok(())
 }

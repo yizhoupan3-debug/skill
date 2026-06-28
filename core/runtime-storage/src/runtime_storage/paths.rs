@@ -1,33 +1,32 @@
 use super::RuntimeStorageRequestPayload;
 use super::backend::normalized_backend_family;
+use core_errors::FrameworkError;
 use sha2::{Digest, Sha256};
 use std::fs;
 use std::io::{ErrorKind, Read};
 use std::path::{Component, Path, PathBuf};
 
 #[tracing::instrument(level = "debug", skip_all)]
-pub fn normalize_runtime_path(value: &str) -> Result<PathBuf, String> {
+pub fn normalize_runtime_path(value: &str) -> Result<PathBuf, FrameworkError> {
     let candidate = PathBuf::from(value.trim());
     if candidate.as_os_str().is_empty() {
-        return Err("runtime storage path must be non-empty".to_string());
+        return Err(FrameworkError::validation("runtime storage path must be non-empty"));
     }
     let absolute = if candidate.is_absolute() {
         candidate
     } else {
-        std::env::current_dir()
-            .map(|cwd| cwd.join(candidate))
-            .map_err(|err| format!("resolve runtime storage path failed: {err}"))?
+        std::env::current_dir().map(|cwd| cwd.join(candidate))?
     };
     canonicalize_or_clean_absolute_path(&absolute)
 }
 
 #[tracing::instrument(level = "debug", skip_all)]
-pub fn clean_absolute_path(path: &Path) -> Result<PathBuf, String> {
+pub fn clean_absolute_path(path: &Path) -> Result<PathBuf, FrameworkError> {
     if !path.is_absolute() {
-        return Err(format!(
+        return Err(FrameworkError::validation(format!(
             "runtime storage path must be absolute after resolution: {}",
             path.display()
-        ));
+        )));
     }
     let mut cleaned = PathBuf::new();
     for component in path.components() {
@@ -38,10 +37,10 @@ pub fn clean_absolute_path(path: &Path) -> Result<PathBuf, String> {
             Component::Normal(segment) => cleaned.push(segment),
             Component::ParentDir => {
                 if !cleaned.pop() {
-                    return Err(format!(
+                    return Err(FrameworkError::validation(format!(
                         "runtime storage path escapes filesystem root: {}",
                         path.display()
-                    ));
+                    )));
                 }
             }
         }
@@ -54,7 +53,7 @@ pub fn clean_absolute_path(path: &Path) -> Result<PathBuf, String> {
 /// removes `.` and `..` components from the absolute path string. If you need actual
 /// symlink resolution, use `canonicalize_existing_ancestors` instead.
 #[tracing::instrument(level = "debug", skip_all)]
-pub fn canonicalize_or_clean_absolute_path(path: &Path) -> Result<PathBuf, String> {
+pub fn canonicalize_or_clean_absolute_path(path: &Path) -> Result<PathBuf, FrameworkError> {
     clean_absolute_path(path)
 }
 
@@ -64,12 +63,12 @@ pub fn canonicalize_or_clean_absolute_path(path: &Path) -> Result<PathBuf, Strin
 /// containment checks against a canonical storage root, even when the final
 /// target (or some intermediate components) does not yet exist.
 #[tracing::instrument(level = "debug", skip_all)]
-pub fn canonicalize_existing_ancestors(path: &Path) -> Result<PathBuf, String> {
+pub fn canonicalize_existing_ancestors(path: &Path) -> Result<PathBuf, FrameworkError> {
     if !path.is_absolute() {
-        return Err(format!(
+        return Err(FrameworkError::validation(format!(
             "runtime storage path must be absolute before symlink resolution: {}",
             path.display()
-        ));
+        )));
     }
 
     let mut current = path.to_path_buf();
@@ -79,33 +78,30 @@ pub fn canonicalize_existing_ancestors(path: &Path) -> Result<PathBuf, String> {
             Ok(_) => break,
             Err(err) if err.kind() == ErrorKind::NotFound => {
                 let Some(file_name) = current.file_name().map(|name| name.to_os_string()) else {
-                    return Err(format!(
+                    return Err(FrameworkError::validation(format!(
                         "runtime storage path has no existing ancestor: {}",
                         path.display()
-                    ));
+                    )));
                 };
                 tail.push(file_name);
                 if !current.pop() {
-                    return Err(format!(
+                    return Err(FrameworkError::validation(format!(
                         "runtime storage path has no existing ancestor: {}",
                         path.display()
-                    ));
+                    )));
                 }
             }
             Err(err) => {
-                return Err(format!(
+                return Err(FrameworkError::validation(format!(
                     "stat runtime storage path {} failed: {err}",
                     current.display()
-                ));
+                )));
             }
         }
     }
 
     let canonical = current.canonicalize().map_err(|err| {
-        format!(
-            "canonicalize runtime storage ancestor {} failed: {err}",
-            current.display()
-        )
+        FrameworkError::Io(err)
     })?;
 
     let mut result = canonical;
@@ -119,18 +115,18 @@ pub fn canonicalize_existing_ancestors(path: &Path) -> Result<PathBuf, String> {
 pub fn resolve_runtime_storage_path_with_root(
     request_path: &str,
     request_storage_root: Option<&str>,
-) -> Result<(PathBuf, PathBuf), String> {
+) -> Result<(PathBuf, PathBuf), FrameworkError> {
     let storage_root = match request_storage_root {
         Some(value) => normalize_runtime_path(value)?,
         None => {
             let cwd = std::env::current_dir()
-                .map_err(|err| format!("resolve current dir failed: {err}"))?;
+                ?;
             canonicalize_or_clean_absolute_path(&cwd)?
         }
     };
     let trimmed_path = request_path.trim();
     if trimmed_path.is_empty() {
-        return Err("runtime storage path must be non-empty".to_string());
+        return Err(FrameworkError::validation("runtime storage path must be non-empty"));
     }
     let candidate = PathBuf::from(trimmed_path);
     let absolute_candidate = if candidate.is_absolute() {
@@ -140,11 +136,11 @@ pub fn resolve_runtime_storage_path_with_root(
     };
     let resolved_path = canonicalize_or_clean_absolute_path(&absolute_candidate)?;
     if !resolved_path.starts_with(&storage_root) {
-        return Err(format!(
+        return Err(FrameworkError::validation(format!(
             "runtime storage path {} must stay under storage root {}",
             resolved_path.display(),
             storage_root.display()
-        ));
+        )));
     }
 
     // Real-path containment: resolve any symlinks along the existing parent
@@ -156,11 +152,11 @@ pub fn resolve_runtime_storage_path_with_root(
     let canonical_storage_root = canonicalize_existing_ancestors(&storage_root)?;
     let canonical_resolved_path = canonicalize_existing_ancestors(&resolved_path)?;
     if !canonical_resolved_path.starts_with(&canonical_storage_root) {
-        return Err(format!(
+        return Err(FrameworkError::validation(format!(
             "runtime storage path {} must stay under storage root {} after symlink resolution",
             canonical_resolved_path.display(),
             canonical_storage_root.display()
-        ));
+        )));
     }
 
     Ok((resolved_path, storage_root))
@@ -227,7 +223,7 @@ pub fn explicit_storage_root_override() -> Option<String> {
         Err(_) => None,
     }
 }
-pub fn stable_memory_key(path: &Path) -> Result<String, String> {
+pub fn stable_memory_key(path: &Path) -> Result<String, FrameworkError> {
     Ok(normalize_runtime_path(&path.display().to_string())?
         .display()
         .to_string())

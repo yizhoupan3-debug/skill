@@ -16,7 +16,6 @@ test-support = []
 
 [dependencies]
 core-state-utils = { path = "../core-state-utils" }
-http-util = { path = "../http-util" }
 core-state = { path = "../core-state" }
 core-state-types = { path = "../core-state-types" }
 core-policy = { path = "../core-policy" }

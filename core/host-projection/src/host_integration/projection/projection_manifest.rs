@@ -49,7 +49,7 @@ pub struct ProjectionManifestOwnership {
     pub owns_projection_file: bool,
 }
 
-pub fn projection_manifest_status(path: &Path) -> std::result::Result<Value, String> {
+pub fn projection_manifest_status(path: &Path) -> Result<Value> {
     let manifest = read_json_if_exists(path)?;
     Ok(projection_manifest_status_from_payload(
         path,
@@ -70,7 +70,7 @@ pub fn projection_manifest_ownership(
     host_projection: &str,
     scope: &str,
     projection_path: &Path,
-) -> std::result::Result<ProjectionManifestOwnership, String> {
+) -> Result<ProjectionManifestOwnership> {
     let managed = projection_manifest_is_managed(path, Some(host_projection), Some(scope))?;
     let owns_projection_file = managed && projection_manifest_files_include(path, projection_path)?;
     Ok(ProjectionManifestOwnership {
@@ -83,7 +83,7 @@ pub fn projection_manifest_is_managed(
     path: &Path,
     host_projection: Option<&str>,
     scope: Option<&str>,
-) -> std::result::Result<bool, String> {
+) -> Result<bool> {
     let Some(manifest) = read_json_if_exists(path)? else {
         return Ok(false);
     };
@@ -124,7 +124,7 @@ pub fn projection_manifest_payload_is_managed(
 pub fn projection_manifest_files_include(
     manifest_path: &Path,
     projection_path: &Path,
-) -> std::result::Result<bool, String> {
+) -> Result<bool> {
     let Some(manifest) = read_json_if_exists(manifest_path)? else {
         return Ok(false);
     };
@@ -184,14 +184,14 @@ pub fn entrypoint_target(
     roots: &ResolvedProjectionRoots,
     scope: &str,
     host_id: &str,
-) -> std::result::Result<PathBuf, String> {
+) -> Result<PathBuf> {
     let config_dir = framework_kernel::runtime_registry::host_private_config_dir(host_id);
     let subdir = framework_kernel::runtime_registry::projection_entrypoint_subdir(host_id);
     let filename = framework_kernel::runtime_registry::projection_entrypoint_filename(host_id);
     if scope == "user" {
         Ok(roots
             .host_home_root(host_id)
-            .ok_or_else(|| format!("{host_id} host must be registered in projection roots"))?
+            .ok_or_else(|| FrameworkError::config(format!("{host_id} host must be registered in projection roots")))?
             .join(subdir)
             .join(filename))
     } else {
@@ -239,7 +239,7 @@ pub fn write_projection_manifest(
     scope: &str,
     files: &[String],
     managed_key_paths: &[String],
-) -> std::result::Result<bool, String> {
+) -> Result<bool> {
     write_json_if_changed(
         &projection_manifest_path(roots, host_projection, scope),
         &json!({
@@ -253,17 +253,16 @@ pub fn write_projection_manifest(
             }
         }),
     )
-    .map_err(|e| e.to_string())
 }
 
 pub fn mcp_config_path(
     roots: &ResolvedProjectionRoots,
     host_id: &str,
     scope: &str,
-) -> std::result::Result<PathBuf, String> {
+) -> Result<PathBuf> {
     let rel = framework_kernel::runtime_registry::host_projection_mcp_relative(host_id, scope);
     if rel.is_empty() {
-        return Err(format!("no mcp config path for {host_id} scope {scope}"));
+        return Err(FrameworkError::unsupported(format!("no mcp config path for {host_id} scope {scope}")));
     }
     if scope == "user" {
         if framework_kernel::runtime_registry::host_projection_mcp_base_is_account(host_id, "user")
@@ -273,7 +272,7 @@ pub fn mcp_config_path(
             roots
                 .host_home_root(host_id)
                 .map(|h| h.join(rel))
-                .ok_or_else(|| format!("{host_id} host not registered"))
+                .ok_or_else(|| FrameworkError::registry(format!("{host_id} host not registered")))
         }
     } else {
         Ok(roots.project_root.join(rel))
@@ -297,7 +296,7 @@ pub fn install_mcp_server(
     path: &Path,
     host_id: &str,
     scope: &str,
-) -> std::result::Result<McpInstallOutcome, String> {
+) -> Result<McpInstallOutcome> {
     if framework_kernel::runtime_registry::host_mcp_config_format(host_id) == "snake_case" {
         install_mcp_impl_snake_case(roots, path, host_id)
     } else {
@@ -315,13 +314,13 @@ pub(super) fn mcp_servers_mut<'a>(
     payload: &'a mut Value,
     servers_key: &str,
     host_id: &str,
-) -> std::result::Result<&'a mut Map<String, Value>, String> {
+) -> Result<&'a mut Map<String, Value>> {
     if !payload.is_object() {
         *payload = json!({});
     }
     let root = payload
         .as_object_mut()
-        .ok_or_else(|| format!("{host_id} MCP config must be a JSON object"))?;
+        .ok_or_else(|| FrameworkError::unsupported(format!("{host_id} MCP config must be a JSON object")))?;
     let container = root
         .entry(servers_key.to_string())
         .or_insert_with(|| json!({}));
@@ -330,14 +329,14 @@ pub(super) fn mcp_servers_mut<'a>(
     }
     container
         .as_object_mut()
-        .ok_or_else(|| format!("{host_id} MCP servers must be an object"))
+        .ok_or_else(|| FrameworkError::unsupported(format!("{host_id} MCP servers must be an object")))
 }
 
 fn install_mcp_impl_snake_case(
     roots: &ResolvedProjectionRoots,
     path: &Path,
     host_id: &str,
-) -> std::result::Result<McpInstallOutcome, String> {
+) -> Result<McpInstallOutcome> {
     let browser_server = mcp_server_payload(roots);
     let framework_server = host_router_rs_framework_payload(
         roots,
@@ -443,7 +442,7 @@ pub fn remove_mcp_server(
     path: &Path,
     framework_root: &Path,
     host_id: &str,
-) -> std::result::Result<bool, String> {
+) -> Result<bool> {
     let format =
         if framework_kernel::runtime_registry::host_mcp_config_format(host_id) == "snake_case" {
             McpConfigFormat::JSON_SNAKE_CASE
@@ -569,7 +568,7 @@ pub fn mcp_server_payload(roots: &ResolvedProjectionRoots) -> Value {
 pub fn projection_manifest_manages_key_path(
     path: &Path,
     key_path: &str,
-) -> std::result::Result<bool, String> {
+) -> Result<bool> {
     let Some(manifest) = read_json_if_exists(path)? else {
         return Ok(false);
     };
@@ -587,7 +586,7 @@ pub fn projection_manifest_manages_key_path(
 pub fn mcp_server_matches_framework(
     roots: &ResolvedProjectionRoots,
     path: &Path,
-) -> std::result::Result<Option<bool>, String> {
+) -> Result<Option<bool>> {
     let Some(payload) = read_json_if_exists(path)? else {
         return Ok(None);
     };
@@ -603,7 +602,7 @@ pub fn mcp_server_matches_framework(
     )))
 }
 
-pub fn mcp_server_exists(path: &Path) -> std::result::Result<bool, String> {
+pub fn mcp_server_exists(path: &Path) -> Result<bool> {
     let Some(payload) = read_json_if_exists(path)? else {
         return Ok(false);
     };
@@ -621,7 +620,7 @@ fn install_mcp_impl_camel_case(
     path: &Path,
     _scope: &str,
     host_id: &str,
-) -> std::result::Result<bool, String> {
+) -> Result<bool> {
     let mut payload = read_json_if_exists(path)?.unwrap_or_else(|| json!({}));
     let entries = mcp_servers_mut(&mut payload, "mcpServers", host_id)?;
 
@@ -656,10 +655,8 @@ pub fn render_framework_entrypoint(
     roots: &ResolvedProjectionRoots,
     scope: &str,
     host_id: &str,
-) -> std::result::Result<String, String> {
-    let narrative = load_host_projection_narrative(&roots.framework_root).map_err(|_| {
-        format!("host projection narrative must load before rendering {host_id} entrypoint")
-    })?;
+) -> Result<String> {
+    let narrative = load_host_projection_narrative(&roots.framework_root)?;
     let runtime_rel = skills_source_rel(&roots.framework_root)
         .map(|source_rel| format!("{source_rel}/SKILL_ROUTING_RUNTIME.json"))
         .unwrap_or_else(|_| "skills/SKILL_ROUTING_RUNTIME.json".to_string());
@@ -675,7 +672,7 @@ pub fn render_framework_entrypoint(
     ))
 }
 
-pub fn managed_projection_file_exists(path: &Path) -> std::result::Result<bool, String> {
+pub fn managed_projection_file_exists(path: &Path) -> Result<bool> {
     let Some(content) = read_text_if_exists(path)? else {
         return Ok(false);
     };
@@ -685,7 +682,7 @@ pub fn managed_projection_file_exists(path: &Path) -> std::result::Result<bool, 
 pub(super) fn projection_file_status(
     path: &Path,
     host_projection: &str,
-) -> std::result::Result<Value, String> {
+) -> Result<Value> {
     let content = read_text_if_exists(path)?;
     let marker_managed = content
         .as_deref()
@@ -742,7 +739,7 @@ pub fn install_skills_projection_tools(
 pub fn canonical_tool_name(
     raw: &str,
     framework_root: &Path,
-) -> std::result::Result<String, String> {
+) -> Result<String> {
     let normalized = raw.trim().to_lowercase();
     if crate::host_integration::projection::projection_ops_trait::projection_ops_for_tool(
         &normalized,
@@ -752,10 +749,10 @@ pub fn canonical_tool_name(
         return Ok(normalized);
     }
     let known = projection_supported_tools_for_message(framework_root);
-    Err(format!(
+    Err(FrameworkError::unsupported(format!(
         "Unknown tool: {normalized}. Supported tools: {}",
         known.join(", "),
-    ))
+    )))
 }
 
 pub fn projection_supported_tools_for_message(framework_root: &Path) -> Vec<String> {

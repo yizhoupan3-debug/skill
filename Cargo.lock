@@ -670,7 +670,6 @@ dependencies = [
 name = "core-state"
 version = "0.1.0"
 dependencies = [
- "chrono",
  "core-errors",
  "core-policy",
  "core-state-types",
@@ -1476,11 +1475,10 @@ dependencies = [
  "core-state",
  "core-state-utils",
  "fr-contracts",
+ "fr-utils",
  "framework-kernel",
- "libc",
  "serde",
  "serde_json",
- "sha2 0.11.0",
  "tempfile",
  "thiserror 2.0.18",
  "tracing",
@@ -1561,7 +1559,6 @@ dependencies = [
  "core-state-utils",
  "framework-kernel",
  "fs2",
- "http-util",
  "insta",
  "libc",
  "mcp-tool-registry",

@@ -273,9 +273,9 @@ pub fn init_hooks() {
                         .collect()
                 },
             },
-            framework_goal_drive: |payload| core_state::state_manager::framework_goal_drive(payload).map_err(|e| e.to_string()),
+            framework_goal_drive: core_state::state_manager::framework_goal_drive,
             handle_orchestrator_operation: |_payload| {
-                Err(core_errors::FrameworkError::hook("orchestrator operation not registered").to_string())
+                Err(core_errors::FrameworkError::hook("orchestrator operation not registered"))
             },
             #[cfg(feature = "l5-state")]
             handle_background_state_operation: rt_storage::background_state::handle_background_state_operation,
@@ -297,12 +297,10 @@ pub fn init_hooks() {
                         tracing::warn!(error = %e, "eval_route report serialization failed");
                         serde_json::json!({})
                     }))
-                    .map_err(|e| e.to_string())
             },
             generated_artifacts_status_for_repo: |repo_root| {
                 crate::host_integration::generated_artifacts_status_for_repo(repo_root)
                     .map(|v| v.to_string())
-                    .map_err(|e| e.to_string())
             },
             ensure_kernel_bootstrap: kernel_bootstrap::ensure_kernel_bootstrap,
         });

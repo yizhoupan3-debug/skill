@@ -3,7 +3,11 @@
 //! The portable pub functions have been moved to `framework-kernel` (single source of truth).
 //! This module re-exports them and keeps only crate-private helpers.
 
-pub use framework_kernel::json_value::*;
+pub use framework_kernel::json_value::{
+    build_task_id, first_nonempty, join_lines, nonempty_string, optional_bool,
+    optional_non_empty_string, required_non_empty_string, safe_slug, stable_line_items,
+    value_bool_or_none, value_string_list, value_text,
+};
 
 use serde_json::Value;
 

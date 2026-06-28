@@ -33,6 +33,11 @@ const STATE_SNAPSHOT_TX_TYPES: &[&str] = &[
 /// `tx_type`) and rewriting via atomic rename.  All kept lines get **dense seq**
 /// (0, 1, 2, … *N*−1) so post-compaction seq monotonicity is preserved.
 ///
+/// **Note:** `seq` is NOT stable across compactions — it is a dense ordering counter,
+/// not a durable transaction ID.  External consumers that use `seq` for deduplication
+/// or external-key correlation must account for renumbering after compaction.
+/// For idempotency, use `idempotency_key` instead of `seq`.
+///
 /// This is a thin wrapper that reads the file and delegates to
 /// [`compact_jsonl_with_content`].
 pub fn compact_jsonl_if_needed(path: &Path, max_lines: usize) -> Result<bool, FrameworkError> {

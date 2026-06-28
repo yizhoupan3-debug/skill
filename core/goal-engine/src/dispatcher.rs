@@ -27,16 +27,35 @@ struct SubagentPermit<'a> {
 
 impl<'a> SubagentPermit<'a> {
     fn acquire(sem: &'a Mutex<u32>) -> Self {
-        let mut backoff_ms = 50;
+        let mut backoff_ms: u64 = 50;
+        let mut poison_retries: u32 = 0;
         loop {
-            let Ok(mut count) = sem.lock().map_err(|e| e.into_inner()) else {
-                continue;
-            };
-            if *count > 0 {
-                *count -= 1;
-                return Self { sem };
+            match sem.lock() {
+                Ok(mut count) => {
+                    poison_retries = 0; // Healthy lock — reset poison counter.
+                    if *count > 0 {
+                        *count -= 1;
+                        return Self { sem };
+                    }
+                    drop(count);
+                }
+                Err(poisoned) => {
+                    poison_retries += 1;
+                    if poison_retries >= 10 {
+                        panic!(
+                            "SubagentPermit semaphore permanently poisoned after {} retries",
+                            poison_retries,
+                        );
+                    }
+                    // Recover the locked value through the poison wrapper.
+                    let mut count = poisoned.into_inner();
+                    if *count > 0 {
+                        *count -= 1;
+                        return Self { sem };
+                    }
+                    drop(count);
+                }
             }
-            drop(count);
             thread::sleep(Duration::from_millis(backoff_ms));
             backoff_ms = (backoff_ms * 2).min(2000);
         }
@@ -162,53 +181,10 @@ pub fn build_handoff(action: &LoopAction, loop_id: &str, run_id: &str) -> String
 
 /// Apply process resource limits via setrlimit in the forked child (pre_exec).
 /// Prevents runaway subprocesses from exhausting system resources.
+/// Delegates to the shared implementation in `fr-utils`.
 #[cfg(unix)]
 pub(crate) fn apply_subprocess_rlimits() -> Result<(), std::io::Error> {
-    use libc::{
-        RLIMIT_AS, RLIMIT_CPU, RLIMIT_FSIZE, RLIMIT_NOFILE, RLIMIT_NPROC, rlimit, setrlimit,
-    };
-    // RLIMIT_CPU: 600s soft, 1200s hard
-    let rlim_cpu = rlimit {
-        rlim_cur: 600,
-        rlim_max: 1200,
-    };
-    // SAFETY: setrlimit is async-signal-safe; pre_exec runs in a single-threaded forked child.
-    if unsafe { setrlimit(RLIMIT_CPU, &rlim_cpu) } != 0 {
-        return Err(std::io::Error::last_os_error());
-    }
-    // RLIMIT_AS: 2 GiB soft, 4 GiB hard
-    let rlim_as = rlimit {
-        rlim_cur: 2 * 1024 * 1024 * 1024,
-        rlim_max: 4 * 1024 * 1024 * 1024,
-    };
-    if unsafe { setrlimit(RLIMIT_AS, &rlim_as) } != 0 {
-        return Err(std::io::Error::last_os_error());
-    }
-    // RLIMIT_FSIZE: 100 MiB soft, 1 GiB hard
-    let rlim_fsize = rlimit {
-        rlim_cur: 100 * 1024 * 1024,
-        rlim_max: 1024 * 1024 * 1024,
-    };
-    if unsafe { setrlimit(RLIMIT_FSIZE, &rlim_fsize) } != 0 {
-        return Err(std::io::Error::last_os_error());
-    }
-    // RLIMIT_NOFILE: 256 soft, 1024 hard
-    let rlim_nofile = rlimit {
-        rlim_cur: 256,
-        rlim_max: 1024,
-    };
-    if unsafe { setrlimit(RLIMIT_NOFILE, &rlim_nofile) } != 0 {
-        return Err(std::io::Error::last_os_error());
-    }
-    // RLIMIT_NPROC: 64 soft, 256 hard
-    let rlim_nproc = rlimit {
-        rlim_cur: 64,
-        rlim_max: 256,
-    };
-    if unsafe { setrlimit(RLIMIT_NPROC, &rlim_nproc) } != 0 {
-        return Err(std::io::Error::last_os_error());
-    }
-    Ok(())
+    fr_utils::process_utils::apply_subprocess_rlimits()
 }
 
 #[cfg(not(unix))]
@@ -277,32 +253,59 @@ pub fn run_action_dry_run(action: &LoopAction, loop_id: &str, run_id: &str) -> S
     )
 }
 
+/// Time-to-live for the cached `git diff` result (seconds).
+const GIT_DIFF_CACHE_TTL_SECS: u64 = 10;
+
 /// Check that modified tracked files are within the allowed scope paths.
 /// Returns a list of file paths that violate the scope constraint.
+///
+/// Results are cached for [`GIT_DIFF_CACHE_TTL_SECS`] seconds to avoid
+/// spawning `git diff` on every call in a tight poll loop.
 pub fn check_scope_compliance(repo_root: &Path, scope_paths: &[String]) -> Vec<String> {
+    let changes = resolve_cached_git_diff(repo_root);
+    if scope_paths.is_empty() || changes.is_empty() {
+        return Vec::new();
+    }
+    changes
+        .into_iter()
+        .filter(|f| !scope_paths.iter().any(|s| f.starts_with(s)))
+        .collect()
+}
+
+/// Cache entry for git diff output — (cached_at, repo_root, changes).
+type GitDiffCacheEntry = (std::time::Instant, std::path::PathBuf, Vec<String>);
+
+/// Cache-backed git diff resolution — spawns `git diff` at most once per TTL.
+fn resolve_cached_git_diff(repo_root: &Path) -> Vec<String> {
+    static CACHE: std::sync::OnceLock<std::sync::Mutex<Option<GitDiffCacheEntry>>> =
+        std::sync::OnceLock::new();
+    let cache = CACHE.get_or_init(|| std::sync::Mutex::new(None));
+    let mut guard = cache.lock().unwrap_or_else(|e| e.into_inner());
+
+    if let Some((cached_at, cached_root, cached_changes)) = guard.as_ref()
+        && cached_root.as_os_str() == repo_root.as_os_str()
+        && cached_at.elapsed() < std::time::Duration::from_secs(GIT_DIFF_CACHE_TTL_SECS)
+    {
+        return cached_changes.clone();
+    }
+
+    // Cache miss — run git diff.
     let output = Command::new("git")
         .args(["diff", "--name-only", "--diff-filter=ACMR"])
         .current_dir(repo_root)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .output();
-    match output {
-        Ok(out) if out.status.success() => {
-            let changes: Vec<String> = String::from_utf8_lossy(&out.stdout)
-                .lines()
-                .map(|l| l.trim().to_string())
-                .filter(|l| !l.is_empty())
-                .collect();
-            if scope_paths.is_empty() {
-                return Vec::new();
-            }
-            changes
-                .into_iter()
-                .filter(|f| !scope_paths.iter().any(|s| f.starts_with(s)))
-                .collect()
-        }
+    let changes: Vec<String> = match output {
+        Ok(out) if out.status.success() => String::from_utf8_lossy(&out.stdout)
+            .lines()
+            .map(|l| l.trim().to_string())
+            .filter(|l| !l.is_empty())
+            .collect(),
         _ => Vec::new(),
-    }
+    };
+    *guard = Some((std::time::Instant::now(), repo_root.to_path_buf(), changes.clone()));
+    changes
 }
 
 #[allow(clippy::unwrap_used, clippy::expect_used)]

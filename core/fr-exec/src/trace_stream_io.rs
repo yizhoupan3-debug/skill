@@ -4,6 +4,7 @@ use serde_json::{Map, Value, json};
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use core_errors::FrameworkError;
 use fr_utils::io_utils::{append_text_with_process_lock, validate_write_path};
 use framework_kernel::stdio_payload_types::{
     TraceCompactionDeltaWriteRequestPayload, TraceCompactionDeltaWriteResponsePayload,
@@ -91,13 +92,14 @@ fn load_trace_stream_events(
     session_id: Option<&str>,
     job_id: Option<&str>,
     stream_scope_fields: &Option<Vec<String>>,
-) -> Result<Vec<Map<String, Value>>, String> {
+) -> Result<Vec<Map<String, Value>>, FrameworkError> {
     let mut events = Vec::new();
     let raw_payload = match event_stream_text {
         Some(value) => value.to_string(),
         None => {
             let storage_backend = resolve_storage_backend(&[path.to_path_buf()]);
-            storage_read_text(path, storage_backend.as_ref())?
+            storage_read_text(path, storage_backend.as_ref())
+                ?
         }
     };
 
@@ -106,10 +108,16 @@ fn load_trace_stream_events(
             continue;
         }
         let event_payload = hydrate_trace_event_object(
-            trace_event_object(serde_json::from_str::<Value>(raw_line).map_err(|err| {
-                format!("parse trace stream line {} failed: {err}", line_number + 1)
-            })?)
-            .map_err(|e| e.to_string())?,
+            trace_event_object(
+                serde_json::from_str::<Value>(raw_line)
+                    .map_err(|err| {
+                        FrameworkError::validation(format!(
+                            "parse trace stream line {} failed: {err}",
+                            line_number + 1
+                        ))
+                    })?,
+            )
+            .map_err(|e| FrameworkError::validation(e.to_string()))?,
             line_number + 1,
         );
         if trace_event_matches_request_scope(
@@ -145,33 +153,43 @@ fn latest_cursor_from_trace_event(payload: &Map<String, Value>) -> Option<Value>
 fn compaction_delta_to_trace_event(
     payload: Value,
     line_number: usize,
-) -> Result<Map<String, Value>, String> {
+) -> Result<Map<String, Value>, FrameworkError> {
     let object = match payload {
         Value::Object(obj) => obj,
         _ => {
-            return Err(format!(
+            return Err(FrameworkError::validation(format!(
                 "trace compaction delta line {} must decode to a JSON object",
                 line_number
-            ));
+            )));
         }
     };
     let generation = trace_event_usize_field(&object, "generation").unwrap_or(0);
-    let seq = trace_event_usize_field(&object, "seq")
-        .ok_or_else(|| format!("trace compaction delta line {line_number} missing seq"))?;
-    let applies_to = object
-        .get("applies_to")
-        .and_then(Value::as_object)
-        .ok_or_else(|| format!("trace compaction delta line {line_number} missing applies_to"))?;
+    let seq = trace_event_usize_field(&object, "seq").ok_or_else(|| {
+        FrameworkError::validation(format!(
+            "trace compaction delta line {line_number} missing seq"
+        ))
+    })?;
+    let applies_to = object.get("applies_to").and_then(Value::as_object).ok_or_else(|| {
+        FrameworkError::validation(format!(
+            "trace compaction delta line {line_number} missing applies_to"
+        ))
+    })?;
     let session_id = applies_to
         .get("session_id")
         .and_then(Value::as_str)
         .ok_or_else(|| {
-            format!("trace compaction delta line {line_number} missing applies_to.session_id")
+            FrameworkError::validation(format!(
+                "trace compaction delta line {line_number} missing applies_to.session_id"
+            ))
         })?;
     let payload_object = object
         .get("payload")
         .and_then(Value::as_object)
-        .ok_or_else(|| format!("trace compaction delta line {line_number} missing payload"))?;
+        .ok_or_else(|| {
+            FrameworkError::validation(format!(
+                "trace compaction delta line {line_number} missing payload"
+            ))
+        })?;
     let event_id = payload_object
         .get("event_id")
         .and_then(Value::as_str)
@@ -242,16 +260,17 @@ fn validate_compaction_artifact_digest(
     artifact_ref: &Map<String, Value>,
     payload_text: &str,
     label: &str,
-) -> Result<(), String> {
-    let expected = artifact_ref
-        .get("digest")
-        .and_then(Value::as_str)
-        .ok_or_else(|| format!("compaction {label} artifact ref is missing digest"))?;
+) -> Result<(), FrameworkError> {
+    let expected = artifact_ref.get("digest").and_then(Value::as_str).ok_or_else(|| {
+        FrameworkError::validation(format!(
+            "compaction {label} artifact ref is missing digest"
+        ))
+    })?;
     let actual = trace_runtime::sha256_hex(payload_text.as_bytes());
     if expected != actual {
-        return Err(format!(
+        return Err(FrameworkError::validation(format!(
             "Compaction recovery failed closed because {label} artifact digest mismatched."
-        ));
+        )));
     }
     Ok(())
 }
@@ -342,7 +361,7 @@ impl<'a> TraceSourceRequest<'a> {
 
 fn load_compaction_recovery(
     request: CompactionRecoveryRequest<'_>,
-) -> Result<ResolvedTraceSource, String> {
+) -> Result<ResolvedTraceSource, FrameworkError> {
     let CompactionRecoveryRequest {
         manifest_path,
         manifest_text,
@@ -356,47 +375,61 @@ fn load_compaction_recovery(
     let storage_backend = resolve_storage_backend(&[manifest_path.to_path_buf()]);
     let manifest_raw = match manifest_text {
         Some(value) => value.to_string(),
-        None => storage_read_text(manifest_path, storage_backend.as_ref())?,
+        None => storage_read_text(manifest_path, storage_backend.as_ref())
+            ?,
     };
-    let manifest_payload = serde_json::from_str::<Value>(&manifest_raw).map_err(|err| {
-        format!(
-            "parse compaction manifest failed for {}: {err}",
-            manifest_path.display()
-        )
-    })?;
+    let manifest_payload =
+        serde_json::from_str::<Value>(&manifest_raw).map_err(|err| {
+            FrameworkError::validation(format!(
+                "parse compaction manifest failed for {}: {err}",
+                manifest_path.display()
+            ))
+        })?;
     let manifest = manifest_payload.as_object().ok_or_else(|| {
-        format!(
+        FrameworkError::validation(format!(
             "compaction manifest must decode to a JSON object: {}",
             manifest_path.display()
-        )
+        ))
     })?;
     let snapshot = manifest
         .get("latest_stable_snapshot")
         .and_then(Value::as_object)
-        .ok_or_else(|| "compaction manifest is missing latest_stable_snapshot".to_string())?;
+        .ok_or_else(|| {
+            FrameworkError::validation(
+                "compaction manifest is missing latest_stable_snapshot",
+            )
+        })?;
     let state_ref = snapshot
         .get("state_ref")
         .and_then(Value::as_object)
         .ok_or_else(|| {
-            "compaction manifest is missing required recovery artifact refs.".to_string()
+            FrameworkError::validation(
+                "compaction manifest is missing required recovery artifact refs.",
+            )
         })?;
     let artifact_index_ref = snapshot
         .get("artifact_index_ref")
         .and_then(Value::as_object)
         .ok_or_else(|| {
-            "compaction manifest is missing required recovery artifact refs.".to_string()
+            FrameworkError::validation(
+                "compaction manifest is missing required recovery artifact refs.",
+            )
         })?;
     let state_ref_uri = state_ref
         .get("uri")
         .and_then(Value::as_str)
         .ok_or_else(|| {
-            "compaction manifest is missing required recovery artifact refs.".to_string()
+            FrameworkError::validation(
+                "compaction manifest is missing required recovery artifact refs.",
+            )
         })?;
     let artifact_index_uri = artifact_index_ref
         .get("uri")
         .and_then(Value::as_str)
         .ok_or_else(|| {
-            "compaction manifest is missing required recovery artifact refs.".to_string()
+            FrameworkError::validation(
+                "compaction manifest is missing required recovery artifact refs.",
+            )
         })?;
     let state_path = PathBuf::from(state_ref_uri);
     let artifact_index_path = PathBuf::from(artifact_index_uri);
@@ -405,25 +438,26 @@ fn load_compaction_recovery(
         && (!storage_artifact_exists(&state_path, storage_backend.as_ref())
             || !storage_artifact_exists(&artifact_index_path, storage_backend.as_ref()))
     {
-        return Err(
-            "Compaction recovery failed closed because a referenced artifact is missing."
-                .to_string(),
-        );
+        return Err(FrameworkError::validation(
+            "Compaction recovery failed closed because a referenced artifact is missing.",
+        ));
     }
     let state_raw = match state_text {
         Some(value) => value.to_string(),
-        None => storage_read_text(&state_path, storage_backend.as_ref())?,
+        None => storage_read_text(&state_path, storage_backend.as_ref())
+            ?,
     };
     validate_compaction_artifact_digest(state_ref, &state_raw, "state_ref")?;
     let state_payload = serde_json::from_str::<Value>(&state_raw).map_err(|err| {
-        format!(
+        FrameworkError::validation(format!(
             "parse compaction state failed for {}: {err}",
             state_path.display()
-        )
+        ))
     })?;
     let artifact_index_raw = match artifact_index_text {
         Some(value) => value.to_string(),
-        None => storage_read_text(&artifact_index_path, storage_backend.as_ref())?,
+        None => storage_read_text(&artifact_index_path, storage_backend.as_ref())
+            ?,
     };
     validate_compaction_artifact_digest(
         artifact_index_ref,
@@ -432,10 +466,10 @@ fn load_compaction_recovery(
     )?;
     let artifact_index_payload =
         serde_json::from_str::<Value>(&artifact_index_raw).map_err(|err| {
-            format!(
+            FrameworkError::validation(format!(
                 "parse compaction artifact index failed for {}: {err}",
                 artifact_index_path.display()
-            )
+            ))
         })?;
 
     let delta_path = manifest
@@ -457,12 +491,13 @@ fn load_compaction_recovery(
                 if raw_line.trim().is_empty() {
                     continue;
                 }
-                let delta_payload = serde_json::from_str::<Value>(raw_line).map_err(|err| {
-                    format!(
-                        "parse compaction delta line {} failed: {err}",
-                        line_number + 1
-                    )
-                })?;
+                let delta_payload =
+                    serde_json::from_str::<Value>(raw_line).map_err(|err| {
+                        FrameworkError::validation(format!(
+                            "parse compaction delta line {} failed: {err}",
+                            line_number + 1
+                        ))
+                    })?;
                 let event_payload =
                     compaction_delta_to_trace_event(delta_payload.clone(), line_number + 1)?;
                 if trace_event_matches_request_scope(
@@ -541,7 +576,7 @@ fn load_compaction_recovery(
     })
 }
 
-fn resolve_trace_source(request: TraceSourceRequest<'_>) -> Result<ResolvedTraceSource, String> {
+fn resolve_trace_source(request: TraceSourceRequest<'_>) -> Result<ResolvedTraceSource, FrameworkError> {
     if request.compaction_manifest_path.is_some() || request.compaction_manifest_text.is_some() {
         let compaction_path = request
             .compaction_manifest_path
@@ -565,7 +600,9 @@ fn resolve_trace_source(request: TraceSourceRequest<'_>) -> Result<ResolvedTrace
             None
         })
         .ok_or_else(|| {
-            "trace stream replay requires path, event_stream_text, compaction_manifest_path, or compaction_manifest_text".to_string()
+            FrameworkError::validation(
+                "trace stream replay requires path, event_stream_text, compaction_manifest_path, or compaction_manifest_text",
+            )
         })?;
     let path_buf = PathBuf::from(path);
     let events = load_trace_stream_events(
@@ -593,7 +630,7 @@ fn resolve_trace_source(request: TraceSourceRequest<'_>) -> Result<ResolvedTrace
 
 pub fn inspect_trace_stream(
     payload: TraceStreamInspectRequestPayload,
-) -> Result<TraceStreamInspectResponsePayload, String> {
+) -> Result<TraceStreamInspectResponsePayload, FrameworkError> {
     let resolved = resolve_trace_source(TraceSourceRequest::from_inspect_payload(&payload))?;
     let reroute_count = trace_reroute_count(&resolved.events);
     let retry_count = trace_retry_count(&resolved.events);
@@ -616,7 +653,7 @@ pub fn inspect_trace_stream(
 
 pub fn replay_trace_stream(
     payload: TraceStreamReplayRequestPayload,
-) -> Result<TraceStreamReplayResponsePayload, String> {
+) -> Result<TraceStreamReplayResponsePayload, FrameworkError> {
     let resolved = resolve_trace_source(TraceSourceRequest::from_replay_payload(&payload))?;
     let after_event_id = payload.after_event_id.clone();
     let limit = payload.limit.unwrap_or(usize::MAX);
@@ -646,10 +683,10 @@ pub fn replay_trace_stream(
     }
 
     if after_event_id.is_some() && !anchor_found {
-        return Err(format!(
+        return Err(FrameworkError::validation(format!(
             "Unknown event id for stream resume: {}",
             after_event_id.unwrap_or_default()
-        ));
+        )));
     }
 
     let window_start_index = anchor_index.map_or(0, |index| index + 1);
@@ -762,11 +799,14 @@ fn build_trace_stream_metadata(
 
 pub fn write_trace_compaction_delta(
     payload: TraceCompactionDeltaWriteRequestPayload,
-) -> Result<TraceCompactionDeltaWriteResponsePayload, String> {
+) -> Result<TraceCompactionDeltaWriteResponsePayload, FrameworkError> {
     let path = PathBuf::from(&payload.path);
     let serialized = serde_json::to_string(&payload.delta)
-        .map_err(|err| format!("serialize trace compaction delta failed: {err}"))?
-        + "\n";
+        .map_err(|err| {
+            FrameworkError::validation(format!(
+                "serialize trace compaction delta failed: {err}"
+            ))
+        })? + "\n";
     append_text_with_process_lock(&path, &serialized, "trace compaction delta")?;
     Ok(TraceCompactionDeltaWriteResponsePayload {
         schema_version: TRACE_COMPACTION_DELTA_WRITE_SCHEMA_VERSION.to_string(),
@@ -818,7 +858,7 @@ fn trace_source_explicitly_provided(payload: &TraceMetadataWriteRequestPayload) 
 
 pub fn write_trace_metadata(
     payload: TraceMetadataWriteRequestPayload,
-) -> Result<TraceMetadataWriteResponsePayload, String> {
+) -> Result<TraceMetadataWriteResponsePayload, FrameworkError> {
     let routing_runtime_version = payload
         .routing_runtime_version
         .unwrap_or_else(|| load_trace_routing_runtime_version(payload.runtime_path.as_deref()));
@@ -933,8 +973,11 @@ pub fn write_trace_metadata(
     }
 
     let serialized = serde_json::to_string_pretty(&Value::Object(document))
-        .map_err(|err| format!("serialize trace metadata failed: {err}"))?
-        + "\n";
+        .map_err(|err| {
+            FrameworkError::validation(format!(
+                "serialize trace metadata failed: {err}"
+            ))
+        })? + "\n";
     if payload.write_outputs {
         let outputs =
             std::iter::once(payload.output_path.clone()).chain(payload.mirror_paths.clone());

@@ -741,9 +741,9 @@ fn background_state_arbitration_dispatch_requires_explicit_operation() {
         "incoming_job_id": "job-3"
     }))
     .expect_err("missing arbitration operation should fail closed");
-    assert_eq!(
-        missing,
-        "Background state arbitration is missing arbitration_operation."
+    assert!(
+        missing.to_string().contains("missing arbitration_operation"),
+        "expected arbitration operation error, got: {missing}"
     );
 
     fs::remove_file(&state_path).expect("cleanup arbitration dispatch state");

@@ -196,7 +196,12 @@ fn append_text(path: &Path, payload: &str) -> Result<(), TraceError> {
     })?;
     // Cross-process serialization: prevents JSONL line interleaving when
     // codex, cursor and parallel test harnesses all tail the same trace.
-    let _path_lock = acquire_runtime_path_lock(path)?;
+    // Note: this is the 2nd of 3 serialization layers — (1) process Mutex,
+    // (2) cross-process file lock, (3) OS append-mode write atomicity.
+    // The ordering is safe: path lock is acquired AFTER the Mutex so there
+    // is no lock-order inversion risk (both are write-only, no back-edge).
+    let _path_lock = acquire_runtime_path_lock(path)
+        .map_err(|e| TraceError::validation(e.to_string()))?;
     let mut file = fs::OpenOptions::new()
         .create(true)
         .append(true)

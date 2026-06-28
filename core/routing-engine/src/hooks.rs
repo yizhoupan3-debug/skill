@@ -11,6 +11,8 @@
 use std::path::PathBuf;
 use std::sync::OnceLock;
 
+use core_errors::FrameworkError;
+
 // ---------------------------------------------------------------------------
 // ParallelReviewMarkers (mirrors core_policy::review_routing_signals)
 // ---------------------------------------------------------------------------
@@ -57,7 +59,7 @@ pub fn register_hooks(
     discover_skill_repo_root: DiscoverSkillRepoRootFn,
     skill_routing_runtime_json: SkillRoutingRuntimeJsonFn,
     parallel_review_markers: ParallelReviewMarkersFn,
-) -> Result<(), &'static str> {
+) -> Result<(), FrameworkError> {
     HOOKS
         .set(RoutingHooks {
             is_review_prompt,
@@ -68,7 +70,9 @@ pub fn register_hooks(
             skill_routing_runtime_json,
             parallel_review_markers,
         })
-        .map_err(|_| "routing hooks already registered")
+        .map_err(|_| FrameworkError::Hook {
+            message: "routing hooks already registered".into(),
+        })
 }
 
 // ---------------------------------------------------------------------------
@@ -125,6 +129,10 @@ pub fn skill_routing_runtime_json(root: &std::path::Path) -> PathBuf {
 }
 
 /// Get parallel review candidate markers.
+///
+/// Returns empty marker lists when hooks are not registered — all parallel review
+/// detection is disabled. Callers should treat empty markers as "no parallel review
+/// candidates exist" rather than assuming registration has already occurred.
 /// Default: returns empty marker lists (no parallel review detection).
 pub fn parallel_review_candidate_markers() -> ParallelReviewMarkers {
     HOOKS
@@ -135,4 +143,23 @@ pub fn parallel_review_candidate_markers() -> ParallelReviewMarkers {
             breadth_markers: &[],
             scope_markers: &[],
         })
+}
+
+/// Reset routing hooks for test isolation.
+///
+/// # Safety
+/// Only safe in single-threaded test contexts. Replaces the global
+/// `OnceLock` in-place; concurrent readers will see permanently unset
+/// accessor defaults after this returns.
+#[cfg(test)]
+pub fn unregister_routing_hooks() {
+    #[allow(invalid_reference_casting)]
+    // SAFETY: #[cfg(test)] only — replaces the OnceLock interior without
+    // dropping the old value. No concurrent access because cargo test
+    // serializes within a binary.
+    unsafe {
+        let ptr = &HOOKS as *const OnceLock<RoutingHooks> as *mut OnceLock<RoutingHooks>;
+        std::ptr::drop_in_place(ptr);
+        std::ptr::write(ptr, OnceLock::new());
+    }
 }

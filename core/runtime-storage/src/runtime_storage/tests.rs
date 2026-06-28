@@ -115,7 +115,7 @@ fn runtime_storage_rejects_parent_escape_path() {
         tail_lines: None,
     };
     let error = runtime_storage_operation(request).expect_err("parent escape must be rejected");
-    assert!(error.contains("must stay under storage root"));
+    assert!(error.to_string().contains("must stay under storage root"));
 }
 
 #[test]
@@ -136,7 +136,7 @@ fn runtime_storage_rejects_absolute_path_outside_storage_root_for_sqlite() {
     };
     let error =
         runtime_storage_operation(request).expect_err("absolute outside root must be rejected");
-    assert!(error.contains("must stay under storage root"));
+    assert!(error.to_string().contains("must stay under storage root"));
 }
 
 /// Simulates a collision on the first `create_new` temp name; second attempt must succeed.
@@ -191,7 +191,7 @@ fn runtime_storage_filesystem_rejects_symlink_write_path() {
     };
     let err = runtime_storage_operation(request).expect_err("symlink path must be rejected");
     assert!(
-        err.contains("must not be a symlink"),
+        err.to_string().contains("must not be a symlink"),
         "unexpected error: {err}"
     );
 }
@@ -227,11 +227,11 @@ fn runtime_storage_rejects_parent_dir_symlink_escape() {
     let err = runtime_storage_operation(request)
         .expect_err("parent-chain symlink escape must be rejected");
     assert!(
-        err.contains("must stay under storage root"),
+        err.to_string().contains("must stay under storage root"),
         "unexpected error: {err}"
     );
     assert!(
-        err.contains("after symlink resolution"),
+        err.to_string().contains("after symlink resolution"),
         "should be the canonical-path branch of the check, got: {err}"
     );
     let leaked = outside.join("leak.txt");
@@ -274,7 +274,7 @@ fn runtime_storage_append_rejects_parent_dir_symlink_escape() {
     let err = runtime_storage_operation(request)
         .expect_err("append via parent-chain symlink escape must be rejected");
     assert!(
-        err.contains("must stay under storage root"),
+        err.to_string().contains("must stay under storage root"),
         "unexpected error: {err}"
     );
     let body = fs::read_to_string(&prepared).expect("outside payload remains");
@@ -465,7 +465,7 @@ fn runtime_storage_append_text_rejects_missing_payload_text() {
         tail_lines: None,
     };
     let err = runtime_storage_operation(request).expect_err("missing payload must fail");
-    assert!(err.contains("append_text requires payload_text"));
+    assert!(err.to_string().contains("append_text requires payload_text"));
 }
 
 #[test]
@@ -686,7 +686,7 @@ fn clean_absolute_path_collapses_parent() {
 fn clean_absolute_path_rejects_escape_beyond_root() {
     let result = clean_absolute_path(Path::new("/../escape"));
     assert!(result.is_err());
-    assert!(result.unwrap_err().contains("escapes filesystem root"));
+    assert!(result.unwrap_err().to_string().contains("escapes filesystem root"));
 }
 
 // ── canonicalize_or_clean_absolute_path ──
@@ -1151,7 +1151,7 @@ fn resolve_runtime_storage_path_with_root_rejects_escape() {
         Some(&root.display().to_string()),
     );
     assert!(result.is_err());
-    assert!(result.unwrap_err().contains("must stay under storage root"));
+    assert!(result.unwrap_err().to_string().contains("must stay under storage root"));
 }
 
 #[test]
@@ -1159,7 +1159,7 @@ fn resolve_runtime_storage_path_with_root_rejects_empty_path() {
     let root = unique_temp_dir("resolve-empty");
     let result = resolve_runtime_storage_path_with_root("  ", Some(&root.display().to_string()));
     assert!(result.is_err());
-    assert!(result.unwrap_err().contains("non-empty"));
+    assert!(result.unwrap_err().to_string().contains("non-empty"));
 }
 
 // ── memory_artifact_path ──
@@ -1478,7 +1478,7 @@ fn runtime_storage_write_text_rejects_missing_payload() {
         tail_lines: None,
     });
     assert!(result.is_err());
-    assert!(result.unwrap_err().contains("payload_text"));
+    assert!(result.unwrap_err().to_string().contains("payload_text"));
 }
 
 #[test]
@@ -1496,7 +1496,7 @@ fn runtime_storage_read_text_fails_on_missing_filesystem() {
         tail_lines: None,
     });
     assert!(result.is_err());
-    assert!(result.unwrap_err().contains("does not exist"));
+    assert!(result.unwrap_err().to_string().contains("does not exist"));
 }
 
 #[test]
@@ -1579,7 +1579,7 @@ fn runtime_storage_sqlite_backend_requires_db_path() {
         tail_lines: None,
     });
     assert!(result.is_err());
-    assert!(result.unwrap_err().contains("sqlite_db_path"));
+    assert!(result.unwrap_err().to_string().contains("sqlite_db_path"));
 }
 
 // ── helper functions ──
@@ -1761,7 +1761,7 @@ fn build_checkpoint_control_plane_compiler_rejects_mismatched_backends() {
     });
     let result = build_checkpoint_control_plane_compiler_payload(payload);
     assert!(result.is_err());
-    assert!(result.unwrap_err().contains("mismatch"));
+    assert!(result.unwrap_err().to_string().contains("mismatch"));
 }
 
 #[test]
@@ -1771,7 +1771,7 @@ fn build_checkpoint_control_plane_compiler_rejects_missing_paths() {
     });
     let result = build_checkpoint_control_plane_compiler_payload(payload);
     assert!(result.is_err());
-    assert!(result.unwrap_err().contains("paths"));
+    assert!(result.unwrap_err().to_string().contains("paths"));
 }
 
 #[test]
@@ -1781,7 +1781,7 @@ fn build_checkpoint_control_plane_compiler_rejects_missing_capabilities() {
     });
     let result = build_checkpoint_control_plane_compiler_payload(payload);
     assert!(result.is_err());
-    assert!(result.unwrap_err().contains("capabilities"));
+    assert!(result.unwrap_err().to_string().contains("capabilities"));
 }
 
 // ── locking and symlink guards ──
@@ -1823,7 +1823,7 @@ fn filesystem_reject_symlink_write_target_rejects_symlink() {
     symlink(&real, &alias).expect("symlink");
     let result = filesystem_reject_symlink_write_target(&alias);
     assert!(result.is_err());
-    assert!(result.unwrap_err().contains("must not be a symlink"));
+    assert!(result.unwrap_err().to_string().contains("must not be a symlink"));
 }
 
 // ── env helpers ──
@@ -1882,7 +1882,7 @@ fn canonicalize_existing_ancestors_resolves_real_path() {
 fn canonicalize_existing_ancestors_rejects_relative() {
     let result = canonicalize_existing_ancestors(Path::new("relative"));
     assert!(result.is_err());
-    assert!(result.unwrap_err().contains("must be absolute"));
+    assert!(result.unwrap_err().to_string().contains("must be absolute"));
 }
 
 // ── storage_artifact_exists / storage_read_text with None backend ──
@@ -1900,7 +1900,7 @@ fn storage_read_text_none_backend_returns_error_for_missing() {
     let path = root.join("missing.json");
     let result = storage_read_text(&path, None);
     assert!(result.is_err());
-    assert!(result.unwrap_err().contains("does not exist"));
+    assert!(result.unwrap_err().to_string().contains("does not exist"));
 }
 
 // ── resolve_storage_backend ──

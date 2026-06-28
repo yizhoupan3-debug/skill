@@ -1,5 +1,6 @@
 //! Stdio JSON op domain registry.
 
+use core_errors::FrameworkError;
 use serde_json::Value;
 
 /// Domain classification for a stdio operation.
@@ -149,7 +150,7 @@ pub fn is_framework_stdio_op(op: &str) -> bool {
 pub fn dispatch_runtime_output_mode_stdio(
     _op: &str,
     _payload: Value,
-) -> Option<Result<Value, String>> {
+) -> Option<Result<Value, FrameworkError>> {
     None
 }
 

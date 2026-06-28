@@ -551,7 +551,7 @@ mod tests {
         );
         let err = result.unwrap_err();
         assert!(
-            err.contains("artifact_root"),
+            err.to_string().contains("artifact_root"),
             "error should mention artifact_root: {err}"
         );
     }

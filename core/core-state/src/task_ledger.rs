@@ -11,6 +11,18 @@ use std::time::Duration;
 
 pub const TASK_LEDGER_FILENAME: &str = "TASK_LEDGER.jsonl";
 
+/// Transaction type for a state checkpoint written after compaction.
+/// The payload contains `goal_state`, `rfv_loop_state`, and `evidence`
+/// sub-objects captured from physical files at compaction time.
+/// Readers can start replay from the last checkpoint instead of
+/// replaying the full ledger from scratch.
+pub const STATE_CHECKPOINT_TX_TYPE: &str = "state_checkpoint";
+
+/// Interval (in transactions) between periodic state checkpoint entries.
+/// When `seq` is a multiple of this value, a checkpoint is appended after
+/// the current transaction so readers can skip ahead during replay.
+const CHECKPOINT_INTERVAL: u64 = 100;
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct LedgerTransaction {
     pub ts: String,
@@ -22,6 +34,62 @@ pub struct LedgerTransaction {
     pub seq: Option<u64>,
     #[serde(default)]
     pub schema_version: Option<i64>,
+}
+
+/// Write a `state_checkpoint` entry capturing the current effective state
+/// from physical files.  Called periodically by [`append_transaction`].
+pub fn write_state_checkpoint(
+    repo_root: &Path,
+    task_id: &str,
+    last_seq: u64,
+) -> Result<(), FrameworkError> {
+    // Read current state from physical files.
+    let goal_state = crate::state_manager::read_goal_state(repo_root, Some(task_id))
+        .ok()
+        .flatten();
+    let rfv_loop_state = crate::state_manager::read_rfv_loop_state(repo_root, Some(task_id))
+        .ok()
+        .flatten();
+    let (evidence_rows_non_empty, has_successful_verification) =
+        crate::state_manager::task_evidence_artifacts_summary_for_task(repo_root, task_id);
+
+    let payload = serde_json::json!({
+        "goal_state": goal_state,
+        "rfv_loop_state": rfv_loop_state,
+        "evidence": {
+            "evidence_rows_non_empty": evidence_rows_non_empty,
+            "has_successful_verification": has_successful_verification,
+        },
+    });
+
+    let tx = LedgerTransaction {
+        ts: iso_now(),
+        tx_type: STATE_CHECKPOINT_TX_TYPE.to_string(),
+        payload,
+        idempotency_key: None,
+        seq: Some(last_seq),
+        schema_version: Some(1),
+    };
+
+    let path = task_ledger_path(repo_root, task_id)?;
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    let serialized = serde_json::to_string(&tx)?;
+    let mut file = OpenOptions::new().create(true).append(true).open(&path)?;
+    writeln!(file, "{}", serialized)?;
+    file.sync_all()?;
+    Ok(())
+}
+
+/// Generate an ISO-8601 timestamp string from system time.
+fn iso_now() -> String {
+    let secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    // Same format used by other ledger callers: seconds since UNIX epoch.
+    secs.to_string()
 }
 
 pub fn task_ledger_path(repo_root: &Path, task_id: &str) -> Result<PathBuf, FrameworkError> {
@@ -102,6 +170,21 @@ pub fn append_transaction_assuming_l1_held(
             writeln!(file, "{}", serialized)?;
             file.sync_all()?;
             drop(file);
+
+            // ── periodic state checkpoint ──────────────────────────────────
+            // Every CHECKPOINT_INTERVAL transactions, capture the current
+            // physical-file state so readers can start replay from the
+            // checkpoint instead of replaying the full ledger from scratch.
+            if line_count > 0 && line_count % CHECKPOINT_INTERVAL == 0 {
+                if let Err(e) = write_state_checkpoint(repo_root, task_id, line_count) {
+                    tracing::warn!(
+                        task_id = %task_id,
+                        seq = line_count,
+                        error = %e,
+                        "write_state_checkpoint failed",
+                    );
+                }
+            }
 
             // ── compact using in-memory content (avoids re-read) ─────────────
             // Append the serialized new line to the pre-append content so the

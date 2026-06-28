@@ -336,11 +336,11 @@ mod tests {
         let err = canonical_tool_name("unknown-host", &root).expect_err("unknown host must fail");
         for &tool in framework_kernel::runtime_registry::ALL_HOST_IDS {
             assert!(
-                err.contains(tool),
+                err.to_string().contains(tool),
                 "expected supported tool {tool} in error: {err}"
             );
         }
-        assert!(err.contains("claude"), "{err}");
+        assert!(err.to_string().contains("claude"), "{err}");
     }
 
     #[test]
@@ -470,11 +470,11 @@ mod tests {
         assert!(fail.is_err(), "expected generator failure");
         let fail_msg = fail.err().unwrap();
         assert!(
-            fail_msg.contains("generated artifact generator failed"),
+            fail_msg.to_string().contains("generated artifact generator failed"),
             "failure message should include generator failed marker: {fail_msg}"
         );
         assert!(
-            fail_msg.contains("boom"),
+            fail_msg.to_string().contains("boom"),
             "failure message should include stderr output: {fail_msg}"
         );
 
@@ -492,7 +492,7 @@ mod tests {
         assert!(timeout.is_err(), "expected timeout failure");
         let timeout_msg = timeout.err().unwrap();
         assert!(
-            timeout_msg.contains("timed out after 1s"),
+            timeout_msg.to_string().contains("timed out after 1s"),
             "timeout message should include configured timeout: {timeout_msg}"
         );
 

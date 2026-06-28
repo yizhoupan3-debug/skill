@@ -6,6 +6,7 @@ use std::fs;
 use std::path::Path;
 
 use super::args::*;
+use core_errors::FrameworkError;
 use core_policy::hook_policy::{
     HookPolicyEvaluateRequest, evaluate_hook_policy, hook_policy_contract,
 };
@@ -55,8 +56,8 @@ use runtime_core::trace_runtime::{
 use runtime_core::runtime_storage::RuntimeStorageRequestPayload;
 
 /// Thin wrapper: print_json_value shim that bridges FrameworkError → String.
-fn print_json_value<T: Serialize>(v: &T) -> Result<(), String> {
-    raw_print_json_value(v).map_err(|e| e.to_string())
+fn print_json_value<T: Serialize>(v: &T) -> Result<(), FrameworkError> {
+    raw_print_json_value(v)
 }
 
 fn hook_output_to_value(output: Option<HookOutput>, event_name: &str) -> Value {
@@ -105,19 +106,19 @@ fn hook_output_to_value(output: Option<HookOutput>, event_name: &str) -> Value {
 fn resolve_host_entrypoint_provider(
     repo_root: &std::path::Path,
     host_id: Option<&str>,
-) -> Result<runtime_core::host_entrypoint_sync::HostEntrypointPayloadProvider, String> {
+) -> Result<runtime_core::host_entrypoint_sync::HostEntrypointPayloadProvider, FrameworkError> {
     let resolved = match host_id {
         Some(id) if !id.trim().is_empty() => id.trim(),
         _ => {
-            return Err(
-                "host-id is required for sync-entrypoints; pass --host-id <host_name>".to_string(),
-            );
+            return Err(FrameworkError::validation(
+                "host-id is required for sync-entrypoints; pass --host-id <host_name>",
+            ));
         }
     };
     let host_provider = runtime_core::hosts::host_provider_for_routing_spelling(resolved)
-        .ok_or_else(|| format!(
+        .ok_or_else(|| FrameworkError::registry(format!(
             "unknown host-id '{resolved}' for sync-entrypoints; not found in host_provider_registry"
-        ))?;
+        )))?;
     let context_file = host_provider.context_file();
     let mut files = std::collections::BTreeMap::new();
     let context_path = repo_root.join(context_file);
@@ -135,7 +136,7 @@ fn resolve_host_entrypoint_provider(
     )
 }
 
-pub fn dispatch_framework_command(command: FrameworkCommand) -> Result<(), String> {
+pub fn dispatch_framework_command(command: FrameworkCommand) -> Result<(), FrameworkError> {
     match command {
         FrameworkCommand::Snapshot(command) => {
             let repo_root = resolve_repo_root_arg(command.repo_root.as_deref())?;
@@ -151,7 +152,10 @@ pub fn dispatch_framework_command(command: FrameworkCommand) -> Result<(), Strin
             let repo_root = resolve_repo_root_arg(command.repo_root.as_deref())?;
             let result = run_framework_doctor(&repo_root)?;
             if result.warn_count > 0 {
-                return Err(format!("doctor found {} warning(s)", result.warn_count,));
+                return Err(FrameworkError::hook(format!(
+                    "doctor found {} warning(s)",
+                    result.warn_count,
+                )));
             }
             Ok(())
         }
@@ -218,7 +222,7 @@ pub fn dispatch_framework_command(command: FrameworkCommand) -> Result<(), Strin
             print_json_value(&handle_step_ledger_operation(payload)?)
         }
         FrameworkCommand::Maint { command } => {
-            runtime_core::framework_maint::dispatch(command).map_err(|e| e.to_string())
+            runtime_core::framework_maint::dispatch(command)
         }
         FrameworkCommand::Skills { command } => dispatch_framework_skills(command),
         FrameworkCommand::HostIntegration(command) => {
@@ -248,12 +252,12 @@ pub fn dispatch_framework_command(command: FrameworkCommand) -> Result<(), Strin
     }
 }
 
-pub fn dispatch_framework_skills(command: SkillsSubcommand) -> Result<(), String> {
+pub fn dispatch_framework_skills(command: SkillsSubcommand) -> Result<(), FrameworkError> {
     use skill_layer::refresh::{SkillsCommand, refresh_skills, validate_skills};
     match command {
         SkillsSubcommand::Validate(args) => {
             let repo_root = resolve_repo_root_arg(args.framework_root.as_deref())?;
-            validate_skills(&repo_root).map_err(|e| e.to_string())
+            validate_skills(&repo_root)
         }
         SkillsSubcommand::Refresh {
             repo_root,
@@ -271,7 +275,6 @@ pub fn dispatch_framework_skills(command: SkillsSubcommand) -> Result<(), String
                 dry_run,
                 generate,
             })
-            .map_err(|e| e.to_string())
         }
     }
 }
@@ -295,7 +298,7 @@ fn scaffold_host_integration(
     repo_root: &std::path::Path,
     host_id: &str,
     dry_run: bool,
-) -> Result<serde_json::Value, String> {
+) -> Result<serde_json::Value, FrameworkError> {
     use std::fs;
 
     // Validate host_id
@@ -304,9 +307,9 @@ fn scaffold_host_integration(
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
     {
-        return Err(format!(
+        return Err(FrameworkError::validation(format!(
             "Invalid host_id: {host_id:?}. Use alphanumeric, dash, or underscore."
-        ));
+        )));
     }
 
     // Check host doesn't already exist
@@ -316,7 +319,7 @@ fn scaffold_host_integration(
             serde_json::from_str(&s)
                 .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
         })
-        .map_err(|e| format!("Read RUNTIME_REGISTRY.json: {e}"))?;
+        .map_err(|e| FrameworkError::config(format!("Read RUNTIME_REGISTRY.json: {e}")))?;
 
     if let Some(supported) = registry
         .get("host_targets")
@@ -324,9 +327,9 @@ fn scaffold_host_integration(
         .and_then(|v| v.as_array())
         && supported.iter().any(|v| v.as_str() == Some(host_id))
     {
-        return Err(format!(
+        return Err(FrameworkError::validation(format!(
             "Host {host_id:?} already exists in RUNTIME_REGISTRY.json"
-        ));
+        )));
     }
 
     let host_id_camel = host_id.replace('-', "_");
@@ -415,10 +418,10 @@ host_id: {hid}
         } else {
             if let Some(parent) = full_path.parent() {
                 fs::create_dir_all(parent)
-                    .map_err(|e| format!("Create dir {}: {e}", parent.display()))?;
+                    .map_err(|e| FrameworkError::Io(e))?;
             }
             fs::write(&full_path, content)
-                .map_err(|e| format!("Write {}: {e}", full_path.display()))?;
+                .map_err(|e| FrameworkError::Io(e))?;
             generated.push(serde_json::json!({
                 "path": path,
                 "action": "created",
@@ -463,12 +466,12 @@ host_id: {hid}
 /// Generic hook dispatch routed by host_id via dispatch registry.
 /// Dispatchers are registered once at first call from the host layer types.
 #[tracing::instrument(level = "info", skip_all, fields(host_id))]
-pub fn dispatch_hook_command(host_id: &str, command: GenericHookCommand) -> Result<(), String> {
+pub fn dispatch_hook_command(host_id: &str, command: GenericHookCommand) -> Result<(), FrameworkError> {
     let f = host_projection::hosts::find_hook_dispatch(host_id).ok_or_else(|| {
-        format!(
+        FrameworkError::registry(format!(
             "hook dispatch not implemented for host `{host_id}`; \
              add a dispatch entry in the registration init"
-        )
+        ))
     })?;
     f(host_id, &command.event, command.repo_root.as_deref())
 }
@@ -514,7 +517,7 @@ pub fn ensure_host_dispatchers_registered() {
 /// All lifecycle events (pretooluse, userpromptsubmit, posttooluse, stop, sessionstart,
 /// subagentstart, subagentstop) are routed via the host's `HostHookDispatcher::dispatch()`.
 /// Each host returns its registered dispatcher from the host provider registry.
-fn dispatch_host_hook(host_id: &str, event: &str, repo_root: Option<&Path>) -> Result<(), String> {
+fn dispatch_host_hook(host_id: &str, event: &str, repo_root: Option<&Path>) -> Result<(), FrameworkError> {
     let repo_root = resolve_repo_root_arg(repo_root)?;
 
     // Bootstrap for lifecycle events
@@ -524,16 +527,16 @@ fn dispatch_host_hook(host_id: &str, event: &str, repo_root: Option<&Path>) -> R
 
     // Read stdin payload (shared 4 MiB limited reader)
     let mut stdin = std::io::stdin().lock();
-    let input = read_stdin_limited(&mut stdin).map_err(|e| format!("read_stdin: {e}"))?;
+    let input = read_stdin_limited(&mut stdin)?;
     let payload: Value = if input.trim().is_empty() {
         json!({})
     } else {
-        serde_json::from_str(input.trim()).map_err(|err| format!("stdin_json_invalid: {err}"))?
+        serde_json::from_str(input.trim())?
     };
 
     // Dispatch via host provider's registered HostHookDispatcher
     let provider = host_projection::hosts::host_provider_for_routing_spelling(host_id)
-        .ok_or_else(|| format!("unknown host: {host_id}"))?;
+        .ok_or_else(|| FrameworkError::registry(format!("unknown host: {host_id}")))?;
     let dispatcher = provider.dispatcher();
     let hook_event = HookEvent {
         repo_root: &repo_root,
@@ -577,7 +580,7 @@ fn dispatch_host_hook(host_id: &str, event: &str, repo_root: Option<&Path>) -> R
 }
 
 /// Unified host command dispatcher (registry-driven: Hook / Agent).
-pub fn dispatch_host_command(command: HostCommand) -> Result<(), String> {
+pub fn dispatch_host_command(command: HostCommand) -> Result<(), FrameworkError> {
     match command {
         HostCommand::Hook { host_id, command } => dispatch_hook_command(&host_id, command),
         HostCommand::Agent { host_id, command } => dispatch_agent_command(&host_id, command),
@@ -585,32 +588,32 @@ pub fn dispatch_host_command(command: HostCommand) -> Result<(), String> {
 }
 
 /// Agent dispatch routed by host_id via dispatch registry.
-pub fn dispatch_agent_command(host_id: &str, command: GenericAgentCommand) -> Result<(), String> {
+pub fn dispatch_agent_command(host_id: &str, command: GenericAgentCommand) -> Result<(), FrameworkError> {
     let f = host_projection::hosts::find_agent_dispatch(host_id).ok_or_else(|| {
-        format!(
+        FrameworkError::registry(format!(
             "agent dispatch not implemented for host `{host_id}`; \
              add an agent dispatch entry in ensure_host_dispatchers_registered()"
-        )
+        ))
     })?;
     f(host_id, command.repo_root.as_deref())
 }
 
 /// Unified diagnostic command dispatcher (merged: profile, browser)
-pub fn dispatch_diagnose_command(command: DiagnoseCommand) -> Result<(), String> {
+pub fn dispatch_diagnose_command(command: DiagnoseCommand) -> Result<(), FrameworkError> {
     match command {
         DiagnoseCommand::Profile { command } => dispatch_profile_command(command),
         DiagnoseCommand::Browser { command } => dispatch_browser_command(command),
     }
 }
 
-pub fn dispatch_trace_command(command: TraceCommand) -> Result<(), String> {
+pub fn dispatch_trace_command(command: TraceCommand) -> Result<(), FrameworkError> {
     match command {
         TraceCommand::RecordEvent(command) => {
             let payload = parse_json_input::<TraceRecordEventRequestPayload>(
                 &command.input_json,
                 "trace record event",
             )?;
-            print_json_value(&record_trace_event(payload).map_err(|e| e.to_string())?)
+            print_json_value(&record_trace_event(payload).map_err(|e| FrameworkError::hook(e.to_string()))?)
         }
         TraceCommand::StreamReplay(command) => {
             let payload = parse_json_input::<TraceStreamReplayRequestPayload>(
@@ -631,7 +634,7 @@ pub fn dispatch_trace_command(command: TraceCommand) -> Result<(), String> {
                 &command.input_json,
                 "trace compact",
             )?;
-            print_json_value(&compact_trace_stream(payload).map_err(|e| e.to_string())?)
+            print_json_value(&compact_trace_stream(payload).map_err(|e| FrameworkError::hook(e.to_string()))?)
         }
         TraceCommand::WriteCompactionDelta(command) => {
             let payload = parse_json_input::<TraceCompactionDeltaWriteRequestPayload>(
@@ -650,7 +653,7 @@ pub fn dispatch_trace_command(command: TraceCommand) -> Result<(), String> {
     }
 }
 
-pub fn dispatch_storage_command(command: StorageCommand) -> Result<(), String> {
+pub fn dispatch_storage_command(command: StorageCommand) -> Result<(), FrameworkError> {
     match command {
         StorageCommand::Runtime(command) => {
             let payload = parse_json_input::<RuntimeStorageRequestPayload>(
@@ -679,19 +682,19 @@ pub fn dispatch_storage_command(command: StorageCommand) -> Result<(), String> {
 }
 
 #[cfg(feature = "codegraph")]
-pub fn dispatch_codegraph_command(command: CodegraphSubcommand) -> Result<(), String> {
+pub fn dispatch_codegraph_command(command: CodegraphSubcommand) -> Result<(), FrameworkError> {
     match command {
         CodegraphSubcommand::McpStdio(command) => {
-            run_codegraph_mcp_stdio_loop(command.repo_root.as_deref()).map_err(|e| e.to_string())
+            run_codegraph_mcp_stdio_loop(command.repo_root.as_deref())
         }
     }
 }
 
-pub fn dispatch_browser_command(command: BrowserSubcommand) -> Result<(), String> {
+pub fn dispatch_browser_command(command: BrowserSubcommand) -> Result<(), FrameworkError> {
     Ok(hooks::dispatch_browser_command(command)?)
 }
 
-pub fn dispatch_profile_command(command: ProfileSubcommand) -> Result<(), String> {
+pub fn dispatch_profile_command(command: ProfileSubcommand) -> Result<(), FrameworkError> {
     match command {
         ProfileSubcommand::Emit(command) => {
             let profile = load_framework_profile(&command.framework_profile)?;
@@ -704,7 +707,7 @@ pub fn dispatch_profile_command(command: ProfileSubcommand) -> Result<(), String
     }
 }
 
-pub fn dispatch_migrate_command(command: MigrateCommand) -> Result<(), String> {
+pub fn dispatch_migrate_command(command: MigrateCommand) -> Result<(), FrameworkError> {
     match command {
         MigrateCommand::CurrentArtifactClutter(command) => {
             let repo_root = resolve_repo_root_arg(command.repo_root.as_deref())?;
@@ -720,7 +723,7 @@ pub fn dispatch_migrate_command(command: MigrateCommand) -> Result<(), String> {
     }
 }
 
-pub fn dispatch_hook_policy_command(command: HookPolicyCommand) -> Result<(), String> {
+pub fn dispatch_hook_policy_command(command: HookPolicyCommand) -> Result<(), FrameworkError> {
     match command {
         HookPolicyCommand::Evaluate(command) => {
             let payload = parse_json_input::<HookPolicyEvaluateRequest>(
@@ -733,30 +736,25 @@ pub fn dispatch_hook_policy_command(command: HookPolicyCommand) -> Result<(), St
     }
 }
 
-pub fn dispatch_closeout_command(command: CloseoutCommand) -> Result<(), String> {
+pub fn dispatch_closeout_command(command: CloseoutCommand) -> Result<(), FrameworkError> {
     match command {
         CloseoutCommand::Evaluate(args) => {
             let raw =
                 match (args.input_json.as_deref(), args.record_path.as_deref()) {
-                    (Some(_), Some(_)) => return Err(
-                        "closeout evaluate: --input-json and --record-path are mutually exclusive"
-                            .to_string(),
-                    ),
+                    (Some(_), Some(_)) => return Err(FrameworkError::validation(
+                        "closeout evaluate: --input-json and --record-path are mutually exclusive",
+                    )),
                     (Some(text), None) => text.to_string(),
                     (None, Some(path)) => fs::read_to_string(path).map_err(|err| {
-                        format!(
-                            "closeout evaluate: failed to read record file {}: {err}",
-                            path.display()
-                        )
+                        FrameworkError::Io(err)
                     })?,
                     (None, None) => {
-                        return Err(
-                            "closeout evaluate: provide --input-json or --record-path".to_string()
-                        );
+                        return Err(FrameworkError::validation(
+                            "closeout evaluate: provide --input-json or --record-path",
+                        ));
                     }
                 };
-            let record_value: Value = serde_json::from_str(&raw)
-                .map_err(|err| format!("closeout evaluate: invalid JSON: {err}"))?;
+            let record_value: Value = serde_json::from_str(&raw)?;
             let response = match (
                 args.repo_root.as_deref(),
                 args.task_id.as_deref(),
@@ -796,7 +794,7 @@ pub fn dispatch_closeout_command(command: CloseoutCommand) -> Result<(), String>
     }
 }
 
-pub fn dispatch_eval_command(command: EvalCommand) -> Result<(), String> {
+pub fn dispatch_eval_command(command: EvalCommand) -> Result<(), FrameworkError> {
     match command {
         EvalCommand::Route(args) => {
             let report = run_eval_route(&args.cases, args.runtime.as_deref())?;
@@ -812,7 +810,7 @@ pub fn dispatch_eval_command(command: EvalCommand) -> Result<(), String> {
     }
 }
 
-pub fn dispatch_schema_drift_command(command: SchemaDriftCommand) -> Result<(), String> {
+pub fn dispatch_schema_drift_command(command: SchemaDriftCommand) -> Result<(), FrameworkError> {
     use runtime_core::schema_drift::{
         check_against_baseline, resolve_task_id_for_schema_drift, schema_drift_contract,
         write_baseline,
@@ -836,32 +834,32 @@ pub fn dispatch_schema_drift_command(command: SchemaDriftCommand) -> Result<(), 
             let response = check_against_baseline(&repo_root, &task_id);
             print_json_value(&response)?;
             if !response.ok {
-                return Err(format!(
+                return Err(FrameworkError::validation(format!(
                     "schema-drift check failed for task {} ({} drift items); re-run `router-rs schema-drift baseline` after intentional changes",
                     task_id,
                     response.drift.len()
-                ));
+                )));
             }
             Ok(())
         }
     }
 }
 
-pub fn dispatch_loop_command(command: LoopCommand) -> Result<(), String> {
+pub fn dispatch_loop_command(command: LoopCommand) -> Result<(), FrameworkError> {
     match command {
         LoopCommand::Run(args) => {
             let repo_root = resolve_repo_root_arg(None)?;
             let registry_path = repo_root.join("configs/framework/LOOP_REGISTRY.json");
             let raw = fs::read_to_string(&registry_path)
-                .map_err(|e| format!("read LOOP_REGISTRY.json: {e}"))?;
+                .map_err(|e| FrameworkError::Io(e))?;
             let registry: goal_engine::LoopRegistryRoot =
-                serde_json::from_str(&raw).map_err(|e| format!("parse LOOP_REGISTRY.json: {e}"))?;
+                serde_json::from_str(&raw).map_err(|e| FrameworkError::config(format!("parse LOOP_REGISTRY.json: {e}")))?;
             let entry = registry
                 .loops
                 .iter()
                 .find(|e| e.loop_id == args.loop_id)
                 .ok_or_else(|| {
-                    format!("loop '{}' not found in LOOP_REGISTRY.json", args.loop_id)
+                    FrameworkError::validation(format!("loop '{}' not found in LOOP_REGISTRY.json", args.loop_id))
                 })?;
             let timeout = std::time::Duration::from_secs(args.timeout);
             let ctx = goal_engine::runner::RunContext {
@@ -872,7 +870,7 @@ pub fn dispatch_loop_command(command: LoopCommand) -> Result<(), String> {
                 depth_remaining: goal_engine::runner::RunContext::default_max_depth(),
             };
             let aggregate =
-                goal_engine::runner::run_loop(&ctx).map_err(|e| format!("loop run failed: {e}"))?;
+                goal_engine::runner::run_loop(&ctx).map_err(|e| FrameworkError::hook(format!("loop run failed: {e}")))?;
             print_json_value(&serde_json::json!({
                 "ok": true,
                 "loop_id": args.loop_id,
@@ -884,7 +882,7 @@ pub fn dispatch_loop_command(command: LoopCommand) -> Result<(), String> {
         LoopCommand::Status(args) => {
             let repo_root = resolve_repo_root_arg(None)?;
             match goal_engine::runner::run_loop_status(&repo_root, &args.loop_id)
-                .map_err(|e| format!("loop status failed: {e}"))?
+                .map_err(|e| FrameworkError::hook(format!("loop status failed: {e}")))?
             {
                 Some(state) => print_json_value(&serde_json::json!({
                     "ok": true,
@@ -907,14 +905,14 @@ pub fn dispatch_loop_command(command: LoopCommand) -> Result<(), String> {
             let repo_root = resolve_repo_root_arg(None)?;
             if args.all {
                 goal_engine::runner::run_loop_kill_all(&repo_root)
-                    .map_err(|e| format!("loop kill --all failed: {e}"))?;
+                    .map_err(|e| FrameworkError::hook(format!("loop kill --all failed: {e}")))?;
                 print_json_value(&serde_json::json!({
                     "ok": true,
                     "message": "All kill signals sent",
                 }))
             } else {
                 goal_engine::runner::run_loop_kill(&repo_root, &args.loop_id)
-                    .map_err(|e| format!("loop kill failed: {e}"))?;
+                    .map_err(|e| FrameworkError::hook(format!("loop kill failed: {e}")))?;
                 print_json_value(&serde_json::json!({
                     "ok": true,
                     "loop_id": args.loop_id,
@@ -929,7 +927,7 @@ pub fn dispatch_loop_command(command: LoopCommand) -> Result<(), String> {
 #[cfg(feature = "research")]
 use research_harness;
 
-pub fn dispatch_research_command(command: ResearchCommand) -> Result<(), String> {
+pub fn dispatch_research_command(command: ResearchCommand) -> Result<(), FrameworkError> {
     match command {
         ResearchCommand::AigcCheck(args) => dispatch_research_aigc_check(args),
         ResearchCommand::Smoke(args) => dispatch_research_smoke(args),
@@ -943,11 +941,11 @@ pub fn dispatch_research_command(command: ResearchCommand) -> Result<(), String>
     }
 }
 
-fn dispatch_research_aigc_check(args: ResearchAigcCheckCommand) -> Result<(), String> {
+fn dispatch_research_aigc_check(args: ResearchAigcCheckCommand) -> Result<(), FrameworkError> {
     #[cfg(not(feature = "research"))]
     {
         let _ = args;
-        Err("research feature not enabled; rebuild with --features research".to_string())
+        Err(FrameworkError::unsupported("research feature not enabled; rebuild with --features research"))
     }
     #[cfg(feature = "research")]
     {
@@ -961,7 +959,7 @@ fn dispatch_research_aigc_check(args: ResearchAigcCheckCommand) -> Result<(), St
             },
             ..Default::default()
         };
-        let results = detect(&args.text, &config).map_err(|e| e.to_string())?;
+        let results = detect(&args.text, &config).map_err(|e| FrameworkError::hook(e.to_string()))?;
         let scored = research_harness::aigc::scorer::score(&results);
         print_json_value(&serde_json::json!({
             "ai_generated_probability": results.iter().map(|r| r.ai_probability).collect::<Vec<_>>(),
@@ -971,11 +969,11 @@ fn dispatch_research_aigc_check(args: ResearchAigcCheckCommand) -> Result<(), St
     }
 }
 
-fn dispatch_research_smoke(args: ResearchSmokeCommand) -> Result<(), String> {
+fn dispatch_research_smoke(args: ResearchSmokeCommand) -> Result<(), FrameworkError> {
     #[cfg(not(feature = "research"))]
     {
         let _ = args;
-        Err("research feature not enabled; rebuild with --features research".to_string())
+        Err(FrameworkError::unsupported("research feature not enabled; rebuild with --features research"))
     }
     #[cfg(feature = "research")]
     {
@@ -989,26 +987,26 @@ fn dispatch_research_smoke(args: ResearchSmokeCommand) -> Result<(), String> {
             args.source.as_deref(),
             args.barrier_id.as_deref(),
         )
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| FrameworkError::hook(e.to_string()))?;
         print_json_value(&result)
     }
 }
 
 fn dispatch_research_verify_literature(
     args: ResearchVerifyLiteratureCommand,
-) -> Result<(), String> {
+) -> Result<(), FrameworkError> {
     match args.check.as_str() {
         "doi" => {
             let doi = args
                 .doi
                 .as_deref()
-                .ok_or_else(|| "doi is required for check=doi".to_string())?;
+                .ok_or_else(|| FrameworkError::validation("doi is required for check=doi"))?;
             let client = reqwest::blocking::Client::builder()
                 .timeout(std::time::Duration::from_secs(15))
                 .build()
-                .map_err(|e| e.to_string())?;
+                .map_err(|e| FrameworkError::Io(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())))?;
             let url = format!("https://doi.org/{}", doi);
-            let resp = client.head(&url).send().map_err(|e| e.to_string())?;
+            let resp = client.head(&url).send().map_err(|e| FrameworkError::Io(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())))?;
             let reachable = resp.status().is_success() || resp.status().is_redirection();
             print_json_value(&serde_json::json!({
                 "doi": doi,
@@ -1019,43 +1017,43 @@ fn dispatch_research_verify_literature(
         "claim_coverage" => {
             #[cfg(not(feature = "research"))]
             {
-                return Err(
-                    "research feature not enabled; rebuild with --features research".to_string(),
-                );
+                return Err(FrameworkError::unsupported(
+                    "research feature not enabled; rebuild with --features research",
+                ));
             }
             #[cfg(feature = "research")]
             {
                 let claims: Vec<String> = args
                     .claims
                     .as_deref()
-                    .ok_or_else(|| "claims is required for check=claim_coverage".to_string())
+                    .ok_or_else(|| FrameworkError::validation("claims is required for check=claim_coverage"))
                     .and_then(|s| {
-                        serde_json::from_str(s).map_err(|e| format!("invalid claims JSON: {e}"))
+                        serde_json::from_str(s).map_err(|e| FrameworkError::validation(format!("invalid claims JSON: {e}")))
                     })?;
                 let references: Vec<String> = args
                     .references
                     .as_deref()
-                    .ok_or_else(|| "references is required for check=claim_coverage".to_string())
+                    .ok_or_else(|| FrameworkError::validation("references is required for check=claim_coverage"))
                     .and_then(|s| {
-                        serde_json::from_str(s).map_err(|e| format!("invalid references JSON: {e}"))
+                        serde_json::from_str(s).map_err(|e| FrameworkError::validation(format!("invalid references JSON: {e}")))
                     })?;
                 let result = research_harness::verification::literature::verify_claim_coverage(
                     &claims,
                     &references,
                 )
-                .map_err(|e| e.to_string())?;
+                .map_err(|e| FrameworkError::hook(e.to_string()))?;
                 print_json_value(&result)
             }
         }
-        other => Err(format!("unknown literature check: {other}")),
+        other => Err(FrameworkError::unsupported(format!("unknown literature check: {other}"))),
     }
 }
 
-fn dispatch_research_verify_structure(args: ResearchVerifyStructureCommand) -> Result<(), String> {
+fn dispatch_research_verify_structure(args: ResearchVerifyStructureCommand) -> Result<(), FrameworkError> {
     #[cfg(not(feature = "research"))]
     {
         let _ = args;
-        Err("research feature not enabled; rebuild with --features research".to_string())
+        Err(FrameworkError::unsupported("research feature not enabled; rebuild with --features research"))
     }
     #[cfg(feature = "research")]
     {
@@ -1063,27 +1061,27 @@ fn dispatch_research_verify_structure(args: ResearchVerifyStructureCommand) -> R
             "latex" => {
                 let result =
                     research_harness::verification::structure::check_latex_compilable(&args.path)
-                        .map_err(|e| e.to_string())?;
+                        .map_err(|e| FrameworkError::hook(e.to_string()))?;
                 print_json_value(&result)
             }
             "figures" => {
                 let result =
                     research_harness::verification::structure::check_figure_references(&args.path)
-                        .map_err(|e| e.to_string())?;
+                        .map_err(|e| FrameworkError::hook(e.to_string()))?;
                 print_json_value(&result)
             }
-            other => Err(format!("unknown structure check: {other}")),
+            other => Err(FrameworkError::unsupported(format!("unknown structure check: {other}"))),
         }
     }
 }
 
 fn dispatch_research_verify_reproducibility(
     args: ResearchVerifyReproducibilityCommand,
-) -> Result<(), String> {
+) -> Result<(), FrameworkError> {
     #[cfg(not(feature = "research"))]
     {
         let _ = args;
-        Err("research feature not enabled; rebuild with --features research".to_string())
+        Err(FrameworkError::unsupported("research feature not enabled; rebuild with --features research"))
     }
     #[cfg(feature = "research")]
     {
@@ -1092,7 +1090,7 @@ fn dispatch_research_verify_reproducibility(
             .as_deref()
             .map(|s| {
                 serde_json::from_str::<Vec<String>>(s)
-                    .map_err(|e| format!("invalid run_paths JSON: {e}"))
+                    .map_err(|e| FrameworkError::validation(format!("invalid run_paths JSON: {e}")))
                     .map(|v| v.into_iter().map(std::path::PathBuf::from).collect())
             })
             .transpose()?;
@@ -1108,14 +1106,14 @@ fn dispatch_research_verify_reproducibility(
                 Some(path_refs.as_slice())
             },
         )
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| FrameworkError::hook(e.to_string()))?;
         print_json_value(&result)
     }
 }
 
 // ── Math CLI dispatch ──
 
-pub fn dispatch_math_command(command: MathCommand) -> Result<(), String> {
+pub fn dispatch_math_command(command: MathCommand) -> Result<(), FrameworkError> {
     match command {
         MathCommand::Prove(args) => dispatch_math_prove(args),
         MathCommand::Backend => dispatch_math_backend(),
@@ -1124,11 +1122,11 @@ pub fn dispatch_math_command(command: MathCommand) -> Result<(), String> {
     }
 }
 
-fn dispatch_math_prove(args: MathProveCommand) -> Result<(), String> {
+fn dispatch_math_prove(args: MathProveCommand) -> Result<(), FrameworkError> {
     #[cfg(not(feature = "research"))]
     {
         let _ = args;
-        Err("research feature not enabled; rebuild with --features research".to_string())
+        Err(FrameworkError::unsupported("research feature not enabled; rebuild with --features research"))
     }
     #[cfg(feature = "research")]
     {
@@ -1140,10 +1138,10 @@ fn dispatch_math_prove(args: MathProveCommand) -> Result<(), String> {
     }
 }
 
-fn dispatch_math_backend() -> Result<(), String> {
+fn dispatch_math_backend() -> Result<(), FrameworkError> {
     #[cfg(not(feature = "research"))]
     {
-        Err("research feature not enabled; rebuild with --features research".to_string())
+        Err(FrameworkError::unsupported("research feature not enabled; rebuild with --features research"))
     }
     #[cfg(feature = "research")]
     {
@@ -1158,16 +1156,16 @@ fn dispatch_math_backend() -> Result<(), String> {
     }
 }
 
-fn dispatch_math_asymptotic_chain(args: MathAsymptoticChainCommand) -> Result<(), String> {
+fn dispatch_math_asymptotic_chain(args: MathAsymptoticChainCommand) -> Result<(), FrameworkError> {
     #[cfg(not(feature = "research"))]
     {
         let _ = args;
-        Err("research feature not enabled; rebuild with --features research".to_string())
+        Err(FrameworkError::unsupported("research feature not enabled; rebuild with --features research"))
     }
     #[cfg(feature = "research")]
     {
         let steps: Vec<research_harness::verification::asymptotic::AsymptoticStep> =
-            serde_json::from_str(&args.steps).map_err(|e| format!("invalid steps JSON: {e}"))?;
+            serde_json::from_str(&args.steps).map_err(|e| FrameworkError::validation(format!("invalid steps JSON: {e}")))?;
         let result = research_harness::verification::asymptotic::verify_asymptotic_chain_with_name(
             &steps,
             &args.variable,
@@ -1179,17 +1177,17 @@ fn dispatch_math_asymptotic_chain(args: MathAsymptoticChainCommand) -> Result<()
     }
 }
 
-fn dispatch_math_lean_verify(args: MathLeanVerifyCommand) -> Result<(), String> {
+fn dispatch_math_lean_verify(args: MathLeanVerifyCommand) -> Result<(), FrameworkError> {
     #[cfg(not(feature = "research"))]
     {
         let _ = args;
-        Err("research feature not enabled; rebuild with --features research".to_string())
+        Err(FrameworkError::unsupported("research feature not enabled; rebuild with --features research"))
     }
     #[cfg(feature = "research")]
     {
         use std::fs;
         let script = fs::read_to_string(&args.script_path)
-            .map_err(|e| format!("read Lean script {}: {e}", args.script_path.display()))?;
+            .map_err(|e| FrameworkError::Io(e))?;
         let result = research_harness::verification::lean_bridge::verify_lean_theorem(&script);
         print_json_value(&result)
     }
@@ -1197,24 +1195,23 @@ fn dispatch_math_lean_verify(args: MathLeanVerifyCommand) -> Result<(), String> 
 
 // ── Web CLI dispatch ──
 
-pub fn dispatch_web_command(command: WebCommand) -> Result<(), String> {
+pub fn dispatch_web_command(command: WebCommand) -> Result<(), FrameworkError> {
     match command {
         WebCommand::Fetch(args) => dispatch_web_fetch(args),
     }
 }
 
-fn dispatch_web_fetch(args: WebFetchCommand) -> Result<(), String> {
+fn dispatch_web_fetch(args: WebFetchCommand) -> Result<(), FrameworkError> {
     use rt_core_contracts::web_fetch_guard;
     use std::io::Read;
 
     let max_bytes = args.max_bytes.unwrap_or(50000).min(50000);
 
     // SSRF first pass — validate + resolve origin URL in one DNS call (TOCTOU-safe).
-    let (parsed_url, addrs) = web_fetch_guard::validate_and_resolve_web_fetch_url(&args.url)
-        .map_err(|e| e.to_string())?;
+    let (parsed_url, addrs) = web_fetch_guard::validate_and_resolve_web_fetch_url(&args.url)?;
     let origin_host = parsed_url
         .host_str()
-        .ok_or_else(|| "web_fetch URL missing host".to_string())?
+        .ok_or_else(|| FrameworkError::validation("web_fetch URL missing host"))?
         .to_string();
 
     /// Build a reqwest blocking Client with DNS pinning for the given host.
@@ -1224,14 +1221,14 @@ fn dispatch_web_fetch(args: WebFetchCommand) -> Result<(), String> {
     fn build_pinned_client(
         host: &str,
         addrs: &[std::net::SocketAddr],
-    ) -> Result<reqwest::blocking::Client, String> {
+    ) -> Result<reqwest::blocking::Client, FrameworkError> {
         let mut builder = reqwest::blocking::Client::builder()
             .timeout(std::time::Duration::from_secs(30))
             .redirect(reqwest::redirect::Policy::none());
         for addr in addrs {
             builder = builder.resolve(host, *addr);
         }
-        builder.build().map_err(|e| e.to_string())
+        builder.build().map_err(|e| FrameworkError::Io(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())))
     }
 
     let mut client = build_pinned_client(&origin_host, &addrs)?;
@@ -1254,29 +1251,29 @@ fn dispatch_web_fetch(args: WebFetchCommand) -> Result<(), String> {
     fn check_scheme_downgrade(
         original: &reqwest::Url,
         target: &reqwest::Url,
-    ) -> Result<(), String> {
+    ) -> Result<(), FrameworkError> {
         if original.scheme() == "https" && target.scheme() != "https" {
-            return Err(format!(
+            return Err(FrameworkError::validation(format!(
                 "web_fetch refused redirect from HTTPS to {}: {} → {}",
                 target.scheme(),
                 original,
                 target,
-            ));
+            )));
         }
         Ok(())
     }
 
     // Manual redirect loop with SSRF check at each hop.
-    let mut current_url = parsed_url.to_string();
+    let mut current_url = parsed_url;
     let max_hops: u32 = 5;
     let mut hops: u32 = 0;
 
     loop {
         let resp = client
-            .get(&current_url)
+            .get(current_url.as_str())
             .header("User-Agent", "router-rs-cli/0.1")
             .send()
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| FrameworkError::Io(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())))?;
 
         let status = resp.status();
 
@@ -1284,9 +1281,9 @@ fn dispatch_web_fetch(args: WebFetchCommand) -> Result<(), String> {
         if is_followable_redirect(status) {
             hops += 1;
             if hops > max_hops {
-                return Err(format!(
+                return Err(FrameworkError::config(format!(
                     "web_fetch too many redirects (>{max_hops}) via {current_url}",
-                ));
+                )));
             }
 
             let location = resp
@@ -1297,50 +1294,43 @@ fn dispatch_web_fetch(args: WebFetchCommand) -> Result<(), String> {
                 .to_string();
 
             if location.is_empty() {
-                return Err(format!(
+                return Err(FrameworkError::validation(format!(
                     "web_fetch redirect without Location header for {current_url}"
-                ));
+                )));
             }
 
             // SSRF check on the redirect target.
             // resolve_web_fetch_redirect joins location against current_url, then
             // validates through the same SSRF guard (DNS resolve + IP check).
             let resolved = web_fetch_guard::resolve_web_fetch_redirect(
-                &reqwest::Url::parse(&current_url).map_err(|e| {
-                    format!("web_fetch invalid current URL during redirect: {current_url}: {e}")
-                })?,
+                &current_url,
                 &location,
-            )
-            .map_err(|e| e.to_string())?;
+            )?;
 
             // Parse the resolved URL for scheme comparison and DNS pinning.
             let resolved_url = reqwest::Url::parse(&resolved).map_err(|e| {
-                format!("web_fetch invalid redirect target URL: {resolved}: {e}")
+                FrameworkError::validation(format!("web_fetch invalid redirect target URL: {resolved}: {e}"))
             })?;
 
             // HTTPS → HTTP scheme downgrade check (uses Url::scheme()).
-            let current_parsed = reqwest::Url::parse(&current_url).map_err(|e| {
-                format!("web_fetch invalid current URL: {current_url}: {e}")
-            })?;
-            check_scheme_downgrade(&current_parsed, &resolved_url)?;
+            check_scheme_downgrade(&current_url, &resolved_url)?;
 
             // DNS pinning for the redirect target: if the host changed, rebuild
             // the client so the next HTTP request is pinned against rebinding.
             let redirect_host = resolved_url
                 .host_str()
                 .ok_or_else(|| {
-                    format!("web_fetch redirect target missing host: {resolved}")
+                    FrameworkError::validation(format!("web_fetch redirect target missing host: {resolved}"))
                 })?
                 .to_string();
 
             if redirect_host != origin_host {
                 let (_url, redirect_addrs) =
-                    web_fetch_guard::validate_and_resolve_web_fetch_url(&resolved)
-                        .map_err(|e| e.to_string())?;
+                    web_fetch_guard::validate_and_resolve_web_fetch_url(&resolved)?;
                 client = build_pinned_client(&redirect_host, &redirect_addrs)?;
             }
 
-            current_url = resolved;
+            current_url = resolved_url;
             continue;
         }
 
@@ -1357,7 +1347,7 @@ fn dispatch_web_fetch(args: WebFetchCommand) -> Result<(), String> {
         let n = resp
             .take(max_bytes as u64)
             .read_to_end(&mut body_buf)
-            .map_err(|e| e.to_string())?;
+            .map_err(FrameworkError::from)?;
 
         // truncated is true only when we read up to the cap AND the cap is > 0.
         // False-positive: if the response happens to be exactly max_bytes bytes,
@@ -1370,7 +1360,7 @@ fn dispatch_web_fetch(args: WebFetchCommand) -> Result<(), String> {
         let body = String::from_utf8_lossy(&body_buf).to_string();
 
         return print_json_value(&serde_json::json!({
-            "url": current_url,
+            "url": current_url.to_string(),
             "status": status_code,
             "headers": {
                 "content_type": content_type,

@@ -6,6 +6,7 @@
 //! Placed in L0 (framework-kernel) to break circular deps — all consumers
 //! already depend on framework-kernel.
 
+use core_errors::FrameworkError;
 use serde_json::Value;
 use std::path::Path;
 use std::sync::OnceLock;
@@ -29,16 +30,53 @@ static RUNTIME_CORE_HOOKS: OnceLock<RuntimeCoreHooks> = OnceLock::new();
 /// # Panics
 /// Panics if `register()` has not been called yet. Guaranteed by
 /// `runtime_core::init_hooks()` initialization ordering.
+#[track_caller]
 pub fn hooks() -> &'static RuntimeCoreHooks {
-    #[allow(clippy::expect_used)]
-    RUNTIME_CORE_HOOKS
-        .get()
-        .expect("RuntimeCoreHooks not registered — call register() before use")
+    match RUNTIME_CORE_HOOKS.get() {
+        Some(h) => h,
+        None => panic!(
+            "RuntimeCoreHooks not registered (call register() before use, location: {})",
+            std::panic::Location::caller(),
+        ),
+    }
 }
 
-/// Register hooks. Only the first call takes effect; subsequent calls are silently ignored.
+/// Try to get registered hooks without panicking.
+/// Returns `None` if `register()` has not been called yet.
+pub fn try_hooks() -> Option<&'static RuntimeCoreHooks> {
+    RUNTIME_CORE_HOOKS.get()
+}
+
+/// Register hooks. Only the first call takes effect; subsequent calls are logged as warnings.
+///
+/// Hooks cannot be unregistered once set (backed by `OnceLock`). Tests that need
+/// clean hook state should use [`try_hooks()`] to detect whether hooks are already
+/// registered and skip or adapt their assertions accordingly.
 pub fn register(h: RuntimeCoreHooks) {
-    RUNTIME_CORE_HOOKS.get_or_init(|| h);
+    if RUNTIME_CORE_HOOKS.set(h).is_err() {
+        tracing::warn!("RuntimeCoreHooks already registered — ignoring duplicate");
+    }
+}
+
+/// Reset hook state for test isolation.
+///
+/// # Safety
+/// Only safe in single-threaded test contexts. Replaces the global
+/// `OnceLock` in-place; concurrent readers will see a permanently
+/// unset lock after this returns.
+#[cfg(test)]
+#[allow(invalid_reference_casting)]
+pub fn unregister_hooks() {
+    // SAFETY: #[cfg(test)] only — replaces the OnceLock interior without
+    // dropping the old value. No concurrent access because cargo test
+    // serializes within a binary.
+    unsafe {
+        let ptr = &RUNTIME_CORE_HOOKS
+            as *const OnceLock<RuntimeCoreHooks>
+            as *mut OnceLock<RuntimeCoreHooks>;
+        std::ptr::drop_in_place(ptr);
+        std::ptr::write(ptr, OnceLock::new());
+    }
 }
 
 // ── Host provider hook group ──
@@ -63,13 +101,13 @@ impl RuntimeCoreHooks {
     pub fn host_provider_registry(&self) -> Vec<(&'static str, Option<&'static str>)> {
         (self.host_provider.registry)()
     }
-    pub fn framework_goal_drive(&self, payload: Value) -> Result<Value, String> {
+    pub fn framework_goal_drive(&self, payload: Value) -> Result<Value, FrameworkError> {
         (self.framework_goal_drive)(payload)
     }
-    pub fn handle_orchestrator_operation(&self, payload: Value) -> Result<Value, String> {
+    pub fn handle_orchestrator_operation(&self, payload: Value) -> Result<Value, FrameworkError> {
         (self.handle_orchestrator_operation)(payload)
     }
-    pub fn handle_background_state_operation(&self, payload: Value) -> Result<Value, String> {
+    pub fn handle_background_state_operation(&self, payload: Value) -> Result<Value, FrameworkError> {
         (self.handle_background_state_operation)(payload)
     }
     pub fn runtime_concurrency_defaults_payload(&self) -> Value {
@@ -82,10 +120,10 @@ impl RuntimeCoreHooks {
         &self,
         cases_path: &Path,
         runtime: Option<&Path>,
-    ) -> Result<Value, String> {
+    ) -> Result<Value, FrameworkError> {
         (self.run_eval_route)(cases_path, runtime)
     }
-    pub fn generated_artifacts_status_for_repo(&self, repo_root: &Path) -> Result<String, String> {
+    pub fn generated_artifacts_status_for_repo(&self, repo_root: &Path) -> Result<String, FrameworkError> {
         (self.generated_artifacts_status_for_repo)(repo_root)
     }
     pub fn ensure_kernel_bootstrap(&self) {
@@ -101,20 +139,20 @@ pub struct RuntimeCoreHooks {
     pub host_provider: HostProviderHooks,
 
     // ── Goal / RFV ──
-    pub framework_goal_drive: fn(Value) -> Result<Value, String>,
+    pub framework_goal_drive: fn(Value) -> Result<Value, FrameworkError>,
 
     // ── Session / background ──
-    pub handle_orchestrator_operation: fn(Value) -> Result<Value, String>,
-    pub handle_background_state_operation: fn(Value) -> Result<Value, String>,
+    pub handle_orchestrator_operation: fn(Value) -> Result<Value, FrameworkError>,
+    pub handle_background_state_operation: fn(Value) -> Result<Value, FrameworkError>,
     pub runtime_concurrency_defaults_payload: fn() -> Value,
 
     // ── Route evaluation ──
     pub eval_route_contract: fn() -> Value,
     #[allow(clippy::type_complexity)]
-    pub run_eval_route: fn(cases_path: &Path, runtime: Option<&Path>) -> Result<Value, String>,
+    pub run_eval_route: fn(cases_path: &Path, runtime: Option<&Path>) -> Result<Value, FrameworkError>,
 
     // ── Diagnostics ──
-    pub generated_artifacts_status_for_repo: fn(repo_root: &Path) -> Result<String, String>,
+    pub generated_artifacts_status_for_repo: fn(repo_root: &Path) -> Result<String, FrameworkError>,
 
     // ── Kernel bootstrap ──
     pub ensure_kernel_bootstrap: fn(),

@@ -62,16 +62,20 @@ fn parse_execute_aggregator_host_allowlist() -> Result<Option<HashSet<String>>, 
     Ok(Some(hosts))
 }
 
-pub fn execute_request(payload: ExecuteRequestPayload) -> Result<ExecuteResponsePayload, String> {
+pub fn execute_request(payload: ExecuteRequestPayload) -> Result<ExecuteResponsePayload, FrameworkError> {
     if payload.dry_run {
         return Ok(build_dry_run_execute_response(&payload));
     }
     let prompt_preview = build_live_execute_prompt(&payload);
     if payload.aggregator_base_url.trim().is_empty() {
-        return Err("router-rs execute requires a non-empty aggregator_base_url".to_string());
+        return Err(FrameworkError::validation(
+            "router-rs execute requires a non-empty aggregator_base_url",
+        ));
     }
     if payload.aggregator_api_key.trim().is_empty() {
-        return Err("router-rs execute requires a non-empty aggregator_api_key".to_string());
+        return Err(FrameworkError::validation(
+            "router-rs execute requires a non-empty aggregator_api_key",
+        ));
     }
     let live_result = perform_live_execute(&payload, &prompt_preview)?;
     Ok(build_live_execute_response(
@@ -278,21 +282,25 @@ struct DeepContinuationResult {
 }
 
 /// Send a request to the aggregator with a single retry for transient errors (429, 5xx).
-fn send_request_with_retry<F>(request_body: &Value, send_request: &mut F) -> Result<Value, String>
+fn send_request_with_retry<F>(
+    request_body: &Value,
+    send_request: &mut F,
+) -> Result<Value, FrameworkError>
 where
-    F: FnMut(&Value) -> Result<(u16, String), String>,
+    F: FnMut(&Value) -> Result<(u16, String), FrameworkError>,
 {
     use std::time::Duration;
-    let mut last_error = "router-rs live execute request failed".to_string();
+    let mut last_error =
+        FrameworkError::validation("router-rs live execute request failed");
     for attempt in 0..=1usize {
         match send_request(request_body) {
             Ok((status_code, response_body)) => {
                 if !(200..300).contains(&status_code) {
-                    last_error = format!(
+                    last_error = FrameworkError::validation(format!(
                         "router-rs live execute returned HTTP {}: {}",
                         status_code,
                         truncate_for_error(&response_body)
-                    );
+                    ));
                     if attempt == 0 && matches!(status_code, 429 | 500..=599) {
                         // Transient server error or rate limit: backoff then retry once
                         std::thread::sleep(Duration::from_millis(500));
@@ -302,10 +310,16 @@ where
                     return Err(last_error);
                 }
                 return serde_json::from_str::<Value>(&response_body)
-                    .map_err(|err| format!("parse router-rs live execute response failed: {err}"));
+                    .map_err(|err| {
+                        FrameworkError::validation(format!(
+                            "parse router-rs live execute response failed: {err}"
+                        ))
+                    })
             }
             Err(err) => {
-                last_error = format!("router-rs live execute request failed: {err}");
+                last_error = FrameworkError::validation(format!(
+                    "router-rs live execute request failed: {err}"
+                ));
                 if attempt == 0 {
                     std::thread::sleep(Duration::from_millis(500));
                     continue;
@@ -330,7 +344,7 @@ fn attempt_deep_continuation<F>(
     max_tokens: usize,
 ) -> DeepContinuationResult
 where
-    F: FnMut(&Value) -> Result<(u16, String), String>,
+    F: FnMut(&Value) -> Result<(u16, String), FrameworkError>,
 {
     let mut content = original_content.to_string();
     let mut finish_reason = original_finish_reason.clone();
@@ -448,9 +462,9 @@ pub fn perform_live_execute_with_sender<F>(
     payload: &ExecuteRequestPayload,
     prompt_preview: &str,
     mut send_request: F,
-) -> Result<LiveExecuteResult, String>
+) -> Result<LiveExecuteResult, FrameworkError>
 where
-    F: FnMut(&Value) -> Result<(u16, String), String>,
+    F: FnMut(&Value) -> Result<(u16, String), FrameworkError>,
 {
     let mut messages = Vec::new();
     if !prompt_preview.trim().is_empty() {
@@ -542,7 +556,7 @@ where
 pub fn perform_live_execute(
     payload: &ExecuteRequestPayload,
     prompt_preview: &str,
-) -> Result<LiveExecuteResult, String> {
+) -> Result<LiveExecuteResult, FrameworkError> {
     validate_live_execute_aggregator_base_url(&payload.aggregator_base_url)?;
     let endpoint = normalize_chat_completions_endpoint(&payload.aggregator_base_url);
     let client = live_execute_http_client()?;
@@ -552,11 +566,17 @@ pub fn perform_live_execute(
             .bearer_auth(payload.aggregator_api_key.as_str())
             .json(request_body)
             .send()
-            .map_err(|err| format!("router-rs live execute request failed: {err}"))?;
+            .map_err(|err| {
+                FrameworkError::validation(format!(
+                    "router-rs live execute request failed: {err}"
+                ))
+            })?;
         let status = response.status().as_u16();
-        let response_body = response
-            .text()
-            .map_err(|err| format!("read router-rs live execute response failed: {err}"))?;
+        let response_body = response.text().map_err(|err| {
+            FrameworkError::validation(format!(
+                "read router-rs live execute response failed: {err}"
+            ))
+        })?;
         Ok((status, response_body))
     })
 }

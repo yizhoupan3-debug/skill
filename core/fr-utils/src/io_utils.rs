@@ -20,7 +20,7 @@ fn append_io_lock() -> &'static Mutex<()> {
 /// Re-export canonicalize from runtime-storage (single source of truth).
 fn canonicalize_existing_ancestors(path: &Path) -> Result<PathBuf, FrameworkError> {
     rt_storage::runtime_storage::paths::canonicalize_existing_ancestors(path)
-        .map_err(|e| FrameworkError::Validation { message: e })
+        .map_err(|e| FrameworkError::Validation { message: e.to_string() })
 }
 
 /// Unified security guard for all write entry points.

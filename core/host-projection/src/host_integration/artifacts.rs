@@ -94,7 +94,7 @@ pub fn generated_artifacts_status(
         let exists = checked_in_path.is_file();
         let regenerated_exists = regenerated_path.as_ref().is_some_and(|path| path.is_file());
         let checked_in = if exists {
-            Some(fs::read(&checked_in_path).map_err(|err| err.to_string())?)
+            Some(fs::read(&checked_in_path).map_err(FrameworkError::Io)?)
         } else {
             None
         };
@@ -102,7 +102,7 @@ pub fn generated_artifacts_status(
             let path = regenerated_path.as_ref().ok_or_else(|| {
                 FrameworkError::hook("regenerated path not set when regenerated_exists is true")
             })?;
-            Some(fs::read(path).map_err(|err| err.to_string())?)
+            Some(fs::read(path).map_err(FrameworkError::Io)?)
         } else {
             None
         };
@@ -195,24 +195,24 @@ pub fn generated_artifacts_status(
 
 fn validate_generated_artifact_entry(
     artifact: &GeneratedArtifactManifestEntry,
-) -> std::result::Result<(), String> {
+) -> Result<()> {
     if Path::new(&artifact.path).is_absolute()
         || artifact.path.contains("..")
         || (artifact.path.starts_with('.') && !allowed_dot_generated_artifact(&artifact.path))
     {
-        return Err(format!(
+        return Err(FrameworkError::validation(format!(
             "generated artifact path must be repo-relative and non-traversing: {}",
             artifact.path
-        ));
+        )));
     }
     if !matches!(
         artifact.compare.as_str(),
         "byte-for-byte" | "normalized-text"
     ) {
-        return Err(format!(
+        return Err(FrameworkError::validation(format!(
             "unsupported generated artifact compare mode for {}: {}",
             artifact.path, artifact.compare
-        ));
+        )));
     }
     Ok(())
 }
@@ -223,7 +223,7 @@ pub fn generated_artifact_drifted(
     regenerated: Option<&[u8]>,
     framework_root: &Path,
     regenerated_root: &Path,
-) -> std::result::Result<bool, String> {
+) -> Result<bool> {
     match compare {
         "byte-for-byte" => Ok(checked_in != regenerated),
         "normalized-text" => {
@@ -234,9 +234,9 @@ pub fn generated_artifact_drifted(
                 return Ok(true);
             };
             let checked_in = std::str::from_utf8(checked_in)
-                .map_err(|err| format!("normalized-text artifact is not UTF-8: {err}"))?;
+                .map_err(|err| FrameworkError::validation(format!("normalized-text artifact is not UTF-8: {err}")))?;
             let regenerated = std::str::from_utf8(regenerated)
-                .map_err(|err| format!("normalized-text artifact is not UTF-8: {err}"))?;
+                .map_err(|err| FrameworkError::validation(format!("normalized-text artifact is not UTF-8: {err}")))?;
             Ok(
                 normalize_generated_artifact_text(checked_in, &[framework_root, regenerated_root])
                     != normalize_generated_artifact_text(
@@ -245,9 +245,9 @@ pub fn generated_artifact_drifted(
                     ),
             )
         }
-        other => Err(format!(
+        other => Err(FrameworkError::unsupported(format!(
             "unsupported generated artifact compare mode: {other}"
-        )),
+        ))),
     }
 }
 
@@ -327,7 +327,7 @@ impl Drop for GeneratedArtifactTempRoot {
 pub fn prepare_generated_artifact_temp_root(
     framework_root: &Path,
     artifact_root: &Path,
-) -> std::result::Result<GeneratedArtifactTempRoot, String> {
+) -> Result<GeneratedArtifactTempRoot> {
     let temp_root = artifact_root
         .join("generated-artifacts-drift-check")
         .join(format!(
@@ -341,24 +341,19 @@ pub fn prepare_generated_artifact_temp_root(
 pub fn copy_framework_tree_for_generation(
     source: &Path,
     destination: &Path,
-) -> std::result::Result<(), String> {
+) -> Result<()> {
     fs::create_dir_all(destination)
-        .map_err(|err| format!("failed to create {}: {err}", destination.display()))?;
+        .map_err(FrameworkError::Io)?;
     for entry in fs::read_dir(source)
-        .map_err(|err| format!("failed to read directory {}: {err}", source.display()))?
+        .map_err(FrameworkError::Io)?
     {
-        let entry = entry.map_err(|err| {
-            format!(
-                "failed to read directory entry under {}: {err}",
-                source.display()
-            )
-        })?;
+        let entry = entry.map_err(FrameworkError::Io)?;
         let path = entry.path();
         let name = entry.file_name();
         let name_text = name.to_string_lossy();
         let target = destination.join(&name);
         let metadata = fs::symlink_metadata(&path)
-            .map_err(|err| format!("failed to inspect {}: {err}", path.display()))?;
+            .map_err(FrameworkError::Io)?;
         if metadata.file_type().is_symlink() {
             continue;
         }
@@ -373,15 +368,9 @@ pub fn copy_framework_tree_for_generation(
             }
             if let Some(parent) = target.parent() {
                 fs::create_dir_all(parent)
-                    .map_err(|err| format!("failed to create {}: {err}", parent.display()))?;
+                    .map_err(FrameworkError::Io)?;
             }
-            fs::copy(&path, &target).map_err(|err| {
-                format!(
-                    "failed to copy {} to {}: {err}",
-                    path.display(),
-                    target.display()
-                )
-            })?;
+            fs::copy(&path, &target).map_err(FrameworkError::Io)?;
         }
     }
     Ok(())
@@ -399,15 +388,15 @@ pub fn run_generated_artifact_generator(
     generator: &str,
     framework_root: &Path,
     temp_root: &Path,
-) -> std::result::Result<(), String> {
+) -> Result<()> {
     let timeout = generated_artifact_generator_timeout();
     let log_stamp = Local::now().timestamp_nanos_opt().unwrap_or_default();
     let stdout_path = temp_root.join(format!(".generated-artifact-{log_stamp}.stdout.log"));
     let stderr_path = temp_root.join(format!(".generated-artifact-{log_stamp}.stderr.log"));
     let stdout_file = fs::File::create(&stdout_path)
-        .map_err(|err| format!("failed to create {}: {err}", stdout_path.display()))?;
+        .map_err(FrameworkError::Io)?;
     let stderr_file = fs::File::create(&stderr_path)
-        .map_err(|err| format!("failed to create {}: {err}", stderr_path.display()))?;
+        .map_err(FrameworkError::Io)?;
     // SAFETY: generator comes from GENERATED_ARTIFACTS.json (version-controlled config),
     // not from direct user input. If user-controlled input is ever accepted as generator,
     // this `sh -c` call becomes a shell injection vector and must be hardened.
@@ -425,27 +414,27 @@ pub fn run_generated_artifact_generator(
         .stdout(Stdio::from(stdout_file))
         .stderr(Stdio::from(stderr_file))
         .spawn()
-        .map_err(|err| err.to_string())?;
+        .map_err(FrameworkError::Io)?;
     let start = Instant::now();
     loop {
-        if child.try_wait().map_err(|err| err.to_string())?.is_some() {
+        if child.try_wait().map_err(FrameworkError::Io)?.is_some() {
             break;
         }
         if start.elapsed() >= timeout {
             let _ = child.kill();
-            let _ = child.wait().map_err(|err| err.to_string())?;
+            let _ = child.wait().map_err(FrameworkError::Io)?;
             let stdout = fs::read_to_string(&stdout_path).unwrap_or_default();
             let stderr = fs::read_to_string(&stderr_path).unwrap_or_default();
-            return Err(format!(
+            return Err(FrameworkError::config(format!(
                 "generated artifact generator timed out after {}s: {generator}\nstdout:\n{}\nstderr:\n{}",
                 timeout.as_secs(),
                 stdout,
                 stderr
-            ));
+            )));
         }
         thread::sleep(Duration::from_millis(100));
     }
-    let status = child.wait().map_err(|err| err.to_string())?;
+    let status = child.wait().map_err(FrameworkError::Io)?;
     let stdout = fs::read_to_string(&stdout_path).unwrap_or_default();
     let stderr = fs::read_to_string(&stderr_path).unwrap_or_default();
     let _ = fs::remove_file(&stdout_path);
@@ -453,10 +442,10 @@ pub fn run_generated_artifact_generator(
     if status.success() {
         return Ok(());
     }
-    Err(format!(
+    Err(FrameworkError::config(format!(
         "generated artifact generator failed: {generator}\nstdout:\n{}\nstderr:\n{}",
         stdout, stderr
-    ))
+    )))
 }
 
 pub fn generated_artifact_generator_timeout() -> Duration {
@@ -512,14 +501,14 @@ pub fn generated_artifact_forbidden_markers(path: &str, content: &str) -> Vec<&'
 pub fn undeclared_generated_framework_artifacts(
     framework_root: &Path,
     declared_paths: &BTreeSet<String>,
-) -> std::result::Result<Vec<String>, String> {
+) -> Result<Vec<String>> {
     let allowed_reports = surface_policy_generated_reports(framework_root)?;
     let mut undeclared = Vec::new();
     let candidates = generated_artifact_reverse_reference_candidates(framework_root)?;
     for path in candidates {
         let rel = path
             .strip_prefix(framework_root)
-            .map_err(|err| err.to_string())?
+            .map_err(|_| FrameworkError::validation(format!("path {} is not under framework root", path.display())))?
             .to_string_lossy()
             .into_owned();
         if !declared_paths.contains(&rel) && !allowed_reports.contains(&rel) {
@@ -533,7 +522,7 @@ pub fn undeclared_generated_framework_artifacts(
 
 pub fn surface_policy_generated_reports(
     framework_root: &Path,
-) -> std::result::Result<BTreeSet<String>, String> {
+) -> Result<BTreeSet<String>> {
     let path = framework_root.join("configs/framework/FRAMEWORK_SURFACE_POLICY.json");
     let Some(policy) = read_json_if_exists(&path)? else {
         return Ok(BTreeSet::new());
@@ -555,7 +544,7 @@ pub fn surface_policy_generated_reports(
 
 pub fn generated_artifact_reverse_reference_candidates(
     framework_root: &Path,
-) -> std::result::Result<Vec<PathBuf>, String> {
+) -> Result<Vec<PathBuf>> {
     let mut candidates = Vec::new();
     for rel in [
         "configs/framework",
@@ -586,13 +575,13 @@ pub fn generated_artifact_reverse_reference_candidates(
 pub fn collect_root_skill_generated_surfaces(
     framework_root: &Path,
     candidates: &mut Vec<PathBuf>,
-) -> std::result::Result<(), String> {
+) -> Result<()> {
     let skills_root = framework_root.join("skills");
     if !skills_root.is_dir() {
         return Ok(());
     }
-    for entry in fs::read_dir(&skills_root).map_err(|err| err.to_string())? {
-        let entry = entry.map_err(|err| err.to_string())?;
+    for entry in fs::read_dir(&skills_root).map_err(FrameworkError::Io)? {
+        let entry = entry.map_err(FrameworkError::Io)?;
         let path = entry.path();
         let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
             continue;
@@ -608,7 +597,7 @@ pub fn collect_generated_artifact_marker_files(
     framework_root: &Path,
     path: &Path,
     candidates: &mut Vec<PathBuf>,
-) -> std::result::Result<(), String> {
+) -> Result<()> {
     if !path.exists() {
         return Ok(());
     }
@@ -619,8 +608,8 @@ pub fn collect_generated_artifact_marker_files(
         if matches!(name, ".git" | "target" | "artifacts") {
             return Ok(());
         }
-        for entry in fs::read_dir(path).map_err(|err| err.to_string())? {
-            let entry = entry.map_err(|err| err.to_string())?;
+        for entry in fs::read_dir(path).map_err(FrameworkError::Io)? {
+            let entry = entry.map_err(FrameworkError::Io)?;
             collect_generated_artifact_marker_files(framework_root, &entry.path(), candidates)?;
         }
         return Ok(());
@@ -636,7 +625,7 @@ pub fn collect_generated_artifact_marker_files(
     }
     let rel = path
         .strip_prefix(framework_root)
-        .map_err(|err| err.to_string())?;
+        .map_err(|_| FrameworkError::path(framework_root.to_path_buf()))?;
     if rel.components().any(|component| {
         component
             .as_os_str()
@@ -662,7 +651,7 @@ pub fn is_generated_artifact_scan_file(path: &Path) -> bool {
     )
 }
 
-pub fn skills_source_rel(repo_root: &Path) -> std::result::Result<String, String> {
+pub fn skills_source_rel(repo_root: &Path) -> Result<String> {
     let registry = load_runtime_registry(repo_root)?;
     let source_rel = registry
         .workspace_bootstrap_defaults
@@ -673,28 +662,28 @@ pub fn skills_source_rel(repo_root: &Path) -> std::result::Result<String, String
     Ok(source_rel)
 }
 
-pub fn validate_source_rel(source_rel: &str) -> std::result::Result<(), String> {
+pub fn validate_source_rel(source_rel: &str) -> Result<()> {
     let candidate = Path::new(source_rel);
     if candidate.as_os_str().is_empty() {
-        return Err("skills source_rel must not be empty".to_string());
+        return Err(FrameworkError::validation("skills source_rel must not be empty"));
     }
     if candidate.is_absolute() {
-        return Err(format!(
+        return Err(FrameworkError::validation(format!(
             "skills source_rel must be repository-relative, got absolute path: {source_rel}"
-        ));
+        )));
     }
     if candidate
         .components()
         .any(|component| matches!(component, std::path::Component::ParentDir))
     {
-        return Err(format!(
+        return Err(FrameworkError::validation(format!(
             "skills source_rel must not contain '..' segments: {source_rel}"
-        ));
+        )));
     }
     Ok(())
 }
 
-pub fn resolve_router_rs_executable(repo_root: &Path) -> std::result::Result<PathBuf, String> {
+pub fn resolve_router_rs_executable(repo_root: &Path) -> Result<PathBuf> {
     if let Ok(raw) = std::env::var("ROUTER_RS_BIN") {
         let path = PathBuf::from(raw);
         if path.is_file() {
@@ -725,7 +714,7 @@ pub fn resolve_router_rs_executable(repo_root: &Path) -> std::result::Result<Pat
             }
         }
     }
-    let cur = std::env::current_exe().map_err(|err| err.to_string())?;
+    let cur = std::env::current_exe().map_err(FrameworkError::Io)?;
     if cur
         .file_name()
         .and_then(|name| name.to_str())
@@ -744,32 +733,34 @@ pub fn resolve_router_rs_executable(repo_root: &Path) -> std::result::Result<Pat
             return Ok(candidate);
         }
     }
-    Err(format!(
+    Err(FrameworkError::config(format!(
         "could not resolve router-rs executable for subprocess (try `cargo build --release --manifest-path core/router-rs/Cargo.toml`, `router-rs-cli self install`, or set ROUTER_RS_BIN); repo_root={}",
         repo_root.display()
-    ))
+    )))
 }
 
-pub fn run_router_rs_json(repo_root: &Path, args: &[String]) -> std::result::Result<Value, String> {
+pub fn run_router_rs_json(repo_root: &Path, args: &[String]) -> Result<Value> {
     let exe = resolve_router_rs_executable(repo_root)?;
     let output = Command::new(&exe)
         .args(args)
         .arg("--repo-root")
         .arg(repo_root)
         .output()
-        .map_err(|err| err.to_string())?;
+        .map_err(FrameworkError::Io)?;
     if output.status.success() {
-        let stdout = String::from_utf8(output.stdout).map_err(|err| err.to_string())?;
-        return serde_json::from_str(stdout.trim()).map_err(|err| err.to_string());
+        let stdout = String::from_utf8(output.stdout).map_err(|err| {
+            FrameworkError::validation(format!("router-rs subprocess stdout is not UTF-8: {err}"))
+        })?;
+        return serde_json::from_str(stdout.trim()).map_err(FrameworkError::Json);
     }
     let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
     Err(if stderr.is_empty() {
-        format!(
+        FrameworkError::config(format!(
             "router-rs subprocess failed (status {:?}); executable {}",
             output.status,
             exe.display()
-        )
+        ))
     } else {
-        stderr
+        FrameworkError::config(stderr)
     })
 }

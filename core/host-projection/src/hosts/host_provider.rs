@@ -229,17 +229,17 @@ include!(concat!(env!("OUT_DIR"), "/generated_host_providers.rs"));
 // ── Hook/Agent dispatch registration (eliminates per-host DISPATCH_TABLE in CLI layer) ──
 
 /// Generic hook dispatch function signature.
-/// Each host's CLI hook handler conforms to `fn(host_id, event, repo_root) -> Result<(), String>`.
+/// Each host's CLI hook handler conforms to `fn(host_id, event, repo_root) -> Result<(), FrameworkError>`.
 pub type HookDispatchFn = fn(
     host_id: &str,
     event: &str,
     repo_root: Option<&std::path::Path>,
-) -> std::result::Result<(), String>;
+) -> std::result::Result<(), core_errors::FrameworkError>;
 
 /// Generic agent dispatch function signature.
 /// Matches host_id (from registration) + repo_root to run the agent MCP loop.
 pub type AgentDispatchFn =
-    fn(host_id: &str, repo_root: Option<&std::path::Path>) -> std::result::Result<(), String>;
+    fn(host_id: &str, repo_root: Option<&std::path::Path>) -> std::result::Result<(), core_errors::FrameworkError>;
 
 static HOOK_DISPATCH_REGISTRY: OnceLock<Vec<(&'static str, HookDispatchFn)>> = OnceLock::new();
 static AGENT_DISPATCH_REGISTRY: OnceLock<Vec<(&'static str, AgentDispatchFn)>> = OnceLock::new();

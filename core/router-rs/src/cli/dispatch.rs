@@ -51,60 +51,30 @@ pub fn dispatch_router_command(command: RouterCommand) -> Result<(), FrameworkEr
             print_search_results(&command.query, &payload, rows);
             Ok(())
         }
-        RouterCommand::Framework { command } => {
-            dispatch_framework_command(command).map_err(FrameworkError::validation)
-        }
+        RouterCommand::Framework { command } => dispatch_framework_command(command),
         RouterCommand::Host { command } => {
             super::router_command_dispatch::ensure_host_dispatchers_registered();
-            dispatch_host_command(command).map_err(FrameworkError::validation)
+            dispatch_host_command(command)
         }
-        RouterCommand::Trace { command } => {
-            dispatch_trace_command(command).map_err(FrameworkError::validation)
-        }
-        RouterCommand::Storage { command } => {
-            dispatch_storage_command(command).map_err(FrameworkError::validation)
-        }
-        RouterCommand::Browser { command } => {
-            dispatch_browser_command(command).map_err(FrameworkError::validation)
-        }
+        RouterCommand::Trace { command } => dispatch_trace_command(command),
+        RouterCommand::Storage { command } => dispatch_storage_command(command),
+        RouterCommand::Browser { command } => dispatch_browser_command(command),
         #[cfg(feature = "codegraph")]
-        RouterCommand::Codegraph { command } => {
-            dispatch_codegraph_command(command).map_err(FrameworkError::validation)
-        }
+        RouterCommand::Codegraph { command } => dispatch_codegraph_command(command),
         #[cfg(not(feature = "codegraph"))]
         RouterCommand::Codegraph { .. } => Err(FrameworkError::validation(
             "codegraph feature not enabled; rebuild with --features codegraph",
         )),
-        RouterCommand::Diagnose { command } => {
-            dispatch_diagnose_command(command).map_err(FrameworkError::validation)
-        }
-        RouterCommand::Migrate { command } => {
-            dispatch_migrate_command(command).map_err(FrameworkError::validation)
-        }
-        RouterCommand::HookPolicy { command } => {
-            dispatch_hook_policy_command(command).map_err(FrameworkError::validation)
-        }
-        RouterCommand::Closeout { command } => {
-            dispatch_closeout_command(command).map_err(FrameworkError::validation)
-        }
-        RouterCommand::Loop { command } => {
-            dispatch_loop_command(command).map_err(FrameworkError::validation)
-        }
-        RouterCommand::Eval { command } => {
-            dispatch_eval_command(command).map_err(FrameworkError::validation)
-        }
-        RouterCommand::SchemaDrift { command } => {
-            dispatch_schema_drift_command(command).map_err(FrameworkError::validation)
-        }
-        RouterCommand::Research { command } => {
-            dispatch_research_command(command).map_err(FrameworkError::validation)
-        }
-        RouterCommand::Math { command } => {
-            dispatch_math_command(command).map_err(FrameworkError::validation)
-        }
-        RouterCommand::Web { command } => {
-            dispatch_web_command(command).map_err(FrameworkError::validation)
-        }
+        RouterCommand::Diagnose { command } => dispatch_diagnose_command(command),
+        RouterCommand::Migrate { command } => dispatch_migrate_command(command),
+        RouterCommand::HookPolicy { command } => dispatch_hook_policy_command(command),
+        RouterCommand::Closeout { command } => dispatch_closeout_command(command),
+        RouterCommand::Loop { command } => dispatch_loop_command(command),
+        RouterCommand::Eval { command } => dispatch_eval_command(command),
+        RouterCommand::SchemaDrift { command } => dispatch_schema_drift_command(command),
+        RouterCommand::Research { command } => dispatch_research_command(command),
+        RouterCommand::Math { command } => dispatch_math_command(command),
+        RouterCommand::Web { command } => dispatch_web_command(command),
         RouterCommand::RouterSelf { command } => {
             router_self::dispatch(command).map_err(FrameworkError::validation)
         }

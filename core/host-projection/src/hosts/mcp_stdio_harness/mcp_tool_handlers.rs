@@ -270,8 +270,11 @@ impl ToolHandler for OrchestratorTools {
             "{}/artifacts/orchestrator/state.json",
             ctx.repo_root.display()
         ));
+        let hooks = framework_kernel::runtime_hooks::try_hooks()
+            .ok_or_else(|| "runtime hooks not registered".to_string())?;
         let result =
-            framework_kernel::runtime_hooks::hooks().handle_orchestrator_operation(payload)?;
+            hooks.handle_orchestrator_operation(payload)
+                .map_err(|e| e.to_string())?;
         serde_json::to_string_pretty(&result).map_err(|e| e.to_string())
     }
 }

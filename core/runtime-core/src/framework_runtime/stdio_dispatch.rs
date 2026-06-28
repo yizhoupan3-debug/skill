@@ -1,4 +1,22 @@
 //! Stdio JSON request dispatch.
+//!
+//! # Dispatch patterns
+//!
+//! This module uses two dispatch patterns:
+//!
+//! 1. **`parse_and_dispatch<T,R,F>()`** — for operations with structured request
+//!    and response types.  The payload is deserialized into `T`, handed to `F`,
+//!    and the return value is serialized.  Used when the handler has well-defined
+//!    typed parameters (e.g. `TraceRecordEventRequestPayload`).
+//!
+//! 2. **Manual field extraction** — for operations with ad-hoc or optional fields
+//!    that don't fit a shared struct (e.g. `session_supervisor` reads raw `Value`
+//!    and delegates to the hook).  The handler calls `payload.get("field")`,
+//!    extracts what it needs, and returns a serialized `Value` directly.
+//!
+//! Both patterns produce `Result<Value, FrameworkError>` at the dispatch level.
+//! The choice depends on whether the operation's shape is stable enough to
+//! warrant a dedicated struct.  When in doubt, prefer `parse_and_dispatch`.
 
 use core_errors::FrameworkError;
 use serde::Serialize;
@@ -116,7 +134,7 @@ pub fn dispatch_stdio_json_request(op: &str, payload: Value) -> Result<Value, Fr
                 "runtime output mode dispatch drifted for {op}"
             )));
         };
-        return result.map_err(FrameworkError::validation);
+        return result;
     }
     match classify_stdio_op(op) {
         Some(StdioOpDomain::Routing) => dispatch_routing_stdio_request(op, payload),
@@ -238,7 +256,7 @@ fn dispatch_runtime_stdio_request(op: &str, payload: Value) -> Result<Value, Fra
         "execute" => {
             let request = parse_payload::<ExecuteRequestPayload>(payload, "execute")?;
             serialize_payload(
-                execute_request(request).map_err(FrameworkError::validation)?,
+                execute_request(request)?,
                 "execute",
             )
         }
@@ -290,22 +308,20 @@ fn dispatch_runtime_stdio_request(op: &str, payload: Value) -> Result<Value, Fra
             "background control",
             |p| {
                 framework_extra::orchestration_controller::build_background_control_response(p)
-                    .map_err(FrameworkError::validation)
             },
         ),
         #[cfg(feature = "l5-state")]
         "background_state" => {
-            handle_background_state_operation(payload).map_err(FrameworkError::validation)
+            handle_background_state_operation(payload)
         }
         #[cfg(not(feature = "l5-state"))]
         "background_state" => Err(FrameworkError::hook(
-            "background_state requires l5-state feature",
+            "background_state requires L5 state feature (compile-time gate)",
         )),
         "session_supervisor" => {
-            let hooks = framework_kernel::runtime_hooks::hooks();
-            hooks
+            framework_kernel::runtime_hooks::try_hooks()
+                .ok_or_else(|| FrameworkError::hook("runtime hooks not registered"))?
                 .handle_orchestrator_operation(payload)
-                .map_err(FrameworkError::hook)
         }
         "describe_transport" => {
             build_trace_transport_descriptor(payload).map_err(FrameworkError::validation)
@@ -318,7 +334,6 @@ fn dispatch_runtime_stdio_request(op: &str, payload: Value) -> Result<Value, Fra
         }
         "runtime_checkpoint_control_plane" => {
             build_checkpoint_control_plane_compiler_payload(payload)
-                .map_err(FrameworkError::validation)
         }
         "write_transport_binding" => {
             write_transport_binding_payload(payload).map_err(FrameworkError::validation)
@@ -338,7 +353,7 @@ fn dispatch_runtime_stdio_request(op: &str, payload: Value) -> Result<Value, Fra
         "runtime_storage" => parse_and_dispatch::<RuntimeStorageRequestPayload, _, _>(
             payload,
             "runtime storage",
-            |p| runtime_storage_operation(p).map_err(FrameworkError::validation),
+            |p| runtime_storage_operation(p),
         ),
         "control_plane_contracts" => serialize_payload(
             build_control_plane_contract_descriptors(),
@@ -360,12 +375,12 @@ fn dispatch_trace_stdio_request(op: &str, payload: Value) -> Result<Value, Frame
         "trace_stream_replay" => parse_and_dispatch::<TraceStreamReplayRequestPayload, _, _>(
             payload,
             "trace stream replay",
-            |p| replay_trace_stream(p).map_err(FrameworkError::validation),
+            |p| replay_trace_stream(p),
         ),
         "trace_stream_inspect" => parse_and_dispatch::<TraceStreamInspectRequestPayload, _, _>(
             payload,
             "trace stream inspect",
-            |p| inspect_trace_stream(p).map_err(FrameworkError::validation),
+            |p| inspect_trace_stream(p),
         ),
         "trace_compact" => {
             parse_and_dispatch::<TraceCompactRequestPayload, _, _>(payload, "trace compact", |p| {
@@ -376,13 +391,13 @@ fn dispatch_trace_stdio_request(op: &str, payload: Value) -> Result<Value, Frame
             parse_and_dispatch::<TraceCompactionDeltaWriteRequestPayload, _, _>(
                 payload,
                 "trace compaction delta",
-                |p| write_trace_compaction_delta(p).map_err(FrameworkError::validation),
+                |p| write_trace_compaction_delta(p),
             )
         }
         "write_trace_metadata" => parse_and_dispatch::<TraceMetadataWriteRequestPayload, _, _>(
             payload,
             "trace metadata write",
-            |p| write_trace_metadata(p).map_err(FrameworkError::validation),
+            |p| write_trace_metadata(p),
         ),
         _ => Err(FrameworkError::validation(format!(
             "unsupported trace stdio operation: {op}"
@@ -698,9 +713,9 @@ fn dispatch_stdio_route_snapshot(payload: Value) -> Result<Value, FrameworkError
 }
 
 fn dispatch_stdio_framework_runtime_snapshot(payload: Value) -> Result<Value, FrameworkError> {
-    let repo_root =
+    let repo_root_str =
         required_non_empty_string(&payload, "repo_root", "stdio framework runtime snapshot")?;
-    let repo_root = resolve_repo_root_arg(Some(Path::new(&repo_root)))?;
+    let repo_root = resolve_repo_root_arg(Some(Path::new(&repo_root_str)))?;
     let artifact_root = optional_non_empty_string(&payload, "artifact_source_dir");
     let task_id = optional_non_empty_string(&payload, "task_id");
     let detail_level = optional_non_empty_string(&payload, "detail_level")

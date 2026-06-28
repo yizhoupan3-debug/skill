@@ -44,12 +44,12 @@ pub use host_provider::{
 
 // ── Shared MCP agent loop (registry-driven: host_id from RUNTIME_REGISTRY) ──
 
+use core_errors::FrameworkError;
 use std::io;
 use std::path::Path;
 
-pub fn run_agent_mcp_loop(repo_root_arg: Option<&Path>, host_id: &str) -> Result<(), String> {
-    let repo_root = framework_kernel::repo_roots::resolve_repo_root_arg(repo_root_arg)
-        .map_err(|e| e.to_string())?;
+pub fn run_agent_mcp_loop(repo_root_arg: Option<&Path>, host_id: &str) -> Result<(), FrameworkError> {
+    let repo_root = framework_kernel::repo_roots::resolve_repo_root_arg(repo_root_arg)?;
     let stdin = io::stdin();
     let stdout = io::stdout();
     mcp_stdio_harness::run_mcp_stdio(stdin.lock(), stdout.lock(), &repo_root, host_id)

@@ -1,8 +1,8 @@
 {
   "schema_version": "mcp-tool-registry-v2",
   "scope": {
-    "total_count": 74,
-    "builtin_count": 19,
+    "total_count": 88,
+    "builtin_count": 33,
     "research_count": 21,
     "independent_count": 23,
     "external_count": 11
@@ -678,6 +678,413 @@
       "input_schema": {
         "type": "object",
         "properties": {}
+      }
+    },
+    {
+      "slug": "orchestrator_team_create",
+      "display_name": "创建团队",
+      "description": "创建一个新的子代理团队",
+      "layer": "builtin",
+      "dispatch_domain": "domain:orchestrator",
+      "owner": "framework",
+      "trigger_hints": [
+        "团队",
+        "创建团队",
+        "team"
+      ],
+      "host_platforms": [],
+      "mcp_server": "router-rs",
+      "tool_flags": [],
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "team_id"
+        ],
+        "properties": {
+          "team_id": {
+            "type": "string",
+            "description": "团队标识符"
+          },
+          "members": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "初始成员列表(可选)"
+          }
+        }
+      }
+    },
+    {
+      "slug": "orchestrator_team_add_member",
+      "display_name": "添加团队成员",
+      "description": "向已有团队添加成员",
+      "layer": "builtin",
+      "dispatch_domain": "domain:orchestrator",
+      "owner": "framework",
+      "trigger_hints": [
+        "添加成员",
+        "加入团队"
+      ],
+      "host_platforms": [],
+      "mcp_server": "router-rs",
+      "tool_flags": [],
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "team_id",
+          "member"
+        ],
+        "properties": {
+          "team_id": {
+            "type": "string",
+            "description": "团队标识符"
+          },
+          "member": {
+            "type": "string",
+            "description": "成员 ID"
+          }
+        }
+      }
+    },
+    {
+      "slug": "orchestrator_team_remove_member",
+      "display_name": "移除团队成员",
+      "description": "从团队中移除成员",
+      "layer": "builtin",
+      "dispatch_domain": "domain:orchestrator",
+      "owner": "framework",
+      "trigger_hints": [
+        "移除成员",
+        "剔除成员"
+      ],
+      "host_platforms": [],
+      "mcp_server": "router-rs",
+      "tool_flags": [],
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "team_id",
+          "member"
+        ],
+        "properties": {
+          "team_id": {
+            "type": "string",
+            "description": "团队标识符"
+          },
+          "member": {
+            "type": "string",
+            "description": "成员 ID"
+          }
+        }
+      }
+    },
+    {
+      "slug": "orchestrator_team_complete",
+      "display_name": "完成团队任务",
+      "description": "标记团队任务为完成状态",
+      "layer": "builtin",
+      "dispatch_domain": "domain:orchestrator",
+      "owner": "framework",
+      "trigger_hints": [
+        "完成团队",
+        "团队完毕",
+        "team complete"
+      ],
+      "host_platforms": [],
+      "mcp_server": "router-rs",
+      "tool_flags": [],
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "team_id"
+        ],
+        "properties": {
+          "team_id": {
+            "type": "string",
+            "description": "团队标识符"
+          }
+        }
+      }
+    },
+    {
+      "slug": "orchestrator_team_send_message",
+      "display_name": "发送团队消息",
+      "description": "向团队成员发送消息",
+      "layer": "builtin",
+      "dispatch_domain": "domain:orchestrator",
+      "owner": "framework",
+      "trigger_hints": [
+        "发送消息",
+        "通知团队"
+      ],
+      "host_platforms": [],
+      "mcp_server": "router-rs",
+      "tool_flags": [],
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "team_id",
+          "message"
+        ],
+        "properties": {
+          "team_id": {
+            "type": "string",
+            "description": "团队标识符"
+          },
+          "message": {
+            "type": "string",
+            "description": "消息内容"
+          }
+        }
+      }
+    },
+    {
+      "slug": "orchestrator_team_read_messages",
+      "display_name": "读取团队消息",
+      "description": "读取团队的消息历史",
+      "layer": "builtin",
+      "dispatch_domain": "domain:orchestrator",
+      "owner": "framework",
+      "trigger_hints": [
+        "读取消息",
+        "查看消息"
+      ],
+      "host_platforms": [],
+      "mcp_server": "router-rs",
+      "tool_flags": [],
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "team_id"
+        ],
+        "properties": {
+          "team_id": {
+            "type": "string",
+            "description": "团队标识符"
+          },
+          "since": {
+            "type": "string",
+            "description": "开始时间(ISO8601, 可选)"
+          }
+        }
+      }
+    },
+    {
+      "slug": "orchestrator_team_alive_members",
+      "display_name": "活跃成员列表",
+      "description": "查询团队中当前活跃的成员",
+      "layer": "builtin",
+      "dispatch_domain": "domain:orchestrator",
+      "owner": "framework",
+      "trigger_hints": [
+        "活跃成员",
+        "在线成员",
+        "alive"
+      ],
+      "host_platforms": [],
+      "mcp_server": "router-rs",
+      "tool_flags": [],
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "team_id"
+        ],
+        "properties": {
+          "team_id": {
+            "type": "string",
+            "description": "团队标识符"
+          }
+        }
+      }
+    },
+    {
+      "slug": "orchestrator_team_list",
+      "display_name": "团队列表",
+      "description": "列出所有已知团队",
+      "layer": "builtin",
+      "dispatch_domain": "domain:orchestrator",
+      "owner": "framework",
+      "trigger_hints": [
+        "团队列表",
+        "所有团队"
+      ],
+      "host_platforms": [],
+      "mcp_server": "router-rs",
+      "tool_flags": [],
+      "input_schema": {
+        "type": "object",
+        "required": [],
+        "properties": {}
+      }
+    },
+    {
+      "slug": "orchestrator_agent_register",
+      "display_name": "注册代理",
+      "description": "注册一个新的子代理",
+      "layer": "builtin",
+      "dispatch_domain": "domain:orchestrator",
+      "owner": "framework",
+      "trigger_hints": [
+        "注册代理",
+        "注册 agent"
+      ],
+      "host_platforms": [],
+      "mcp_server": "router-rs",
+      "tool_flags": [],
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "agent_id"
+        ],
+        "properties": {
+          "agent_id": {
+            "type": "string",
+            "description": "代理标识符"
+          },
+          "capabilities": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "能力列表(可选)"
+          }
+        }
+      }
+    },
+    {
+      "slug": "orchestrator_agent_unregister",
+      "display_name": "注销代理",
+      "description": "注销一个已注册的子代理",
+      "layer": "builtin",
+      "dispatch_domain": "domain:orchestrator",
+      "owner": "framework",
+      "trigger_hints": [
+        "注销代理",
+        "删除代理"
+      ],
+      "host_platforms": [],
+      "mcp_server": "router-rs",
+      "tool_flags": [],
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "agent_id"
+        ],
+        "properties": {
+          "agent_id": {
+            "type": "string",
+            "description": "代理标识符"
+          }
+        }
+      }
+    },
+    {
+      "slug": "orchestrator_agent_list_running",
+      "display_name": "运行中代理列表",
+      "description": "列出当前所有运行的子代理",
+      "layer": "builtin",
+      "dispatch_domain": "domain:orchestrator",
+      "owner": "framework",
+      "trigger_hints": [
+        "运行中代理",
+        "运行中 agent",
+        "running agents"
+      ],
+      "host_platforms": [],
+      "mcp_server": "router-rs",
+      "tool_flags": [],
+      "input_schema": {
+        "type": "object",
+        "required": [],
+        "properties": {}
+      }
+    },
+    {
+      "slug": "orchestrator_worker_launch",
+      "display_name": "启动工作进程",
+      "description": "启动一个新的工作进程",
+      "layer": "builtin",
+      "dispatch_domain": "domain:orchestrator",
+      "owner": "framework",
+      "trigger_hints": [
+        "启动工作",
+        "launch worker"
+      ],
+      "host_platforms": [],
+      "mcp_server": "router-rs",
+      "tool_flags": [],
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "task"
+        ],
+        "properties": {
+          "task": {
+            "type": "string",
+            "description": "工作任务描述"
+          },
+          "team_id": {
+            "type": "string",
+            "description": "所属团队(可选)"
+          }
+        }
+      }
+    },
+    {
+      "slug": "orchestrator_worker_list",
+      "display_name": "工作进程列表",
+      "description": "列出所有工作进程",
+      "layer": "builtin",
+      "dispatch_domain": "domain:orchestrator",
+      "owner": "framework",
+      "trigger_hints": [
+        "工作进程",
+        "worker list"
+      ],
+      "host_platforms": [],
+      "mcp_server": "router-rs",
+      "tool_flags": [],
+      "input_schema": {
+        "type": "object",
+        "required": [],
+        "properties": {
+          "team_id": {
+            "type": "string",
+            "description": "团队过滤(可选)"
+          }
+        }
+      }
+    },
+    {
+      "slug": "orchestrator_worker_terminate",
+      "display_name": "终止工作进程",
+      "description": "终止一个运行中的工作进程",
+      "layer": "builtin",
+      "dispatch_domain": "domain:orchestrator",
+      "owner": "framework",
+      "trigger_hints": [
+        "终止工作",
+        "停止 worker"
+      ],
+      "host_platforms": [],
+      "mcp_server": "router-rs",
+      "tool_flags": [],
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "worker_id"
+        ],
+        "properties": {
+          "worker_id": {
+            "type": "string",
+            "description": "工作进程 ID"
+          },
+          "team_id": {
+            "type": "string",
+            "description": "所属团队(可选)"
+          }
+        }
       }
     },
     {

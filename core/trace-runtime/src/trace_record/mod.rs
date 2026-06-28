@@ -24,7 +24,13 @@ mod util;
 mod tests;
 
 // Re-exports — makes all `pub` items from submodules accessible at crate level
-pub use compact::*;
-pub use record::*;
-pub use types::*;
-pub use util::*;
+pub use compact::compact_trace_stream;
+pub use record::record_trace_event;
+pub use types::{
+    TraceCompactRequestPayload, TraceCompactResponsePayload, TraceRecordEventRequestPayload,
+    TraceRecordEventResponsePayload, TraceTextWrite,
+};
+pub use util::{
+    build_trace_cursor, hydrate_trace_event, sha256_hex, trace_event_object,
+    trace_event_string_field, trace_event_usize_field,
+};

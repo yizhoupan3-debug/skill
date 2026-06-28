@@ -4,6 +4,7 @@
 use super::signal_cache::cached_signal;
 use super::signals::*;
 use super::types::{RouteCandidate, SkillRecord};
+use core_errors::FrameworkError;
 use serde_json::Value;
 use std::collections::HashSet;
 use std::sync::OnceLock;
@@ -164,13 +165,15 @@ fn allowed_signal(name: &str) -> bool {
     nl_registry_find(name).is_some()
 }
 
-fn validate_signal(name: &str) -> Result<(), String> {
+fn validate_signal(name: &str) -> Result<(), FrameworkError> {
     if allowed_signal(name) {
         Ok(())
     } else {
-        Err(format!(
-            "unknown when.signal `{name}` (not in NL_SIGNAL_REGISTRY)"
-        ))
+        Err(FrameworkError::Validation {
+            message: format!(
+                "unknown when.signal `{name}` (not in NL_SIGNAL_REGISTRY)"
+            ),
+        })
     }
 }
 
@@ -211,7 +214,7 @@ struct CompiledNl {
     visual_evidence_markers: Vec<String>,
 }
 
-fn parse_record_filter(filter: Option<&Value>) -> Result<RecordFilter, String> {
+fn parse_record_filter(filter: Option<&Value>) -> Result<RecordFilter, FrameworkError> {
     let Some(spec) = filter else {
         return Ok(RecordFilter::default());
     };
@@ -219,43 +222,63 @@ fn parse_record_filter(filter: Option<&Value>) -> Result<RecordFilter, String> {
         return Ok(RecordFilter::default());
     }
     let Some(obj) = spec.as_object() else {
-        return Err("record: expected object or null".into());
+        return Err(FrameworkError::Validation {
+            message: "record: expected object or null".into(),
+        });
     };
     const ALLOWED: &[&str] = &["slug", "slugs", "gate_lower"];
     for k in obj.keys() {
         if !ALLOWED.contains(&k.as_str()) {
-            return Err(format!("record: unknown key `{k}`"));
+            return Err(FrameworkError::Validation {
+                message: format!("record: unknown key `{k}`"),
+            });
         }
     }
     let slug = obj
         .get("slug")
         .map(|v| {
             v.as_str()
-                .ok_or_else(|| "record.slug must be string".to_string())
+                .ok_or_else(|| {
+                    FrameworkError::Validation {
+                        message: "record.slug must be string".into(),
+                    }
+                })
                 .map(str::to_string)
         })
         .transpose()?;
     let slugs = obj
         .get("slugs")
-        .map(|v| -> Result<Vec<String>, String> {
+        .map(|v| -> Result<Vec<String>, FrameworkError> {
             let arr = v
                 .as_array()
-                .ok_or_else(|| "record.slugs must be array".to_string())?;
+                .ok_or_else(|| {
+                    FrameworkError::Validation {
+                        message: "record.slugs must be array".into(),
+                    }
+                })?;
             let mut out = Vec::with_capacity(arr.len());
             for item in arr {
                 let s = item
                     .as_str()
-                    .ok_or_else(|| "record.slugs entries must be strings".to_string())?;
+                    .ok_or_else(|| {
+                        FrameworkError::Validation {
+                            message: "record.slugs entries must be strings".into(),
+                        }
+                    })?;
                 out.push(s.to_string());
             }
-            Ok::<Vec<String>, String>(out)
+            Ok::<Vec<String>, FrameworkError>(out)
         })
         .transpose()?;
     let gate_lower = obj
         .get("gate_lower")
         .map(|v| {
             v.as_str()
-                .ok_or_else(|| "record.gate_lower must be string".to_string())
+                .ok_or_else(|| {
+                    FrameworkError::Validation {
+                        message: "record.gate_lower must be string".into(),
+                    }
+                })
                 .map(str::to_string)
         })
         .transpose()?;
@@ -266,31 +289,37 @@ fn parse_record_filter(filter: Option<&Value>) -> Result<RecordFilter, String> {
     })
 }
 
-fn parse_when(expr: &Value) -> Result<WhenExpr, String> {
+fn parse_when(expr: &Value) -> Result<WhenExpr, FrameworkError> {
     match expr {
         Value::Bool(b) => Ok(WhenExpr::Literal(*b)),
         Value::Object(map) => {
             if map.is_empty() {
-                return Err(
-                    "when: empty object is not allowed (use true or a single recognized key)"
+                return Err(FrameworkError::Validation {
+                    message: "when: empty object is not allowed (use true or a single recognized key)"
                         .into(),
-                );
+                });
             }
             for k in map.keys() {
                 if !matches!(
                     k.as_str(),
                     "all" | "any" | "not" | "signal" | "query_contains" | "first_turn"
                 ) {
-                    return Err(format!("when: unknown key `{k}`"));
+                    return Err(FrameworkError::Validation {
+                        message: format!("when: unknown key `{k}`"),
+                    });
                 }
             }
             if let Some(arr) = map.get("all") {
                 if map.len() != 1 {
-                    return Err("when: `all` must be the sole object key".into());
+                    return Err(FrameworkError::Validation {
+                        message: "when: `all` must be the sole object key".into(),
+                    });
                 }
                 let arr = arr
                     .as_array()
-                    .ok_or_else(|| "when.all must be array".to_string())?;
+                    .ok_or_else(|| FrameworkError::Validation {
+                        message: "when.all must be array".into(),
+                    })?;
                 let mut out = Vec::with_capacity(arr.len());
                 for item in arr {
                     out.push(parse_when(item)?);
@@ -299,11 +328,15 @@ fn parse_when(expr: &Value) -> Result<WhenExpr, String> {
             }
             if let Some(arr) = map.get("any") {
                 if map.len() != 1 {
-                    return Err("when: `any` must be the sole object key".into());
+                    return Err(FrameworkError::Validation {
+                        message: "when: `any` must be the sole object key".into(),
+                    });
                 }
                 let arr = arr
                     .as_array()
-                    .ok_or_else(|| "when.any must be array".to_string())?;
+                    .ok_or_else(|| FrameworkError::Validation {
+                        message: "when.any must be array".into(),
+                    })?;
                 let mut out = Vec::with_capacity(arr.len());
                 for item in arr {
                     out.push(parse_when(item)?);
@@ -312,15 +345,19 @@ fn parse_when(expr: &Value) -> Result<WhenExpr, String> {
             }
             if let Some(inner) = map.get("not") {
                 if map.len() != 1 {
-                    return Err("when: `not` must be the sole object key".into());
+                    return Err(FrameworkError::Validation {
+                        message: "when: `not` must be the sole object key".into(),
+                    });
                 }
                 return Ok(WhenExpr::Not(Box::new(parse_when(inner)?)));
             }
             if map.len() != 1 {
-                return Err(format!(
-                    "when: expected exactly one leaf key among signal/query_contains/first_turn, got {:?}",
-                    map.keys().collect::<Vec<_>>()
-                ));
+                return Err(FrameworkError::Validation {
+                    message: format!(
+                        "when: expected exactly one leaf key among signal/query_contains/first_turn, got {:?}",
+                        map.keys().collect::<Vec<_>>()
+                    ),
+                });
             }
             if let Some(s) = map.get("signal").and_then(Value::as_str) {
                 validate_signal(s)?;
@@ -332,25 +369,35 @@ fn parse_when(expr: &Value) -> Result<WhenExpr, String> {
             if let Some(b) = map.get("first_turn").and_then(Value::as_bool) {
                 return Ok(WhenExpr::FirstTurn(b));
             }
-            Err("when: leaf object must be signal, query_contains, or first_turn".into())
+            Err(FrameworkError::Validation {
+                message: "when: leaf object must be signal, query_contains, or first_turn".into(),
+            })
         }
-        other => Err(format!("when: expected bool or object, got {other}")),
+        other => Err(FrameworkError::Validation {
+            message: format!("when: expected bool or object, got {other}"),
+        }),
     }
 }
 
-fn parse_action(action: &Value) -> Result<CompiledAction, String> {
+fn parse_action(action: &Value) -> Result<CompiledAction, FrameworkError> {
     let Some(obj) = action.as_object() else {
-        return Err("action: expected object".into());
+        return Err(FrameworkError::Validation {
+            message: "action: expected object".into(),
+        });
     };
     for k in obj.keys() {
         if !matches!(k.as_str(), "type" | "reason" | "delta") {
-            return Err(format!("action: unknown key `{k}`"));
+            return Err(FrameworkError::Validation {
+                message: format!("action: unknown key `{k}`"),
+            });
         }
     }
     let ty = obj
         .get("type")
         .and_then(Value::as_str)
-        .ok_or_else(|| "action.type must be string".to_string())?;
+        .ok_or_else(|| FrameworkError::Validation {
+            message: "action.type must be string".into(),
+        })?;
     match ty {
         "suppress" => {
             let reason = obj
@@ -363,7 +410,9 @@ fn parse_action(action: &Value) -> Result<CompiledAction, String> {
         "boost" => {
             let delta = obj.get("delta").and_then(Value::as_f64).unwrap_or(0.0);
             if !delta.is_finite() {
-                return Err("action.boost delta must be a finite number".into());
+                return Err(FrameworkError::Validation {
+                    message: "action.boost delta must be a finite number".into(),
+                });
             }
             let reason = obj
                 .get("reason")
@@ -372,17 +421,23 @@ fn parse_action(action: &Value) -> Result<CompiledAction, String> {
                 .to_string();
             Ok(CompiledAction::Boost { delta, reason })
         }
-        other => Err(format!("unknown action.type `{other}`")),
+        other => Err(FrameworkError::Unsupported {
+            what: format!("unknown action.type `{other}`"),
+        }),
     }
 }
 
-fn compile_rule(rule: &Value) -> Result<CompiledRule, String> {
+fn compile_rule(rule: &Value) -> Result<CompiledRule, FrameworkError> {
     let Some(obj) = rule.as_object() else {
-        return Err("rule must be JSON object".into());
+        return Err(FrameworkError::Validation {
+            message: "rule must be JSON object".into(),
+        });
     };
     for k in obj.keys() {
         if !matches!(k.as_str(), "record" | "when" | "action") {
-            return Err(format!("rule: unknown top-level key `{k}`"));
+            return Err(FrameworkError::Validation {
+                message: format!("rule: unknown top-level key `{k}`"),
+            });
         }
     }
     let record = parse_record_filter(obj.get("record"))?;
@@ -392,7 +447,9 @@ fn compile_rule(rule: &Value) -> Result<CompiledRule, String> {
     };
     let action = parse_action(
         obj.get("action")
-            .ok_or_else(|| "rule.action is required".to_string())?,
+            .ok_or_else(|| FrameworkError::Validation {
+                message: "rule.action is required".into(),
+            })?,
     )?;
     Ok(CompiledRule {
         record,
@@ -401,19 +458,23 @@ fn compile_rule(rule: &Value) -> Result<CompiledRule, String> {
     })
 }
 
-fn compile_rule_vec(rules: &[Value], label: &str) -> Result<Vec<CompiledRule>, String> {
+fn compile_rule_vec(rules: &[Value], label: &str) -> Result<Vec<CompiledRule>, FrameworkError> {
     let mut out = Vec::with_capacity(rules.len());
     for (i, rule) in rules.iter().enumerate() {
-        out.push(compile_rule(rule).map_err(|e| format!("{label}[{i}]: {e}"))?);
+        out.push(compile_rule(rule).map_err(|e| FrameworkError::Validation {
+            message: format!("{label}[{i}]: {e}"),
+        })?);
     }
     Ok(out)
 }
 
 /// Parse and validate embedded (or test) NL JSON. Used by [`compiled_nl`] and unit tests for bad fixtures.
-fn compile_nl_route_adjustments(json: &str) -> Result<CompiledNl, String> {
-    let root: Value = serde_json::from_str(json).map_err(|e| format!("NL JSON parse: {e}"))?;
+fn compile_nl_route_adjustments(json: &str) -> Result<CompiledNl, FrameworkError> {
+    let root: Value = serde_json::from_str(json)?;
     let Some(root_obj) = root.as_object() else {
-        return Err("NL root must be object".into());
+        return Err(FrameworkError::Validation {
+            message: "NL root must be object".into(),
+        });
     };
     const ROOT_KEYS: &[&str] = &[
         "schema_version",
@@ -424,7 +485,9 @@ fn compile_nl_route_adjustments(json: &str) -> Result<CompiledNl, String> {
     ];
     for k in root_obj.keys() {
         if !ROOT_KEYS.contains(&k.as_str()) {
-            return Err(format!("NL root: unknown key `{k}`"));
+            return Err(FrameworkError::Validation {
+                message: format!("NL root: unknown key `{k}`"),
+            });
         }
     }
     let sv = root_obj
@@ -432,9 +495,11 @@ fn compile_nl_route_adjustments(json: &str) -> Result<CompiledNl, String> {
         .and_then(Value::as_str)
         .unwrap_or("");
     if sv != EXPECTED_SCHEMA {
-        return Err(format!(
-            "NL_ROUTE_ADJUSTMENTS schema_version mismatch: expected `{EXPECTED_SCHEMA}`, got `{sv}`"
-        ));
+        return Err(FrameworkError::Validation {
+            message: format!(
+                "NL_ROUTE_ADJUSTMENTS schema_version mismatch: expected `{EXPECTED_SCHEMA}`, got `{sv}`"
+            ),
+        });
     }
     let pre = root_obj
         .get("pre_framework_alias_rules")
