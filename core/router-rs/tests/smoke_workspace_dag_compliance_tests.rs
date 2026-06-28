@@ -4,7 +4,7 @@
 //! - 8 core crates exist in workspace (core-math merged into runtime-core 2026-06-11)
 //! - Leaf crates have zero workspace deps
 //! - DAG direction is correct (no reverse edges)
-//! - B10/B11/B8 are fully independent
+//! - B10/B8 are fully independent
 
 use std::path::PathBuf;
 
@@ -57,7 +57,6 @@ fn workspace_has_nine_core_crates() {
         "core/routing-engine",
         "core/router-rs",
         "tools/codegraph-rs",
-        "tools/observer-rs",
         "core/research-harness",
     ];
 
@@ -78,7 +77,6 @@ fn leaf_crates_have_zero_workspace_deps() {
         "core/core-state",
         "core/framework-kernel",
         "core/routing-engine",
-        "tools/observer-rs",
         "tools/codegraph-rs",
     ];
 
@@ -89,7 +87,6 @@ fn leaf_crates_have_zero_workspace_deps() {
         "routing-engine",
         "router-rs",
         "codegraph-rs",
-        "observer-rs",
         "research-harness",
     ];
 
@@ -164,25 +161,6 @@ fn b10_codegraph_rs_is_independent() {
         assert!(
             !has_workspace_dep(&content, dep),
             "B10 codegraph-rs should not depend on {}",
-            dep
-        );
-    }
-}
-
-#[test]
-fn b11_observer_rs_is_independent() {
-    let content = read_cargo_toml("tools/observer-rs");
-    let framework_crates = [
-        "core-state",
-        "core-policy",
-        "framework-kernel",
-        "routing-engine",
-        "router-rs",
-    ];
-    for dep in &framework_crates {
-        assert!(
-            !has_workspace_dep(&content, dep),
-            "B11 observer-rs should not depend on {}",
             dep
         );
     }

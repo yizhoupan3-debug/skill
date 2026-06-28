@@ -133,8 +133,8 @@ pub fn init_hooks() {
         host_projection::hooks::set_runtime_hooks(
             host_projection::hooks::RuntimeHooks {
                 // framework_runtime (5 fields)
-                closeout_record_path_for_task: |repo_root, task_id| framework_extra::closeout::closeout_record_path_for_task(repo_root, task_id).map_err(Into::into),
-                evaluate_closeout_record_file_for_task: |repo_root, task_id, record_path| framework_extra::closeout::evaluate_closeout_record_file_for_task(repo_root, task_id, record_path).map_err(Into::into),
+                closeout_record_path_for_task: framework_extra::closeout::closeout_record_path_for_task,
+                evaluate_closeout_record_file_for_task: framework_extra::closeout::evaluate_closeout_record_file_for_task,
                 extract_post_tool_duration_ms: framework_extra::evidence::extract_post_tool_duration_ms,
                 post_tool_call_succeeded: framework_extra::evidence::post_tool_call_succeeded,
                 closeout_stop_followup_for_completion_text: framework_extra::closeout::closeout_stop_followup_for_completion_text,
@@ -149,7 +149,7 @@ pub fn init_hooks() {
                 ensure_kernel_bootstrap: kernel_bootstrap::ensure_kernel_bootstrap,
                 // framework_runtime_extra (7 fields)
                 current_local_timestamp: framework_extra::util::current_local_timestamp,
-                write_framework_session_artifacts: |payload| framework_extra::session_artifacts::write_framework_session_artifacts(payload).map_err(Into::into),
+                write_framework_session_artifacts: framework_extra::session_artifacts::write_framework_session_artifacts,
                 route_task_with_manifest_fallback: |records_json, host_id, query, session_id, allow_overlay, first_turn| {
                     let records: Vec<routing_engine::route::SkillRecord> = records_json.iter()
                         .filter_map(|v| serde_json::from_value(v.clone()).ok())
@@ -275,9 +275,7 @@ pub fn init_hooks() {
                 },
             },
             framework_goal_drive: core_state::state_manager::framework_goal_drive,
-            handle_orchestrator_operation: |_payload| {
-                Err(core_errors::FrameworkError::hook("orchestrator operation not registered"))
-            },
+            handle_orchestrator_operation: framework_extra::orchestration_controller::handle_orchestrator_operation,
             #[cfg(feature = "l5-state")]
             handle_background_state_operation: rt_storage::background_state::handle_background_state_operation,
             #[cfg(not(feature = "l5-state"))]
@@ -286,18 +284,18 @@ pub fn init_hooks() {
             },
             runtime_concurrency_defaults_payload: || {
                 serde_json::to_value(stdio_transport::runtime_concurrency_defaults_payload())
-                    .unwrap_or_else(|e| {
+                    .map_err(|e| {
                         tracing::warn!(error = %e, "runtime_concurrency_defaults_payload serialization failed");
-                        serde_json::json!({})
+                        core_errors::FrameworkError::validation(format!("runtime_concurrency_defaults_payload serialization: {e}"))
                     })
             },
             eval_route_contract: eval_route::eval_route_contract,
             run_eval_route: |cases_path, runtime| {
-                eval_route::run_eval_route(cases_path, runtime)
-                    .map(|report| serde_json::to_value(report).unwrap_or_else(|e| {
-                        tracing::warn!(error = %e, "eval_route report serialization failed");
-                        serde_json::json!({})
-                    }))
+                let report = eval_route::run_eval_route(cases_path, runtime)?;
+                serde_json::to_value(report).map_err(|e| {
+                    tracing::warn!(error = %e, "eval_route report serialization failed");
+                    core_errors::FrameworkError::validation(format!("eval_route report serialization: {e}"))
+                })
             },
             generated_artifacts_status_for_repo: |repo_root| {
                 crate::host_integration::generated_artifacts_status_for_repo(repo_root)

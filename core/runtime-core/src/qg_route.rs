@@ -51,17 +51,21 @@ pub fn init_qg_route() {
 
 /// Evaluate the QG Route for a given scene and context.
 ///
-/// Returns an aggregated `GateVerdict`. Returns a passed verdict with
-/// reason "QG Route not initialized" if `init_qg_route()` has not been called.
+/// Returns an aggregated `GateVerdict`. Returns a blocked verdict with
+/// reason "QG Route not initialized" if `init_qg_route()` has not been called,
+/// preventing silent fail-open behavior.
 pub fn evaluate_qg_route(scene: &str, ctx: &CheckContext) -> GateVerdict {
     match QG_ROUTE.get() {
         Some(registry) => registry.evaluate(scene, ctx),
-        None => quality_gate::types::GateVerdict {
-            passed: true,
-            checkers_ran: 0,
-            blockers: vec![],
-            advisories: vec![],
-            reason: Some("QG Route not initialized".to_string()),
+        None => {
+            tracing::warn!("evaluate_qg_route called before init_qg_route() — returning blocked (fail-closed)");
+            quality_gate::types::GateVerdict {
+                passed: false,
+                checkers_ran: 0,
+                blockers: vec![],
+                advisories: vec![],
+                reason: Some("QG Route not initialized — returning blocked to prevent silent fail-open".to_string()),
+            }
         },
     }
 }

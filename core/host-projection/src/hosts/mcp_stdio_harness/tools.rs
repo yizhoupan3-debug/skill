@@ -171,7 +171,7 @@ pub(super) fn tool_skill_read(arguments: &Value, repo_root: &Path) -> Result<Str
         "schema_version": "cowork-skill-read-v1",
         "authority": "router-rs-framework",
         "skill": slug,
-        "path": path.to_string_lossy(),
+        // HPM-14: return slug only, not absolute file path (directory structure leak)
         "content": truncated_content,
         "truncated": truncated,
     })
@@ -206,27 +206,34 @@ fn finalize_skill_path(repo_root: &Path, path: &Path, slug: &str) -> Result<Path
     use core_state_utils::path_guard::{path_is_within_repo_root, reject_unsafe_path};
 
     reject_unsafe_path(path)?;
-    if !path.is_file() {
-        return Err(format!("skill body not found: {}", path.display()));
-    }
-    if !path_is_within_repo_root(repo_root, path) {
+
+    // HPM-15: canonicalize first to detect symlink swaps before the is_file check.
+    let canonical_path = path.canonicalize().map_err(|_| {
+        format!("skill path not found or unresolvable: {}", path.display())
+    })?;
+
+    let skills_dir = repo_root.join("skills");
+    // Use canonicalized path for the in-repo check as well
+    if !canonical_path.starts_with(&skills_dir) {
         return Err(format!(
-            "skill path for {slug} escapes repo root: {}",
-            path.display()
+            "skill path for {slug} resolves outside skills directory via symlink: {}",
+            canonical_path.display()
         ));
     }
-    // Canonicalize to catch symlink redirections in intermediate components
-    // that symlink_metadata (used by reject_unsafe_path) cannot detect.
-    if let Ok(canonical) = path.canonicalize() {
-        let skills_dir = repo_root.join("skills");
-        if !canonical.starts_with(&skills_dir) {
-            return Err(format!(
-                "skill path for {slug} resolves outside skills directory via symlink: {}",
-                canonical.display()
-            ));
-        }
+
+    let is_under_skills = path_is_within_repo_root(repo_root, &canonical_path);
+    if !is_under_skills {
+        return Err(format!(
+            "skill path for {slug} escapes repo root: {}",
+            canonical_path.display()
+        ));
     }
-    Ok(path.to_path_buf())
+
+    if !canonical_path.is_file() {
+        return Err(format!("skill body not found: {}", path.display()));
+    }
+
+    Ok(canonical_path)
 }
 
 pub(super) fn tool_skill_route_status(repo_root: &Path) -> Result<String, String> {
@@ -253,6 +260,10 @@ pub(super) fn tool_skill_route_status(repo_root: &Path) -> Result<String, String
 }
 
 pub fn build_evidence_entry(arguments: &Value) -> Result<Map<String, Value>, String> {
+    // HPM-16: TODO — this function currently accepts any input without validation.
+    // Callers can supply arbitrary evidence records (fake exit codes, forged tool names).
+    // A verification layer should be added that cross-references tool_name and exit_code
+    // against actual host tool execution logs when available.
     let tool_name = arguments
         .get("tool_name")
         .and_then(Value::as_str)

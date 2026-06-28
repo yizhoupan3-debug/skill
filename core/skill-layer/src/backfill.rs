@@ -15,6 +15,7 @@ use crate::frontmatter::RecordKind;
 use crate::frontmatter_parser;
 use crate::paths;
 use core_errors::FrameworkError;
+use fs2::FileExt;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::fs;
@@ -104,6 +105,17 @@ pub fn backfill_registry(
     dry_run: bool,
 ) -> Result<BackfillReport, FrameworkError> {
     let runtime_path = paths::runtime_json(repo_root);
+
+    // SL-7: advisory file lock (separate lock file) to prevent concurrent
+    // overwrites without requiring write permissions on the target file.
+    let lock_path = runtime_path.with_extension("json.lock");
+    let lock_file = fs::OpenOptions::new()
+        .create(true)
+        .read(true)
+        .write(true)
+        .open(&lock_path)?;
+    lock_file.lock_exclusive()?;
+
     let mut doc: Value = serde_json::from_str(&fs::read_to_string(&runtime_path)?)?;
 
     let keys: Vec<String> = doc["keys"]
@@ -197,9 +209,12 @@ pub fn backfill_registry(
     }
 
     // Write the updated JSON (if not dry-run and any changes were made)
+    // Lock is still held, serializing access against concurrent processes.
     if !dry_run && report.cells_filled > 0 {
         core_state_utils::atomic_write::write_atomic_json(&runtime_path, &doc)?;
     }
+
+    // Lock file handle drops here → advisory lock released
 
     Ok(report)
 }

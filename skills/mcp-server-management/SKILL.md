@@ -213,7 +213,7 @@ Server 可通过 `ctx.info()` / `ctx.warning()` / `ctx.error()` 发送日志到 
 
 - **router-rs-framework**：`core/router-rs/` — Rust stdio MCP server，提供框架路由、goal 管理、closeout 等工具
 - **browser-mcp**：`tools/browser-mcp/` — Rust stdio MCP（`router-rs browser mcp-stdio`），浏览器自动化，带 session supervisor 和 background job 管理
-- **mcp-codegraph**：`tools/` 独立 crate `codegraph-rs` — Rust stdio MCP，代码知识图谱（search/callers/callees/impact/node/status）
+- **mcp-codegraph**：`core/` 独立 crate `codegraph-rs` — Rust stdio MCP，代码知识图谱（search/callers/callees/impact/node/status）
 - **paperplain**：`npx -y paperplain-mcp` — Node stdio MCP，学术论文元数据检索（paper_metadata/paper_search）
 
 ## Exit Criteria

@@ -77,7 +77,7 @@ In that case:
 ## Rust batch path
 
 - Batch catalog: `pdf-batch/catalog.json` under `${SKILL_FRAMEWORK_ROOT}` artifacts.
-- 禁止在 skill 正文默认写 `cargo run` 作为操作员主路径；已安装 `pdf_tool_rs` 二进制优先。
+- 禁止在 skill 正文默认写 `cargo run` 作为操作员主路径；已安装 `mcp-pdf` 二进制优先。
 
 ## Shared artifact protocol
 

@@ -3742,6 +3742,7 @@ dependencies = [
  "core-errors",
  "core-state",
  "core-state-utils",
+ "fs2",
  "serde",
  "serde_json",
  "serde_yml",

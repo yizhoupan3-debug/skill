@@ -205,6 +205,16 @@ pub fn bash_write_target(
 }
 
 fn split_bash_segments(command: &str) -> Vec<String> {
+    // HPM-12: This is a regex-based analysis, NOT a full Bash parser.
+    // Known limitations:
+    // - Does not handle sub shells: `(cmd1; cmd2)` or `$(cmd)` command substitution
+    // - Does not handle heredocs: `cat <<EOF ... EOF`
+    // - Does not handle brace expansion: `{a,b,c}`
+    // - Does not handle quoted separators inside strings: echo "foo; bar"
+    // - False negatives on complex pipelines with conditional operators
+    // These are acceptable for the PreToolUse guard since it's a best-effort
+    // safety layer, not a formal parser. False negatives are bounded by the
+    // additional regex patterns in MUTATING_COMMAND_PATTERNS.
     let chars: Vec<char> = command.chars().collect();
     let mut segments = Vec::new();
     let mut start = 0usize;
@@ -251,11 +261,18 @@ static MUTATING_COMMAND_PATTERNS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
         r"^\s*ln\b[^\n]*\s-[^\n]*[fs][^\n]*\b",
         r"^\s*git\s+(checkout\s+--|restore\b)",
         r"\bsed\s+-i\b",
+        // HPM-5: also match sed --in-place (long option variant)
+        r"\bsed\b.*--in-place",
+        // HPM-5: GNU sed variant
+        r"\bgsed\b",
         r"\bperl\s+-pi\b",
-        r"\bpython3?\s+-c\b",
+        // HPM-5: explicit python3 match (belt-and-suspenders)
+        r"\bpython3\s+-c\b",
+        r"\bpython\s+-c\b",
         r"\bnode\s+-e\b",
         r"\bruby\s+-e\b",
         r"\btee\b",
+        // dd of= is covered by \bdd\b in combination with bash_segment_redirects_to_hint
         r"\bdd\b",
     ]
     .iter()

@@ -44,7 +44,7 @@ fn evaluate_mcp_pre_guard_inner(
     McpPreGuardVerdict::allow()
 }
 
-/// Evaluate MCP pre-guard; panics inside guard logic fall back to allow + log.
+/// Evaluate MCP pre-guard; panics inside guard logic fall back to block + log.
 pub fn evaluate_mcp_pre_guard_safe(
     tool_name: &str,
     arguments: &Value,
@@ -55,10 +55,12 @@ pub fn evaluate_mcp_pre_guard_safe(
     })) {
         Ok(verdict) => verdict,
         Err(_) => {
-            tracing::warn!(
-                "[router-rs] MCP pre-guard panicked for tool={tool_name:?}; allowing call (fallback)"
+            tracing::error!(
+                "[router-rs] MCP pre-guard panicked for tool={tool_name:?}; blocking call (fallback)"
             );
-            McpPreGuardVerdict::allow()
+            McpPreGuardVerdict::block(
+                "MCP pre-guard evaluation panicked — blocked as safety fallback".to_string(),
+            )
         }
     }
 }

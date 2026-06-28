@@ -48,7 +48,7 @@ use crate::route::{
     RouteSnapshotRequestPayload, SkillRecord, build_route_diff_report, build_route_policy,
     build_route_resolution, build_route_snapshot, build_search_results_payload,
     filter_record_indices_for_host, filter_records_for_host, load_inline_records,
-    load_records_cached_for_stdio, route_task, search_skills_subset,
+    load_records_cached_for_stdio, search_skills_subset,
 };
 use crate::runtime_storage::{
     RuntimeStorageRequestPayload, build_checkpoint_control_plane_compiler_payload,
@@ -110,24 +110,50 @@ use quality_gate;
 pub fn dispatch_stdio_json_request_payload(
     request: StdioJsonRequestPayload,
 ) -> StdioJsonResponsePayload {
-    match dispatch_stdio_json_request(&request.op, request.payload) {
-        Ok(payload) => StdioJsonResponsePayload {
+    let id = request.id.clone();
+    use std::panic::{catch_unwind, AssertUnwindSafe};
+    match catch_unwind(AssertUnwindSafe(|| {
+        dispatch_stdio_json_request(&request.op, request.payload)
+    })) {
+        Ok(Ok(payload)) => StdioJsonResponsePayload {
             id: request.id,
             ok: true,
             payload: Some(payload),
             error: None,
         },
-        Err(error) => StdioJsonResponsePayload {
+        Ok(Err(error)) => StdioJsonResponsePayload {
             id: request.id,
             ok: false,
             payload: None,
             error: Some(error.to_string()),
         },
+        Err(panic_err) => {
+            let msg = if let Some(s) = panic_err.downcast_ref::<&str>() {
+                s.to_string()
+            } else if let Some(s) = panic_err.downcast_ref::<String>() {
+                s.clone()
+            } else {
+                "unknown panic in dispatch_stdio_json_request".to_string()
+            };
+            tracing::error!(panic = %msg, "panic caught in stdio dispatch");
+            StdioJsonResponsePayload {
+                id,
+                ok: false,
+                payload: None,
+                error: Some(format!("dispatch panic: {msg}")),
+            }
+        }
     }
 }
 
 pub fn dispatch_stdio_json_request(op: &str, payload: Value) -> Result<Value, FrameworkError> {
     crate::kernel_bootstrap::ensure_kernel_bootstrap();
+    // Runtime output mode dispatch: `handles_runtime_output_stdio_op()` and
+    // `dispatch_runtime_output_mode_stdio()` are intentional stubs in `fr_utils`.
+    // The real implementation lives in `runtime-core::orchestration_controller` and
+    // is registered via host-projection hooks at runtime. These stubs break the
+    // `cli ↔ framework-runtime` circular dependency (framework-runtime cannot
+    // depend on runtime-core). See `fr_utils::stdio_op_registry` for details.
     if handles_runtime_output_stdio_op(op) {
         let Some(result) = dispatch_runtime_output_mode_stdio(op, payload) else {
             return Err(FrameworkError::validation(format!(
@@ -263,10 +289,9 @@ fn dispatch_runtime_stdio_request(op: &str, payload: Value) -> Result<Value, Fra
         "execution_contract_bundle" => Ok(Value::Object(build_execution_contract_bundle())),
         "normalize_execution_kernel_metadata_contract" => {
             if payload.as_object().is_some_and(Map::is_empty) || payload.is_null() {
-                normalize_execution_kernel_metadata_contract_value(None).map_err(Into::into)
+                normalize_execution_kernel_metadata_contract_value(None)
             } else {
                 normalize_execution_kernel_metadata_contract_value(Some(&payload))
-                    .map_err(Into::into)
             }
         }
         "normalize_execution_kernel_contract" => {
@@ -275,7 +300,6 @@ fn dispatch_runtime_stdio_request(op: &str, payload: Value) -> Result<Value, Fra
             })?;
             let response_shape = payload.get("response_shape").and_then(Value::as_str);
             normalize_execution_kernel_contract_value(kernel_contract, response_shape)
-                .map_err(Into::into)
         }
         "validate_execution_kernel_steady_state_metadata" => {
             let metadata = payload.get("metadata").ok_or_else(|| {
@@ -288,7 +312,6 @@ fn dispatch_runtime_stdio_request(op: &str, payload: Value) -> Result<Value, Fra
                 kernel_contract,
                 response_shape,
             )
-            .map_err(Into::into)
         }
         "decode_execution_response" => {
             let execution_payload = payload.get("payload").ok_or_else(|| {
@@ -297,7 +320,6 @@ fn dispatch_runtime_stdio_request(op: &str, payload: Value) -> Result<Value, Fra
             let kernel_contract = payload.get("kernel_contract");
             let dry_run = payload.get("dry_run").and_then(Value::as_bool);
             decode_execution_response_value(execution_payload, kernel_contract, dry_run)
-                .map_err(Into::into)
         }
         "runtime_observability_health_snapshot" => serialize_payload(
             build_runtime_observability_health_snapshot(),
@@ -324,31 +346,31 @@ fn dispatch_runtime_stdio_request(op: &str, payload: Value) -> Result<Value, Fra
                 .handle_orchestrator_operation(payload)
         }
         "describe_transport" => {
-            build_trace_transport_descriptor(payload).map_err(FrameworkError::validation)
+            build_trace_transport_descriptor(payload)
         }
         "describe_handoff" => {
-            build_trace_handoff_descriptor(payload).map_err(FrameworkError::validation)
+            build_trace_handoff_descriptor(payload)
         }
         "checkpoint_resume_manifest" => {
-            build_checkpoint_resume_manifest(payload).map_err(FrameworkError::validation)
+            build_checkpoint_resume_manifest(payload)
         }
         "runtime_checkpoint_control_plane" => {
             build_checkpoint_control_plane_compiler_payload(payload)
         }
         "write_transport_binding" => {
-            write_transport_binding_payload(payload).map_err(FrameworkError::validation)
+            write_transport_binding_payload(payload)
         }
         "write_checkpoint_resume_manifest" => {
-            write_checkpoint_resume_manifest_payload(payload).map_err(FrameworkError::validation)
+            write_checkpoint_resume_manifest_payload(payload)
         }
         "attach_runtime_event_transport" => {
-            attach_runtime_event_transport(payload).map_err(FrameworkError::validation)
+            attach_runtime_event_transport(payload)
         }
         "subscribe_attached_runtime_events" => {
-            subscribe_attached_runtime_events(payload).map_err(FrameworkError::validation)
+            subscribe_attached_runtime_events(payload)
         }
         "cleanup_attached_runtime_event_transport" => {
-            cleanup_attached_runtime_event_transport(payload).map_err(FrameworkError::validation)
+            cleanup_attached_runtime_event_transport(payload)
         }
         "runtime_storage" => parse_and_dispatch::<RuntimeStorageRequestPayload, _, _>(
             payload,
@@ -415,7 +437,6 @@ fn dispatch_framework_stdio_request(op: &str, payload: Value) -> Result<Value, F
                 .and_then(serde_json::Value::as_u64)
                 .map(|v| v as usize);
             build_framework_prompt_compression_envelope(payload, ctx_size)
-                .map_err(FrameworkError::validation)
         }
         "framework_resolve_content" => {
             let hash = required_non_empty_string(&payload, "hash", "framework_resolve_content")?;
@@ -426,13 +447,12 @@ fn dispatch_framework_stdio_request(op: &str, payload: Value) -> Result<Value, F
             Ok(serde_json::json!({ "content": content }))
         }
         "framework_session_artifact_write" => {
-            write_framework_session_artifacts(payload).map_err(FrameworkError::from)
+            write_framework_session_artifacts(payload)
         }
         "framework_hook_evidence_append" => {
-            framework_hook_evidence_append(payload).map_err(FrameworkError::from)
+            framework_hook_evidence_append(payload)
         }
-        "framework_goal_drive" => runtime_infra::kernel_utils::framework_goal_drive(payload)
-            .map_err(FrameworkError::validation),
+        "framework_goal_drive" => runtime_infra::kernel_utils::framework_goal_drive(payload),
         "framework_rfv_loop" => {
             let repo_root_str = payload
                 .get("repo_root")
@@ -575,14 +595,13 @@ fn dispatch_stdio_route(payload: Value) -> Result<Value, FrameworkError> {
         .and_then(Value::as_bool)
         .unwrap_or(true);
     let owned_inline_records = if payload.get("skills").is_some() {
-        Some(load_inline_records(&payload).map_err(FrameworkError::validation)?)
+        Some(load_inline_records(&payload)?)
     } else {
         None
     };
     let runtime_path = optional_non_empty_string(&payload, "runtime_path").map(PathBuf::from);
     let host_id = optional_non_empty_string(&payload, "host_id");
     let cached_records;
-    let using_inline_records = owned_inline_records.is_some();
     let records: &[SkillRecord] = if let Some(items) = owned_inline_records.as_ref() {
         items.as_slice()
     } else {
@@ -599,24 +618,17 @@ fn dispatch_stdio_route(payload: Value) -> Result<Value, FrameworkError> {
     } else {
         records
     };
-    let decision = if using_inline_records {
-        route_task(
-            route_records,
-            &query,
-            &session_id,
-            allow_overlay,
-            first_turn,
-        )?
-    } else {
-        route_task_with_manifest_fallback(
-            route_records,
-            host_id.as_deref(),
-            &query,
-            &session_id,
-            allow_overlay,
-            first_turn,
-        )?
-    };
+    // Always use route_task_with_manifest_fallback to ensure host_id-based
+    // manifest lookup. Previously when inline records were provided we called
+    // route_task() directly, which bypassed the manifest fallback. RD-7 fix.
+    let decision = route_task_with_manifest_fallback(
+        route_records,
+        host_id.as_deref(),
+        &query,
+        &session_id,
+        allow_overlay,
+        first_turn,
+    )?;
     serialize_payload(decision, "route")
 }
 
@@ -629,8 +641,7 @@ fn dispatch_stdio_search_skills(payload: Value) -> Result<Value, FrameworkError>
         .unwrap_or(5);
     let runtime_path = optional_non_empty_string(&payload, "runtime_path").map(PathBuf::from);
     let host_id = optional_non_empty_string(&payload, "host_id");
-    let records = load_records_cached_for_stdio(runtime_path.as_deref())
-        .map_err(FrameworkError::validation)?;
+    let records = load_records_cached_for_stdio(runtime_path.as_deref())?;
     let host_indices = filter_record_indices_for_host(&records, host_id.as_deref())
         .map_err(|e| FrameworkError::validation(format!("host filter: {e}")))?;
     let matches = search_skills_subset(&records, Some(&host_indices), &query, limit);

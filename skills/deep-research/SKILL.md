@@ -96,14 +96,14 @@ The harness runs as a multi-stage execution using `WebSearch` and `WebFetch` too
 
 ### Phase 2: Search — Fan out across the web
 
-1. Execute all search queries in parallel using `web_search`.
+1. Execute all search queries in parallel using `WebSearch`.
 2. Collect the top 3 URLs per query (up to 15 candidates).
 3. Deduplicate by URL and filter obviously irrelevant results (e.g., ads, thin content).
 4. Cap at 10 unique URLs for the fetch phase.
 
 ### Phase 3: Extract — Fetch and read sources
 
-1. Fetch each URL in parallel using `web_fetch`.
+1. Fetch each URL in parallel using `WebFetch`.
 2. For each page, extract:
    - **Claims**: factual assertions relevant to the research question.
    - **Evidence**: direct quotes, data points, or specific context supporting each claim.
@@ -164,7 +164,7 @@ Return:
 - Do not skip the adversarial verification phase — every claim must pass cross-reference before appearing in the report body.
 - Do not scope-creep into experiment design, literature survey, or manuscript work; hand off to the appropriate skill.
 - Do not bury the next executable step in prose; make it directly actionable.
-- Do not use academic API endpoints (arXiv, OpenAlex, CrossRef, PubMed) unless the research topic specifically requires academic sources; use `web_search` as the primary retrieval backbone.
+- Do not use academic API endpoints (arXiv, OpenAlex, CrossRef, PubMed) unless the research topic specifically requires academic sources; use `WebSearch` as the primary retrieval backbone.
 
 ## Division of work with peer skills
 

@@ -1,6 +1,6 @@
 //! Object-safe host abstraction (`Box<dyn HostProvider>` registry).
 //!
-//! P4: `HostLifecycle` / `HostToolExecutor` / `HostTelemetry` expose static metadata hooks
+//! P4: `HostLifecycle` / `HostTelemetry` expose static metadata hooks
 //! consumed by `pre_tool_use_guard` and `host_integration` without registry I/O.
 
 use std::sync::OnceLock;
@@ -114,24 +114,6 @@ pub trait HostLifecycle: Send + Sync {
     }
 }
 
-/// Tool-guard metadata aligned with `pre_tool_use_guard` registry signals.
-pub trait HostToolExecutor: Send + Sync {
-    /// All supported hosts (with native hooks) support hard gate hooks (shell/plugin level).
-    fn has_hard_gate_hooks(&self) -> bool {
-        true
-    }
-
-    /// All supported hosts (with native hooks) support closeout evidence hooks.
-    fn closeout_evidence_hooks_supported(&self) -> bool {
-        true
-    }
-
-    /// All supported hosts (with native hooks) have native hooks; strict fallback not needed.
-    fn requires_strict_pre_tool_fallback_default(&self) -> bool {
-        false
-    }
-}
-
 /// Telemetry / observation metadata for hook journal routing.
 pub trait HostTelemetry: Send + Sync {
     /// All 4 closed-set hosts are review gate observable.
@@ -167,7 +149,22 @@ pub trait HostTelemetry: Send + Sync {
 }
 
 /// Object-safe provider contract; implementors register via [`host_provider_registry`].
-pub trait HostProvider: HostLifecycle + HostToolExecutor + HostTelemetry {
+pub trait HostProvider: HostLifecycle + HostTelemetry {
+    /// All supported hosts (with native hooks) support hard gate hooks (shell/plugin level).
+    fn has_hard_gate_hooks(&self) -> bool {
+        true
+    }
+
+    /// All supported hosts (with native hooks) support closeout evidence hooks.
+    fn closeout_evidence_hooks_supported(&self) -> bool {
+        true
+    }
+
+    /// All supported hosts (with native hooks) have native hooks; strict fallback not needed.
+    fn requires_strict_pre_tool_fallback_default(&self) -> bool {
+        false
+    }
+
     /// `RUNTIME_REGISTRY.host_targets.supported` id (e.g. `cursor`, `claude`).
     fn host_id(&self) -> &'static str;
 
@@ -185,38 +182,9 @@ pub trait HostProvider: HostLifecycle + HostToolExecutor + HostTelemetry {
     /// configured from RUNTIME_REGISTRY.json fields.
     /// Used by CLI dispatch to avoid hardcoded host match arms.
     fn dispatcher(&self) -> Box<dyn crate::hosts::hook_dispatch::HostHookDispatcher> {
-        Box::new(NullHostDispatcher {
-            host_id: self.host_id(),
-        })
+        unreachable!("HostProvider::dispatcher() default reached — all 4 supported hosts override")
     }
 }
-
-/// Minimal dispatcher used as default when a HostProvider does not override
-/// `dispatcher()`. Always returns None for all events (no-op).
-#[derive(Debug, Clone, Copy)]
-pub(crate) struct NullHostDispatcher {
-    host_id: &'static str,
-}
-
-impl crate::hosts::hook_dispatch::HostHookConfig for NullHostDispatcher {
-    fn host_id(&self) -> &'static str {
-        self.host_id
-    }
-    fn state_dir_leaf(&self) -> &'static str {
-        ""
-    }
-    fn hook_state_unreadable_tag(&self) -> &'static str {
-        "null"
-    }
-    fn session_namespace_env(&self) -> &'static str {
-        ""
-    }
-    fn log_label(&self) -> &'static str {
-        self.host_id
-    }
-}
-
-impl crate::hosts::hook_dispatch::HostHookDispatcher for NullHostDispatcher {}
 
 /// Closed-set fast path for `pre_tool_use_guard` (no registry disk read).
 pub fn host_provider_strict_pre_tool_fallback_hint(host_id: &str) -> Option<bool> {
@@ -329,10 +297,6 @@ pub fn host_provider_routing_aliases(host_id: &str) -> Vec<String> {
 
 pub fn host_lifecycle_for_id(host_id: &str) -> Option<&'static dyn HostLifecycle> {
     host_provider_for_id(host_id).map(|provider| provider as &dyn HostLifecycle)
-}
-
-pub fn host_tool_executor_for_id(host_id: &str) -> Option<&'static dyn HostToolExecutor> {
-    host_provider_for_id(host_id).map(|provider| provider as &dyn HostToolExecutor)
 }
 
 pub fn host_telemetry_for_id(host_id: &str) -> Option<&'static dyn HostTelemetry> {
@@ -461,13 +425,6 @@ mod tests {
             assert!(
                 !lifecycle.session_supervisor_driver().is_empty(),
                 "{host_id}: supervisor"
-            );
-
-            let tool_exec = host_tool_executor_for_id(host_id)
-                .unwrap_or_else(|| panic!("{host_id}: tool_exec upcast"));
-            assert!(
-                !tool_exec.requires_strict_pre_tool_fallback_default(),
-                "{host_id}: strict_fallback"
             );
 
             let telemetry = host_telemetry_for_id(host_id)

@@ -18,6 +18,8 @@ use mcp_tool_registry::McpToolRecord;
 use std::collections::HashSet;
 
 use crate::routing_logger::log_tool_decision;
+#[cfg(test)]
+use mcp_tool_registry::{DispatchDomain, ToolLayer, ToolOwner};
 
 const DECISION_SCHEMA_VERSION: &str = "1.0.0";
 
@@ -55,7 +57,7 @@ pub fn route_tool_from_records(
     let query_lower = query.to_lowercase();
     let query_tokens = tokenize_text(&query_lower);
 
-    // Step 1-6: score all records (skip no_routing and deprecated)
+    // Step 1-5: score all records (skip no_routing and deprecated)
     let candidates: Vec<ToolCandidate> = records
         .iter()
         .filter(|record| {
@@ -76,7 +78,7 @@ pub fn route_tool_from_records(
         })
         .collect();
 
-    // Step 7: host filtering — exclude host-mismatched records
+    // Step 6: host filtering — exclude host-mismatched records
     let filtered: Vec<ToolCandidate> = if let Some(hid) = host_id {
         let hid_lower = hid.to_lowercase();
         candidates
@@ -107,7 +109,7 @@ pub fn route_tool_from_records(
             score: best.score,
             reasons: best.reasons.clone(),
             matched_token_count: best.matched_token_count,
-            dispatch_domain: best.record.dispatch_domain.clone(),
+            dispatch_domain: best.record.dispatch_domain.to_string(),
             mcp_server: best.record.mcp_server.clone(),
             fuzzy_match: false,
         };
@@ -151,9 +153,9 @@ pub fn route_tool_from_records(
         decision_schema_version: DECISION_SCHEMA_VERSION.to_string(),
         selected_tool: fuzzy_record.slug.clone(),
         score: fuzzy_score,
-        reasons: vec![format!("fuzzy_rescue: trigram similarity {fuzzy_score:.1}")],
+        reasons: vec![format!("fuzzy_rescue: weighted n-gram similarity {fuzzy_score:.1}")],
         matched_token_count: 0,
-        dispatch_domain: fuzzy_record.dispatch_domain.clone(),
+        dispatch_domain: fuzzy_record.dispatch_domain.to_string(),
         mcp_server: fuzzy_record.mcp_server.clone(),
         fuzzy_match: true,
     };
@@ -161,8 +163,8 @@ pub fn route_tool_from_records(
     Some(decision)
 }
 
-/// 7-step scoring pipeline. Steps 1-5 produce the primary score;
-/// step 6 (do-not-use) and step 7 (layer penalty) are applied as adjustments.
+/// 6-step scoring pipeline. Steps 1-5 produce the primary score;
+/// step 6 (layer penalty) is applied as an adjustment.
 /// Step 3 (display_name) was merged into Step 4's alias mechanism to avoid
 /// double-counting — the same alias_tokens were being scored twice.
 pub(crate) fn score_tool(
@@ -192,21 +194,6 @@ pub(crate) fn score_tool(
         .collect();
 
     let alias_tokens: HashSet<String> = tokenize_text(&display_name_lower).into_iter().collect();
-
-    let do_not_use_tokens: HashSet<String> = if record.tool_flags.iter().any(|f| f == "deprecated")
-    {
-        // Only include "deprecated" as the signal keyword — do NOT clone
-        // name_tokens here. Otherwise the tool gets penalized for its OWN
-        // name tokens matching the query, creating a confusing self-penalty
-        // where the same tokens earn positive score (Step 2) and then reduce
-        // it (Step 6). The penalty should only fire when the query explicitly
-        // signals "I want something deprecated".
-        let mut tokens = HashSet::new();
-        tokens.insert("deprecated".to_string());
-        tokens
-    } else {
-        HashSet::new()
-    };
 
     let mut score = 0.0f64;
     let mut reasons = Vec::new();
@@ -245,6 +232,9 @@ pub(crate) fn score_tool(
         .iter()
         .filter(|hint| {
             let hint_lower = hint.to_lowercase();
+            if hint_lower.is_empty() {
+                return false;
+            }
             if is_ascii_word(&hint_lower) {
                 query_tokens.iter().any(|qt| qt == &hint_lower)
             } else {
@@ -309,25 +299,10 @@ pub(crate) fn score_tool(
         matched_token_count += desc_match_count;
     }
 
-    // Step 6: do-not-use penalty (for deprecated tools)
-    if !do_not_use_tokens.is_empty() && score > 0.0 {
-        let base_penalty = weights.do_not_use_penalty_per_hit;
-        let additional_hits: Vec<&str> = query_tokens
-            .iter()
-            .filter(|qt| do_not_use_tokens.contains(qt.as_str()))
-            .map(|s| s.as_str())
-            .collect();
-        let total_penalty =
-            base_penalty + (additional_hits.len() as f64) * weights.do_not_use_penalty_per_hit;
-        let penalty = f64::min(score * weights.do_not_use_penalty_max_ratio, total_penalty);
-        score = f64::max(0.0, score - penalty);
-        reasons.push(format!("do_not_use_penalty:{penalty:.1}"));
-    }
-
-    // Step 7: Layer penalty (from externalized JSON config)
+    // Step 6: Layer penalty (from externalized JSON config)
     let layer_penalty = weights
         .layer_penalties
-        .get(&record.layer)
+        .get(&record.layer.to_string())
         .copied()
         .unwrap_or(0.0);
     if layer_penalty != 0.0 {
@@ -345,15 +320,16 @@ pub(crate) fn score_tool(
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
+    use mcp_tool_registry::{DispatchDomain, ToolLayer, ToolOwner};
 
     fn test_tool_record(slug: &str, keywords: &[&str]) -> McpToolRecord {
         McpToolRecord {
             slug: slug.to_string(),
             display_name: format!("Display {slug}"),
             description: format!("Description for {slug}"),
-            layer: "builtin".to_string(),
-            dispatch_domain: "composite".to_string(),
-            owner: "framework".to_string(),
+            layer: ToolLayer::Builtin,
+            dispatch_domain: DispatchDomain::DomainFramework,
+            owner: ToolOwner::Framework,
             trigger_hints: keywords.iter().map(|s| s.to_string()).collect(),
             host_platforms: vec!["claude".to_string()],
             mcp_server: "router-rs".to_string(),
@@ -452,57 +428,15 @@ mod tests {
     }
 
     #[test]
-    fn score_tool_deprecated_base_penalty_no_keyword() {
-        let weights = tool_scoring_weights();
-        let mut record = test_tool_record("old_tool", &["legacy"]);
-        record.tool_flags = vec!["deprecated".to_string()];
-        record.description = "An old deprecated tool".to_string();
-        // Query does NOT contain "deprecated" — base penalty should still fire.
-        let query_tokens = tokenize_text("old_tool legacy");
-        let (score, reasons, _) = score_tool(&record, "old_tool legacy", &query_tokens, &weights);
-        assert!(score > 0.0, "exact name should still score positively");
-        assert!(
-            reasons.iter().any(|r| r.starts_with("do_not_use_penalty:")),
-            "base do-not-use penalty should fire even without 'deprecated' keyword"
-        );
-    }
-
-    #[test]
-    fn score_tool_do_not_use_penalty() {
-        let weights = tool_scoring_weights();
-        let mut record = test_tool_record("old_tool", &["legacy"]);
-        record.tool_flags = vec!["deprecated".to_string()];
-        record.description = "An old deprecated tool".to_string();
-        // Query contains "deprecated" explicitly — that's the signal that
-        // triggers the do-not-use penalty. Querying the tool name alone no
-        // longer self-penalizes (name_tokens are not cloned into do_not_use_tokens).
-        let query_tokens = tokenize_text("old_tool deprecated");
-        let (score, reasons, _) =
-            score_tool(&record, "old_tool deprecated", &query_tokens, &weights);
-        assert!(score > 0.0, "exact name should still score positively");
-        assert!(
-            reasons.iter().any(|r| r.contains("do_not_use_penalty")),
-            "do-not-use penalty reason should be present when query contains 'deprecated'"
-        );
-        // Without the self-penalty bug, exact name boost (100) is still
-        // dominant. The "deprecated" token adds via keyword matching too.
-        // Verify the penalty did reduce score from the peak though.
-        assert!(
-            reasons.iter().any(|r| r.starts_with("do_not_use_penalty:")),
-            "do_not_use_penalty reason should have a numeric value"
-        );
-    }
-
-    #[test]
     fn score_tool_layer_penalty_external() {
         let weights = tool_scoring_weights();
-        let make_record = |layer: &str| McpToolRecord {
+        let make_record = |layer: ToolLayer| McpToolRecord {
             slug: "ext_tool".to_string(),
             display_name: "Ext Tool".to_string(),
             description: "An external tool".to_string(),
-            layer: layer.to_string(),
-            dispatch_domain: "composite".to_string(),
-            owner: "external".to_string(),
+            layer,
+            dispatch_domain: DispatchDomain::Research,
+            owner: ToolOwner::Research,
             trigger_hints: vec![],
             host_platforms: vec![],
             mcp_server: "ext-server".to_string(),
@@ -511,9 +445,9 @@ mod tests {
         };
         let query_tokens = tokenize_text("ext_tool");
         let (score_builtin, _, _) =
-            score_tool(&make_record("builtin"), "ext_tool", &query_tokens, &weights);
+            score_tool(&make_record(ToolLayer::Builtin), "ext_tool", &query_tokens, &weights);
         let (score_external, reasons, _) = score_tool(
-            &make_record("external"),
+            &make_record(ToolLayer::External),
             "ext_tool",
             &query_tokens,
             &weights,

@@ -537,7 +537,7 @@ fn register_test_hooks() {
         framework_goal_drive: |_| Ok(serde_json::Value::Null),
         handle_orchestrator_operation: |_| Ok(serde_json::Value::Null),
         handle_background_state_operation: |_| Ok(serde_json::Value::Null),
-        runtime_concurrency_defaults_payload: || serde_json::Value::Null,
+        runtime_concurrency_defaults_payload: || Ok(serde_json::Value::Null),
         eval_route_contract: || serde_json::Value::Null,
         run_eval_route: |_, _| Ok(serde_json::Value::Null),
         generated_artifacts_status_for_repo: |_| Ok(String::new()),

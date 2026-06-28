@@ -10,10 +10,16 @@
 
 use std::fs;
 use std::path::PathBuf;
+use std::time::Duration;
 
 use crate::resolve_tool_registry_path;
-use crate::tool_registry::{invalidate_tool_cache, load_tool_records, load_tool_records_cached};
-use crate::tool_types::{McpToolInputSchema, McpToolRecord};
+use crate::tool_registry::{
+    invalidate_tool_cache, invalidate_tool_cache_for_path, load_tool_records,
+    load_tool_records_cached, set_cache_entry_for_test,
+};
+use crate::tool_types::{
+    DispatchDomain, McpToolInputSchema, McpToolRecord, ToolLayer, ToolOwner,
+};
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -32,9 +38,9 @@ fn test_mcp_tool_record_serde_roundtrip() {
         slug: "test_tool".into(),
         display_name: "Test Tool".into(),
         description: "A comprehensive test tool".into(),
-        layer: "builtin".into(),
-        dispatch_domain: "domain:goal".into(),
-        owner: "framework".into(),
+        layer: ToolLayer::Builtin,
+        dispatch_domain: DispatchDomain::DomainGoal,
+        owner: ToolOwner::Framework,
         trigger_hints: vec!["hint1".into(), "hint2".into()],
         host_platforms: vec!["macos".into()],
         mcp_server: "test-server".into(),
@@ -67,6 +73,9 @@ fn test_mcp_tool_record_serde_roundtrip() {
     let deserialized: McpToolRecord = serde_json::from_value(json).unwrap();
     assert_eq!(deserialized.slug, "test_tool");
     assert_eq!(deserialized.display_name, "Test Tool");
+    assert_eq!(deserialized.layer, ToolLayer::Builtin);
+    assert_eq!(deserialized.dispatch_domain, DispatchDomain::DomainGoal);
+    assert_eq!(deserialized.owner, ToolOwner::Framework);
     assert_eq!(deserialized.trigger_hints, vec!["hint1", "hint2"]);
     assert_eq!(deserialized.host_platforms, vec!["macos"]);
     assert_eq!(deserialized.tool_flags, vec!["experimental"]);
@@ -112,6 +121,7 @@ fn test_input_schema_defaults_to_none() {
 
     let record: McpToolRecord = serde_json::from_value(json).unwrap();
     assert!(record.input_schema_json.is_none());
+    assert_eq!(record.layer, ToolLayer::Builtin);
 }
 
 #[test]
@@ -134,6 +144,67 @@ fn test_minimal_record_deserialization() {
     assert!(record.host_platforms.is_empty());
     assert!(record.tool_flags.is_empty());
     assert!(record.input_schema_json.is_none());
+    assert_eq!(record.layer, ToolLayer::Builtin);
+}
+
+#[test]
+fn test_serde_default_for_trigger_hints_and_host_platforms() {
+    // JSON without trigger_hints and host_platforms — should default to empty
+    let json = serde_json::json!({
+        "slug": "no_hints",
+        "display_name": "No Hints",
+        "description": "desc",
+        "layer": "builtin",
+        "dispatch_domain": "domain:goal",
+        "owner": "framework",
+        "mcp_server": "srv"
+    });
+
+    let record: McpToolRecord = serde_json::from_value(json).unwrap();
+    assert!(record.trigger_hints.is_empty());
+    assert!(record.host_platforms.is_empty());
+}
+
+#[test]
+fn test_enum_constrained_fields_reject_invalid_values() {
+    // Invalid layer should fail deserialization
+    let json = serde_json::json!({
+        "slug": "bad",
+        "display_name": "Bad",
+        "description": "desc",
+        "layer": "nonexistent_layer",
+        "dispatch_domain": "domain:goal",
+        "owner": "framework",
+        "trigger_hints": [],
+        "host_platforms": [],
+        "mcp_server": "srv"
+    });
+
+    let err = serde_json::from_value::<McpToolRecord>(json).unwrap_err();
+    let msg = err.to_string();
+    assert!(
+        msg.contains("unknown variant") || msg.contains("nonexistent_layer"),
+        "error message should mention unknown variant: {msg}"
+    );
+}
+
+#[test]
+fn test_enum_as_str_and_display() {
+    assert_eq!(ToolLayer::Builtin.as_str(), "builtin");
+    assert_eq!(ToolLayer::External.to_string(), "external");
+    assert_eq!(DispatchDomain::DomainGoal.as_str(), "domain:goal");
+    assert_eq!(DispatchDomain::Research.to_string(), "research");
+    assert_eq!(ToolOwner::Framework.as_str(), "framework");
+    assert_eq!(ToolOwner::RustTools.to_string(), "rust-tools");
+    assert_eq!(ToolOwner::Paperplain.as_str(), "paperplain");
+}
+
+#[test]
+fn test_partial_eq_str() {
+    assert!(ToolLayer::Builtin == "builtin");
+    assert!(ToolLayer::Research != "builtin");
+    assert!(DispatchDomain::DomainGoal == "domain:goal");
+    assert!(ToolOwner::Framework == "framework");
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -154,6 +225,7 @@ fn test_load_v2_format() {
     assert_eq!(records[0].slug, "tool_a");
     assert_eq!(records[0].display_name, "Tool A");
     assert_eq!(records[0].mcp_server, "server-a");
+    assert_eq!(records[0].layer, ToolLayer::Builtin);
 }
 
 #[test]
@@ -181,9 +253,9 @@ fn test_load_v2_with_full_fields() {
     assert_eq!(records.len(), 1);
     let r = &records[0];
     assert_eq!(r.slug, "full_tool");
-    assert_eq!(r.layer, "external");
-    assert_eq!(r.dispatch_domain, "research");
-    assert_eq!(r.owner, "research-team");
+    assert_eq!(r.layer, ToolLayer::External);
+    assert_eq!(r.dispatch_domain, DispatchDomain::Research);
+    assert_eq!(r.owner, ToolOwner::Paperplain);
     assert_eq!(r.trigger_hints, vec!["hint_a", "hint_b"]);
     assert_eq!(r.host_platforms, vec!["linux", "macos"]);
     assert_eq!(r.tool_flags, vec!["deprecated"]);
@@ -279,6 +351,52 @@ fn test_nonexistent_file_error() {
     assert!(err.to_string().contains("I/O error"), "error: {err}");
 }
 
+// ── MTR-4: Duplicate slug detection ─────────────────────────────────────────
+
+#[test]
+fn test_duplicate_slug_rejected() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("registry.json");
+
+    write_json(&path, JSON_DUPLICATE_SLUG);
+
+    let err = load_tool_records(&path).unwrap_err();
+    assert!(
+        err.to_string().contains("duplicate tool slug"),
+        "error should mention duplicate slug: {err}"
+    );
+}
+
+// ── MTR-8: Input schema validation ─────────────────────────────────────────
+
+#[test]
+fn test_input_schema_bad_type_rejected() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("registry.json");
+
+    write_json(&path, JSON_BAD_SCHEMA_TYPE);
+
+    let err = load_tool_records(&path).unwrap_err();
+    assert!(
+        err.to_string().contains("input_schema type must be 'object'"),
+        "error: {err}"
+    );
+}
+
+#[test]
+fn test_input_schema_missing_required_field_rejected() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("registry.json");
+
+    write_json(&path, JSON_SCHEMA_REQUIRED_NOT_IN_PROPERTIES);
+
+    let err = load_tool_records(&path).unwrap_err();
+    assert!(
+        err.to_string().contains("not found in properties"),
+        "error: {err}"
+    );
+}
+
 // ── Cache behavior ────────────────────────────────────────────────────────────
 
 // NOTE: Caching tests use a global singleton (`static CACHED` in tool_registry.rs).
@@ -354,6 +472,86 @@ fn test_load_tool_records_no_cache_always_reads_disk() {
     assert_eq!(records2.len(), 2);
 }
 
+// ── MTR-3: Per-path cache isolation ─────────────────────────────────────────
+
+#[test]
+fn test_cache_isolation_by_path() {
+    invalidate_tool_cache();
+
+    let dir = tempfile::tempdir().unwrap();
+    let path_a = dir.path().join("reg_a.json");
+    let path_b = dir.path().join("reg_b.json");
+
+    write_json(&path_a, JSON_V2_SINGLE);
+    write_json(&path_b, JSON_V2_MULTIPLE);
+
+    // Load both
+    let a_records = load_tool_records_cached(&path_a).unwrap();
+    let b_records = load_tool_records_cached(&path_b).unwrap();
+    assert_eq!(a_records.len(), 1);
+    assert_eq!(b_records.len(), 2);
+
+    // Modify path_a on disk; path_b's cache should be unaffected
+    write_json(&path_a, JSON_V2_MULTIPLE);
+    invalidate_tool_cache_for_path(&path_a);
+    let a_records = load_tool_records_cached(&path_a).unwrap();
+    assert_eq!(a_records.len(), 2);
+    let b_records = load_tool_records_cached(&path_b).unwrap();
+    assert_eq!(b_records.len(), 2);
+
+    invalidate_tool_cache();
+}
+
+// ── MTR-1: Consecutive cache failure → propagate error ──────────────────────
+
+#[test]
+fn test_cache_reload_failure_eventually_propagates() {
+    invalidate_tool_cache();
+
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("registry.json");
+
+    // Prime the cache by inserting an entry with expired TTL and 0 failures.
+    // The file doesn't exist yet, so the reload will fail.
+    let dummy_record = serde_json::from_value::<McpToolRecord>(serde_json::json!({
+        "slug": "stale",
+        "display_name": "Stale",
+        "description": "stale data",
+        "layer": "builtin",
+        "dispatch_domain": "domain:goal",
+        "owner": "framework",
+        "trigger_hints": [],
+        "host_platforms": [],
+        "mcp_server": "srv"
+    }))
+    .unwrap();
+    set_cache_entry_for_test(
+        path.clone(),
+        vec![dummy_record.clone()],
+        0,                           // consecutive_failures = 0
+        Duration::from_secs(60),      // expired TTL (60s ago)
+    );
+
+    // Now the file doesn't exist; each call tries to reload, fails, and increments the counter.
+    let result = load_tool_records_cached(&path);
+    assert!(result.is_ok(), "first failure should return stale data");
+
+    let result = load_tool_records_cached(&path);
+    assert!(result.is_ok(), "second failure should return stale data");
+
+    let result = load_tool_records_cached(&path);
+    assert!(result.is_ok(), "third failure should return stale data");
+
+    // ...eventually propagate error after MAX_CONSECUTIVE_FAILURES
+    let result = load_tool_records_cached(&path);
+    assert!(
+        result.is_err(),
+        "consecutive failures should eventually propagate error"
+    );
+
+    invalidate_tool_cache();
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // lib tests
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -410,7 +608,7 @@ const JSON_V2_FULL: &str = r#"{
             "description": "A fully populated tool",
             "layer": "external",
             "dispatch_domain": "research",
-            "owner": "research-team",
+            "owner": "paperplain",
             "trigger_hints": ["hint_a", "hint_b"],
             "host_platforms": ["linux", "macos"],
             "mcp_server": "research-server",
@@ -470,5 +668,52 @@ const JSON_CACHE_MODIFIED: &str = r#"{
     "schema_version": "mcp-tool-registry-v2",
     "tools": [
         {"slug": "modified_tool", "display_name": "Modified", "description": "changed", "layer": "builtin", "dispatch_domain": "domain:goal", "owner": "framework", "trigger_hints": [], "host_platforms": [], "mcp_server": "srv"}
+    ]
+}"#;
+
+// MTR-4 fixture: two tools with the same slug
+const JSON_DUPLICATE_SLUG: &str = r#"{
+    "schema_version": "mcp-tool-registry-v2",
+    "tools": [
+        {"slug": "dup", "display_name": "First", "description": "first dup", "layer": "builtin", "dispatch_domain": "domain:goal", "owner": "framework", "trigger_hints": [], "host_platforms": [], "mcp_server": "srv"},
+        {"slug": "dup", "display_name": "Second", "description": "second dup", "layer": "research", "dispatch_domain": "research", "owner": "research", "trigger_hints": [], "host_platforms": [], "mcp_server": "srv2"}
+    ]
+}"#;
+
+// MTR-8 fixture: input_schema with wrong type
+const JSON_BAD_SCHEMA_TYPE: &str = r#"{
+    "schema_version": "mcp-tool-registry-v2",
+    "tools": [
+        {
+            "slug": "bad_schema",
+            "display_name": "Bad Schema",
+            "description": "schema type is not object",
+            "layer": "builtin",
+            "dispatch_domain": "domain:goal",
+            "owner": "framework",
+            "trigger_hints": [],
+            "host_platforms": [],
+            "mcp_server": "srv",
+            "input_schema": {"type": "array", "items": {"type": "string"}}
+        }
+    ]
+}"#;
+
+// MTR-8 fixture: required field not in properties
+const JSON_SCHEMA_REQUIRED_NOT_IN_PROPERTIES: &str = r#"{
+    "schema_version": "mcp-tool-registry-v2",
+    "tools": [
+        {
+            "slug": "missing_req",
+            "display_name": "Missing Req",
+            "description": "required field not in properties",
+            "layer": "builtin",
+            "dispatch_domain": "domain:goal",
+            "owner": "framework",
+            "trigger_hints": [],
+            "host_platforms": [],
+            "mcp_server": "srv",
+            "input_schema": {"type": "object", "properties": {"file": {"type": "string"}}, "required": ["nonexistent_field"]}
+        }
     ]
 }"#;

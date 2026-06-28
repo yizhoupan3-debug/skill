@@ -110,14 +110,9 @@ fn main() {
     }
     out.push('\n');
 
-    // ── HostToolExecutor (empty, all hosts) ──
-    for id in &supported {
-        out.push_str(&format!(
-            "impl HostToolExecutor for {}HostProvider {{}}\n",
-            pascal(id)
-        ));
-    }
-    out.push('\n');
+    // HostToolExecutor removed; its 3 default methods (has_hard_gate_hooks,
+    // closeout_evidence_hooks_supported, requires_strict_pre_tool_fallback_default)
+    // are now default methods on the HostProvider trait in host_provider.rs.
 
     // ── HostLifecycle ──
     for id in &supported {

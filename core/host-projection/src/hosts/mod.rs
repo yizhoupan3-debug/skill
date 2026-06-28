@@ -35,10 +35,10 @@ pub mod test_shim;
 
 pub use host_provider::{
     AgentDispatchFn, HookDispatchFn, HostCapabilities, HostLifecycle, HostProvider, HostTelemetry,
-    HostToolExecutor, find_agent_dispatch, find_hook_dispatch, host_lifecycle_for_id,
+    find_agent_dispatch, find_hook_dispatch, host_lifecycle_for_id,
     host_provider_for_id, host_provider_for_install_tool, host_provider_for_routing_spelling,
     host_provider_registry, host_provider_routing_aliases,
-    host_provider_strict_pre_tool_fallback_hint, host_telemetry_for_id, host_tool_executor_for_id,
+    host_provider_strict_pre_tool_fallback_hint, host_telemetry_for_id,
     register_agent_dispatchers, register_hook_dispatchers,
 };
 

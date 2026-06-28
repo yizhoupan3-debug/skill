@@ -133,7 +133,7 @@ Non-goals: <可选>
 
 ## Continuity 与工件
 
-分层与 hook 以 [`docs/architecture.md`](../../docs/architecture.md) 为准；计划落盘于宿主工作区 plans 目录；宿主 Plan Build **不**自动武装 lifecycle goal 门控，连续执行由用户显式启动。
+分层与 hook 以 [`docs/architecture.md`](../../docs/routing/architecture.md) 为准；计划落盘于宿主工作区 plans 目录；宿主 Plan Build **不**自动武装 lifecycle goal 门控，连续执行由用户显式启动。
 
 ## 宿主差异
 

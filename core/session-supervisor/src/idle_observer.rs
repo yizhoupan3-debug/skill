@@ -50,7 +50,7 @@ pub fn maybe_trigger_idle_observation(
             status: "dry_run".to_string(),
         };
     }
-    // Telemetry removed per v10 Wave 2d — observer-rs no longer spawned.
+    // observer-rs 已移除（v10 Wave 2d），telemetry 跳过。
     let _ = stamp_cooldown(repo_cwd);
     IdleTriggerResult {
         triggered: true,

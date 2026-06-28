@@ -28,8 +28,6 @@ pub(crate) const MAX_QUERY_LEN: usize = 4096;
 
 pub use eval::{evaluate_tool_routing_cases, load_tool_routing_eval_cases};
 pub use routing::{route_tool, route_tool_from_records};
-pub use routing_logger::{
-    init_tool_routing_logger, is_tool_routing_logger_active, log_tool_decision,
-};
+pub use routing_logger::log_tool_decision;
 pub use search::search_tools;
 pub use types::{McpToolDecision, ToolCandidate};

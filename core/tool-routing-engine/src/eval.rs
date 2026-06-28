@@ -22,6 +22,12 @@ const TOOL_ROUTING_EVAL_REPORT_SCHEMA_VERSION: &str = "tool-routing-eval-v1";
 pub fn load_tool_routing_eval_cases(
     path: &Path,
 ) -> Result<ToolRoutingEvalCasesPayload, FrameworkError> {
+    if !path.exists() {
+        return Err(FrameworkError::not_found(format!(
+            "tool routing eval file not found: {}",
+            path.display()
+        )));
+    }
     let payload = read_json_strict(path)
         .map_err(|e| FrameworkError::registry(format!("failed reading {}: {e}", path.display())))?;
     let cases = serde_json::from_value::<ToolRoutingEvalCasesPayload>(payload).map_err(|err| {
@@ -82,7 +88,7 @@ pub fn evaluate_tool_routing_cases(
             let tool_correct =
                 if !tool_correct_raw && expected_tool.is_none() && category == "should-not-trigger"
                 {
-                    true
+                    selected_tool.is_none()
                 } else {
                     tool_correct_raw
                 };

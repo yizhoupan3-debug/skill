@@ -22,9 +22,20 @@ pub fn discover_skill_md_slugs(skills_root: &Path) -> Result<BTreeSet<String>> {
 }
 
 fn walk_skill_md(dir: &Path, slugs: &mut BTreeSet<String>) -> Result<()> {
-    for entry in fs::read_dir(dir)? {
-        let entry = entry?;
+    // SL-11: handle unreadable directories gracefully
+    let entries = match fs::read_dir(dir) {
+        Ok(e) => e,
+        Err(e) => {
+            tracing::warn!("cannot read directory {}: {e}", dir.display());
+            return Ok(());
+        }
+    };
+    for entry in entries.flatten() {
         let path = entry.path();
+        // SL-10: skip symbolic links (path traversal risk)
+        if path.is_symlink() {
+            continue;
+        }
         if path.is_dir() {
             // Skip hidden directories
             if let Some(name) = path.file_name().and_then(|n| n.to_str())
@@ -33,10 +44,13 @@ fn walk_skill_md(dir: &Path, slugs: &mut BTreeSet<String>) -> Result<()> {
                 continue;
             }
             walk_skill_md(&path, slugs)?;
-        } else if path.file_name().and_then(|s| s.to_str()) == Some("SKILL.md")
-            && let Some(name) = parse_skill_name_from_path(&path)?
-        {
-            slugs.insert(name);
+        } else if path.file_name().and_then(|s| s.to_str()) == Some("SKILL.md") {
+            // SL-8: derive slug from directory name, not frontmatter name
+            if let Some(parent) = path.parent() {
+                if let Some(slug) = parent.file_name().and_then(|n| n.to_str()) {
+                    slugs.insert(slug.to_string());
+                }
+            }
         }
     }
     Ok(())

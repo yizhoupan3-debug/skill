@@ -19,7 +19,7 @@ depends_on:
 | 健康检查 | `cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework doctor --repo-root "$PWD"` |
 | 宿主集成状态 | `framework host-integration status` |
 | 构建 release | `CARGO_TARGET_DIR="$PWD/core/router-rs/target" cargo build --release --manifest-path core/router-rs/Cargo.toml` |
-| 全量测试（常用三 crate） | `cargo test -p router-rs -p codegraph-rs -p observer-rs` |
+| 全量测试（常用二 crate） | `cargo test -p router-rs -p codegraph-rs` |
 | SSRF 防护回归 | `cargo test --manifest-path core/router-rs/Cargo.toml -- web_fetch_guard` |
 
 ---
@@ -78,16 +78,9 @@ cargo run --release --manifest-path core/router-rs/Cargo.toml --features codegra
 
 排障：工具不可用 → 确认 `--features codegraph` 构建；索引空 → 跑 sync + watcher。
 
-### B11 — observatory-engine
+### B11 — observatory-engine（已移除）
 
-遥测观测离线分析（`tools/observer-rs/`），零 crate 依赖，mmap 读取遥测 JSONL。
-
-```bash
-cargo run --manifest-path tools/observer-rs/Cargo.toml -- analyze --help
-cargo run --manifest-path tools/observer-rs/Cargo.toml -- audit --config configs/observer/observer.toml
-```
-
-排障：找不到 journal → 确认 `artifacts/telemetry/` 目录；idle analyze 未触发 → 检查仍有 running worker。
+遥测观测离线分析工具 `tools/observer-rs` 已在 v10 重构中移除。遥测核心逻辑已迁移至 `router-rs-framework` MCP 工具的 `session_checkpoint` + `record_evidence`。
 
 ---
 

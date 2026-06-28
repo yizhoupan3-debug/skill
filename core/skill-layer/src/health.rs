@@ -3,7 +3,7 @@
 use crate::constants;
 use core_errors::FrameworkError;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -38,7 +38,7 @@ struct HealthManifest {
 // ---------------------------------------------------------------------------
 
 /// Read the existing health manifest (if any) and update it with fresh
-/// timestamps.  If no observer-rs output is available, preserves existing
+/// timestamps.  Preserves existing scores and updates the `generated_at`
 /// scores and updates the `generated_at` timestamp.
 ///
 /// `repo_root` is the project root (parent of `skills/`).
@@ -55,7 +55,8 @@ pub fn generate_health_manifest(repo_root: &Path) -> Result<()> {
         }
     }
 
-    // Scan skill directories — any skill not yet in the manifest gets a default entry
+    // Scan skill directories — track found slugs so we can prune deleted skills
+    let mut found_slugs = HashSet::new();
     if let Ok(entries) = fs::read_dir(skills_root) {
         for entry in entries.flatten() {
             let path = entry.path();
@@ -67,6 +68,11 @@ pub fn generate_health_manifest(repo_root: &Path) -> Result<()> {
                         .and_then(|n| n.to_str())
                         .unwrap_or_default()
                         .to_string();
+                    // SL-3: skip empty slugs (non-UTF8 directory names)
+                    if slug.is_empty() {
+                        continue;
+                    }
+                    found_slugs.insert(slug.clone());
                     skills.entry(slug).or_insert_with(|| HealthEntry {
                         blended_score: 0.0,
                         status: "Unknown".into(),
@@ -77,6 +83,9 @@ pub fn generate_health_manifest(repo_root: &Path) -> Result<()> {
             }
         }
     }
+
+    // SL-2: remove entries for skills that no longer exist on disk
+    skills.retain(|k, _| found_slugs.contains(k));
 
     let manifest = HealthManifest {
         schema_version: constants::SCHEMA_HEALTH.to_string(),
@@ -114,7 +123,11 @@ fn utc_now() -> String {
     // Approximate year/month/day from days since epoch
     let mut y = 1970u64;
     let mut remaining = days;
+    const MAX_YEAR: u64 = 2099;
     loop {
+        if y > MAX_YEAR {
+            break;
+        }
         let days_in_year = if is_leap(y) { 366 } else { 365 };
         if remaining < days_in_year {
             break;

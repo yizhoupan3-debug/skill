@@ -42,6 +42,29 @@ pub(crate) fn tool_task_create(
         // Idempotent: if task directory already has a TASK_LEDGER.jsonl, skip creation.
         let ledger_path = task_dir.join("TASK_LEDGER.jsonl");
         if ledger_path.is_file() {
+            // HPM-18: check title consistency on idempotent create
+            let pointers_path = repo_root_owned.join("artifacts/current/TASK_POINTERS.json");
+            if let Ok(pointers_raw) = std::fs::read_to_string(&pointers_path) {
+                if let Ok(pointers_val) = serde_json::from_str::<Value>(&pointers_raw) {
+                    if let Some(tasks) = pointers_val.get("tasks").and_then(Value::as_array) {
+                        let existing_title = tasks.iter().find_map(|t| {
+                            if t.get("task_id").and_then(Value::as_str) == Some(task_id) {
+                                t.get("label").and_then(Value::as_str)
+                            } else {
+                                None
+                            }
+                        });
+                        if let Some(existing) = existing_title {
+                            if existing != title {
+                                tracing::warn!(
+                                    "task_create: idempotent call with different title \
+                                     for {task_id}: existing='{existing}' new='{title}'; ignoring new title"
+                                );
+                            }
+                        }
+                    }
+                }
+            }
             return Ok(false);
         }
 
@@ -202,10 +225,10 @@ pub(crate) fn tool_task_complete(
     // No GOAL_STATE → evidence check + pointer neutralization + ledger
     let transition_v = validate_transition(repo_root, &task_id, TaskTransition::Complete);
     if !transition_v.passed {
-        return Err(format!(
+        return Err(FrameworkError::validation(format!(
             "task_complete blocked by evidence gate: {}",
             transition_v.reason
-        ));
+        )).to_string());
     }
     apply_task_ledger_mutation(repo_root, || {
         core_state::state_manager::neutralize_task_pointers_for_task(

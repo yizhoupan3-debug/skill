@@ -269,7 +269,7 @@ fn handle_tools_call(params: &Value, runtime: &mut BrowserRuntime) -> Result<Val
         "browser_restore_session" => runtime.restore_session(&arguments),
         "browser_diagnostics" => runtime.diagnostics(&arguments),
         _ => Err(browser_error(
-            "INVALID_INPUT",
+            "UNKNOWN_TOOL",
             &format!("Unknown tool name: {tool_name}"),
             &["call tools/list to inspect available browser tools"],
             true,

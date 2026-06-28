@@ -122,7 +122,6 @@ MCP 工具注册表、工具路由、框架内建工具实现、独立 MCP 服�
 | `rust_tools/pdf_tool_rs` | PDF 读取/提取 |
 | `rust_tools/pptx_tool_rs` | PowerPoint 生成/分析 |
 | `tools/browser-mcp` | 浏览器自动化 MCP 服务器 |
-| `tools/observer-rs` | 健康审计 + 更新 |
 
 **框架内建工具**（在运行层实现，通过工具层注册暴露）：
 

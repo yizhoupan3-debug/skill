@@ -184,5 +184,5 @@ Before finishing, verify:
 ## Exit Criteria
 
 - MANIFEST/RUNTIME 已同步（framework skills validate 通过）
-- 路由测试通过（cargo test --test routing_tests）
+- 路由测试通过（cargo test --test main_tests routing_tests）
 - 新增/修改的 skill 可被路由命中

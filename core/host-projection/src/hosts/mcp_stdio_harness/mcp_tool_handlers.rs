@@ -1,4 +1,5 @@
 use super::*;
+use core_errors::FrameworkError;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -18,7 +19,7 @@ pub trait ToolHandler: Send + Sync {
         tool_name: &str,
         args: &Value,
         ctx: &ToolCallContext,
-    ) -> Result<String, String>;
+    ) -> Result<String, FrameworkError>;
 }
 
 /// Composite registry that chains multiple ToolHandler implementations.
@@ -58,11 +59,11 @@ impl CompositeRegistry {
         tool_name: &str,
         args: &Value,
         ctx: &ToolCallContext,
-    ) -> Result<String, String> {
+    ) -> Result<String, FrameworkError> {
         if let Some(&idx) = self.name_to_handler.get(tool_name) {
             self.handlers[idx].dispatch(tool_name, args, ctx)
         } else {
-            Err(format!("Unknown tool: {tool_name}"))
+            Err(FrameworkError::not_found(format!("Unknown tool: {tool_name}")))
         }
     }
 }
@@ -86,13 +87,13 @@ impl ToolHandler for RoutingTools {
         tool_name: &str,
         args: &Value,
         ctx: &ToolCallContext,
-    ) -> Result<String, String> {
+    ) -> Result<String, FrameworkError> {
         match tool_name {
-            "skill_route" => tool_skill_route(args, &ctx.repo_root, &ctx.host_id),
-            "skill_search" => tool_skill_search(args, &ctx.repo_root, &ctx.host_id),
-            "skill_read" => tool_skill_read(args, &ctx.repo_root),
-            "skill_route_status" => tool_skill_route_status(&ctx.repo_root),
-            _ => Err(format!("RoutingTools: unknown tool: {tool_name}")),
+            "skill_route" => tool_skill_route(args, &ctx.repo_root, &ctx.host_id).map_err(Into::into),
+            "skill_search" => tool_skill_search(args, &ctx.repo_root, &ctx.host_id).map_err(Into::into),
+            "skill_read" => tool_skill_read(args, &ctx.repo_root).map_err(Into::into),
+            "skill_route_status" => tool_skill_route_status(&ctx.repo_root).map_err(Into::into),
+            _ => Err(FrameworkError::not_found(format!("RoutingTools: unknown tool: {tool_name}"))),
         }
     }
 }
@@ -111,13 +112,13 @@ impl ToolHandler for GoalTools {
         tool_name: &str,
         args: &Value,
         ctx: &ToolCallContext,
-    ) -> Result<String, String> {
+    ) -> Result<String, FrameworkError> {
         match tool_name {
-            "goal_state_read" => tool_goal_state_read(args, &ctx.repo_root),
+            "goal_state_read" => tool_goal_state_read(args, &ctx.repo_root).map_err(Into::into),
             "goal_state_manage" => {
-                tool_goal_state_manage(args, &ctx.repo_root, &ctx.connection_session_id)
+                tool_goal_state_manage(args, &ctx.repo_root, &ctx.connection_session_id).map_err(Into::into)
             }
-            _ => Err(format!("GoalTools: unknown tool: {tool_name}")),
+            _ => Err(FrameworkError::not_found(format!("GoalTools: unknown tool: {tool_name}"))),
         }
     }
 }
@@ -136,13 +137,13 @@ impl ToolHandler for CloseoutTools {
         tool_name: &str,
         args: &Value,
         ctx: &ToolCallContext,
-    ) -> Result<String, String> {
+    ) -> Result<String, FrameworkError> {
         match tool_name {
-            "closeout_gate" => tool_closeout_gate(args, &ctx.repo_root, &ctx.host_id),
+            "closeout_gate" => tool_closeout_gate(args, &ctx.repo_root, &ctx.host_id).map_err(Into::into),
             "closeout_record_write" => {
-                tool_closeout_record_write(args, &ctx.repo_root, &ctx.host_id)
+                tool_closeout_record_write(args, &ctx.repo_root, &ctx.host_id).map_err(Into::into)
             }
-            _ => Err(format!("CloseoutTools: unknown tool: {tool_name}")),
+            _ => Err(FrameworkError::not_found(format!("CloseoutTools: unknown tool: {tool_name}"))),
         }
     }
 }
@@ -161,11 +162,11 @@ impl ToolHandler for FrameworkTools {
         tool_name: &str,
         args: &Value,
         ctx: &ToolCallContext,
-    ) -> Result<String, String> {
+    ) -> Result<String, FrameworkError> {
         match tool_name {
-            "record_evidence" => tool_record_evidence(args, &ctx.repo_root),
-            "session_checkpoint" => tool_session_checkpoint(args, &ctx.repo_root),
-            _ => Err(format!("FrameworkTools: unknown tool: {tool_name}")),
+            "record_evidence" => tool_record_evidence(args, &ctx.repo_root).map_err(Into::into),
+            "session_checkpoint" => tool_session_checkpoint(args, &ctx.repo_root).map_err(Into::into),
+            _ => Err(FrameworkError::not_found(format!("FrameworkTools: unknown tool: {tool_name}"))),
         }
     }
 }
@@ -184,12 +185,12 @@ impl ToolHandler for ToolDomainTools {
         tool_name: &str,
         args: &Value,
         ctx: &ToolCallContext,
-    ) -> Result<String, String> {
+    ) -> Result<String, FrameworkError> {
         match tool_name {
-            "route_tool" => tool_route_tool(args, &ctx.repo_root, &ctx.host_id),
-            "search_tools" => tool_search_tools(args, &ctx.repo_root, &ctx.host_id),
-            "tool_registry_status" => tool_registry_status(),
-            _ => Err(format!("ToolDomainTools: unknown tool: {tool_name}")),
+            "route_tool" => tool_route_tool(args, &ctx.repo_root, &ctx.host_id).map_err(Into::into),
+            "search_tools" => tool_search_tools(args, &ctx.repo_root, &ctx.host_id).map_err(Into::into),
+            "tool_registry_status" => tool_registry_status().map_err(Into::into),
+            _ => Err(FrameworkError::not_found(format!("ToolDomainTools: unknown tool: {tool_name}"))),
         }
     }
 }
@@ -214,14 +215,14 @@ impl ToolHandler for TaskCrudTools {
         tool_name: &str,
         args: &Value,
         ctx: &ToolCallContext,
-    ) -> Result<String, String> {
+    ) -> Result<String, FrameworkError> {
         match tool_name {
             "task_create" => Ok(tool_task_create(args, &ctx.repo_root)?),
             "task_list" => Ok(tool_task_list(&ctx.repo_root)?),
             "task_complete" => Ok(tool_task_complete(args, &ctx.repo_root)?),
             "task_focus" => Ok(tool_task_focus(args, &ctx.repo_root)?),
             "task_chain_advance" => Ok(tool_task_chain_advance(args, &ctx.repo_root)?),
-            _ => Err(format!("TaskCrudTools: unknown tool: {tool_name}")),
+            _ => Err(FrameworkError::not_found(format!("TaskCrudTools: unknown tool: {tool_name}"))),
         }
     }
 }
@@ -262,8 +263,9 @@ impl ToolHandler for OrchestratorTools {
         tool_name: &str,
         args: &Value,
         ctx: &ToolCallContext,
-    ) -> Result<String, String> {
-        let operation = orchestrator_operation_for_tool(tool_name)?;
+    ) -> Result<String, FrameworkError> {
+        let operation = orchestrator_operation_for_tool(tool_name)
+            .map_err(FrameworkError::validation)?;
         let mut payload = args.clone();
         payload["operation"] = json!(operation);
         payload["state_path"] = json!(format!(
@@ -271,11 +273,9 @@ impl ToolHandler for OrchestratorTools {
             ctx.repo_root.display()
         ));
         let hooks = framework_kernel::runtime_hooks::try_hooks()
-            .ok_or_else(|| "runtime hooks not registered".to_string())?;
-        let result =
-            hooks.handle_orchestrator_operation(payload)
-                .map_err(|e| e.to_string())?;
-        serde_json::to_string_pretty(&result).map_err(|e| e.to_string())
+            .ok_or_else(|| FrameworkError::config("runtime hooks not registered"))?;
+        let result = hooks.handle_orchestrator_operation(payload)?;
+        serde_json::to_string_pretty(&result).map_err(FrameworkError::Json)
     }
 }
 
@@ -305,7 +305,7 @@ const ORCH_OP_WORKER_LAUNCH: &str = "launch";
 const ORCH_OP_WORKER_LIST: &str = "list";
 const ORCH_OP_WORKER_TERMINATE: &str = "terminate";
 
-fn orchestrator_operation_for_tool(tool_name: &str) -> Result<&'static str, String> {
+fn orchestrator_operation_for_tool(tool_name: &str) -> Result<&'static str, FrameworkError> {
     match tool_name {
         "orchestrator_team_create" => Ok(ORCH_OP_TEAM_CREATE),
         "orchestrator_team_add_member" => Ok(ORCH_OP_TEAM_ADD_MEMBER),
@@ -321,7 +321,7 @@ fn orchestrator_operation_for_tool(tool_name: &str) -> Result<&'static str, Stri
         "orchestrator_worker_launch" => Ok(ORCH_OP_WORKER_LAUNCH),
         "orchestrator_worker_list" => Ok(ORCH_OP_WORKER_LIST),
         "orchestrator_worker_terminate" => Ok(ORCH_OP_WORKER_TERMINATE),
-        _ => Err(format!("OrchestratorTools: unknown tool: {tool_name}")),
+        _ => Err(FrameworkError::unsupported(format!("OrchestratorTools: unknown tool: {tool_name}"))),
     }
 }
 

@@ -27,8 +27,7 @@ pub mod runtime_hooks;
 pub use json_value::*;
 pub use time::current_local_timestamp;
 pub use tokenizer::{
-    TokenizerProvider, has_parallel_review_candidate_context, install_tokenizer_provider,
-    tokenize_query,
+    TokenizerProvider, install_tokenizer_provider, tokenize_query,
 };
 
 #[cfg(test)]

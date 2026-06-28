@@ -1,16 +1,16 @@
 #[cfg(test)]
 mod routing_integration_tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
-    use mcp_tool_registry::McpToolRecord;
+    use mcp_tool_registry::{DispatchDomain, McpToolRecord, ToolLayer, ToolOwner};
 
     fn test_record(slug: &str, display_name: &str, keywords: &[&str]) -> McpToolRecord {
         McpToolRecord {
             slug: slug.to_string(),
             display_name: display_name.to_string(),
             description: format!("Tool: {display_name}"),
-            layer: "builtin".to_string(),
-            dispatch_domain: "composite".to_string(),
-            owner: "framework".to_string(),
+            layer: ToolLayer::Builtin,
+            dispatch_domain: DispatchDomain::DomainFramework,
+            owner: ToolOwner::Framework,
             trigger_hints: keywords.iter().map(|s| s.to_string()).collect(),
             host_platforms: vec!["claude".to_string()],
             mcp_server: "router-rs".to_string(),
@@ -124,6 +124,55 @@ mod routing_integration_tests {
         let d = decision.unwrap();
         assert!(d.fuzzy_match, "should be flagged as fuzzy match");
         assert_eq!(d.selected_tool, "browser-screenshot");
+    }
+
+    #[test]
+    fn route_tie_breaking() {
+        let records = vec![
+            test_record("tool-alpha", "Tool Alpha", &["search"]),
+            test_record("tool-beta", "Tool Beta", &["search"]),
+        ];
+        let decision =
+            tool_routing_engine::routing::route_tool_from_records("search", &records, None);
+        assert!(decision.is_some(), "tie should still return a result");
+    }
+
+    #[test]
+    fn route_emoji_or_punctuation_query() {
+        let records = make_records();
+        let decision =
+            tool_routing_engine::routing::route_tool_from_records("😊", &records, None);
+        assert!(decision.is_none(), "emoji-only query should not match");
+        let decision2 =
+            tool_routing_engine::routing::route_tool_from_records("!@#$%^&*", &records, None);
+        assert!(decision2.is_none(), "punctuation-only query should not match");
+    }
+
+    #[test]
+    fn route_empty_trigger_hint_string_does_not_match_all() {
+        let records = vec![test_record("empty-hints", "Empty Hints", &[""])];
+        let decision = tool_routing_engine::routing::route_tool_from_records(
+            "something totally unrelated",
+            &records,
+            None,
+        );
+        assert!(decision.is_none(), "empty hint string should not match anything");
+    }
+
+    #[test]
+    fn search_top_k_overflow() {
+        let records = make_records();
+        let results =
+            tool_routing_engine::search::search_tools("pdf", &records, 9999, None);
+        assert!(!results.is_empty(), "should still return results");
+        assert!(
+            results.len() <= 100,
+            "top_k should be clamped to MAX_TOP_K"
+        );
+        assert!(
+            results.len() <= records.len(),
+            "results should not exceed total record count"
+        );
     }
 
     #[test]

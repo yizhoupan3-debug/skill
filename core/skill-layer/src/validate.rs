@@ -66,10 +66,11 @@ pub fn validate_skill_name(name: &str) -> Result<(), FrameworkError> {
 /// Checks:
 /// 1. Runtime JSON file exists
 /// 2. Every skill_path in runtime points to an existing file
-/// 3. Every on-disk SKILL.md passes frontmatter schema validation
-/// 4. Frontmatter name matches slug
-/// 5. Optional generated files exist (as warnings)
-/// 6. Disk vs runtime slug cross-reference
+/// 3. Disk slug discovery
+/// 4. Frontmatter schema validation (includes name-vs-slug consistency)
+/// 5. Disk vs runtime slug cross-reference
+/// 6. Optional generated files exist (as warnings)
+/// 7. Frontmatter <--> registry consistency check
 pub fn validate_all(repo_root: &Path) -> Result<ValidationReport, FrameworkError> {
     let skills_root = paths::skills_root(repo_root);
     let runtime_path = paths::runtime_json(repo_root);
@@ -97,40 +98,66 @@ pub fn validate_all(repo_root: &Path) -> Result<ValidationReport, FrameworkError
     let disk_set: HashSet<&String> = disk_slugs.iter().collect();
     let runtime_slugs: HashSet<String> = columnar::extract_slugs(&runtime).into_iter().collect();
 
-    // 5. Frontmatter schema validation
+    // 4. Frontmatter schema validation
+    const MAX_SKILL_MD_SIZE: u64 = 10 * 1024 * 1024; // 10 MiB
+    // Build frontmatter map to avoid double I/O (used by check_frontmatter_vs_registry)
+    let mut frontmatter_map: HashMap<String, crate::frontmatter::SkillFrontmatter> = HashMap::new();
+    let mut raw_skill_md_text: HashMap<String, String> = HashMap::new();
     for slug in &disk_slugs {
         let path = paths::skill_md(repo_root, slug);
+        // SL-9: pre-check file size to prevent OOM
+        match fs::metadata(&path) {
+            Ok(meta) if meta.len() > MAX_SKILL_MD_SIZE => {
+                errors.push(format!(
+                    "{slug}: SKILL.md exceeds size limit ({} bytes, max {MAX_SKILL_MD_SIZE})",
+                    meta.len()
+                ));
+                continue;
+            }
+            _ => {}
+        }
         match fs::read_to_string(&path) {
-            Ok(text) => match frontmatter_parser::parse_and_validate(&text) {
-                Ok((fm, fm_warnings)) => {
-                    for w in fm_warnings {
-                        warnings.push(format!("{slug}: {w}"));
+            Ok(text) => {
+                raw_skill_md_text.insert(slug.clone(), text.clone());
+                match frontmatter_parser::parse_and_validate(&text) {
+                    Ok((fm, fm_warnings)) => {
+                        frontmatter_map.insert(slug.clone(), fm.clone());
+                        for w in fm_warnings {
+                            warnings.push(format!("{slug}: {w}"));
+                        }
+                        // Framework_command conventions
+                        if fm.kind == Some(RecordKind::FrameworkCommand) {
+                            if fm.routing_gate != RoutingGate::None {
+                                errors.push(format!(
+                                    "{slug}: framework_command must have `routing_gate: none`, got `{:?}`",
+                                    fm.routing_gate
+                                ));
+                            }
+                            if fm.routing_owner != RoutingOwner::Owner {
+                                errors.push(format!(
+                                    "{slug}: framework_command must have `routing_owner: owner`, got `{:?}`",
+                                    fm.routing_owner
+                                ));
+                            }
+                            if !fm.trigger_hints.iter().any(|h| h.starts_with('/')) {
+                                warnings.push(format!(
+                                    "{slug}: framework_command should have at least one `/`-prefixed trigger_hint"
+                                ));
+                            }
+                        }
+                        // SL-4: name-vs-slug consistency (check 5)
+                        if fm.name != slug.as_str() {
+                            errors.push(format!(
+                                "{slug}: frontmatter name `{}` does not match directory slug",
+                                fm.name
+                            ));
+                        }
                     }
-                    // Framework_command conventions
-                    if fm.kind == Some(RecordKind::FrameworkCommand) {
-                        if fm.routing_gate != RoutingGate::None {
-                            errors.push(format!(
-                                "{slug}: framework_command must have `routing_gate: none`, got `{:?}`",
-                                fm.routing_gate
-                            ));
-                        }
-                        if fm.routing_owner != RoutingOwner::Owner {
-                            errors.push(format!(
-                                "{slug}: framework_command must have `routing_owner: owner`, got `{:?}`",
-                                fm.routing_owner
-                            ));
-                        }
-                        if !fm.trigger_hints.iter().any(|h| h.starts_with('/')) {
-                            warnings.push(format!(
-                                "{slug}: framework_command should have at least one `/`-prefixed trigger_hint"
-                            ));
-                        }
+                    Err(e) => {
+                        errors.push(format!("frontmatter: {slug}: {e}"));
                     }
                 }
-                Err(e) => {
-                    errors.push(format!("frontmatter: {slug}: {e}"));
-                }
-            },
+            }
             Err(e) => {
                 errors.push(format!("frontmatter: {slug}: cannot read SKILL.md: {e}"));
             }
@@ -161,8 +188,14 @@ pub fn validate_all(repo_root: &Path) -> Result<ValidationReport, FrameworkError
         }
     }
 
-    // 8. Frontmatter ←→ registry consistency check
-    if let Err(e) = check_frontmatter_vs_registry(repo_root, &mut errors, &mut warnings) {
+    // 8. Frontmatter ←→ registry consistency check (using pre-parsed frontmatter)
+    if let Err(e) = check_frontmatter_vs_registry(
+        repo_root,
+        &frontmatter_map,
+        &raw_skill_md_text,
+        &mut errors,
+        &mut warnings,
+    ) {
         warnings.push(format!("registry consistency check: {e}"));
     }
 
@@ -202,6 +235,11 @@ fn collect_missing_skill_paths(
     for row in rows {
         let rel = path_idx.and_then(|i| row.get(i)).and_then(|v| v.as_str());
         if let Some(rel) = rel {
+            // SL-1: reject absolute paths (Path::join replaces base for absolute paths)
+            if std::path::Path::new(rel).is_absolute() {
+                errors.push(format!("{label}: absolute skill_path not allowed: {rel}"));
+                continue;
+            }
             let full = repo_root.join(rel);
             if !full.is_file() {
                 errors.push(format!("{label}: missing skill_path file {rel}"));
@@ -216,6 +254,8 @@ fn collect_missing_skill_paths(
 
 /// Check that every SKILL.md frontmatter field matches the registry.
 ///
+/// Uses pre-parsed frontmatter maps from validate_all to avoid double I/O.
+///
 /// After Phase 3 (generate), the registry is the source of truth for all
 /// routing metadata.  This function detects:
 ///
@@ -225,6 +265,8 @@ fn collect_missing_skill_paths(
 /// 4. **Null registry** — frontmatter has a value but registry is null → warning.
 fn check_frontmatter_vs_registry(
     repo_root: &Path,
+    frontmatter_map: &HashMap<String, crate::frontmatter::SkillFrontmatter>,
+    raw_text_map: &HashMap<String, String>,
     errors: &mut Vec<String>,
     warnings: &mut Vec<String>,
 ) -> Result<(), FrameworkError> {
@@ -272,49 +314,45 @@ fn check_frontmatter_vs_registry(
             continue;
         };
 
-        let skill_md_path = paths::skill_md(repo_root, slug);
-        let text = match fs::read_to_string(&skill_md_path) {
-            Ok(t) => t,
-            Err(_) => continue,
+        // Use pre-parsed frontmatter (already validated by validate_all)
+        // to avoid re-reading and re-parsing SKILL.md.
+        let Some(fm) = frontmatter_map.get(slug) else {
+            continue; // SKILL.md had parse errors — already reported
         };
 
-        let fm_block = match frontmatter_parser::extract_frontmatter_block(&text) {
-            Some(b) => b,
-            None => continue,
-        };
-
-        let fm_value: Value = match serde_yml::from_str(fm_block) {
-            Ok(v) => v,
-            Err(_) => continue,
-        };
-
-        let Some(fm_map) = fm_value.as_object() else {
-            continue;
-        };
-
-        // 1. Orphan detection — frontmatter field has no registry column
-        for yaml_key in fm_map.keys() {
-            if !known_yaml_keys.contains(yaml_key.as_str()) {
-                warnings.push(format!(
-                    "{slug}: orphan frontmatter field `{yaml_key}` not in registry schema"
-                ));
+        // Orphan detection: extract raw YAML keys from cached text
+        if let Some(raw_text) = raw_text_map.get(slug) {
+            if let Some(fm_block) = frontmatter_parser::extract_frontmatter_block(raw_text) {
+                if let Ok(fm_value) = serde_yml::from_str::<Value>(fm_block) {
+                    if let Some(fm_map) = fm_value.as_object() {
+                        for yaml_key in fm_map.keys() {
+                            if !known_yaml_keys.contains(yaml_key.as_str()) {
+                                warnings.push(format!(
+                                    "{slug}: orphan frontmatter field `{yaml_key}` not in registry schema"
+                                ));
+                            }
+                        }
+                    }
+                }
             }
         }
 
-        // 2. Field-by-field comparison
+        // 2. Field-by-field comparison using strong-typed frontmatter
         for &(registry_col, yaml_key) in FRONTMATTER_KEYS {
             if registry_col == "slug" {
                 continue; // slug→name mapping is validated by frontmatter schema
             }
 
             let reg_val = col_idx.get(registry_col).and_then(|&idx| row_arr.get(idx));
-            let fm_val = fm_map.get(yaml_key);
+
+            // Convert strong-typed frontmatter field to JSON Value for comparison
+            let fm_val = frontmatter_field_to_value(fm, yaml_key);
 
             match (reg_val, fm_val) {
                 // Both non-null and different → value mismatch
-                (Some(reg), Some(fm)) if !reg.is_null() && reg != fm => {
+                (Some(reg), Some(fm_v)) if !reg.is_null() && reg != &fm_v => {
                     errors.push(format!(
-                        "{slug}: registry `{registry_col}` ≠ frontmatter `{yaml_key}` — registry={reg}, frontmatter={fm}",
+                        "{slug}: registry `{registry_col}` ≠ frontmatter `{yaml_key}` — registry={reg}, frontmatter={fm_v}",
                     ));
                 }
                 // Registry has non-null, non-empty value, frontmatter missing
@@ -324,7 +362,7 @@ fn check_frontmatter_vs_registry(
                     ));
                 }
                 // Registry is null/None, frontmatter has value → run backfill
-                (Some(reg), Some(fm)) if reg.is_null() && !is_empty_value(fm) => {
+                (Some(reg), Some(fm_v)) if reg.is_null() && !is_empty_value(&fm_v) => {
                     warnings.push(format!(
                         "{slug}: frontmatter `{yaml_key}` populated but registry `{registry_col}` is null — run `backfill`",
                     ));
@@ -335,6 +373,47 @@ fn check_frontmatter_vs_registry(
     }
 
     Ok(())
+}
+
+/// Convert a SkillFrontmatter field to its registry JSON Value representation.
+fn frontmatter_field_to_value(
+    fm: &crate::frontmatter::SkillFrontmatter,
+    yaml_key: &str,
+) -> Option<Value> {
+    match yaml_key {
+        "name" => Some(Value::String(fm.name.clone())),
+        "description" => Some(Value::String(fm.description.clone())),
+        "routing_layer" => Some(Value::String(fm.layer_str().to_string())),
+        "routing_owner" => Some(Value::String(format!("{:?}", fm.routing_owner).to_lowercase())),
+        "routing_gate" => Some(Value::String(format!("{:?}", fm.routing_gate).to_lowercase())),
+        "routing_priority" => Some(Value::String(format!("{:?}", fm.routing_priority))),
+        "session_start" => match fm.session_start {
+            crate::frontmatter::SessionStart::NA => Some(Value::String("n/a".into())),
+            _ => Some(Value::String(format!("{:?}", fm.session_start).to_lowercase())),
+        },
+        "trigger_hints" => Some(Value::Array(
+            fm.trigger_hints.iter().map(|s| Value::String(s.clone())).collect()
+        )),
+        "short_description" => fm.short_description.as_ref().map(|s| Value::String(s.clone())),
+        "risk" => fm.risk.as_ref().map(|v| Value::String(v.clone())),
+        "source" => fm.source.as_ref().map(|v| Value::String(v.clone())),
+        "metadata" => fm.metadata.clone(),
+        "allowed_tools" => fm.allowed_tools.as_ref().map(|v| {
+            Value::Array(v.iter().map(|s| Value::String(s.clone())).collect())
+        }),
+        "runtime_requirements" => fm.runtime_requirements.clone(),
+        "network_access" => fm.network_access.as_ref().map(|v| Value::String(v.clone())),
+        "approval_required_tools" => fm.approval_required_tools.as_ref().map(|v| {
+            Value::Array(v.iter().map(|s| Value::String(s.clone())).collect())
+        }),
+        "kind" => fm.kind.and_then(|k| match k {
+            crate::frontmatter::RecordKind::Skill => None,
+            crate::frontmatter::RecordKind::FrameworkCommand => Some(Value::String("framework_command".into())),
+        }),
+        "scene" => fm.scene.as_ref().map(|s| Value::String(s.clone())),
+        "sub_scene" => fm.sub_scene.as_ref().map(|s| Value::String(s.clone())),
+        _ => None,
+    }
 }
 
 /// Return true if a JSON value is null/empty/zero-length.

@@ -9,7 +9,7 @@
 use core_errors::FrameworkError;
 use serde_json::Value;
 use std::path::Path;
-use std::sync::OnceLock;
+use std::sync::{OnceLock, RwLock};
 
 // ── Hook duplicate check (generic fn-pointer proxy) ──
 
@@ -23,7 +23,7 @@ pub fn check_hook_duplicates(repo_root: &Path) -> Vec<String> {
     }
 }
 
-static RUNTIME_CORE_HOOKS: OnceLock<RuntimeCoreHooks> = OnceLock::new();
+static RUNTIME_CORE_HOOKS: RwLock<Option<RuntimeCoreHooks>> = RwLock::new(None);
 
 /// Get the registered hooks. Must be called after `register()`.
 ///
@@ -31,55 +31,40 @@ static RUNTIME_CORE_HOOKS: OnceLock<RuntimeCoreHooks> = OnceLock::new();
 /// Panics if `register()` has not been called yet. Guaranteed by
 /// `runtime_core::init_hooks()` initialization ordering.
 #[track_caller]
-pub fn hooks() -> &'static RuntimeCoreHooks {
-    match RUNTIME_CORE_HOOKS.get() {
-        Some(h) => h,
-        None => panic!(
-            "RuntimeCoreHooks not registered (call register() before use, location: {})",
-            std::panic::Location::caller(),
-        ),
-    }
+pub fn hooks() -> RuntimeCoreHooks {
+    RUNTIME_CORE_HOOKS
+        .read()
+        .unwrap()
+        .clone()
+        .expect("RuntimeCoreHooks not registered (call register() before use)")
 }
 
 /// Try to get registered hooks without panicking.
 /// Returns `None` if `register()` has not been called yet.
-pub fn try_hooks() -> Option<&'static RuntimeCoreHooks> {
-    RUNTIME_CORE_HOOKS.get()
+pub fn try_hooks() -> Option<RuntimeCoreHooks> {
+    RUNTIME_CORE_HOOKS.read().unwrap().clone()
 }
 
 /// Register hooks. Only the first call takes effect; subsequent calls are logged as warnings.
-///
-/// Hooks cannot be unregistered once set (backed by `OnceLock`). Tests that need
-/// clean hook state should use [`try_hooks()`] to detect whether hooks are already
-/// registered and skip or adapt their assertions accordingly.
 pub fn register(h: RuntimeCoreHooks) {
-    if RUNTIME_CORE_HOOKS.set(h).is_err() {
+    let mut guard = RUNTIME_CORE_HOOKS.write().unwrap();
+    if guard.is_some() {
         tracing::warn!("RuntimeCoreHooks already registered — ignoring duplicate");
+        return;
     }
+    *guard = Some(h);
 }
 
 /// Reset hook state for test isolation.
 ///
-/// # Safety
-/// Only safe in single-threaded test contexts. Replaces the global
-/// `OnceLock` in-place; concurrent readers will see a permanently
-/// unset lock after this returns.
+/// Thread-safe via `RwLock` — no `unsafe` required.
 #[cfg(test)]
-#[allow(invalid_reference_casting)]
 pub fn unregister_hooks() {
-    // SAFETY: #[cfg(test)] only — replaces the OnceLock interior without
-    // dropping the old value. No concurrent access because cargo test
-    // serializes within a binary.
-    unsafe {
-        let ptr = &RUNTIME_CORE_HOOKS
-            as *const OnceLock<RuntimeCoreHooks>
-            as *mut OnceLock<RuntimeCoreHooks>;
-        std::ptr::drop_in_place(ptr);
-        std::ptr::write(ptr, OnceLock::new());
-    }
+    *RUNTIME_CORE_HOOKS.write().unwrap() = None;
 }
 
 // ── Host provider hook group ──
+#[derive(Clone)]
 pub struct HostProviderHooks {
     pub for_routing_spelling: fn(host_id: Option<&str>) -> Option<&'static str>,
     pub strict_pre_tool_fallback_hint: fn(host_id: &str) -> Option<bool>,
@@ -110,7 +95,7 @@ impl RuntimeCoreHooks {
     pub fn handle_background_state_operation(&self, payload: Value) -> Result<Value, FrameworkError> {
         (self.handle_background_state_operation)(payload)
     }
-    pub fn runtime_concurrency_defaults_payload(&self) -> Value {
+    pub fn runtime_concurrency_defaults_payload(&self) -> Result<Value, FrameworkError> {
         (self.runtime_concurrency_defaults_payload)()
     }
     pub fn eval_route_contract(&self) -> Value {
@@ -134,6 +119,7 @@ impl RuntimeCoreHooks {
 /// All hooks that require callbacks into runtime-core.
 ///
 /// Uses grouped sub-structs to reduce cognitive load.
+#[derive(Clone)]
 pub struct RuntimeCoreHooks {
     // ── Host (3 fields → 1 group) ──
     pub host_provider: HostProviderHooks,
@@ -144,7 +130,7 @@ pub struct RuntimeCoreHooks {
     // ── Session / background ──
     pub handle_orchestrator_operation: fn(Value) -> Result<Value, FrameworkError>,
     pub handle_background_state_operation: fn(Value) -> Result<Value, FrameworkError>,
-    pub runtime_concurrency_defaults_payload: fn() -> Value,
+    pub runtime_concurrency_defaults_payload: fn() -> Result<Value, FrameworkError>,
 
     // ── Route evaluation ──
     pub eval_route_contract: fn() -> Value,

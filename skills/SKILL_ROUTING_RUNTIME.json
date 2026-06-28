@@ -2072,7 +2072,11 @@
       "Inspect Sentry production errors and triage issues",
       null,
       null,
-      null,
+      [
+        "production",
+        "monitoring",
+        "error-tracking"
+      ],
       {
         "platforms": [
           "supported"
@@ -2097,7 +2101,7 @@
       [
         "authenticated web access"
       ],
-      "code_review",
+      "general",
       null
     ],
     [
@@ -2243,7 +2247,7 @@
       "evidence",
       "P2",
       "Root-cause investigation lane: hypothesis-driven debugging, reproduction capture, flake isolation, incident triage.",
-      "n/a",
+      "required",
       [
         "blind fix",
         "debug",
@@ -2401,7 +2405,12 @@
       "Route workbook-native spreadsheet work to the right implementation lane",
       null,
       null,
-      null,
+      [
+        "spreadsheet",
+        "excel",
+        "data",
+        "office"
+      ],
       {
         "alias_for": "primary-runtime/spreadsheets",
         "version": "2.0.0"
@@ -2857,53 +2866,6 @@
       null
     ],
     [
-      "observer-rs",
-      "L0",
-      "none",
-      "none",
-      "P3",
-      "Framework-operational reference: analyze telemetry, audit usage journal, compute per-skill health scores, inspect integrity, snapshot registry state.",
-      "n/a",
-      [],
-      "framework",
-      "skills/observer-rs/SKILL.md",
-      [
-        "claude",
-        "codex",
-        "cursor",
-        "opencode"
-      ],
-      "reference",
-      [],
-      "Framework-operational reference for observability and audit",
-      null,
-      null,
-      null,
-      {
-        "platforms": [
-          "supported"
-        ],
-        "tags": [
-          "observability",
-          "audit",
-          "health"
-        ],
-        "category": "framework",
-        "version": "1.0.0"
-      },
-      "medium",
-      [
-        "Read",
-        "Bash",
-        "WebFetch"
-      ],
-      null,
-      "local",
-      null,
-      "code_review",
-      null
-    ],
-    [
       "primary-runtime",
       "L0",
       "none",
@@ -2925,12 +2887,24 @@
       "Framework lifecycle orchestration: goal drive, quality gate, session supervision",
       null,
       null,
-      null,
+      [
+        "runtime",
+        "kernel",
+        "framework",
+        "core"
+      ],
       {
         "platforms": [
           "supported"
         ],
-        "version": "1.0.0"
+        "version": "1.0.0",
+        "tags": [
+          "runtime",
+          "kernel",
+          "framework",
+          "core"
+        ],
+        "category": "framework"
       },
       "medium",
       [

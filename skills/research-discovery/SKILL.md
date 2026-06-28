@@ -84,7 +84,7 @@ Start by classifying the task into one or more lanes:
 
 - `research_question`: research objective, novelty claim, and decision the work must support.
 - `external_research`: literature, standards, datasets, repositories, or prior-art lookup when allowed or necessary. Use [`references/academic-sources.md`](references/academic-sources.md) for the five verified-open retrieval sources (arXiv, OpenAlex, CrossRef, PubMed E-utilities, DOAJ); fan out across sources for thorough coverage.
-- `math_background_inquiry`: theory landscape for unknown properties (`theory_background` with `theorem_applicability`, `cross_domain_bridges`, `proof_strategy_hints`, multi-source `retrieval_fanout_plan`); multi-round -> RFV `external_mode=math_background` + [math-background-inquiry.md](../../docs/architecture.md); conjectures -> §D `conjecture_list`. **Mandatory**: every analogy has `breaks_when`; named theorems have `applies_when`/`fails_when`; retrieval fans out arXiv+OpenAlex/CrossRef per [academic-sources.md](references/academic-sources.md).
+- `math_background_inquiry`: theory landscape for unknown properties (`theory_background` with `theorem_applicability`, `cross_domain_bridges`, `proof_strategy_hints`, multi-source `retrieval_fanout_plan`); multi-round -> RFV `external_mode=math_background` + [math-background-inquiry.md](../../docs/routing/architecture.md); conjectures -> §D `conjecture_list`. **Mandatory**: every analogy has `breaks_when`; named theorems have `applies_when`/`fails_when`; retrieval fans out arXiv+OpenAlex/CrossRef per [academic-sources.md](references/academic-sources.md).
 - `paper_handoff`: only when the task becomes manuscript-level; then hand off to `$paper-workbench` with **`language_register`** + link to [`../paper-workbench/references/prose-chain-contract.md`](../paper-workbench/references/prose-chain-contract.md) when prose is in scope.
 
 Prefer the smallest lane set that can answer the user's real question. Do not
@@ -154,9 +154,9 @@ the execution lanes with the discovery outputs as context.
 ## Cross-references
 
 - **Academic sources (verified-open retrieval scaffolding)**: [`references/academic-sources.md`](references/academic-sources.md) — arXiv, OpenAlex, CrossRef, PubMed E-utilities, DOAJ API templates and fan-out patterns for `external_research` lane.
-- Quality Gate research harness: `docs/architecture.md` §Quality Gate
-- External research harness: `docs/architecture.md` §External Research
-- Math background inquiry (deep): `docs/architecture.md` §Math Background
+- Quality Gate research harness: `docs/routing/architecture.md` §Quality Gate
+- External research harness: `docs/routing/architecture.md` §External Research
+- Math background inquiry (deep): `docs/routing/architecture.md` §Math Background
 - Manuscript stack boundary: [`../paper-workbench/references/RESEARCH_PAPER_STACK.md`](../paper-workbench/references/RESEARCH_PAPER_STACK.md)
 - **Verification skills** (load when lane requires):
   - `literature_survey` lane → [`../literature-verification/SKILL.md`](../literature-verification/SKILL.md)

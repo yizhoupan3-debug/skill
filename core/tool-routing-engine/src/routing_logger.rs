@@ -6,9 +6,7 @@
 //!
 //! Parallel to `routing-engine/src/route/routing_logger.rs`.
 
-#![allow(dead_code)]
-
-use std::fs::{self, File, OpenOptions};
+use std::fs::{File, OpenOptions};
 use std::io::{BufWriter, Write};
 use std::path::PathBuf;
 use std::sync::{LazyLock, Mutex};
@@ -16,8 +14,6 @@ use std::sync::{LazyLock, Mutex};
 use crate::types::McpToolDecision;
 use core_errors::FrameworkError;
 
-const LOG_DIR: &str = "logs/tool-routing";
-const LOG_FILE: &str = "tool_routing_audit.ndjson";
 const MAX_LOG_BYTES: u64 = 10 * 1024 * 1024; // 10 MB
 
 static LOGGER: LazyLock<Mutex<Option<ToolRoutingLogger>>> = LazyLock::new(|| Mutex::new(None));
@@ -28,19 +24,6 @@ struct ToolRoutingLogger {
 }
 
 impl ToolRoutingLogger {
-    fn new(log_dir: &str) -> Result<Self, FrameworkError> {
-        fs::create_dir_all(log_dir)?;
-        let path = PathBuf::from(log_dir).join(LOG_FILE);
-        let file = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&path)?;
-        Ok(Self {
-            writer: BufWriter::new(file),
-            path,
-        })
-    }
-
     fn rotate_if_needed(&mut self) -> Result<(), FrameworkError> {
         if self.path.metadata().map(|m| m.len()).unwrap_or(0) >= MAX_LOG_BYTES {
             let rotated = OpenOptions::new()
@@ -61,31 +44,9 @@ impl ToolRoutingLogger {
     }
 }
 
-/// Initialize the tool routing logger. Creates the log directory and opens
-/// the audit log file for appending. Idempotent — safe to call multiple times;
-/// subsequent calls are silently ignored once the logger is active.
-///
-/// Should be called during runtime-core bootstrap with the repo root's log path.
-pub fn init_tool_routing_logger(log_dir: &str) -> Result<(), FrameworkError> {
-    let mut guard = LOGGER
-        .lock()
-        .map_err(|_| FrameworkError::lock("routing logger mutex poisoned"))?;
-    if guard.is_some() {
-        return Ok(()); // Already initialized — idempotent
-    }
-    *guard = Some(ToolRoutingLogger::new(log_dir)?);
-    Ok(())
-}
-
-/// Check whether the tool routing logger is active (has been initialized).
-pub fn is_tool_routing_logger_active() -> bool {
-    LOGGER.lock().ok().map(|g| g.is_some()).unwrap_or(false)
-}
-
 /// Write a tool routing decision to the structured audit log.
 ///
-/// Auto-initializes with default log directory on first call if
-/// `init_tool_routing_logger` was not called explicitly.
+/// Logs a warning and returns early if the logger has not been initialized.
 pub fn log_tool_decision(decision: &McpToolDecision, query: &str) {
     let entry = serde_json::json!({
         "ts": iso_timestamp_now(),
@@ -100,16 +61,8 @@ pub fn log_tool_decision(decision: &McpToolDecision, query: &str) {
     });
     if let Ok(mut guard) = LOGGER.lock() {
         if guard.is_none() {
-            // Auto-init with default path on first use
-            match ToolRoutingLogger::new(LOG_DIR) {
-                Ok(logger) => {
-                    *guard = Some(logger);
-                }
-                Err(e) => {
-                    tracing::warn!("failed to auto-init tool routing logger: {e}");
-                    return;
-                }
-            }
+            tracing::warn!("tool routing logger not initialized, skipping audit log");
+            return;
         }
         if let Some(ref mut logger) = *guard {
             let _ = logger.write_entry(&entry.to_string());

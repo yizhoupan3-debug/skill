@@ -23,9 +23,14 @@
         "deep-research",
         "pdf",
         "plan-mode",
-        "research-knowledge-graph"
-      ],
-      "entry_map": "skills/research-discovery/SKILL.md"
+        "research-knowledge-graph",
+        "formal-verification",
+        "literature-verification",
+        "prose-verification",
+        "reproducibility-verification",
+        "statistical-verification",
+        "structure-verification"
+      ]
     },
     "implementation_loadout": {
       "description": "My execution stack: code-review-deep, gitx.",
@@ -33,7 +38,10 @@
       "skill_slugs": [
         "code-review-deep",
         "gitx",
-        "plan-mode"
+        "plan-mode",
+        "simplify",
+        "systematic-debugging",
+        "mcp-server-management"
       ]
     },
     "audit_loadout": {
@@ -51,7 +59,11 @@
       "skill_slugs": [
         "skill-framework-developer",
         "update",
-        "agent-swarm-orchestration"
+        "agent-swarm-orchestration",
+        "observer-rs",
+        "primary-runtime",
+        "shared-references",
+        "goalx"
       ]
     },
     "ops_loadout": {
@@ -60,7 +72,35 @@
       "skill_slugs": [
         "gh-fix-ci",
         "gh-address-comments",
-        "sentry"
+        "sentry",
+        "observer-rs"
+      ]
+    },
+    "design_content_loadout": {
+      "description": "Design and content creation: diagrams, infographics, slides, docx, pdf, visual review, design system.",
+      "tier_activation": "explicit_opt_in",
+      "skill_slugs": [
+        "diagramming",
+        "infographic",
+        "slides",
+        "doc",
+        "pdf",
+        "design-md",
+        "visual-review",
+        "tikz-paper-figure",
+        "scientific-figure-plotting"
+      ]
+    },
+    "general_dev_loadout": {
+      "description": "General development: cleanup, diagrams, env management, mcp, spreadsheets.",
+      "tier_activation": "explicit_opt_in",
+      "skill_slugs": [
+        "simplify",
+        "systematic-debugging",
+        "python-env-management",
+        "mcp-server-management",
+        "email-template",
+        "spreadsheets"
       ]
     }
   },

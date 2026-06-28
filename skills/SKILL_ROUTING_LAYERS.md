@@ -25,7 +25,7 @@
 自动化是 **异步演化通道**，不参与同轮 owner 竞争：
 
 - `skill-ci.yml`：push / PR 校验、生成物漂移拦截
-- `observer-audit.yml`：定时健康审计、同步 routing 产物、创建维护 issue
+- `observer-audit.yml`：~~定时健康审计、同步 routing 产物、创建维护 issue~~（已在 v10 移除，observer-rs 已清理）
 - 宿主 automations（路径由 `RUNTIME_REGISTRY.json` 定义）：
   异步收集维护任务、例行检查、产物刷新
 
@@ -102,3 +102,12 @@ Runtime lanes  planning, execution/code, language/framework, platform/integratio
 - 任务阶段自然迁移（plan → code → verify）
 - 当前 skill 已连续 3 次落在 `## Do not use` 的边界外
 - 证据源或产物类型发生变化
+
+## `allowed_tools` 字段说明
+
+技能路由表中的 `allowed_tools` 是 **参考性元数据**，路由引擎不做 route-time 校验：
+
+- 该字段记录了技能设计预期的工具集（含宿主工具如 `Read/Bash`、领域提示如 `rust/shell`、MCP 工具如 `mcp__mcp-codegraph__codegraph_search`）
+- **路由引擎不验证**一个技能是否真的使用了这些工具
+- 工具级别的访问控制由运行时 MCP 宿主层负责，不由 `allowed_tools` 决定
+- 该字段的主要用途是文档/审计/生成 SKILL_ROUTING_RUNTIME.json 时的元数据携带

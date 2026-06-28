@@ -1,5 +1,6 @@
 ---
 source: core/framework-kernel/src/framework_profile/mod.rs
+assertion_line: 623
 expression: json
 ---
 {
@@ -995,7 +996,7 @@ expression: json
       ],
       "session_supervisor_driver": "unsupported",
       "session_supervisor_status": {
-        "rationale": "Cursor host does not expose external process supervision or auto-resume. session_supervisor currently supports codex and claude drivers only. Long-running goals on Cursor must rely on in-session continuity artifacts (.supervisor_state.json, SESSION_SUMMARY.md, NEXT_ACTIONS.json, EVIDENCE_INDEX.json) instead of an external supervisor process.",
+        "rationale": "Cursor host does not expose external process supervision or auto-resume. The orchestrator currently supports codex and claude drivers only. Long-running goals on Cursor must rely on in-session continuity artifacts (.supervisor_state.json, SESSION_SUMMARY.md, NEXT_ACTIONS.json, EVIDENCE_INDEX.json) instead of an external supervisor process.",
         "supported": false
       },
       "settings_paths": [
@@ -1868,7 +1869,7 @@ expression: json
         ],
         "session_supervisor_driver": "unsupported",
         "session_supervisor_status": {
-          "rationale": "Cursor host does not expose external process supervision or auto-resume. session_supervisor currently supports codex and claude drivers only. Long-running goals on Cursor must rely on in-session continuity artifacts (.supervisor_state.json, SESSION_SUMMARY.md, NEXT_ACTIONS.json, EVIDENCE_INDEX.json) instead of an external supervisor process.",
+          "rationale": "Cursor host does not expose external process supervision or auto-resume. The orchestrator currently supports codex and claude drivers only. Long-running goals on Cursor must rely on in-session continuity artifacts (.supervisor_state.json, SESSION_SUMMARY.md, NEXT_ACTIONS.json, EVIDENCE_INDEX.json) instead of an external supervisor process.",
           "supported": false
         },
         "settings_paths": [

@@ -10,6 +10,7 @@ workspace = true
 core-errors = { path = "../core-errors" }
 core-state = { path = "../core-state" }
 core-state-utils = { path = "../core-state-utils" }
+fs2.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 serde_yml.workspace = true

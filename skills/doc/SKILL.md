@@ -104,7 +104,7 @@ Follow the shared artifact rules in
 
 ## Batch artifacts
 
-- Batch catalog: `ooxml-batch/catalog.json` (checkpoint + `results.jsonl` alongside).
+- Batch processing: `rust_tools/ooxml_parser_rs/` (parser + batch entry point via `cargo run -p ooxml_parser_rs` or installed `mcp-ooxml` binary).
 - Install pinned OOXML CLI: `bash scripts/install-ooxml-tool.sh` (repo root).
 - 禁止在 skill 正文默认写 `cargo run` 作为操作员主路径；已安装二进制或 Just `install-ooxml` 优先。
 

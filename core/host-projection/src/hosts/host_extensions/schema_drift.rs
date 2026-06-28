@@ -195,6 +195,11 @@ fn compare_hooks_template_parity(hooks_doc: &Value, template_doc: &Value) -> Vec
 /// - `template_path` — repo-root-relative path to the workspace template (e.g. `configs/framework/{host_id}-hooks.workspace-template.json`)
 /// - `expected_events` — events that the host must register (from host_registered_hook_events())
 /// - `forbidden_events` — events that must NOT be registered (e.g. subtracted events)
+///
+/// HPM-19: TODO — this function currently only DETECTs drift (reports issues in the
+/// snapshot) but does not REPAIR it. A future addition should accept an optional
+/// auto-repair callback that can fix common issues (wrong timeout, missing events)
+/// by rewriting the hooks manifest before returning.
 pub fn snapshot_host_hooks(
     repo_root: &Path,
     hooks_path: &Path,

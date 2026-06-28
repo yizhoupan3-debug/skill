@@ -1,17 +1,18 @@
 {
   "schema_version": "mcp-tool-registry-v2",
   "scope": {
-    "total_count": 88,
+    "total_count": 100,
     "builtin_count": 33,
     "research_count": 21,
-    "independent_count": 23,
-    "external_count": 11
+    "independent_count": 35,
+    "external_count": 11,
+    "_comment": "scope counts are auto-generated — update this when adding/removing scopes"
   },
   "tools": [
     {
       "slug": "goal_state_manage",
       "display_name": "目标状态管理",
-      "description": "管理 Goal 状态（start/checkpoint/pause/resume/complete/clear/block/amend）",
+      "description": "管理 Goal 状态（start/checkpoint/pause/resume/complete/clear/block/amend",
       "layer": "builtin",
       "dispatch_domain": "domain:goal",
       "owner": "framework",
@@ -27,7 +28,6 @@
         "任务状态管理",
         "overview"
       ],
-      "host_platforms": [],
       "mcp_server": "router-rs",
       "tool_flags": [],
       "input_schema": {
@@ -65,7 +65,6 @@
         "状态",
         "查看"
       ],
-      "host_platforms": [],
       "mcp_server": "router-rs",
       "tool_flags": [],
       "input_schema": {
@@ -91,7 +90,6 @@
         "记录",
         "追加"
       ],
-      "host_platforms": [],
       "mcp_server": "router-rs",
       "tool_flags": [],
       "input_schema": {
@@ -137,7 +135,6 @@
         "中间存档",
         "snapshot"
       ],
-      "host_platforms": [],
       "mcp_server": "router-rs",
       "tool_flags": [],
       "input_schema": {
@@ -178,7 +175,6 @@
         "就绪",
         "缺失"
       ],
-      "host_platforms": [],
       "mcp_server": "router-rs",
       "tool_flags": [],
       "input_schema": {
@@ -211,7 +207,6 @@
         "完成汇报",
         "end task"
       ],
-      "host_platforms": [],
       "mcp_server": "router-rs",
       "tool_flags": [],
       "input_schema": {
@@ -283,7 +278,6 @@
         "查看",
         "文档"
       ],
-      "host_platforms": [],
       "mcp_server": "router-rs",
       "tool_flags": [],
       "input_schema": {
@@ -319,7 +313,6 @@
         "匹配",
         "查询"
       ],
-      "host_platforms": [],
       "mcp_server": "router-rs",
       "tool_flags": [],
       "input_schema": {
@@ -349,7 +342,6 @@
         "技能",
         "查找"
       ],
-      "host_platforms": [],
       "mcp_server": "router-rs",
       "tool_flags": [],
       "input_schema": {
@@ -389,7 +381,6 @@
         "索引状态",
         "routing health"
       ],
-      "host_platforms": [],
       "mcp_server": "router-rs",
       "tool_flags": [],
       "input_schema": {
@@ -412,9 +403,11 @@
         "HTTP",
         "链接"
       ],
-      "host_platforms": [],
-      "mcp_server": "router-rs-cli",
-      "tool_flags": [],
+      "mcp_server": "router-rs",
+      "tool_flags": [
+        "readonly",
+        "network"
+      ],
       "input_schema": {
         "type": "object",
         "required": [
@@ -435,7 +428,7 @@
     {
       "slug": "task_create",
       "display_name": "任务创建",
-      "description": "创建新 task（定义 todo）。幂等：已存在则跳过。",
+      "description": "创建新 task（定义 todo）。幂等：已存在则跳过",
       "layer": "builtin",
       "dispatch_domain": "domain:framework",
       "owner": "framework",
@@ -446,7 +439,6 @@
         "todo",
         "待办"
       ],
-      "host_platforms": [],
       "mcp_server": "router-rs",
       "tool_flags": [
         "no_routing"
@@ -471,7 +463,7 @@
     {
       "slug": "task_list",
       "display_name": "任务列表",
-      "description": "列出所有已知 task 及其状态。",
+      "description": "列出所有已知 task 及其状态",
       "layer": "builtin",
       "dispatch_domain": "domain:framework",
       "owner": "framework",
@@ -482,7 +474,6 @@
         "查看",
         "所有"
       ],
-      "host_platforms": [],
       "mcp_server": "router-rs",
       "tool_flags": [
         "no_routing"
@@ -495,7 +486,7 @@
     {
       "slug": "task_complete",
       "display_name": "任务完成",
-      "description": "完成一个 task。有 GOAL_STATE 时委托 goal_state_manage(complete)。",
+      "description": "完成一个 task。有 GOAL_STATE 时委托 goal_state_manage(complete",
       "layer": "builtin",
       "dispatch_domain": "domain:framework",
       "owner": "framework",
@@ -506,7 +497,6 @@
         "结束",
         "完工"
       ],
-      "host_platforms": [],
       "mcp_server": "router-rs",
       "tool_flags": [
         "no_routing"
@@ -527,7 +517,7 @@
     {
       "slug": "task_focus",
       "display_name": "任务切换焦点",
-      "description": "切换 focus 到指定 task。",
+      "description": "切换 focus 到指定 task",
       "layer": "builtin",
       "dispatch_domain": "domain:framework",
       "owner": "framework",
@@ -539,7 +529,6 @@
         "fokus",
         "active"
       ],
-      "host_platforms": [],
       "mcp_server": "router-rs",
       "tool_flags": [
         "no_routing"
@@ -560,7 +549,7 @@
     {
       "slug": "task_chain_advance",
       "display_name": "任务链推进",
-      "description": "将 task chain 推进到下一个 task：标记当前为 completed、切换 focus 到下一项。",
+      "description": "将 task chain 推进到下一个 task：标记当前为 completed、切换 focus 到下一项",
       "layer": "builtin",
       "dispatch_domain": "domain:framework",
       "owner": "framework",
@@ -571,7 +560,6 @@
         "chain",
         "下一个"
       ],
-      "host_platforms": [],
       "mcp_server": "router-rs",
       "tool_flags": [
         "no_routing"
@@ -584,7 +572,7 @@
     {
       "slug": "route_tool",
       "display_name": "工具路由",
-      "description": "将自然语言查询路由到最佳匹配的 MCP 工具。",
+      "description": "将自然语言查询路由到最佳匹配的 MCP 工具 Self-routing excluded: route_tool cannot route itself",
       "layer": "builtin",
       "dispatch_domain": "domain:framework",
       "owner": "framework",
@@ -595,10 +583,10 @@
         "查询",
         "匹配"
       ],
-      "host_platforms": [],
       "mcp_server": "router-rs",
       "tool_flags": [
-        "no_routing"
+        "no_routing",
+        "readonly"
       ],
       "input_schema": {
         "type": "object",
@@ -620,7 +608,7 @@
     {
       "slug": "search_tools",
       "display_name": "工具搜索",
-      "description": "搜索 MCP 工具注册表并返回 top-k 结果。",
+      "description": "搜索 MCP 工具注册表并返回 top-k 结果",
       "layer": "builtin",
       "dispatch_domain": "domain:framework",
       "owner": "framework",
@@ -630,7 +618,6 @@
         "search",
         "工具"
       ],
-      "host_platforms": [],
       "mcp_server": "router-rs",
       "tool_flags": [
         "no_routing"
@@ -659,7 +646,7 @@
     {
       "slug": "tool_registry_status",
       "display_name": "工具注册表状态",
-      "description": "报告工具注册表元数据（计数、schema 版本、层级分布）。",
+      "description": "报告工具注册表元数据（计数、schema 版本、层级分布",
       "layer": "builtin",
       "dispatch_domain": "domain:framework",
       "owner": "framework",
@@ -670,7 +657,6 @@
         "统计",
         "registry"
       ],
-      "host_platforms": [],
       "mcp_server": "router-rs",
       "tool_flags": [
         "no_routing"
@@ -688,11 +674,14 @@
       "dispatch_domain": "domain:orchestrator",
       "owner": "framework",
       "trigger_hints": [
+        "create",
+        "team",
+        "group",
+        "squad",
+        "assign",
         "团队",
-        "创建团队",
-        "team"
+        "创建团队"
       ],
-      "host_platforms": [],
       "mcp_server": "router-rs",
       "tool_flags": [],
       "input_schema": {
@@ -723,10 +712,14 @@
       "dispatch_domain": "domain:orchestrator",
       "owner": "framework",
       "trigger_hints": [
+        "add",
+        "member",
+        "team",
+        "join",
+        "include",
         "添加成员",
         "加入团队"
       ],
-      "host_platforms": [],
       "mcp_server": "router-rs",
       "tool_flags": [],
       "input_schema": {
@@ -755,10 +748,14 @@
       "dispatch_domain": "domain:orchestrator",
       "owner": "framework",
       "trigger_hints": [
+        "remove",
+        "member",
+        "team",
+        "kick",
+        "exclude",
         "移除成员",
         "剔除成员"
       ],
-      "host_platforms": [],
       "mcp_server": "router-rs",
       "tool_flags": [],
       "input_schema": {
@@ -787,11 +784,15 @@
       "dispatch_domain": "domain:orchestrator",
       "owner": "framework",
       "trigger_hints": [
+        "complete",
+        "finish",
+        "team",
+        "done",
+        "close",
         "完成团队",
         "团队完毕",
         "team complete"
       ],
-      "host_platforms": [],
       "mcp_server": "router-rs",
       "tool_flags": [],
       "input_schema": {
@@ -815,10 +816,14 @@
       "dispatch_domain": "domain:orchestrator",
       "owner": "framework",
       "trigger_hints": [
+        "message",
+        "send",
+        "team",
+        "notify",
+        "broadcast",
         "发送消息",
         "通知团队"
       ],
-      "host_platforms": [],
       "mcp_server": "router-rs",
       "tool_flags": [],
       "input_schema": {
@@ -847,10 +852,14 @@
       "dispatch_domain": "domain:orchestrator",
       "owner": "framework",
       "trigger_hints": [
+        "read",
+        "message",
+        "team",
+        "history",
+        "log",
         "读取消息",
         "查看消息"
       ],
-      "host_platforms": [],
       "mcp_server": "router-rs",
       "tool_flags": [],
       "input_schema": {
@@ -878,11 +887,15 @@
       "dispatch_domain": "domain:orchestrator",
       "owner": "framework",
       "trigger_hints": [
+        "alive",
+        "member",
+        "team",
+        "active",
+        "status",
+        "health",
         "活跃成员",
-        "在线成员",
-        "alive"
+        "在线成员"
       ],
-      "host_platforms": [],
       "mcp_server": "router-rs",
       "tool_flags": [],
       "input_schema": {
@@ -906,10 +919,14 @@
       "dispatch_domain": "domain:orchestrator",
       "owner": "framework",
       "trigger_hints": [
+        "list",
+        "team",
+        "all",
+        "groups",
+        "overview",
         "团队列表",
         "所有团队"
       ],
-      "host_platforms": [],
       "mcp_server": "router-rs",
       "tool_flags": [],
       "input_schema": {
@@ -926,10 +943,14 @@
       "dispatch_domain": "domain:orchestrator",
       "owner": "framework",
       "trigger_hints": [
+        "agent",
+        "register",
+        "tool",
+        "worker",
+        "capability",
         "注册代理",
         "注册 agent"
       ],
-      "host_platforms": [],
       "mcp_server": "router-rs",
       "tool_flags": [],
       "input_schema": {
@@ -960,10 +981,13 @@
       "dispatch_domain": "domain:orchestrator",
       "owner": "framework",
       "trigger_hints": [
+        "agent",
+        "unregister",
+        "remove",
+        "deregister",
         "注销代理",
         "删除代理"
       ],
-      "host_platforms": [],
       "mcp_server": "router-rs",
       "tool_flags": [],
       "input_schema": {
@@ -987,11 +1011,16 @@
       "dispatch_domain": "domain:orchestrator",
       "owner": "framework",
       "trigger_hints": [
+        "list",
+        "agent",
+        "worker",
+        "running",
+        "active",
+        "status",
         "运行中代理",
         "运行中 agent",
         "running agents"
       ],
-      "host_platforms": [],
       "mcp_server": "router-rs",
       "tool_flags": [],
       "input_schema": {
@@ -1008,10 +1037,14 @@
       "dispatch_domain": "domain:orchestrator",
       "owner": "framework",
       "trigger_hints": [
+        "launch",
+        "worker",
+        "spawn",
+        "task",
+        "start",
         "启动工作",
         "launch worker"
       ],
-      "host_platforms": [],
       "mcp_server": "router-rs",
       "tool_flags": [],
       "input_schema": {
@@ -1039,10 +1072,14 @@
       "dispatch_domain": "domain:orchestrator",
       "owner": "framework",
       "trigger_hints": [
+        "list",
+        "worker",
+        "task",
+        "running",
+        "jobs",
         "工作进程",
         "worker list"
       ],
-      "host_platforms": [],
       "mcp_server": "router-rs",
       "tool_flags": [],
       "input_schema": {
@@ -1064,10 +1101,14 @@
       "dispatch_domain": "domain:orchestrator",
       "owner": "framework",
       "trigger_hints": [
+        "terminate",
+        "kill",
+        "worker",
+        "stop",
+        "abort",
         "终止工作",
         "停止 worker"
       ],
-      "host_platforms": [],
       "mcp_server": "router-rs",
       "tool_flags": [],
       "input_schema": {
@@ -1092,7 +1133,7 @@
       "display_name": "AIGC 检测",
       "description": "检测文本是否由 AI 生成，返回概率评分和逐段分析",
       "layer": "research",
-      "dispatch_domain": "research",
+      "dispatch_domain": "domain:research",
       "owner": "research",
       "trigger_hints": [
         "AIGC",
@@ -1111,9 +1152,10 @@
         "抄袭风险",
         "AI文本"
       ],
-      "host_platforms": [],
-      "mcp_server": "router-rs-cli",
-      "tool_flags": [],
+      "mcp_server": "router-rs",
+      "tool_flags": [
+        "readonly"
+      ],
       "input_schema": {
         "type": "object",
         "required": [
@@ -1140,7 +1182,7 @@
       "display_name": "审稿维度",
       "description": "获取多轮对抗审稿的维度 prompt",
       "layer": "research",
-      "dispatch_domain": "research",
+      "dispatch_domain": "domain:research",
       "owner": "research",
       "trigger_hints": [
         "审稿",
@@ -1158,9 +1200,10 @@
         "审稿方向",
         "多维度审稿"
       ],
-      "host_platforms": [],
       "mcp_server": "research-harness",
-      "tool_flags": [],
+      "tool_flags": [
+        "readonly"
+      ],
       "input_schema": {
         "type": "object",
         "required": [
@@ -1183,7 +1226,7 @@
       "display_name": "Claim 漂移检测",
       "description": "检测原始 vs 当前声明的相似度和证据变化",
       "layer": "research",
-      "dispatch_domain": "research",
+      "dispatch_domain": "domain:research",
       "owner": "research",
       "trigger_hints": [
         "claim",
@@ -1202,9 +1245,10 @@
         "原始声明",
         "当前声明"
       ],
-      "host_platforms": [],
       "mcp_server": "research-harness",
-      "tool_flags": [],
+      "tool_flags": [
+        "readonly"
+      ],
       "input_schema": {
         "type": "object",
         "required": [
@@ -1234,7 +1278,7 @@
       "display_name": "对抗审稿循环",
       "description": "对抗审稿循环——适配器工具，提供审稿维度/prompt/checklist。循环状态由 GoalEngine QGEntry 管理",
       "layer": "research",
-      "dispatch_domain": "research",
+      "dispatch_domain": "domain:research",
       "owner": "research",
       "trigger_hints": [
         "审稿",
@@ -1253,9 +1297,10 @@
         "审稿进度",
         "持续审稿"
       ],
-      "host_platforms": [],
       "mcp_server": "research-harness",
-      "tool_flags": [],
+      "tool_flags": [
+        "readonly"
+      ],
       "input_schema": {
         "type": "object",
         "properties": {
@@ -1292,9 +1337,9 @@
     {
       "slug": "research_smoke",
       "display_name": "学术数据源新鲜度烟雾测试",
-      "description": "对学术数据源（arXiv/Semantic Scholar）执行新鲜度烟雾测试，检测源端数据是否滞后或不可用",
+      "description": "对学术数据源（arXiv/Semantic Scholar）执行新鲜度烟雾测试，检测源端数据是否滞后或不可用 (Deprecated. Use search_research/fetch_paper instead.)",
       "layer": "research",
-      "dispatch_domain": "research",
+      "dispatch_domain": "domain:research",
       "owner": "research",
       "trigger_hints": [
         "烟雾测试",
@@ -1313,10 +1358,10 @@
         "连接测试",
         "学术数据"
       ],
-      "host_platforms": [],
-      "mcp_server": "router-rs-cli",
+      "mcp_server": "router-rs",
       "tool_flags": [
-        "deprecated"
+        "deprecated",
+        "readonly"
       ],
       "input_schema": {
         "type": "object",
@@ -1339,9 +1384,9 @@
     {
       "slug": "math_prove_inequality",
       "display_name": "不等式证明",
-      "description": "使用 Z3/SMT 求解器验证线性不等式",
+      "description": "使用 Z3/SMT 求解器验证线性不等式 (Deprecated. Use math_sympy_verify instead.)",
       "layer": "research",
-      "dispatch_domain": "research",
+      "dispatch_domain": "domain:research",
       "owner": "research",
       "trigger_hints": [
         "不等式",
@@ -1360,10 +1405,10 @@
         "数学检验",
         "SMT"
       ],
-      "host_platforms": [],
       "mcp_server": "research-harness",
       "tool_flags": [
-        "deprecated"
+        "deprecated",
+        "readonly"
       ],
       "input_schema": {
         "type": "object",
@@ -1385,9 +1430,9 @@
     {
       "slug": "math_backend_available",
       "display_name": "数学后端可用性检查",
-      "description": "检查数学验证后端（Z3/SymPy/Lean）是否可用",
+      "description": "检查数学验证后端（Z3/SymPy/Lean）是否可用 (Deprecated. Backend availability is automatically checked.)",
       "layer": "research",
-      "dispatch_domain": "research",
+      "dispatch_domain": "domain:research",
       "owner": "research",
       "trigger_hints": [
         "后端",
@@ -1407,10 +1452,10 @@
         "backend check",
         "环境就绪"
       ],
-      "host_platforms": [],
       "mcp_server": "research-harness",
       "tool_flags": [
-        "deprecated"
+        "deprecated",
+        "readonly"
       ],
       "input_schema": {
         "type": "object",
@@ -1422,7 +1467,7 @@
       "display_name": "渐近估计",
       "description": "估计数学表达式的渐近量级",
       "layer": "research",
-      "dispatch_domain": "research",
+      "dispatch_domain": "domain:research",
       "owner": "research",
       "trigger_hints": [
         "渐近",
@@ -1441,7 +1486,6 @@
         "增长率",
         "复杂度分析"
       ],
-      "host_platforms": [],
       "mcp_server": "research-harness",
       "tool_flags": [],
       "input_schema": {
@@ -1468,9 +1512,9 @@
     {
       "slug": "math_asymptotic_chain",
       "display_name": "渐近链验证",
-      "description": "验证渐近推理链（多步逐步推导）",
+      "description": "验证渐近推理链（多步逐步推导 (Deprecated. Use math_asymptotic_estimate instead.)",
       "layer": "research",
-      "dispatch_domain": "research",
+      "dispatch_domain": "domain:research",
       "owner": "research",
       "trigger_hints": [
         "渐近链",
@@ -1488,10 +1532,10 @@
         "渐近传递",
         "big O链"
       ],
-      "host_platforms": [],
       "mcp_server": "research-harness",
       "tool_flags": [
-        "deprecated"
+        "deprecated",
+        "readonly"
       ],
       "input_schema": {
         "type": "object",
@@ -1524,9 +1568,9 @@
     {
       "slug": "math_proof_dag_init",
       "display_name": "证明 DAG 初始化",
-      "description": "初始化一个证明有向无环图（Proof DAG）",
+      "description": "初始化一个证明有向无环图（Proof DAG",
       "layer": "research",
-      "dispatch_domain": "research",
+      "dispatch_domain": "domain:research",
       "owner": "research",
       "trigger_hints": [
         "证明DAG",
@@ -1545,7 +1589,6 @@
         "证明入口",
         "DAG初始化"
       ],
-      "host_platforms": [],
       "mcp_server": "research-harness",
       "tool_flags": [],
       "input_schema": {
@@ -1570,7 +1613,7 @@
       "display_name": "证明 DAG 分解",
       "description": "将证明节点分解为子目标",
       "layer": "research",
-      "dispatch_domain": "research",
+      "dispatch_domain": "domain:research",
       "owner": "research",
       "trigger_hints": [
         "分解",
@@ -1588,7 +1631,6 @@
         "拆解证明",
         "子目标生成"
       ],
-      "host_platforms": [],
       "mcp_server": "research-harness",
       "tool_flags": [],
       "input_schema": {
@@ -1621,7 +1663,7 @@
       "display_name": "证明 DAG 验证",
       "description": "验证当前证明 DAG 的结构完备性",
       "layer": "research",
-      "dispatch_domain": "research",
+      "dispatch_domain": "domain:research",
       "owner": "research",
       "trigger_hints": [
         "DAG验证",
@@ -1639,7 +1681,6 @@
         "DAG检查",
         "证明结构验证"
       ],
-      "host_platforms": [],
       "mcp_server": "research-harness",
       "tool_flags": [],
       "input_schema": {
@@ -1652,7 +1693,7 @@
       "display_name": "证明 DAG 状态",
       "description": "查看当前证明 DAG 的进度摘要",
       "layer": "research",
-      "dispatch_domain": "research",
+      "dispatch_domain": "domain:research",
       "owner": "research",
       "trigger_hints": [
         "DAG状态",
@@ -1670,7 +1711,6 @@
         "进度摘要",
         "DAG概览"
       ],
-      "host_platforms": [],
       "mcp_server": "research-harness",
       "tool_flags": [],
       "input_schema": {
@@ -1683,7 +1723,7 @@
       "display_name": "SymPy 等式验证",
       "description": "使用 SymPy 验证代数等式恒成立",
       "layer": "research",
-      "dispatch_domain": "research",
+      "dispatch_domain": "domain:research",
       "owner": "research",
       "trigger_hints": [
         "SymPy",
@@ -1701,7 +1741,6 @@
         "符号验证",
         "恒等检查"
       ],
-      "host_platforms": [],
       "mcp_server": "research-harness",
       "tool_flags": [],
       "input_schema": {
@@ -1734,7 +1773,7 @@
       "display_name": "SymPy 表达式化简",
       "description": "使用 SymPy 化简数学表达式",
       "layer": "research",
-      "dispatch_domain": "research",
+      "dispatch_domain": "domain:research",
       "owner": "research",
       "trigger_hints": [
         "化简",
@@ -1752,7 +1791,6 @@
         "代数简化",
         "符号计算"
       ],
-      "host_platforms": [],
       "mcp_server": "research-harness",
       "tool_flags": [],
       "input_schema": {
@@ -1771,9 +1809,9 @@
     {
       "slug": "math_lean_verify",
       "display_name": "Lean 定理证明",
-      "description": "使用 Lean 4 定理证明器验证数学命题",
+      "description": "使用 Lean 4 定理证明器验证数学命题 (Deprecated. Use math_sympy_verify for algebraic verification instead.)",
       "layer": "research",
-      "dispatch_domain": "research",
+      "dispatch_domain": "domain:research",
       "owner": "research",
       "trigger_hints": [
         "Lean",
@@ -1792,10 +1830,10 @@
         "形式证明",
         "lean4"
       ],
-      "host_platforms": [],
       "mcp_server": "research-harness",
       "tool_flags": [
-        "deprecated"
+        "deprecated",
+        "readonly"
       ],
       "input_schema": {
         "type": "object",
@@ -1813,9 +1851,9 @@
     {
       "slug": "research_verification_literature",
       "display_name": "文献验证",
-      "description": "验证学术文献的 DOI 可达性和声明覆盖率",
+      "description": "验证学术文献的 DOI 可达性和声明覆盖率 (Deprecated. Use research_verification_prose instead.)",
       "layer": "research",
-      "dispatch_domain": "research",
+      "dispatch_domain": "domain:research",
       "owner": "research",
       "trigger_hints": [
         "文献验证",
@@ -1830,10 +1868,10 @@
         "claim coverage",
         "引用可达性"
       ],
-      "host_platforms": [],
       "mcp_server": "research-harness",
       "tool_flags": [
-        "deprecated"
+        "deprecated",
+        "readonly"
       ],
       "input_schema": {
         "type": "object",
@@ -1875,7 +1913,7 @@
       "display_name": "文本质控",
       "description": "验证论文文本质素：术语一致性、AI slop 检测和 hedging 分析",
       "layer": "research",
-      "dispatch_domain": "research",
+      "dispatch_domain": "domain:research",
       "owner": "research",
       "trigger_hints": [
         "文本质控",
@@ -1893,9 +1931,10 @@
         "prose quality",
         "文字检查"
       ],
-      "host_platforms": [],
       "mcp_server": "research-harness",
-      "tool_flags": [],
+      "tool_flags": [
+        "readonly"
+      ],
       "input_schema": {
         "type": "object",
         "required": [
@@ -1933,9 +1972,9 @@
     {
       "slug": "research_verification_reproducibility",
       "display_name": "可复现性审计",
-      "description": "审计实验的可复现性（README/环境/脚本/数据/种子/Docker）",
+      "description": "审计实验的可复现性（README/环境/脚本/数据/种子/Docker (Deprecated. Use research_verification_statistical instead.)",
       "layer": "research",
-      "dispatch_domain": "research",
+      "dispatch_domain": "domain:research",
       "owner": "research",
       "trigger_hints": [
         "可复现性",
@@ -1953,10 +1992,10 @@
         "实验完整性",
         "reproducibility audit"
       ],
-      "host_platforms": [],
       "mcp_server": "research-harness",
       "tool_flags": [
-        "deprecated"
+        "deprecated",
+        "readonly"
       ],
       "input_schema": {
         "type": "object",
@@ -1983,7 +2022,7 @@
       "display_name": "统计验证",
       "description": "验证统计声明的正确性：GRIM 测试、p值验证、多重比较校正检查",
       "layer": "research",
-      "dispatch_domain": "research",
+      "dispatch_domain": "domain:research",
       "owner": "research",
       "trigger_hints": [
         "统计验证",
@@ -2001,9 +2040,10 @@
         "统计显著性",
         "校正检查"
       ],
-      "host_platforms": [],
       "mcp_server": "research-harness",
-      "tool_flags": [],
+      "tool_flags": [
+        "readonly"
+      ],
       "input_schema": {
         "type": "object",
         "required": [
@@ -2057,9 +2097,9 @@
     {
       "slug": "research_verification_structure",
       "display_name": "结构验证",
-      "description": "验证论文结构完整性：LaTeX 可编译性检查和图表引用检查",
+      "description": "验证论文结构完整性：LaTeX 可编译性检查和图表引用检查 (Deprecated. Use research_verification_prose instead.)",
       "layer": "research",
-      "dispatch_domain": "research",
+      "dispatch_domain": "domain:research",
       "owner": "research",
       "trigger_hints": [
         "结构验证",
@@ -2076,10 +2116,10 @@
         "figure reference",
         "论文格式检查"
       ],
-      "host_platforms": [],
       "mcp_server": "research-harness",
       "tool_flags": [
-        "deprecated"
+        "deprecated",
+        "readonly"
       ],
       "input_schema": {
         "type": "object",
@@ -2105,9 +2145,9 @@
     {
       "slug": "browser_tabs",
       "display_name": "浏览器标签页",
-      "description": "管理浏览器标签页（列出/切换）",
+      "description": "管理浏览器标签页（列出/切换",
       "layer": "independent",
-      "dispatch_domain": "browser",
+      "dispatch_domain": "domain:browser",
       "owner": "browser",
       "trigger_hints": [
         "标签页",
@@ -2118,7 +2158,6 @@
         "标签列表",
         "窗口管理"
       ],
-      "host_platforms": [],
       "mcp_server": "browser-mcp",
       "tool_flags": []
     },
@@ -2127,7 +2166,7 @@
       "display_name": "浏览器打开",
       "description": "在当前浏览器会话中打开页面",
       "layer": "independent",
-      "dispatch_domain": "browser",
+      "dispatch_domain": "domain:browser",
       "owner": "browser",
       "trigger_hints": [
         "打开",
@@ -2136,7 +2175,6 @@
         "浏览器",
         "URL"
       ],
-      "host_platforms": [],
       "mcp_server": "browser-mcp",
       "tool_flags": []
     },
@@ -2145,7 +2183,7 @@
       "display_name": "浏览器关闭",
       "description": "关闭单个标签页或整个会话",
       "layer": "independent",
-      "dispatch_domain": "browser",
+      "dispatch_domain": "domain:browser",
       "owner": "browser",
       "trigger_hints": [
         "关闭",
@@ -2154,7 +2192,6 @@
         "浏览器",
         "会话"
       ],
-      "host_platforms": [],
       "mcp_server": "browser-mcp",
       "tool_flags": []
     },
@@ -2163,7 +2200,7 @@
       "display_name": "浏览器点击",
       "description": "点击索引元素并返回增量页面 delta",
       "layer": "independent",
-      "dispatch_domain": "browser",
+      "dispatch_domain": "domain:browser",
       "owner": "browser",
       "trigger_hints": [
         "点击",
@@ -2175,7 +2212,6 @@
         "模拟点击",
         "鼠标操作"
       ],
-      "host_platforms": [],
       "mcp_server": "browser-mcp",
       "tool_flags": []
     },
@@ -2184,7 +2220,7 @@
       "display_name": "浏览器填充",
       "description": "填充输入框，可选提交，返回增量页面 delta",
       "layer": "independent",
-      "dispatch_domain": "browser",
+      "dispatch_domain": "domain:browser",
       "owner": "browser",
       "trigger_hints": [
         "填充",
@@ -2195,7 +2231,6 @@
         "表单填写",
         "输入文字"
       ],
-      "host_platforms": [],
       "mcp_server": "browser-mcp",
       "tool_flags": []
     },
@@ -2204,7 +2239,7 @@
       "display_name": "浏览器按键",
       "description": "在当前页面按下键盘键",
       "layer": "independent",
-      "dispatch_domain": "browser",
+      "dispatch_domain": "domain:browser",
       "owner": "browser",
       "trigger_hints": [
         "按键",
@@ -2213,7 +2248,6 @@
         "浏览器",
         "快捷键"
       ],
-      "host_platforms": [],
       "mcp_server": "browser-mcp",
       "tool_flags": []
     },
@@ -2222,7 +2256,7 @@
       "display_name": "浏览器截图",
       "description": "截取页面截图并作为内联图像返回",
       "layer": "independent",
-      "dispatch_domain": "browser",
+      "dispatch_domain": "domain:browser",
       "owner": "browser",
       "trigger_hints": [
         "截图",
@@ -2233,7 +2267,6 @@
         "页面截图",
         "视觉验证"
       ],
-      "host_platforms": [],
       "mcp_server": "browser-mcp",
       "tool_flags": []
     },
@@ -2242,7 +2275,7 @@
       "display_name": "浏览器获取文本",
       "description": "获取页面或特定元素范围的可见文本",
       "layer": "independent",
-      "dispatch_domain": "browser",
+      "dispatch_domain": "domain:browser",
       "owner": "browser",
       "trigger_hints": [
         "文本",
@@ -2251,7 +2284,6 @@
         "获取",
         "内容"
       ],
-      "host_platforms": [],
       "mcp_server": "browser-mcp",
       "tool_flags": []
     },
@@ -2260,7 +2292,7 @@
       "display_name": "浏览器获取状态",
       "description": "返回压缩页面摘要、交互元素和可选 diff",
       "layer": "independent",
-      "dispatch_domain": "browser",
+      "dispatch_domain": "domain:browser",
       "owner": "browser",
       "trigger_hints": [
         "状态",
@@ -2269,7 +2301,6 @@
         "摘要",
         "页面"
       ],
-      "host_platforms": [],
       "mcp_server": "browser-mcp",
       "tool_flags": []
     },
@@ -2278,7 +2309,7 @@
       "display_name": "浏览器获取元素",
       "description": "返回按角色和文本查询过滤的交互元素",
       "layer": "independent",
-      "dispatch_domain": "browser",
+      "dispatch_domain": "domain:browser",
       "owner": "browser",
       "trigger_hints": [
         "元素",
@@ -2287,7 +2318,6 @@
         "交互",
         "查询"
       ],
-      "host_platforms": [],
       "mcp_server": "browser-mcp",
       "tool_flags": []
     },
@@ -2296,7 +2326,7 @@
       "display_name": "浏览器等待",
       "description": "等待一个显式页面条件而不重新读取整个页面",
       "layer": "independent",
-      "dispatch_domain": "browser",
+      "dispatch_domain": "domain:browser",
       "owner": "browser",
       "trigger_hints": [
         "等待",
@@ -2305,7 +2335,6 @@
         "条件",
         "加载"
       ],
-      "host_platforms": [],
       "mcp_server": "browser-mcp",
       "tool_flags": []
     },
@@ -2314,7 +2343,7 @@
       "display_name": "浏览器网络",
       "description": "返回最近的网络请求，包括状态、时序和可选 body",
       "layer": "independent",
-      "dispatch_domain": "browser",
+      "dispatch_domain": "domain:browser",
       "owner": "browser",
       "trigger_hints": [
         "网络",
@@ -2323,7 +2352,6 @@
         "请求",
         "API"
       ],
-      "host_platforms": [],
       "mcp_server": "browser-mcp",
       "tool_flags": []
     },
@@ -2332,7 +2360,7 @@
       "display_name": "浏览器诊断",
       "description": "返回运行时健康信息，包括仓库技能路由工具是否暴露",
       "layer": "independent",
-      "dispatch_domain": "browser",
+      "dispatch_domain": "domain:browser",
       "owner": "browser",
       "trigger_hints": [
         "诊断",
@@ -2341,7 +2369,6 @@
         "健康",
         "运行时"
       ],
-      "host_platforms": [],
       "mcp_server": "browser-mcp",
       "tool_flags": []
     },
@@ -2350,7 +2377,7 @@
       "display_name": "浏览器保存会话",
       "description": "将当前浏览器上下文存储状态保存到磁盘",
       "layer": "independent",
-      "dispatch_domain": "browser",
+      "dispatch_domain": "domain:browser",
       "owner": "browser",
       "trigger_hints": [
         "保存",
@@ -2359,7 +2386,6 @@
         "浏览器",
         "状态"
       ],
-      "host_platforms": [],
       "mcp_server": "browser-mcp",
       "tool_flags": []
     },
@@ -2368,7 +2394,7 @@
       "display_name": "浏览器恢复会话",
       "description": "从磁盘恢复之前保存的浏览器会话",
       "layer": "independent",
-      "dispatch_domain": "browser",
+      "dispatch_domain": "domain:browser",
       "owner": "browser",
       "trigger_hints": [
         "恢复",
@@ -2377,7 +2403,6 @@
         "浏览器",
         "加载"
       ],
-      "host_platforms": [],
       "mcp_server": "browser-mcp",
       "tool_flags": []
     },
@@ -2386,7 +2411,7 @@
       "display_name": "代码图搜索",
       "description": "在代码图中搜索符号、函数、类等",
       "layer": "independent",
-      "dispatch_domain": "codegraph",
+      "dispatch_domain": "domain:codegraph",
       "owner": "codegraph",
       "trigger_hints": [
         "代码",
@@ -2395,7 +2420,6 @@
         "codegraph",
         "符号"
       ],
-      "host_platforms": [],
       "mcp_server": "codegraph-rs",
       "tool_flags": []
     },
@@ -2404,7 +2428,7 @@
       "display_name": "调用者查询",
       "description": "查找哪些函数/方法调用了指定的符号",
       "layer": "independent",
-      "dispatch_domain": "codegraph",
+      "dispatch_domain": "domain:codegraph",
       "owner": "codegraph",
       "trigger_hints": [
         "调用者",
@@ -2415,7 +2439,6 @@
         "哪些地方用了",
         "谁引用"
       ],
-      "host_platforms": [],
       "mcp_server": "codegraph-rs",
       "tool_flags": []
     },
@@ -2424,7 +2447,7 @@
       "display_name": "被调用者查询",
       "description": "查找指定函数/方法调用了哪些其他符号",
       "layer": "independent",
-      "dispatch_domain": "codegraph",
+      "dispatch_domain": "domain:codegraph",
       "owner": "codegraph",
       "trigger_hints": [
         "被调用者",
@@ -2435,7 +2458,6 @@
         "调用了什么",
         "内部依赖"
       ],
-      "host_platforms": [],
       "mcp_server": "codegraph-rs",
       "tool_flags": []
     },
@@ -2444,7 +2466,7 @@
       "display_name": "影响分析",
       "description": "分析修改指定符号的影响范围",
       "layer": "independent",
-      "dispatch_domain": "codegraph",
+      "dispatch_domain": "domain:codegraph",
       "owner": "codegraph",
       "trigger_hints": [
         "影响",
@@ -2456,7 +2478,6 @@
         "修改变更影响",
         "波及范围"
       ],
-      "host_platforms": [],
       "mcp_server": "codegraph-rs",
       "tool_flags": []
     },
@@ -2465,7 +2486,7 @@
       "display_name": "节点详情",
       "description": "获取代码图中指定节点的详细信息",
       "layer": "independent",
-      "dispatch_domain": "codegraph",
+      "dispatch_domain": "domain:codegraph",
       "owner": "codegraph",
       "trigger_hints": [
         "节点",
@@ -2474,7 +2495,6 @@
         "信息",
         "代码图"
       ],
-      "host_platforms": [],
       "mcp_server": "codegraph-rs",
       "tool_flags": []
     },
@@ -2483,7 +2503,7 @@
       "display_name": "代码图状态",
       "description": "查看代码图索引的构建状态和统计信息",
       "layer": "independent",
-      "dispatch_domain": "codegraph",
+      "dispatch_domain": "domain:codegraph",
       "owner": "codegraph",
       "trigger_hints": [
         "状态",
@@ -2492,7 +2512,6 @@
         "索引",
         "统计"
       ],
-      "host_platforms": [],
       "mcp_server": "codegraph-rs",
       "tool_flags": []
     },
@@ -2501,7 +2520,7 @@
       "display_name": "死代码检测",
       "description": "检测项目中未被使用的代码",
       "layer": "independent",
-      "dispatch_domain": "codegraph",
+      "dispatch_domain": "domain:codegraph",
       "owner": "codegraph",
       "trigger_hints": [
         "死代码",
@@ -2514,7 +2533,6 @@
         "僵尸代码",
         "剔除"
       ],
-      "host_platforms": [],
       "mcp_server": "codegraph-rs",
       "tool_flags": []
     },
@@ -2523,7 +2541,7 @@
       "display_name": "跳转定义",
       "description": "查找指定符号的定义位置",
       "layer": "independent",
-      "dispatch_domain": "codegraph",
+      "dispatch_domain": "domain:codegraph",
       "owner": "codegraph",
       "trigger_hints": [
         "定义",
@@ -2533,7 +2551,6 @@
         "查找",
         "代码"
       ],
-      "host_platforms": [],
       "mcp_server": "codegraph-rs",
       "tool_flags": []
     },
@@ -2542,7 +2559,7 @@
       "display_name": "PDF 文本提取",
       "description": "从 PDF 文件中提取文本内容，支持分页和全量提取",
       "layer": "external",
-      "dispatch_domain": "stdio-binary",
+      "dispatch_domain": "domain:stdio-binary",
       "owner": "rust-tools",
       "trigger_hints": [
         "PDF",
@@ -2552,16 +2569,15 @@
         "文档",
         "论文"
       ],
-      "host_platforms": [],
       "mcp_server": "mcp-pdf",
       "tool_flags": []
     },
     {
       "slug": "pdf_info",
       "display_name": "PDF 元数据",
-      "description": "获取 PDF 文件的元数据信息（页数、标题、作者等）",
+      "description": "获取 PDF 文件的元数据信息（页数、标题、作者等",
       "layer": "external",
-      "dispatch_domain": "stdio-binary",
+      "dispatch_domain": "domain:stdio-binary",
       "owner": "rust-tools",
       "trigger_hints": [
         "PDF",
@@ -2570,16 +2586,15 @@
         "信息",
         "页数"
       ],
-      "host_platforms": [],
       "mcp_server": "mcp-pdf",
       "tool_flags": []
     },
     {
       "slug": "ooxml_parse",
       "display_name": "OOXML 解析",
-      "description": "解析 Office Open XML 格式文件（docx/xlsx/pptx）",
+      "description": "解析 Office Open XML 格式文件（docx/xlsx/pptx",
       "layer": "external",
-      "dispatch_domain": "stdio-binary",
+      "dispatch_domain": "domain:stdio-binary",
       "owner": "rust-tools",
       "trigger_hints": [
         "OOXML",
@@ -2589,7 +2604,6 @@
         "解析",
         "文档"
       ],
-      "host_platforms": [],
       "mcp_server": "mcp-ooxml",
       "tool_flags": []
     },
@@ -2598,7 +2612,7 @@
       "display_name": "PPTX 解析",
       "description": "解析 PowerPoint 文件，提取幻灯片文本和结构",
       "layer": "external",
-      "dispatch_domain": "stdio-binary",
+      "dispatch_domain": "domain:stdio-binary",
       "owner": "rust-tools",
       "trigger_hints": [
         "PPTX",
@@ -2607,16 +2621,15 @@
         "幻灯片",
         "解析"
       ],
-      "host_platforms": [],
       "mcp_server": "mcp-pptx",
       "tool_flags": []
     },
     {
       "slug": "financial_data",
       "display_name": "金融数据",
-      "description": "获取和分析金融数据（股票、基金、指数等）",
+      "description": "获取和分析金融数据（股票、基金、指数等",
       "layer": "external",
-      "dispatch_domain": "stdio-binary",
+      "dispatch_domain": "domain:stdio-binary",
       "owner": "rust-tools",
       "trigger_hints": [
         "金融",
@@ -2626,7 +2639,6 @@
         "分析",
         "financial"
       ],
-      "host_platforms": [],
       "mcp_server": "mcp-financial-data",
       "tool_flags": []
     },
@@ -2635,7 +2647,7 @@
       "display_name": "引用审计",
       "description": "审计学术论文引用的准确性和完整性",
       "layer": "external",
-      "dispatch_domain": "stdio-binary",
+      "dispatch_domain": "domain:stdio-binary",
       "owner": "rust-tools",
       "trigger_hints": [
         "引用",
@@ -2644,7 +2656,6 @@
         "论文",
         "学术"
       ],
-      "host_platforms": [],
       "mcp_server": "mcp-citation",
       "tool_flags": []
     },
@@ -2653,7 +2664,7 @@
       "display_name": "引用检查",
       "description": "检查引用格式是否符合规范",
       "layer": "external",
-      "dispatch_domain": "stdio-binary",
+      "dispatch_domain": "domain:stdio-binary",
       "owner": "rust-tools",
       "trigger_hints": [
         "引用",
@@ -2662,7 +2673,6 @@
         "lint",
         "格式"
       ],
-      "host_platforms": [],
       "mcp_server": "mcp-citation",
       "tool_flags": []
     },
@@ -2671,7 +2681,7 @@
       "display_name": "GitHub 源码门禁",
       "description": "对 GitHub 仓库源码进行安全和质量门禁检查",
       "layer": "external",
-      "dispatch_domain": "stdio-binary",
+      "dispatch_domain": "domain:stdio-binary",
       "owner": "rust-tools",
       "trigger_hints": [
         "GitHub",
@@ -2681,7 +2691,6 @@
         "质量",
         "检查"
       ],
-      "host_platforms": [],
       "mcp_server": "mcp-gh-source-gate",
       "tool_flags": []
     },
@@ -2690,7 +2699,7 @@
       "display_name": "研究论文搜索",
       "description": "搜索学术论文，支持多源并行查询",
       "layer": "external",
-      "dispatch_domain": "stdio-binary",
+      "dispatch_domain": "domain:stdio-binary",
       "owner": "paperplain",
       "trigger_hints": [
         "搜索",
@@ -2701,7 +2710,6 @@
         "PubMed",
         "ArXiv"
       ],
-      "host_platforms": [],
       "mcp_server": "paperplain-mcp",
       "tool_flags": []
     },
@@ -2710,7 +2718,7 @@
       "display_name": "论文获取",
       "description": "获取论文的完整摘要和元数据",
       "layer": "external",
-      "dispatch_domain": "stdio-binary",
+      "dispatch_domain": "domain:stdio-binary",
       "owner": "paperplain",
       "trigger_hints": [
         "获取",
@@ -2719,7 +2727,6 @@
         "摘要",
         "元数据"
       ],
-      "host_platforms": [],
       "mcp_server": "paperplain-mcp",
       "tool_flags": []
     },
@@ -2728,7 +2735,7 @@
       "display_name": "论文标题查找",
       "description": "通过标题或部分标题查找论文",
       "layer": "external",
-      "dispatch_domain": "stdio-binary",
+      "dispatch_domain": "domain:stdio-binary",
       "owner": "paperplain",
       "trigger_hints": [
         "查找",
@@ -2737,8 +2744,213 @@
         "论文",
         "论文标题"
       ],
-      "host_platforms": [],
       "mcp_server": "paperplain-mcp",
+      "tool_flags": []
+    },
+    {
+      "slug": "browser_get_attached_runtime_events",
+      "display_name": "获取附加运行时事件",
+      "description": "获取浏览器运行时事件流",
+      "layer": "independent",
+      "dispatch_domain": "browser",
+      "owner": "browser",
+      "trigger_hints": [
+        "事件",
+        "event",
+        "runtime",
+        "浏览器"
+      ],
+      "host_platforms": [],
+      "mcp_server": "browser-mcp",
+      "tool_flags": []
+    },
+    {
+      "slug": "runtime_heartbeat",
+      "display_name": "运行时心跳",
+      "description": "返回运行时健康状态",
+      "layer": "independent",
+      "dispatch_domain": "browser",
+      "owner": "browser",
+      "trigger_hints": [
+        "心跳",
+        "heartbeat",
+        "运行时",
+        "健康"
+      ],
+      "host_platforms": [],
+      "mcp_server": "browser-mcp",
+      "tool_flags": []
+    },
+    {
+      "slug": "session_launch",
+      "display_name": "会话启动",
+      "description": "启动新浏览器会话",
+      "layer": "independent",
+      "dispatch_domain": "browser",
+      "owner": "browser",
+      "trigger_hints": [
+        "启动",
+        "launch",
+        "会话",
+        "session"
+      ],
+      "host_platforms": [],
+      "mcp_server": "browser-mcp",
+      "tool_flags": []
+    },
+    {
+      "slug": "session_list",
+      "display_name": "会话列表",
+      "description": "列出所有浏览器会话",
+      "layer": "independent",
+      "dispatch_domain": "browser",
+      "owner": "browser",
+      "trigger_hints": [
+        "列表",
+        "list",
+        "会话",
+        "session"
+      ],
+      "host_platforms": [],
+      "mcp_server": "browser-mcp",
+      "tool_flags": []
+    },
+    {
+      "slug": "session_inspect",
+      "display_name": "会话检查",
+      "description": "检查浏览器会话详情",
+      "layer": "independent",
+      "dispatch_domain": "browser",
+      "owner": "browser",
+      "trigger_hints": [
+        "检查",
+        "inspect",
+        "会话",
+        "session"
+      ],
+      "host_platforms": [],
+      "mcp_server": "browser-mcp",
+      "tool_flags": []
+    },
+    {
+      "slug": "session_terminate",
+      "display_name": "会话终止",
+      "description": "终止浏览器会话",
+      "layer": "independent",
+      "dispatch_domain": "browser",
+      "owner": "browser",
+      "trigger_hints": [
+        "终止",
+        "terminate",
+        "会话",
+        "session"
+      ],
+      "host_platforms": [],
+      "mcp_server": "browser-mcp",
+      "tool_flags": []
+    },
+    {
+      "slug": "session_mark_blocked",
+      "display_name": "会话标记阻塞",
+      "description": "标记浏览器会话为阻塞状态",
+      "layer": "independent",
+      "dispatch_domain": "browser",
+      "owner": "browser",
+      "trigger_hints": [
+        "阻塞",
+        "blocked",
+        "标记",
+        "会话"
+      ],
+      "host_platforms": [],
+      "mcp_server": "browser-mcp",
+      "tool_flags": []
+    },
+    {
+      "slug": "session_resume_due",
+      "display_name": "会话到期恢复",
+      "description": "恢复到期浏览器会话",
+      "layer": "independent",
+      "dispatch_domain": "browser",
+      "owner": "browser",
+      "trigger_hints": [
+        "恢复",
+        "resume",
+        "到期",
+        "due",
+        "会话"
+      ],
+      "host_platforms": [],
+      "mcp_server": "browser-mcp",
+      "tool_flags": []
+    },
+    {
+      "slug": "background_list",
+      "display_name": "后台任务列表",
+      "description": "列出所有后台浏览器任务",
+      "layer": "independent",
+      "dispatch_domain": "browser",
+      "owner": "browser",
+      "trigger_hints": [
+        "后台",
+        "background",
+        "列表",
+        "任务"
+      ],
+      "host_platforms": [],
+      "mcp_server": "browser-mcp",
+      "tool_flags": []
+    },
+    {
+      "slug": "background_inspect",
+      "display_name": "后台任务检查",
+      "description": "检查后台浏览器任务详情",
+      "layer": "independent",
+      "dispatch_domain": "browser",
+      "owner": "browser",
+      "trigger_hints": [
+        "后台",
+        "background",
+        "检查",
+        "inspect"
+      ],
+      "host_platforms": [],
+      "mcp_server": "browser-mcp",
+      "tool_flags": []
+    },
+    {
+      "slug": "background_terminate",
+      "display_name": "后台任务终止",
+      "description": "终止后台浏览器任务",
+      "layer": "independent",
+      "dispatch_domain": "browser",
+      "owner": "browser",
+      "trigger_hints": [
+        "后台",
+        "background",
+        "终止",
+        "terminate"
+      ],
+      "host_platforms": [],
+      "mcp_server": "browser-mcp",
+      "tool_flags": []
+    },
+    {
+      "slug": "session_classify_block",
+      "display_name": "会话阻塞分类",
+      "description": "对浏览器会话阻塞原因进行分类",
+      "layer": "independent",
+      "dispatch_domain": "browser",
+      "owner": "browser",
+      "trigger_hints": [
+        "阻塞",
+        "block",
+        "分类",
+        "classify",
+        "会话"
+      ],
+      "host_platforms": [],
+      "mcp_server": "browser-mcp",
       "tool_flags": []
     }
   ]

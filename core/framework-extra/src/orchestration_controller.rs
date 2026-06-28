@@ -53,7 +53,7 @@ fn compute_backoff_seconds(
         return 0.0;
     }
     let normalized_multiplier = if multiplier > 0.0 { multiplier } else { 1.0 };
-    let mut delay = base * normalized_multiplier.powi((retry_count.saturating_sub(1)) as i32);
+    let mut delay = base * normalized_multiplier.powi((retry_count.min(32).saturating_sub(1)) as i32);
     if let Some(maximum) = maximum {
         delay = delay.min(maximum);
     }
@@ -775,4 +775,45 @@ pub fn runtime_observability_dashboard_schema() -> Value {
             },
         ],
     })
+}
+
+/// Dispatch an orchestrator operation payload.
+///
+/// Routes known sub-operations to the appropriate handler. For operations that
+/// require the session-supervisor crate (team/worker/agent management), returns
+/// a documented error since that crate is not wired into this build.
+///
+/// This is wired into `runtime_core::init_hooks()` as the
+/// `handle_orchestrator_operation` hook. It replaces the previous dead-end
+/// closure that unconditionally returned an error.
+pub fn handle_orchestrator_operation(payload: Value) -> Result<Value, FrameworkError> {
+    let operation = payload
+        .get("operation")
+        .and_then(Value::as_str)
+        .unwrap_or("<missing>")
+        .to_string();
+    tracing::info!(operation = %operation, "orchestrator operation requested");
+
+    match operation.as_str() {
+        // Background control operations — route to existing handler
+        "batch-plan" | "enqueue" | "interrupt" | "claim" | "complete"
+        | "completion-race" | "retry-claim" | "interrupt-finalize"
+        | "retry" | "session-release" => {
+            let request: BackgroundControlRequestPayload = serde_json::from_value(payload)
+                .map_err(|e| FrameworkError::validation(format!("background_control payload: {e}")))?;
+            let response = build_background_control_response(request)?;
+            serde_json::to_value(response)
+                .map_err(|e| FrameworkError::validation(format!("background_control response: {e}")))
+        }
+        other => Err(FrameworkError::hook(
+            format!("orchestrator operation '{other}' is not available: the session-supervisor crate (team/worker/agent \
+                     management) is not wired into this runtime-core build. \
+                     Available operations: team_create, team_add_member, team_remove_member, team_complete, \
+                     team_send_message, team_read_messages, team_alive_members, team_list, agent_register, \
+                     agent_unregister, agent_list_running, launch, list, terminate, classify_block. \
+                     Background control operations (batch-plan, enqueue, interrupt, claim, complete, \
+                     completion-race, retry-claim, interrupt-finalize, retry, session-release) ARE available \
+                     via the appropriate orchestrator operation payload.")
+        )),
+    }
 }

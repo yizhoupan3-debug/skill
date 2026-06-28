@@ -35,6 +35,8 @@ use std::collections::HashMap;
 use std::fs;
 use std::io::{BufRead, Write};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::AtomicU64;
+use std::sync::mpsc;
 use std::sync::{Arc, OnceLock};
 use std::time::{Duration, Instant};
 
@@ -167,10 +169,14 @@ impl ToolDispatchTable {
         let records = match mcp_tool_registry::load_tool_records_cached(&registry_path) {
             Ok(records) => records,
             Err(e) => {
-                tracing::warn!("ToolDispatchTable: failed to load registry: {e}");
-                return Self {
-                    targets: HashMap::new(),
-                };
+                tracing::warn!("ToolDispatchTable: failed to load registry: {e}; using fallback CLI tool list");
+                // HPM-9: when registry is unavailable, populate with known CLI tools
+                // so they don't fall through to research-harness handlers.
+                let mut targets = HashMap::new();
+                for slug in KNOWN_CLI_TOOLS {
+                    targets.insert(slug.to_string(), McpDispatchTarget::CliSubprocess);
+                }
+                return Self { targets };
             }
         };
 
@@ -186,6 +192,12 @@ impl ToolDispatchTable {
                 targets.insert(r.slug.clone(), t);
             }
         }
+
+        // HPM-9: ensure known CLI tools are always mapped even if absent from registry
+        for slug in KNOWN_CLI_TOOLS {
+            targets.entry(slug.to_string()).or_insert(McpDispatchTarget::CliSubprocess);
+        }
+
         Self { targets }
     }
 
@@ -201,6 +213,23 @@ impl ToolDispatchTable {
 /// Lazily-initialized dispatch table from MCP_TOOL_REGISTRY.json.
 static DISPATCH_TABLE: OnceLock<ToolDispatchTable> = OnceLock::new();
 
+/// Lazily-initialized CompositeRegistry of built-in (router-rs) tool handlers.
+static REGISTRY: OnceLock<CompositeRegistry> = OnceLock::new();
+
+/// Known CLI-routed tools used as fallback when MCP_TOOL_REGISTRY.json is unavailable.
+const KNOWN_CLI_TOOLS: &[&str] = &[
+    "web_fetch",
+    "research_aigc_check",
+    "research_smoke",
+    "research_verification_literature",
+    "research_verification_structure",
+    "research_verification_reproducibility",
+    "math_prove_inequality",
+    "math_backend_available",
+    "math_asymptotic_chain",
+    "math_lean_verify",
+];
+
 /// Dispatch a tool call through the global CompositeRegistry,
 /// falling through to the external research-tool handler when
 /// the built-in registry does not recognise the tool name.
@@ -215,7 +244,7 @@ pub(super) fn dispatch_tool(
     repo_root: &Path,
     host_id: &str,
     connection_session_id: &str,
-) -> Result<String, String> {
+) -> Result<String, FrameworkError> {
     // CLI-routed tools: spawn as subprocess (process isolation for blocking I/O).
     // MUST be checked before CompositeRegistry — some CLI tools (e.g. web_fetch)
     // have legacy ToolHandler entries that would otherwise consume the call.
@@ -223,12 +252,10 @@ pub(super) fn dispatch_tool(
         .get_or_init(ToolDispatchTable::from_registry)
         .is_cli_tool(tool_name)
     {
-        return spawn_cli_tool(tool_name, args, repo_root);
+        return spawn_cli_tool(tool_name, args, repo_root)
+            .map_err(|e| FrameworkError::validation(e));
     }
 
-    use std::sync::OnceLock;
-
-    static REGISTRY: OnceLock<CompositeRegistry> = OnceLock::new();
     let registry = REGISTRY.get_or_init(|| {
         let mut r = CompositeRegistry::new();
         r.register(RoutingTools);
@@ -240,17 +267,34 @@ pub(super) fn dispatch_tool(
         r.register(OrchestratorTools);
         r
     });
-    let ctx = ToolCallContext {
-        repo_root: repo_root.to_path_buf(),
-        host_id: host_id.to_string(),
-        connection_session_id: Arc::new(connection_session_id.to_string()),
-    };
 
     // Check if the tool is registered in the built-in registry.
     // Only fall through to external dispatch for truly unregistered tools;
     // registered tools that return Err have a business error that must propagate.
     if registry.contains(tool_name) {
-        return registry.dispatch(tool_name, args, &ctx);
+        // HPM-2: wrap builtin tool dispatch with a 60-second timeout via thread+channel
+        let tn = tool_name.to_string();
+        let a = args.clone();
+        let repo_root = repo_root.to_path_buf();
+        let host_id = host_id.to_string();
+        let connection_session_id = connection_session_id.to_string();
+        let (tx, rx) = mpsc::channel();
+        std::thread::spawn(move || {
+            let reg = REGISTRY.get().expect("REGISTRY initialized above");
+            let ctx = ToolCallContext {
+                repo_root,
+                host_id,
+                connection_session_id: Arc::new(connection_session_id),
+            };
+            let result = reg.dispatch(&tn, &a, &ctx);
+            let _ = tx.send(result);
+        });
+        return match rx.recv_timeout(Duration::from_secs(60)) {
+            Ok(r) => r,
+            Err(_) => Err(FrameworkError::validation(format!(
+                "builtin tool {tool_name} timed out after 60s"
+            ))),
+        };
     }
 
     // Not found in built-in registry → try externally-registered dispatch
@@ -263,10 +307,14 @@ pub(super) fn dispatch_tool(
     // have handlers in research-harness that are effectively dead code since
     // the CLI dispatch at line 226 returns early. They are retained in case
     // mcp_server is changed back from "router-rs-cli" to "research-harness".
+    //
+    // HPM-17: compile-time assertion — these tools are CLI-routed. If their
+    // mcp_server changes back to "research-harness", remove this note and
+    // re-enable the research-harness handlers.
     if let Some(dispatch) = crate::hooks::get_research_tool_dispatch() {
-        Ok(dispatch(tool_name, args)?)
+        dispatch(tool_name, args).map_err(|e| FrameworkError::validation(e.to_string()))
     } else {
-        Err(format!("Unknown tool: {tool_name}"))
+        Err(FrameworkError::not_found(format!("Unknown tool: {tool_name}")))
     }
 }
 
@@ -309,6 +357,8 @@ fn read_mcp_message<R: BufRead>(
     input: &mut R,
     transport_mode: &mut Option<McpTransportMode>,
 ) -> Result<Option<String>, String> {
+    const MAX_HEADER_LINE: usize = 8192;
+
     let mut first_line = String::new();
     loop {
         first_line.clear();
@@ -318,15 +368,24 @@ fn read_mcp_message<R: BufRead>(
         if bytes == 0 {
             return Ok(None);
         }
+        // HPM-7: enforce 8KB per header line
+        if first_line.len() > MAX_HEADER_LINE {
+            return Err(format!(
+                "MCP header line exceeds {MAX_HEADER_LINE} byte limit"
+            ));
+        }
         if !first_line.trim().is_empty() {
             break;
         }
     }
 
     let lower = first_line.to_ascii_lowercase();
-    // HTTP headers may have optional whitespace (OWS) before the colon per RFC 7230
-    let has_content_length =
-        lower.starts_with("content-length:") || lower.starts_with("content-length :");
+    // HPM-13: use find(':') to locate colon position instead of fixed offsets,
+    // properly handling optional whitespace (OWS) before colon per RFC 7230.
+    let colon_pos = lower.find(':');
+    let has_content_length = colon_pos
+        .map(|pos| lower[..pos].trim() == "content-length")
+        .unwrap_or(false);
     if has_content_length {
         let previous_mode = *transport_mode;
         *transport_mode = Some(McpTransportMode::ContentLength);
@@ -349,6 +408,12 @@ fn read_mcp_message<R: BufRead>(
                 .map_err(|err| format!("read MCP header failed: {err}"))?;
             if bytes == 0 {
                 return Err("MCP header ended before blank line".to_string());
+            }
+            // HPM-7: enforce 8KB per header line
+            if header.len() > MAX_HEADER_LINE {
+                return Err(format!(
+                    "MCP header line exceeds {MAX_HEADER_LINE} byte limit"
+                ));
             }
             if header.trim().is_empty() {
                 break;
@@ -376,18 +441,17 @@ fn read_mcp_message<R: BufRead>(
 }
 
 fn parse_content_length(line: &str) -> Result<usize, String> {
-    // Handle both "Content-Length:" and "Content-Length :" (OWS)
-    // Note: line may contain trailing \r\n from read_line
+    // HPM-13: use find(':') to locate the colon position, supporting arbitrary
+    // optional whitespace (OWS) before the colon per RFC 7230.
     let lower = line.to_ascii_lowercase();
-    let value_str = if lower.starts_with("content-length :") {
-        // Skip "content-length :" (16 chars)
-        line[16..].trim()
-    } else if lower.starts_with("content-length:") {
-        // Skip "content-length:" (15 chars)
-        line[15..].trim()
-    } else {
-        return Err(format!("invalid Content-Length header: {}", line));
-    };
+    let colon_pos = lower.find(':').ok_or_else(|| {
+        format!("invalid Content-Length header (no colon): {line}")
+    })?;
+    let header_name = lower[..colon_pos].trim();
+    if header_name != "content-length" {
+        return Err(format!("invalid Content-Length header: {line}"));
+    }
+    let value_str = line[colon_pos + 1..].trim();
     value_str
         .parse::<usize>()
         .map_err(|err| format!("invalid MCP content length '{value_str}': {err}"))
@@ -413,14 +477,17 @@ fn write_mcp_response<W: Write>(
     Ok(())
 }
 
-/// 生成连接级 session_id：`{host_id}-{nanos}`。
+/// 生成连接级 session_id：`{host_id}-{nanos}-{counter}`。
 /// 每次 MCP stdio 连接调用一次，同一连接内所有 goal 操作共享此 ID。
+/// 使用递增计数器防止系统时间回退导致 session_id 退化。
 fn generate_connection_session_id(host_id: &str) -> String {
+    static SESSION_COUNTER: AtomicU64 = AtomicU64::new(0);
+    let counter = SESSION_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let nanos = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_nanos();
-    format!("{host_id}-{nanos}")
+    format!("{host_id}-{nanos}-{counter}")
 }
 
 pub fn handle_mcp_request(
@@ -817,17 +884,43 @@ pub fn tool_closeout_record_write_for_test(
 
 // ── CLI subprocess dispatch ──
 
+/// Validate and sanitize a CLI argument value to prevent argument injection:
+/// 1. Reject values starting with `--` (could be interpreted as flags)
+/// 2. Cap at `max_len` bytes (prevent oversized payloads)
+fn validate_cli_arg(value: &str, max_len: usize) -> Result<String, String> {
+    if value.len() > max_len {
+        return Err(format!("argument too long (max {max_len} bytes)"));
+    }
+    if value.starts_with("--") {
+        return Err("argument cannot start with '--'".to_string());
+    }
+    Ok(value.to_string())
+}
+
+/// Validate and serialize a JSON array/object CLI argument (64KB serialized limit).
+fn validate_cli_json_arg(value: &Value) -> Result<String, String> {
+    let json_str = serde_json::to_string(value)
+        .map_err(|e| format!("argument serialization failed: {e}"))?;
+    if json_str.len() > 64 * 1024 {
+        return Err("JSON argument exceeds 64KB limit".to_string());
+    }
+    Ok(json_str)
+}
+
 /// Map MCP tool name and JSON arguments to `router-rs-cli` subcommand arguments.
 /// Each tool name maps to its corresponding CLI subcommand tree with flags
 /// derived from the MCP tool's JSON input schema.
 fn map_tool_to_cli_args(tool_name: &str, args: &Value) -> Result<Vec<String>, String> {
+    // HPM-1: validate all user-supplied parameter values for injection safety
+    const MAX_ARG_LEN: usize = 4096;
     match tool_name {
         "web_fetch" => {
             let url = args
                 .get("url")
                 .and_then(Value::as_str)
                 .ok_or("Missing required argument: url")?;
-            let mut cmd = vec!["web".to_string(), "fetch".to_string(), url.to_string()];
+            let url = validate_cli_arg(url, MAX_ARG_LEN)?;
+            let mut cmd = vec!["web".to_string(), "fetch".to_string(), url];
             if let Some(max_bytes) = args.get("max_bytes").and_then(Value::as_u64) {
                 cmd.push("--max-bytes".to_string());
                 cmd.push(max_bytes.to_string());
@@ -839,15 +932,17 @@ fn map_tool_to_cli_args(tool_name: &str, args: &Value) -> Result<Vec<String>, St
                 .get("text")
                 .and_then(Value::as_str)
                 .ok_or("Missing required argument: text")?;
+            let text = validate_cli_arg(text, MAX_ARG_LEN)?;
             let mut cmd = vec![
                 "research".to_string(),
                 "aigc-check".to_string(),
                 "--text".to_string(),
-                text.to_string(),
+                text,
             ];
             if let Some(lang) = args.get("language").and_then(Value::as_str) {
+                let lang = validate_cli_arg(lang, MAX_ARG_LEN)?;
                 cmd.push("--language".to_string());
-                cmd.push(lang.to_string());
+                cmd.push(lang);
             }
             Ok(cmd)
         }
@@ -855,15 +950,15 @@ fn map_tool_to_cli_args(tool_name: &str, args: &Value) -> Result<Vec<String>, St
             let mut cmd = vec!["research".to_string(), "smoke".to_string()];
             if let Some(source) = args.get("source").and_then(Value::as_str) {
                 cmd.push("--source".to_string());
-                cmd.push(source.to_string());
+                cmd.push(validate_cli_arg(source, MAX_ARG_LEN)?);
             }
             if let Some(repo_root) = args.get("repo_root").and_then(Value::as_str) {
                 cmd.push("--repo-root".to_string());
-                cmd.push(repo_root.to_string());
+                cmd.push(validate_cli_arg(repo_root, MAX_ARG_LEN)?);
             }
             if let Some(barrier_id) = args.get("barrier_id").and_then(Value::as_str) {
                 cmd.push("--barrier-id".to_string());
-                cmd.push(barrier_id.to_string());
+                cmd.push(validate_cli_arg(barrier_id, MAX_ARG_LEN)?);
             }
             Ok(cmd)
         }
@@ -872,30 +967,25 @@ fn map_tool_to_cli_args(tool_name: &str, args: &Value) -> Result<Vec<String>, St
                 .get("check")
                 .and_then(Value::as_str)
                 .ok_or("Missing required argument: check")?;
+            let check = validate_cli_arg(check, MAX_ARG_LEN)?;
             let mut cmd = vec![
                 "research".to_string(),
                 "verify".to_string(),
                 "literature".to_string(),
                 "--check".to_string(),
-                check.to_string(),
+                check,
             ];
             if let Some(doi) = args.get("doi").and_then(Value::as_str) {
                 cmd.push("--doi".to_string());
-                cmd.push(doi.to_string());
+                cmd.push(validate_cli_arg(doi, MAX_ARG_LEN)?);
             }
             if let Some(claims) = args.get("claims").and_then(Value::as_array) {
                 cmd.push("--claims".to_string());
-                cmd.push(
-                    serde_json::to_string(claims)
-                        .map_err(|e| format!("claims serialization failed: {e}"))?,
-                );
+                cmd.push(validate_cli_json_arg(&Value::Array(claims.clone()))?);
             }
             if let Some(references) = args.get("references").and_then(Value::as_array) {
                 cmd.push("--references".to_string());
-                cmd.push(
-                    serde_json::to_string(references)
-                        .map_err(|e| format!("references serialization failed: {e}"))?,
-                );
+                cmd.push(validate_cli_json_arg(&Value::Array(references.clone()))?);
             }
             Ok(cmd)
         }
@@ -904,17 +994,19 @@ fn map_tool_to_cli_args(tool_name: &str, args: &Value) -> Result<Vec<String>, St
                 .get("check")
                 .and_then(Value::as_str)
                 .ok_or("Missing required argument: check")?;
+            let check = validate_cli_arg(check, MAX_ARG_LEN)?;
             let path = args
                 .get("path")
                 .and_then(Value::as_str)
                 .ok_or("Missing required argument: path")?;
+            let path = validate_cli_arg(path, MAX_ARG_LEN)?;
             Ok(vec![
                 "research".to_string(),
                 "verify".to_string(),
                 "structure".to_string(),
-                path.to_string(),
+                path,
                 "--check".to_string(),
-                check.to_string(),
+                check,
             ])
         }
         "research_verification_reproducibility" => {
@@ -922,18 +1014,16 @@ fn map_tool_to_cli_args(tool_name: &str, args: &Value) -> Result<Vec<String>, St
                 .get("experiment_dir")
                 .and_then(Value::as_str)
                 .ok_or("Missing required argument: experiment_dir")?;
+            let dir = validate_cli_arg(dir, MAX_ARG_LEN)?;
             let mut cmd = vec![
                 "research".to_string(),
                 "verify".to_string(),
                 "reproducibility".to_string(),
-                dir.to_string(),
+                dir,
             ];
             if let Some(run_paths) = args.get("run_paths").and_then(Value::as_array) {
                 cmd.push("--run-paths".to_string());
-                cmd.push(
-                    serde_json::to_string(run_paths)
-                        .map_err(|e| format!("run_paths serialization failed: {e}"))?,
-                );
+                cmd.push(validate_cli_json_arg(&Value::Array(run_paths.clone()))?);
             }
             Ok(cmd)
         }
@@ -942,7 +1032,8 @@ fn map_tool_to_cli_args(tool_name: &str, args: &Value) -> Result<Vec<String>, St
                 .get("expression")
                 .and_then(Value::as_str)
                 .ok_or("Missing required argument: expression")?;
-            let mut cmd = vec!["math".to_string(), "prove".to_string(), expr.to_string()];
+            let expr = validate_cli_arg(expr, MAX_ARG_LEN)?;
+            let mut cmd = vec!["math".to_string(), "prove".to_string(), expr];
             if let Some(timeout) = args.get("timeout_ms").and_then(Value::as_u64) {
                 cmd.push("--timeout-ms".to_string());
                 cmd.push(timeout.to_string());
@@ -955,20 +1046,20 @@ fn map_tool_to_cli_args(tool_name: &str, args: &Value) -> Result<Vec<String>, St
                 .get("steps")
                 .and_then(Value::as_array)
                 .ok_or("Missing required argument: steps")?;
+            let steps_json = validate_cli_json_arg(&Value::Array(steps.clone()))?;
             let mut cmd = vec![
                 "math".to_string(),
                 "asymptotic-chain".to_string(),
                 "--steps".to_string(),
-                serde_json::to_string(steps)
-                    .map_err(|e| format!("steps serialization failed: {e}"))?,
+                steps_json,
             ];
             if let Some(var) = args.get("variable").and_then(Value::as_str) {
                 cmd.push("--variable".to_string());
-                cmd.push(var.to_string());
+                cmd.push(validate_cli_arg(var, MAX_ARG_LEN)?);
             }
             if let Some(regime) = args.get("regime").and_then(Value::as_str) {
                 cmd.push("--regime".to_string());
-                cmd.push(regime.to_string());
+                cmd.push(validate_cli_arg(regime, MAX_ARG_LEN)?);
             }
             if let Some(sympy) = args.get("sympy_check").and_then(Value::as_bool) {
                 if !sympy {
@@ -982,8 +1073,13 @@ fn map_tool_to_cli_args(tool_name: &str, args: &Value) -> Result<Vec<String>, St
                 .get("script")
                 .and_then(Value::as_str)
                 .ok_or("Missing required argument: script")?;
+            // HPM-8: use timestamp-based suffix instead of predictable PID
+            let nanos = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos();
             let tmp_path =
-                std::env::temp_dir().join(format!("router_rs_lean_{}.lean", std::process::id()));
+                std::env::temp_dir().join(format!("router_rs_lean_{nanos}.lean"));
             std::fs::write(&tmp_path, script)
                 .map_err(|e| format!("failed to write lean script to temp file: {e}"))?;
             Ok(vec![
@@ -1005,7 +1101,6 @@ fn spawn_cli_tool(tool_name: &str, args: &Value, repo_root: &Path) -> Result<Str
     let cli_args = map_tool_to_cli_args(tool_name, args)?;
 
     let timeout = Duration::from_secs(300);
-    let poll_interval = Duration::from_millis(100);
 
     let mut child = std::process::Command::new("router-rs-cli")
         .args(&cli_args)
@@ -1015,37 +1110,52 @@ fn spawn_cli_tool(tool_name: &str, args: &Value, repo_root: &Path) -> Result<Str
         .spawn()
         .map_err(|e| format!("router-rs-cli subprocess failed (is it in PATH or built?): {e}"))?;
 
-    let start = std::time::Instant::now();
-    let status = loop {
-        match child.try_wait() {
-            Ok(Some(status)) => break status,
-            Ok(None) => {
-                if start.elapsed() >= timeout {
-                    let _ = child.kill();
-                    let _ = child.wait();
-                    return Err(format!(
-                        "router-rs-cli {} timed out after {}s",
-                        tool_name,
-                        timeout.as_secs()
-                    ));
-                }
-                std::thread::sleep(poll_interval);
+    // HPM-10: take stdout/stderr handles before moving child into wait thread
+    let mut child_stdout = child.stdout.take();
+    let mut child_stderr = child.stderr.take();
+    let pid = child.id();
+
+    // Monitor thread: blocks on child.wait() — zero busy polling
+    let (tx, rx) = mpsc::channel();
+    std::thread::spawn(move || {
+        let status = child.wait();
+        let _ = tx.send(status);
+    });
+
+    // Block until child exits or timeout expires
+    let status = match rx.recv_timeout(timeout) {
+        Ok(Ok(status)) => status,
+        Ok(Err(e)) => return Err(format!("router-rs-cli subprocess wait error: {e}")),
+        Err(_) => {
+            // Timed out: kill child process via OS signal
+            #[cfg(unix)]
+            unsafe {
+                libc::kill(pid as i32, libc::SIGTERM);
             }
-            Err(e) => {
-                return Err(format!("router-rs-cli subprocess wait error: {e}"));
-            }
+            // Wait for the reaper thread to finish
+            let _ = rx.recv();
+            return Err(format!(
+                "router-rs-cli {} timed out after {}s",
+                tool_name,
+                timeout.as_secs()
+            ));
         }
     };
 
+    // Read stdout/stderr (child has exited, pipes are still valid)
     let mut stdout = String::new();
     let mut stderr = String::new();
-    let _ = child.stdout.as_mut().map(|r| r.read_to_string(&mut stdout));
-    let _ = child.stderr.as_mut().map(|r| r.read_to_string(&mut stderr));
+    let _ = child_stdout.as_mut().map(|r| r.read_to_string(&mut stdout));
+    let _ = child_stderr.as_mut().map(|r| r.read_to_string(&mut stderr));
 
     // Clean up temp file created for lean-verify
     if tool_name == "math_lean_verify" {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
         let tmp_path =
-            std::env::temp_dir().join(format!("router_rs_lean_{}.lean", std::process::id()));
+            std::env::temp_dir().join(format!("router_rs_lean_{nanos}.lean"));
         let _ = std::fs::remove_file(&tmp_path);
     }
 
@@ -1232,19 +1342,18 @@ mod tests {
     }
 
     #[test]
-    fn parse_content_length_htab_before_colon_rejected() {
-        // HTAB before colon is valid per RFC 7230 OWS but current impl rejects it.
-        // This test documents the behavior gap — see ADR if needed.
-        assert!(parse_content_length("Content-Length\t: 42").is_err());
+    fn parse_content_length_htab_before_colon_now_supported() {
+        // HTAB before colon is valid per RFC 7230 OWS — HPM-13 fix enables this.
+        assert_eq!(parse_content_length("Content-Length\t: 42").unwrap(), 42);
     }
 
     #[test]
     fn parse_content_length_mixed_ows() {
-        // Multiple spaces before colon (OWS)
-        // Note: current impl only handles single-space-before-colon.
-        // Parsing falls through to Err, which is safe (no silent misparse).
-        let result = parse_content_length("Content-Length  : 42");
-        assert!(result.is_err());
+        // Multiple spaces before colon (OWS) — HPM-13 fix enables this.
+        assert_eq!(
+            parse_content_length("Content-Length  : 42").unwrap(),
+            42
+        );
     }
 
     // ── E2E chain tests: JSON-RPC tools/call → dispatch → research handler ──

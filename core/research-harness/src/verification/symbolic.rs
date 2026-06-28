@@ -1125,8 +1125,6 @@ fn growth_to_order(class: &GrowthClass, var: &str) -> String {
                 "O(1)".into()
             } else if *k == 1.0 {
                 format!("O({var})")
-            } else if k.fract() == 0.0 {
-                format!("O({var}^{k})")
             } else {
                 format!("O({var}^{k})")
             }

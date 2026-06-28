@@ -62,7 +62,7 @@ pub fn parse_task_ledger_command_envelope(
 pub fn dispatch_task_ledger_command(cmd: TaskLedgerCommand) -> Result<Value, FrameworkError> {
     match cmd {
         TaskLedgerCommand::GoalDrive(p) => {
-            runtime_infra::kernel_utils::framework_goal_drive(p).map_err(FrameworkError::validation)
+            runtime_infra::kernel_utils::framework_goal_drive(p)
         }
         TaskLedgerCommand::QualityGate(p) => {
             let repo_root =
@@ -85,7 +85,7 @@ pub fn dispatch_task_ledger_command(cmd: TaskLedgerCommand) -> Result<Value, Fra
                 let transition_v =
                     validate_transition(repo_root, task_id, TaskTransition::Complete);
                 if !transition_v.passed {
-                    return serde_json::to_value(&quality_gate::types::GateVerdict {
+                    return Ok(serde_json::to_value(&quality_gate::types::GateVerdict {
                         passed: false,
                         checkers_ran: 0,
                         blockers: vec![quality_gate::types::Finding {
@@ -99,7 +99,7 @@ pub fn dispatch_task_ledger_command(cmd: TaskLedgerCommand) -> Result<Value, Fra
                         }],
                         advisories: vec![],
                         reason: Some(format!("transition validation blocked: {}", transition_v.reason)),
-                    }).map_err(FrameworkError::from);
+                    })?);
                 }
             }
 
@@ -120,11 +120,9 @@ pub fn dispatch_task_ledger_command(cmd: TaskLedgerCommand) -> Result<Value, Fra
         }
         TaskLedgerCommand::SessionArtifacts(p) => {
             framework_extra::session_artifacts::write_framework_session_artifacts(p)
-                .map_err(FrameworkError::from)
         }
         TaskLedgerCommand::HookEvidenceAppend(p) => {
             framework_extra::evidence::framework_hook_evidence_append(p)
-                .map_err(FrameworkError::from)
         }
     }
 }

@@ -7,7 +7,7 @@
 //!
 //! User input NEVER reaches shell arguments. All data arrives via JSON on stdin.
 //! The only shell-adjacent call is `uv run -m <module>` where `<module>` is a
-//! compile-time constant (inequality_solver, asymptotic_solver), never user input.
+//! compile-time constant.
 
 use core_errors::FrameworkError;
 use serde_json::Value;

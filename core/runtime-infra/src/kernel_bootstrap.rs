@@ -13,10 +13,6 @@ impl framework_kernel::TokenizerProvider for RouteTokenizerProvider {
     fn tokenize_query(&self, text: &str) -> Vec<String> {
         routing_engine::route::tokenize_query(text)
     }
-
-    fn has_parallel_review_candidate_context(&self, query: &str, tokens: &[String]) -> bool {
-        routing_engine::route::has_parallel_review_candidate_context(query, tokens)
-    }
 }
 
 static BOOTSTRAP_SHUTDOWN: AtomicBool = AtomicBool::new(false);

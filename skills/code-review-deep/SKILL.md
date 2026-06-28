@@ -235,7 +235,7 @@ Use when the user allows network/tools or scope touches third-party crates/servi
 
 **In compact mode**: external material appears only as indented bullets under the specific `[P*]` / `Caveat:` line they support, or as plain continuation after the last finding and before the one-line verdict — no standalone section headers, no Markdown tables.
 
-**Full report profile** (or explicit preamble): produce **Claims** with citations (CVE, changelog URL, Advisory ID), **Contradiction sweep**, **Unknowns**, **Retrieval_trace**. Aligns with [docs/architecture.md](../../docs/architecture.md) section A-B.
+**Full report profile** (or explicit preamble): produce **Claims** with citations (CVE, changelog URL, Advisory ID), **Contradiction sweep**, **Unknowns**, **Retrieval_trace**. Aligns with [docs/architecture.md](../../docs/routing/architecture.md) section A-B.
 
 ## Severity evidence gate
 

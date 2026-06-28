@@ -10,6 +10,8 @@ use crate::scoring_config::tool_scoring_weights;
 use crate::types::McpToolDecision;
 use core_state_utils::text_utils::tokenize_cjk_aware as tokenize_text;
 use mcp_tool_registry::McpToolRecord;
+#[cfg(test)]
+use mcp_tool_registry::{DispatchDomain, ToolLayer, ToolOwner};
 
 const DECISION_SCHEMA_VERSION: &str = "1.0.0";
 
@@ -67,7 +69,7 @@ pub fn search_tools(
             let (score, reasons, matched_token_count) =
                 score_tool(record, &query_lower, &query_tokens, &weights);
 
-            if score <= 0.0 {
+            if score.is_nan() || score <= 0.0 {
                 return None;
             }
 
@@ -77,7 +79,7 @@ pub fn search_tools(
                 score,
                 reasons,
                 matched_token_count,
-                dispatch_domain: record.dispatch_domain.clone(),
+                dispatch_domain: record.dispatch_domain.to_string(),
                 mcp_server: record.mcp_server.clone(),
                 fuzzy_match: false,
             })
@@ -110,9 +112,9 @@ pub fn search_tools(
                     decision_schema_version: DECISION_SCHEMA_VERSION.to_string(),
                     selected_tool: record.slug.clone(),
                     score: fuzzy_score,
-                    reasons: vec![format!("fuzzy_rescue: trigram similarity {fuzzy_score:.1}")],
+                    reasons: vec![format!("fuzzy_rescue: weighted n-gram similarity {fuzzy_score:.1}")],
                     matched_token_count: 0,
-                    dispatch_domain: record.dispatch_domain.clone(),
+                    dispatch_domain: record.dispatch_domain.to_string(),
                     mcp_server: record.mcp_server.clone(),
                     fuzzy_match: true,
                 });
@@ -139,9 +141,9 @@ mod tests {
             slug: slug.to_string(),
             display_name: format!("Display {slug}"),
             description: format!("Description for {slug}"),
-            layer: "builtin".to_string(),
-            dispatch_domain: "composite".to_string(),
-            owner: "framework".to_string(),
+            layer: ToolLayer::Builtin,
+            dispatch_domain: DispatchDomain::DomainFramework,
+            owner: ToolOwner::Framework,
             trigger_hints: keywords.iter().map(|s| s.to_string()).collect(),
             host_platforms: vec!["claude".to_string()],
             mcp_server: "router-rs".to_string(),

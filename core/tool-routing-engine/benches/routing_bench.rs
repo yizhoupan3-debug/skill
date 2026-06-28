@@ -9,7 +9,7 @@
 //! Generates synthetic McpToolRecord data in-memory.
 
 use criterion::{BenchmarkId, Criterion, black_box};
-use mcp_tool_registry::McpToolRecord;
+use mcp_tool_registry::{DispatchDomain, McpToolRecord, ToolLayer, ToolOwner};
 use std::time::{Duration, Instant};
 use tool_routing_engine::{route_tool_from_records, search_tools};
 
@@ -36,19 +36,12 @@ fn report_latency(label: &str, samples: &mut [Duration]) {
 }
 
 fn make_tool_records(count: usize) -> Vec<McpToolRecord> {
-    let domains = [
-        "composite",
-        "research",
-        "browser",
-        "codegraph",
-        "stdio-binary",
-    ];
-    let owners = [
-        "framework",
-        "research",
-        "browser",
-        "codegraph",
-        "rust-tools",
+    const DD: [DispatchDomain; 5] = [
+        DispatchDomain::DomainFramework,
+        DispatchDomain::Research,
+        DispatchDomain::Browser,
+        DispatchDomain::CodeGraph,
+        DispatchDomain::StdioBinary,
     ];
     let descriptions = [
         "Search and retrieve documents from the knowledge base using full-text search",
@@ -80,12 +73,12 @@ fn make_tool_records(count: usize) -> Vec<McpToolRecord> {
                     i
                 ),
                 description: descriptions[cat].to_string(),
-                layer: "builtin".to_string(),
-                dispatch_domain: domains[cat].to_string(),
-                owner: owners[cat].to_string(),
+                layer: ToolLayer::Builtin,
+                dispatch_domain: DD[cat].clone(),
+                owner: ToolOwner::Framework,
                 trigger_hints: hints[cat].iter().map(|s| s.to_string()).collect(),
                 host_platforms: vec![],
-                mcp_server: format!("server-{}", domains[cat]),
+                mcp_server: format!("server-{}", DD[cat]),
                 tool_flags: vec![],
                 input_schema_json: None,
             }

@@ -74,10 +74,11 @@ mod tool_eval_harness_contracts {
             }
         }
 
-        // Baselines (adjusted for deprecated tool exclusion):
+        // Baselines (adjusted for deprecated tool exclusion and TRE-1 eval fix):
         //   trigger_hit >= 84% (was 85% before deprecated exclusion)
         //   overtrigger <= 10%
-        //   tool_accuracy >= 80%
+        //   tool_accuracy >= 74% (was 80% before TRE-1: should-not-trigger
+        //     with selected tool is now correctly counted as tool_correct=false)
         assert!(
             trigger_rate >= 84.0,
             "trigger_hit rate too low: {trigger_rate:.1}% (want >= 84%)"
@@ -87,8 +88,8 @@ mod tool_eval_harness_contracts {
             "overtrigger rate too high: {overtrigger_rate:.1}% (want <= 10%)"
         );
         assert!(
-            tool_accuracy >= 80.0,
-            "tool_accuracy too low: {tool_accuracy:.1}% (want >= 80%)"
+            tool_accuracy >= 74.0,
+            "tool_accuracy too low: {tool_accuracy:.1}% (want >= 74%)"
         );
     }
 }

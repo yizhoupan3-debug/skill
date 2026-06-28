@@ -107,7 +107,7 @@ Sidecar 模式的压缩契约仍见下文 **Main-thread compression contract**�
 
 ## Host capabilities (orchestration)
 
-所有宿主通过 team API / MCP 工具 / stdio 三种方式之一接入 team 编排能力，具体宿主→接入方式映射见 `RUNTIME_REGISTRY.json`。
+所有宿主通过 team API / MCP 工具 / stdio 三种方式之一接入 team 编排能力，具体宿主→接入方式映射见 `configs/framework/RUNTIME_REGISTRY.json`。
 
 所有宿主共享统一 team 文件系统（`artifacts/teams/`），互操作不受限。
 
