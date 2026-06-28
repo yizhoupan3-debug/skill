@@ -24,6 +24,7 @@
 //! 非 Unix 平台（Windows、WASM）使用 `create_new` 作为锁机制，存在固有的
 //! TOCTOU (time-of-check-to-time-of-use) 竞态风险。当前实现使用指数退避重试缓解。
 
+use core_errors::FrameworkError;
 use core_state_utils::atomic_write::write_atomic_text;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -145,10 +146,10 @@ impl HookStateConfig {
     }
 
     /// Acquire a file lock and execute a closure with loaded state (default config).
-    pub fn with_state_lock<T, F, S>(&self, repo_root: &Path, f: F) -> Result<T, String>
+    pub fn with_state_lock<T, F, S>(&self, repo_root: &Path, f: F) -> Result<T, FrameworkError>
     where
         S: Default + serde::Serialize + serde::de::DeserializeOwned,
-        F: FnOnce(&mut S) -> Result<T, String>,
+        F: FnOnce(&mut S) -> Result<T, FrameworkError>,
     {
         self.with_state_lock_configured(repo_root, &LockConfig::cli_default(), f)
     }
@@ -166,17 +167,17 @@ impl HookStateConfig {
         repo_root: &Path,
         config: &LockConfig,
         f: F,
-    ) -> Result<T, String>
+    ) -> Result<T, FrameworkError>
     where
         S: Default + serde::Serialize + serde::de::DeserializeOwned,
-        F: FnOnce(&mut S) -> Result<T, String>,
+        F: FnOnce(&mut S) -> Result<T, FrameworkError>,
     {
         let state_path = self.state_path(repo_root);
         let lock_path = state_path.with_extension("json.lock");
 
         // Ensure parent directory exists
         if let Some(parent) = lock_path.parent() {
-            fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+            fs::create_dir_all(parent)?;
         }
 
         // Acquire lock (platform-specific, with config)
@@ -186,15 +187,15 @@ impl HookStateConfig {
         let mut state = match fs::read_to_string(&state_path) {
             Ok(content) => serde_json::from_str::<S>(&content).unwrap_or_default(),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => S::default(),
-            Err(e) => return Err(format!("read_state_failed: {e}")),
+            Err(e) => return Err(FrameworkError::Io(e)),
         };
 
         // Execute closure
         let result = f(&mut state)?;
 
         // Save state atomically (temp + fsync + rename)
-        let json = serde_json::to_string_pretty(&state).map_err(|e| e.to_string())?;
-        write_atomic_text(&state_path, &json).map_err(|e| e.to_string())?;
+        let json = serde_json::to_string_pretty(&state)?;
+        write_atomic_text(&state_path, &json)?;
 
         Ok(result)
     }
@@ -208,19 +209,18 @@ impl HookStateConfig {
 pub fn acquire_file_lock_with_config(
     lock_path: &Path,
     config: &LockConfig,
-) -> Result<FileStateLockGuard, String> {
+) -> Result<FileStateLockGuard, FrameworkError> {
     use std::os::unix::io::AsRawFd;
 
     if let Some(parent) = lock_path.parent() {
-        fs::create_dir_all(parent).map_err(|e| format!("lock_dir_create_failed: {e}"))?;
+        fs::create_dir_all(parent)?;
     }
 
     let file = fs::OpenOptions::new()
         .create(true)
         .write(true)
         .truncate(false)
-        .open(lock_path)
-        .map_err(|e| format!("lock_open_failed: {e}"))?;
+        .open(lock_path)?;
 
     let fd = file.as_raw_fd();
     let start = std::time::Instant::now();
@@ -261,11 +261,11 @@ pub fn acquire_file_lock_with_config(
                     });
                 }
             }
-            return Err(format!(
+            return Err(FrameworkError::lock(format!(
                 "lock_timeout after {}ms (path={})",
                 config.max_wait_ms,
                 lock_path.display()
-            ));
+            )));
         }
 
         std::thread::sleep(retry_interval);
@@ -277,9 +277,9 @@ pub fn acquire_file_lock_with_config(
 pub fn acquire_file_lock_with_config(
     lock_path: &Path,
     config: &LockConfig,
-) -> Result<FileStateLockGuard, String> {
+) -> Result<FileStateLockGuard, FrameworkError> {
     if let Some(parent) = lock_path.parent() {
-        fs::create_dir_all(parent).map_err(|e| format!("lock_dir_create_failed: {e}"))?;
+        fs::create_dir_all(parent)?;
     }
 
     const STALE_LOCK_AGE_SECS: u64 = 10; // age-gated stale recovery
@@ -315,11 +315,11 @@ pub fn acquire_file_lock_with_config(
             }
             Err(e) => {
                 if start.elapsed() >= max_wait {
-                    return Err(format!(
+                    return Err(FrameworkError::lock(format!(
                         "lock_timeout after {}ms (path={}): {e}",
                         config.max_wait_ms,
                         lock_path.display()
-                    ));
+                    )));
                 }
                 tracing::warn!("lock_create_failed: {e}, retrying");
                 std::thread::sleep(retry_interval);

@@ -4,6 +4,7 @@
 //! String/integer values are parsed here; boolean flags (e.g. `_ENABLED`)
 //! delegate to [`core_policy::env_flags`] for consistent true/false semantics.
 
+use core_errors::FrameworkError;
 use std::sync::OnceLock;
 
 /// Default max concurrent subagent processes (default: 4, min: 1).
@@ -27,11 +28,11 @@ pub fn max_concurrent_procs() -> u32 {
 
 /// Resolve the subagent binary path (`ROUTER_RS_SUBAGENT_BIN`).
 /// Returns `Err` if the env var is not set or is empty.
-pub fn subagent_binary() -> Result<String, String> {
+pub fn subagent_binary() -> Result<String, FrameworkError> {
     std::env::var("ROUTER_RS_SUBAGENT_BIN")
         .ok()
         .filter(|v| !v.is_empty())
-        .ok_or_else(|| "subagent binary not found. Set ROUTER_RS_SUBAGENT_BIN.".to_string())
+        .ok_or_else(|| FrameworkError::config("subagent binary not found. Set ROUTER_RS_SUBAGENT_BIN."))
 }
 
 /// Resolve the autoresearch binary path (`ROUTER_RS_AUTORESEARCH_BIN`).

@@ -17,6 +17,7 @@
 //! )?;
 //! ```
 
+use core_errors::FrameworkError;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::path::Path;
@@ -82,12 +83,14 @@ const GATE_TIMEOUT_SECS: &[(&str, u64)] = &[
 // Helpers
 // ---------------------------------------------------------------------------
 
-fn read_hooks_doc(path: &Path) -> Result<Value, String> {
-    let raw = std::fs::read_to_string(path).map_err(|e| format!("read {}: {e}", path.display()))?;
-    serde_json::from_str(&raw).map_err(|e| format!("parse {}: {e}", path.display()))
+fn read_hooks_doc(path: &Path) -> Result<Value, FrameworkError> {
+    let raw = std::fs::read_to_string(path)
+        .map_err(|e| FrameworkError::config(format!("read {}: {e}", path.display())))?;
+    serde_json::from_str(&raw)
+        .map_err(|e| FrameworkError::config(format!("parse {}: {e}", path.display())))
 }
 
-fn read_hooks_event_keys(path: &Path) -> Result<Vec<String>, String> {
+fn read_hooks_event_keys(path: &Path) -> Result<Vec<String>, FrameworkError> {
     let doc = read_hooks_doc(path)?;
     let mut keys: Vec<String> = doc
         .get("hooks")
@@ -199,7 +202,7 @@ pub fn snapshot_host_hooks(
     expected_events: &[&str],
     forbidden_events: &[&str],
     expected_cmd_fragment: &str,
-) -> Result<HostHooksSnapshot, String> {
+) -> Result<HostHooksSnapshot, FrameworkError> {
     let abs_hooks = repo_root.join(hooks_path);
     let abs_template = repo_root.join(template_path);
 
@@ -256,7 +259,7 @@ pub fn snapshot_host_hooks_json(
     expected_events: &[&str],
     forbidden_events: &[&str],
     expected_cmd_fragment: &str,
-) -> Result<Value, String> {
+) -> Result<Value, FrameworkError> {
     let snap = snapshot_host_hooks(
         repo_root,
         hooks_path,
@@ -265,7 +268,8 @@ pub fn snapshot_host_hooks_json(
         forbidden_events,
         expected_cmd_fragment,
     )?;
-    serde_json::to_value(snap).map_err(|e| format!("serialize snapshot: {e}"))
+    serde_json::to_value(snap)
+        .map_err(|e| FrameworkError::config(format!("serialize snapshot: {e}")))
 }
 
 /// Check a host hooks snapshot JSON blob for validity.
@@ -308,9 +312,9 @@ pub fn host_hooks_json_ok(hooks: &Value) -> bool {
 /// 1. If host has hooks_manifest_path → verify hooks.json exists and has correct structure
 /// 2. If host has registered_hook_events → verify all events are registered in hooks.json
 /// 3. Launcher command pattern derived from host_id
-pub fn verify_host_projection(repo_root: &Path, host_id: &str) -> Result<(), String> {
+pub fn verify_host_projection(repo_root: &Path, host_id: &str) -> Result<(), FrameworkError> {
     let provider = crate::hosts::host_provider_for_id(host_id)
-        .ok_or_else(|| format!("verify_host_projection: unknown host {host_id}"))?;
+        .ok_or_else(|| FrameworkError::not_found(format!("verify_host_projection: unknown host {host_id}")))?;
 
     let hooks_manifest_path = provider.hooks_manifest_path();
 
@@ -318,17 +322,23 @@ pub fn verify_host_projection(repo_root: &Path, host_id: &str) -> Result<(), Str
     if let Some(hooks_rel) = hooks_manifest_path {
         let hooks_path = repo_root.join(hooks_rel);
         if !hooks_path.is_file() {
-            return Err(format!("verify_{host_id}: missing {hooks_rel}"));
+            return Err(FrameworkError::not_found(format!(
+                "verify_{host_id}: missing {hooks_rel}"
+            )));
         }
 
         let text = std::fs::read_to_string(&hooks_path)
-            .map_err(|e| format!("verify_{host_id}: read {hooks_rel}: {e}"))?;
+            .map_err(|e| FrameworkError::config(format!("verify_{host_id}: read {hooks_rel}: {e}")))?;
         let payload: Value = serde_json::from_str(&text)
-            .map_err(|e| format!("verify_{host_id}: parse {hooks_rel}: {e}"))?;
+            .map_err(|e| FrameworkError::config(format!("verify_{host_id}: parse {hooks_rel}: {e}")))?;
         let hooks = payload
             .get("hooks")
             .and_then(Value::as_object)
-            .ok_or_else(|| format!("verify_{host_id}: {hooks_rel} must contain a hooks object"))?;
+            .ok_or_else(|| {
+                FrameworkError::config(format!(
+                    "verify_{host_id}: {hooks_rel} must contain a hooks object"
+                ))
+            })?;
 
         let expected_events = provider.registered_hook_events();
         let launcher_needle = format!("{host_id}-router-rs-hook.sh");
@@ -338,20 +348,24 @@ pub fn verify_host_projection(repo_root: &Path, host_id: &str) -> Result<(), Str
                 .get(*event)
                 .and_then(Value::as_array)
                 .filter(|a| !a.is_empty())
-                .ok_or_else(|| format!("verify_{host_id}: missing hook event {event}"))?;
+                .ok_or_else(|| {
+                    FrameworkError::config(format!(
+                        "verify_{host_id}: missing hook event {event}"
+                    ))
+                })?;
             let cmds: Vec<&str> = entries
                 .iter()
                 .filter_map(|entry| entry.get("command").and_then(Value::as_str))
                 .collect();
             if cmds.is_empty() {
-                return Err(format!(
+                return Err(FrameworkError::config(format!(
                     "verify_{host_id}: event {event} must contain command hooks"
-                ));
+                )));
             }
             if !cmds.iter().any(|c| c.contains(&launcher_needle)) {
-                return Err(format!(
+                return Err(FrameworkError::config(format!(
                     "verify_{host_id}: {event} must invoke `{launcher_needle}` (see {hooks_rel})"
-                ));
+                )));
             }
         }
     }

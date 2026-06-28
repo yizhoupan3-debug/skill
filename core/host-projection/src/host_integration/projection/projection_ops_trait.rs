@@ -5,6 +5,7 @@
 //! correct implementation, eliminating hardcoded `const TABLE` dispatch.
 
 use super::ResolvedProjectionRoots;
+use core_errors::FrameworkError;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::OnceLock;
@@ -18,16 +19,16 @@ pub trait HostProjectionOps: Send + Sync {
         &self,
         roots: &ResolvedProjectionRoots,
         scope: &str,
-    ) -> std::result::Result<Value, String>;
+    ) -> std::result::Result<Value, FrameworkError>;
 
-    fn status(&self, roots: &ResolvedProjectionRoots) -> std::result::Result<Value, String>;
+    fn status(&self, roots: &ResolvedProjectionRoots) -> std::result::Result<Value, FrameworkError>;
 
     fn remove(
         &self,
         roots: &ResolvedProjectionRoots,
         scope: &str,
         dry_run: bool,
-    ) -> std::result::Result<Value, String>;
+    ) -> std::result::Result<Value, FrameworkError>;
 }
 
 static PROJECTION_OPS_REGISTRY: OnceLock<HashMap<&'static str, Box<dyn HostProjectionOps>>> =

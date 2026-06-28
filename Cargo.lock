@@ -321,6 +321,7 @@ dependencies = [
  "base64",
  "browser-mcp-dispatch",
  "chrono",
+ "core-errors",
  "ctor",
  "framework-kernel",
  "http-util",
@@ -338,6 +339,7 @@ dependencies = [
 name = "browser-mcp-dispatch"
 version = "0.1.0"
 dependencies = [
+ "core-errors",
  "framework-kernel",
  "serde_json",
  "tracing",

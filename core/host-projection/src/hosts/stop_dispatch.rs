@@ -19,6 +19,7 @@
 //! 13. Review output lint (shared)
 
 use crate::hosts::hook_dispatch;
+use core_errors::FrameworkError;
 use serde_json::{Value, json};
 use std::path::{Path, PathBuf};
 
@@ -385,13 +386,14 @@ fn load_touch_state_disk(path: &Path) -> DiskState<Value> {
 fn write_review_state(
     path: &Path,
     state: &core_policy::hook_review_disk_state::HookReviewDiskCore,
-) -> Result<(), String> {
-    let text =
-        serde_json::to_string_pretty(state).map_err(|e| format!("serialize review state: {e}"))?;
+) -> Result<(), FrameworkError> {
+    let text = serde_json::to_string_pretty(state)
+        .map_err(|e| FrameworkError::config(format!("serialize review state: {e}")))?;
     if let Some(parent) = path.parent() {
         let _ = std::fs::create_dir_all(parent);
     }
-    std::fs::write(path, text).map_err(|e| format!("write review state: {e}"))
+    std::fs::write(path, text)
+        .map_err(|e| FrameworkError::config(format!("write review state: {e}")))
 }
 
 fn clear_file(path: &Path) {

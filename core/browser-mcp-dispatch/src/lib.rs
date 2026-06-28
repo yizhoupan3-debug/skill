@@ -22,6 +22,7 @@
 
 #![deny(clippy::unwrap_used, clippy::expect_used)]
 
+use core_errors::FrameworkError;
 use std::sync::OnceLock;
 
 /// Mirror of `host_projection::hooks::McpPreGuardVerdict`.
@@ -43,13 +44,14 @@ pub struct BrowserMcpHooks {
         repo_root: &std::path::Path,
     ) -> McpPreGuardVerdict,
     /// Attach a runtime event transport.
-    pub attach_runtime_event_transport: fn(serde_json::Value) -> Result<serde_json::Value, String>,
+    pub attach_runtime_event_transport:
+        fn(serde_json::Value) -> Result<serde_json::Value, FrameworkError>,
     /// Inspect a trace stream and return structured diagnostic data.
     pub inspect_trace_stream: fn(
         framework_kernel::stdio_payload_types::TraceStreamInspectRequestPayload,
     ) -> Result<
         framework_kernel::stdio_payload_types::TraceStreamInspectResponsePayload,
-        String,
+        FrameworkError,
     >,
 }
 

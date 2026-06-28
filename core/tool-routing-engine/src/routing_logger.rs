@@ -14,6 +14,7 @@ use std::path::PathBuf;
 use std::sync::{LazyLock, Mutex};
 
 use crate::types::McpToolDecision;
+use core_errors::FrameworkError;
 
 const LOG_DIR: &str = "logs/tool-routing";
 const LOG_FILE: &str = "tool_routing_audit.ndjson";
@@ -27,42 +28,36 @@ struct ToolRoutingLogger {
 }
 
 impl ToolRoutingLogger {
-    fn new(log_dir: &str) -> Result<Self, String> {
-        fs::create_dir_all(log_dir)
-            .map_err(|e| format!("create tool routing log dir {log_dir}: {e}"))?;
+    fn new(log_dir: &str) -> Result<Self, FrameworkError> {
+        fs::create_dir_all(log_dir)?;
         let path = PathBuf::from(log_dir).join(LOG_FILE);
         let file = OpenOptions::new()
             .create(true)
             .append(true)
-            .open(&path)
-            .map_err(|e| format!("open tool routing log {path:?}: {e}"))?;
+            .open(&path)?;
         Ok(Self {
             writer: BufWriter::new(file),
             path,
         })
     }
 
-    fn rotate_if_needed(&mut self) -> Result<(), String> {
+    fn rotate_if_needed(&mut self) -> Result<(), FrameworkError> {
         if self.path.metadata().map(|m| m.len()).unwrap_or(0) >= MAX_LOG_BYTES {
             let rotated = OpenOptions::new()
                 .create(true)
                 .truncate(true)
                 .write(true)
-                .open(&self.path)
-                .map_err(|e| format!("rotate tool routing log {path:?}: {e}", path = self.path))?;
+                .open(&self.path)?;
             self.writer = BufWriter::new(rotated);
         }
         Ok(())
     }
 
-    fn write_entry(&mut self, entry: &str) -> Result<(), String> {
+    fn write_entry(&mut self, entry: &str) -> Result<(), FrameworkError> {
         self.rotate_if_needed()?;
-        self.writer
-            .write_all(entry.as_bytes())
-            .map_err(|e| format!("write tool routing log: {e}"))?;
-        self.writer
-            .write_all(b"\n")
-            .map_err(|e| format!("write tool routing log newline: {e}"))
+        self.writer.write_all(entry.as_bytes())?;
+        self.writer.write_all(b"\n")?;
+        Ok(())
     }
 }
 
@@ -71,10 +66,10 @@ impl ToolRoutingLogger {
 /// subsequent calls are silently ignored once the logger is active.
 ///
 /// Should be called during runtime-core bootstrap with the repo root's log path.
-pub fn init_tool_routing_logger(log_dir: &str) -> Result<(), String> {
+pub fn init_tool_routing_logger(log_dir: &str) -> Result<(), FrameworkError> {
     let mut guard = LOGGER
         .lock()
-        .map_err(|_| "routing logger mutex poisoned".to_string())?;
+        .map_err(|_| FrameworkError::lock("routing logger mutex poisoned"))?;
     if guard.is_some() {
         return Ok(()); // Already initialized — idempotent
     }

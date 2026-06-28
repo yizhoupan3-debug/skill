@@ -11,6 +11,7 @@ name = "browser_mcp_dispatch"
 path = "src/lib.rs"
 
 [dependencies]
+core-errors = { path = "../core-errors" }
 framework-kernel = { path = "../framework-kernel" }
 serde_json.workspace = true
 tracing.workspace = true

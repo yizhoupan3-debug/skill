@@ -4,6 +4,7 @@
 //! error messages are configurable via parameters — not hardcoded to Codex.
 //! All hosts can use this module for path protection.
 
+use core_errors::FrameworkError;
 use regex::Regex;
 use serde_json::{Value, json};
 use std::collections::{HashMap, HashSet};
@@ -24,7 +25,7 @@ pub fn run_pre_tool_use(
     protected_paths: &HashSet<String>,
     protected_prefixes: &[&str],
     entrypoint_hint: &str,
-) -> Result<Option<Value>, String> {
+) -> Result<Option<Value>, FrameworkError> {
     let mut rel_paths = HashSet::new();
     for path in iter_payload_paths(payload) {
         rel_paths.insert(relative_candidate_path(&path, repo_root));

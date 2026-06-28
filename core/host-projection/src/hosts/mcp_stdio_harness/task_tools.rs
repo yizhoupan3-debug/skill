@@ -504,6 +504,14 @@ mod tests {
         // Create task (sets both pointers)
         tool_task_create(&json!({"task_id": "done-task"}), &repo).expect("create");
 
+        // Create evidence artifacts for the validate_transition gate
+        let evidence_dir = repo.join("artifacts/current/done-task");
+        fs::write(
+            evidence_dir.join("EVIDENCE_INDEX.json"),
+            r#"{"artifacts":[{"exit_code":0,"command":"test"}]}"#,
+        )
+        .expect("write evidence");
+
         // Complete
         let result = tool_task_complete(&json!({"task_id": "done-task"}), &repo).expect("complete");
         let v: Value = serde_json::from_str(&result).expect("parse");
@@ -537,6 +545,14 @@ mod tests {
     fn task_complete_defaults_to_active_task() {
         let repo = unique_test_dir("complete-active");
         tool_task_create(&json!({"task_id": "auto-complete"}), &repo).expect("create");
+
+        // Create evidence artifacts for the validate_transition gate
+        let evidence_dir = repo.join("artifacts/current/auto-complete");
+        fs::write(
+            evidence_dir.join("EVIDENCE_INDEX.json"),
+            r#"{"artifacts":[{"exit_code":0,"command":"test"}]}"#,
+        )
+        .expect("write evidence");
 
         // Complete without task_id — should use active task
         let result = tool_task_complete(&json!({}), &repo).expect("complete active");

@@ -113,7 +113,7 @@ impl HostHookDispatcher for RegistryDispatcher {
         ) {
             Ok(Some(val)) => Some(HookOutput::Raw(val)),
             Ok(None) => None,
-            Err(err) => Some(HookOutput::Deny { reason: err }),
+            Err(err) => Some(HookOutput::Deny { reason: err.to_string() }),
         }
     }
     fn handle_stop(&self, event: &HookEvent) -> Option<HookOutput> {

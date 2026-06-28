@@ -361,13 +361,13 @@ fn main() {
 pub struct {pascal}ProjectionOps;\n\n\
 impl HostProjectionOps for {pascal}ProjectionOps {{\n\
     fn host_id(&self) -> &'static str {{ \"{id}\" }}\n\n\
-    fn install(&self, roots: &ResolvedProjectionRoots, scope: &str) -> std::result::Result<Value, String> {{\n\
+    fn install(&self, roots: &ResolvedProjectionRoots, scope: &str) -> std::result::Result<Value, FrameworkError> {{\n\
         Ok(install_projection(roots, scope, self.host_id())?)\n\
     }}\n\n\
-    fn status(&self, roots: &ResolvedProjectionRoots) -> std::result::Result<Value, String> {{\n\
+    fn status(&self, roots: &ResolvedProjectionRoots) -> std::result::Result<Value, FrameworkError> {{\n\
         Ok(projection_status(roots, self.host_id())?)\n\
     }}\n\n\
-    fn remove(&self, roots: &ResolvedProjectionRoots, scope: &str, dry_run: bool) -> std::result::Result<Value, String> {{\n\
+    fn remove(&self, roots: &ResolvedProjectionRoots, scope: &str, dry_run: bool) -> std::result::Result<Value, FrameworkError> {{\n\
         Ok(remove_projection(roots, scope, dry_run, self.host_id())?)\n\
     }}\n\
 }}\n\n"

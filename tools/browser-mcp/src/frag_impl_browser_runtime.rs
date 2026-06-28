@@ -1,4 +1,6 @@
 // `impl BrowserRuntime`（与 `frag_01_through_types.rs` 中类型同模块拼接）。
+#[cfg(test)]
+use core_errors::FrameworkError;
 
 impl BrowserRuntime {
     #[cfg(test)]
@@ -14,10 +16,14 @@ impl BrowserRuntime {
                     }
                 },
                 attach_runtime_event_transport: |_| {
-                    Err("no runtime hooks in test".to_string())
+                    Err(FrameworkError::validation(
+                        "no runtime hooks in test",
+                    ))
                 },
                 inspect_trace_stream: |_| {
-                    Err("no runtime hooks in test".to_string())
+                    Err(FrameworkError::validation(
+                        "no runtime hooks in test",
+                    ))
                 },
             });
         });
@@ -798,7 +804,7 @@ impl BrowserRuntime {
                 Err(err) => {
                     let mut diagnostics = resolved.diagnostics_base;
                     diagnostics["status"] = Value::String("trace_unavailable".to_string());
-                    diagnostics["warning"] = Value::String(err);
+                    diagnostics["warning"] = Value::String(err.to_string());
                     diagnostics
                 }
             },

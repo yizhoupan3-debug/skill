@@ -866,7 +866,14 @@ mod tests {
 
     #[test]
     fn test_discover_actions() {
-        let entry = make_entry("loop-auto");
+        let mut entry = make_entry("loop-auto");
+        entry.static_actions = Some(vec![LoopAction {
+            action_id: "test-action".into(),
+            action_type: "test".into(),
+            scope_paths: Vec::new(),
+            safety: "L1".into(),
+            description: None,
+        }]);
         let tmp = tempfile::TempDir::new().unwrap();
         let actions = discover_actions(&entry, tmp.path()).unwrap();
         assert_eq!(actions.len(), 1);

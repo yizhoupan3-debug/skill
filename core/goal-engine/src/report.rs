@@ -1,5 +1,6 @@
 use crate::state::loop_reports_dir;
 use crate::types::{AggregateActionEntry, LoopCloseoutAggregate, LoopRunState, UnconsumedFinding};
+use core_errors::FrameworkError;
 use std::fs;
 use std::path::Path;
 
@@ -117,11 +118,11 @@ pub fn write_loop_report(
     loop_id: &str,
     run_id: &str,
     report: &str,
-) -> Result<String, String> {
+) -> Result<String, FrameworkError> {
     let dir = loop_reports_dir(repo_root, loop_id);
-    fs::create_dir_all(&dir).map_err(|e| format!("mkdir {}: {e}", dir.display()))?;
+    fs::create_dir_all(&dir)?;
     let path = dir.join(format!("{}.md", run_id));
-    fs::write(&path, report).map_err(|e| format!("write {}: {e}", path.display()))?;
+    fs::write(&path, report)?;
     Ok(path.display().to_string())
 }
 

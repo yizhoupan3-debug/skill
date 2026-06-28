@@ -12,6 +12,7 @@ path = "src/lib.rs"
 
 [dependencies]
 browser-mcp-dispatch = { path = "../../core/browser-mcp-dispatch" }
+core-errors = { path = "../../core/core-errors" }
 framework-kernel = { path = "../../core/framework-kernel" }
 http-util = { path = "../../core/http-util" }
 runtime-core-contracts = { path = "../../core/runtime-core-contracts" }

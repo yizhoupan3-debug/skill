@@ -1,0 +1,184 @@
+{
+  "findings": [
+    {
+      "id": "HPM-1",
+      "severity": "P0",
+      "category": "参数注入",
+      "file": "core/host-projection/src/hosts/mcp_stdio_harness/mod.rs",
+      "description": "CLI 子进程参数注入风险：map_tool_to_cli_args 将用户输入字符串直接拼接到 router-rs-cli 参数向量",
+      "detail": "research_aigc_check的text/claims/references、research_smoke的source等参数直接作为CLI参数传递。Rust Command API避免shell注入但参数值可嵌入 --flag 劫持相邻标志。research_verification_literature的claims/references数组被serde_json::to_string序列化后传给 --claims 标志，数组内容可能注入 CLI 解析器。所有分支无参数值长度限制或字符过滤。",
+      "fix": "对每个用户可控参数值添加守卫：(1)参数值长度上限4096字节；(2)拒绝含 '--' 前缀的参数值或将其固定在参数列表末尾；(3)对claims/references等JSON数组参数设置序列化后大小上限64 KiB；(4)参数值含不可打印字符时拒绝调用"
+    },
+    {
+      "id": "HPM-2",
+      "severity": "P0",
+      "category": "超时控制",
+      "file": "core/host-projection/src/hosts/mcp_stdio_harness/mod.rs",
+      "description": "CompositeRegistry 内置工具执行无超时机制，慢操作或死锁阻塞整个 MCP 服务器",
+      "detail": "CLI子进程分支有300秒超时但CompositeRegistry内所有内置工具（RoutingTools/GoalTools/CloseoutTools/FrameworkTools/ToolDomainTools/TaskCrudTools/OrchestratorTools共28个工具）均直接同步执行，无执行时长限制。read_goal_state、serde_json::from_str处理损坏大文件等操作无超时保护。工具调用陷入死循环或等待文件锁时整个MCP stdio循环阻塞。",
+      "fix": "(1)为CompositeRegistry.dispatch添加std::thread::spawn+channel超时包装（建议内置工具60s，外部工具300s）；(2)为大文件IO操作添加截断保护；(3)为ToolHandler特征添加执行时长参数"
+    },
+    {
+      "id": "HPM-3",
+      "severity": "P0",
+      "category": "鉴权",
+      "file": "core/host-projection/src/hosts/mcp_stdio_harness/mod.rs",
+      "description": "MCP 工具调用完全无身份认证和权限检查，所有工具对任何能建立连接的客户端开放",
+      "detail": "handle_tools_call仅做rate limit检查和pre-guard检查，不验证调用方身份。orchestrator_worker_launch可启动任意工作进程，goal_state_manage可修改任意任务状态，closeout_record_write可伪造收尾记录，session_checkpoint可覆盖会话摘要，task_create/task_complete/task_focus操作无权限检查。MCP stdio是本地进程间通信，但在多租户或CI/CD等共享环境下风险极高。",
+      "fix": "(1)添加连接级session token认证；(2)为高危工具添加操作确认（confirmation gate）；(3)注册MCP工具时声明permission scope并在工具执行前验证"
+    },
+    {
+      "id": "HPM-4",
+      "severity": "P0",
+      "category": "Pre-tool Guard",
+      "file": "core/runtime-core-contracts/src/mcp_pre_guard.rs",
+      "description": "MCP pre-guard panic 时静默 fallback 到 Allow，绕过所有安全保护",
+      "detail": "evaluate_mcp_pre_guard_safe 第48-64行使用 catch_unwind 包裹内核实 panics 后记录警告并以 Allow 放行。这意味着 guard 逻辑中任何空指针解引用、unwrap失败、assert失败等情况都会导致所有受保护的危险操作被默默允许。标称的 HX-5（hard block 降级 advisory）在此场景变成 hard block 完全失效。",
+      "fix": "panic回退策略改为Block而非Allow：当 catch_unwind 捕获 panic 时返回 McpPreGuardVerdict::block('guard panicked')，或至少记录严重告警后返回 Block"
+    },
+    {
+      "id": "HPM-5",
+      "severity": "P1",
+      "category": "Pre-tool Guard",
+      "file": "core/host-projection/src/hosts/host_extensions/pretool.rs",
+      "description": "Bash 变异命令模式检测存在绕过路径",
+      "detail": "MUTATING_COMMAND_PATTERNS 正则列表（第248-263行）包含 sed -i、perl -pi、mv/cp 等常见变异命令，但可绕过：(1) sed --in-place 不使用 -i 参数；(2) gsed 替代 sed；(3) python3 -c 可执行任意Python代码却不需要文件操作权限检查；(4) dd if=... of=... 使用 of= 参数方式写入时检测存在但写目标检测需同时命中 path mention + redirect。path detection 使用 token 精确匹配（normalize_repo_relative_path），Unicode 规范化不等价路径可绕过。",
+      "fix": "(1)增加 sed --in-place、gsed 等变体检测；(2)在路径匹配前做 Unicode NFC/NFD 规范化；(3)增加 python/perl/ruby -e/-c 对 protected_paths 操作的检测；(4)对所有 tee/dd 输出重定向做更严格的检测"
+    },
+    {
+      "id": "HPM-6",
+      "severity": "P1",
+      "category": "错误处理",
+      "file": "core/host-projection/src/hosts/mcp_stdio_harness/mcp_tool_handlers.rs",
+      "description": "所有 ToolHandler 返回 Result<String, String> 而非 FrameworkError，丢失结构化错误信息",
+      "detail": "ToolHandler trait（第21行）、CompositeRegistry::dispatch（第56行）、以及所有 handler 函数（tool_skill_route、tool_skill_search 等）均返回 Result<String, String>。这导致：(1)错误 ID、类别、backtrace 等结构化信息丢失；(2)调用链中无法使用 ? 操作符统一传播 FrameworkError；(3)错误格式不一致（有些用 'Missing required argument:'，有些用 'Missing required'，有些用中文）。stdio_dispatch.rs 层已全部迁移到 FrameworkError，但 MCP 工具层仍使用 String。",
+      "fix": "将 ToolHandler::dispatch 返回类型改为 Result<String, FrameworkError>，所有工具函数内 ? 传播 FrameworkError，统一错误格式。这是 Wave 3c 遗留的架构迁移任务。"
+    },
+    {
+      "id": "HPM-7",
+      "severity": "P1",
+      "category": "输入校验",
+      "file": "core/host-projection/src/hosts/mcp_stdio_harness/mod.rs",
+      "description": "MCP header 行读取无大小限制，恶意客户端可导致内存耗尽",
+      "detail": "read_mcp_message 第308-376行使用 read_line 循环读取 header 行，read_line 持续读取直到遇到 \n，无最大行长度限制。恶意客户端发送一个 GB 级别的行而不含换行符会导致服务器内存耗尽。第314行 first_line 的 read_line 和第348行 header 的 read_line 同样无限制。",
+      "fix": "使用 BufRead::read_until 或手动实现带大小限制的 read_line_wrapped 函数，建议每行上限 8 KiB（MCP 协议规范建议值），超过时断开连接或忽略该行"
+    },
+    {
+      "id": "HPM-8",
+      "severity": "P1",
+      "category": "参数注入",
+      "file": "core/host-projection/src/hosts/mcp_stdio_harness/mod.rs",
+      "description": "math_lean_verify 将用户输入的 Lean 脚本写入临时文件，文件路径仅依赖 PID",
+      "detail": "第986-988行将用户提供的 script 直接写入 /tmp/router_rs_lean_{PID}.lean，文件路径仅基于进程 ID 而非随机化。同一进程内多次调用 math_lean_verify 会覆盖同一文件（第1046-1050行清理仅一次）。多线程环境或竞态条件下可能产生临时文件竞争。script 内容无长度或内容限制。",
+      "fix": "(1)使用随机化文件名（如 tempfile::NamedTempFile 或 UUID 后缀）；(2)对 script 内容添加最大长度限制（建议 256 KiB）；(3)考虑通过 stdin 传递脚本而不是写入临时文件"
+    },
+    {
+      "id": "HPM-9",
+      "severity": "P1",
+      "category": "工具分发",
+      "file": "core/host-projection/src/hosts/mcp_stdio_harness/mod.rs",
+      "description": "DISPATCH_TABLE 和 CompositeRegistry 双重路由表存在空档，工具注册不一致时静默失败",
+      "detail": "dispatch_tool 第222-271行：先查 DISPATCH_TABLE（来自 MCP_TOOL_REGISTRY.json），如果是 CLI 路由则提前返回；再查 CompositeRegistry（硬编码注册）；最后 fallback 到 research-harness。但 DISPATCH_TABLE::from_registry 返回空表时（文件读取失败/解析失败）第171-173行清空 targets，此时所有工具都无法匹配 CLI 路由，而 CompositeRegistry 不包含 CLI 工具，最终返回 Unknown tool 错误。此外 load_tool_records_cached 使用 mtime 缓存，运行时 MCP_TOOL_REGISTRY.json 更新后 tools/list 和 dispatch 行为不一致。",
+      "fix": "(1)from_registry 失败时记录警告但保留已知 CLI 工具的回退列表；(2)添加启动时注册表验证，确保 DISPATCH_TABLE 和 CompositeRegistry 无空档；(3)缓存增加版本号而非仅依赖 mtime 检测"
+    },
+    {
+      "id": "HPM-10",
+      "severity": "P1",
+      "category": "同步/异步",
+      "file": "core/host-projection/src/hosts/mcp_stdio_harness/mod.rs",
+      "description": "CLI 子进程使用 100ms 繁忙轮询等待退出，CPU 浪费",
+      "detail": "spawn_cli_tool 第1019-1038行使用 try_wait + 100ms sleep 循环轮询子进程退出状态。每 100ms 一个完整循环意味着 5 分钟超时内执行约 3000 次轮询，每次涉及系统调用。更好的做法是使用 blocking wait 或管道 EOF 等待。此外子进程 stderr 收集在清理阶段（第1043行）但 stdout 丢失在 wait 之前的 kill 场景（第1024-1027行 kill 后未收集输出直接返回错误）。",
+      "fix": "(1)使用 std::process::Child::wait 替代轮询 + 独立的超时线程；(2) kill 时收集 stdout/stderr 再返回错误（现有代码第1042-1043行的 read_to_string 在 kill+wait 后可能无效，需在 kill 前收集）；(3)轮询间隔增加到 500ms 降低 CPU 负载"
+    },
+    {
+      "id": "HPM-11",
+      "severity": "P1",
+      "category": "错误处理",
+      "file": "core/host-projection/src/hosts/mcp_stdio_harness/task_tools.rs",
+      "description": "tool_task_complete 的 validate_transition 失败返回 String 而非 FrameworkError，静默吞掉验证上下文",
+      "detail": "task_tools.rs 第203-209行 validate_transition 返回 transition_v.reason 作为 String 错误。原因是返回值类型为 Result<String, String>，不能传播 FrameworkError。如果验证失败，错误消息不包含导致失败的 goal_type、evidence 状况等结构化上下文，仅包含 validate_transition 的 reason 文本。",
+      "fix": "迁移到 FrameworkError 返回类型后，此处可返回 FrameworkError::validation() 并携带结构化元数据字段"
+    },
+    {
+      "id": "HPM-12",
+      "severity": "P2",
+      "category": "Pre-tool Guard",
+      "file": "core/host-projection/src/hosts/host_extensions/pretool.rs",
+      "description": "Bash segment 分割逻辑过于简化，复合命令中的保护路径检测可能漏报",
+      "detail": "split_bash_segments 第207-246行仅按 ;、&&、||、| 分割，不处理：(1)子shell (cmd) 和 $(cmd)；(2)管道链中中间命令的写入；(3)heredoc (<<EOF) 和 here-string (<<<) 重定向；(4)花括号展开 {...} 内的多命令。这意味着 echo $((protected_var)) 或 complex_command 2>&1 等复杂语法中的路径引用可能越过 guard 检测。",
+      "fix": "(1)增加更鲁棒的 Bash AST 分析或使用 shellcheck 等效的预处理器；(2)对无法解析的命令保守地标记为潜在写入操作；(3)添加对 $(...) 和 `...` 子命令内容的重写扫描"
+    },
+    {
+      "id": "HPM-13",
+      "severity": "P2",
+      "category": "输入校验",
+      "file": "core/host-projection/src/hosts/mcp_stdio_harness/mod.rs",
+      "description": "Content-Length OWS 解析不完整，多空格格式被拒绝",
+      "detail": "parse_content_length 第378-394行仅处理 'Content-Length:'（15字符偏移）和 'Content-Length :'（16字符偏移）。RFC 7230 允许任意 OWS（包括多空格和 HTAB）在冒号前后。'Content-Length  : 42'（两空格）被拒绝（测试第1243-1248行已记录此行为差距）。一个严格遵循 RFC 的 MCP 客户端发送此格式会连接失败。",
+      "fix": "使用正则或 find 定位 'content-length' 后的第一个冒号位置，而非固定偏移量。或允许可选的 OWS 模式后提取所有数字字符"
+    },
+    {
+      "id": "HPM-14",
+      "severity": "P2",
+      "category": "错误处理",
+      "file": "core/host-projection/src/hosts/mcp_stdio_harness/tools.rs",
+      "description": "tool_skill_read 返回路径泄露，调用方可发现仓库中技能目录结构",
+      "detail": "tools.rs 第174行 path.to_string_lossy() 在响应中包含 SKILL.md 的绝对路径。此路径暴露了 repo_root 的绝对位置以及 skills/ 目录结构。虽然本地进程通信中风险较低，但在 CI 日志或远程调试场景中可能泄露敏感路径信息。",
+      "fix": "响应中只返回 skill slug，不返回绝对路径。如需路径用于调试，仅在日志日志中输出，不在 MCP 响应中包含"
+    },
+    {
+      "id": "HPM-15",
+      "severity": "P2",
+      "category": "输入校验",
+      "file": "core/host-projection/src/hosts/mcp_stdio_harness/tools.rs",
+      "description": "finalize_skill_path 存在 TOCTOU 竞态，文件检查和路径使用之间文件可能被替换为符号链接",
+      "detail": "finalize_skill_path 第209行检查 path.is_file()，然后第212行检查 path_is_within_repo_root，最后第220行 canonicalize 检查 symlink 逃逸。在多线程环境中，攻击者可能在 is_file() 返回 true 后、canonicalize() 之前将 SKILL.md 替换为指向仓库外文件的符号链接。read_to_string 第166行发生在这些检查之后。",
+      "fix": "将 canonicalize 移到检查最前面，基于规范化路径做所有验证。或者在读取之前 lstat 检查不是 symlink"
+    },
+    {
+      "id": "HPM-16",
+      "severity": "P2",
+      "category": "鉴权",
+      "file": "core/host-projection/src/hosts/mcp_stdio_harness/tools.rs",
+      "description": "build_evidence_entry 接受用户上报的 command/exit_code 不做验证，信任声明仅靠 honor-system",
+      "detail": "build_evidence_entry 第256-285行将 tool_name、command、exit_code、output 直接写入 evidence 索引。第307行文档明确标注 'honor-system: not bound to host tool execution'。攻击者可以通过 MCP 工具调用伪造虚假证据记录，绕过后继的 validate_transition 证据门检查（task_tools.rs 第204行）。",
+      "fix": "(1)添加证据验证层，将 exit_code=0 的 evidence 与工具实际执行关联；(2)对 command 内容做限制：仅允许已知工具的白名单命令；(3)记录工具调用前后状态以验证证据真实性"
+    },
+    {
+      "id": "HPM-17",
+      "severity": "P2",
+      "category": "工具分发",
+      "file": "core/host-projection/src/hosts/mcp_stdio_harness/mod.rs",
+      "description": "9 个 CLI 路由工具在 research-harness 中存在死代码 handler，维护时可能被错误路由",
+      "detail": "dispatch_tool 第259-265行的注释明确标注 9 个 CLI 路由工具在 research-harness 有 handler 但永远不会到达（CLI 路由提前返回）。如果未来修改 mcp_server 字段从 'router-rs-cli' 改回 'research-harness'，这些 handler 会意外激活但可能已陈旧。工具列表：research_aigc_check、research_smoke、math_prove_inequality、math_backend_available、math_asymptotic_chain、math_lean_verify、research_verification_literature、research_verification_structure、research_verification_reproducibility。",
+      "fix": "从 research-harness 中移除此 9 个已经不再可达的 handler，或添加编译期检测（cfg 标志）防止意外重新激活"
+    },
+    {
+      "id": "HPM-18",
+      "severity": "P3",
+      "category": "工具分发",
+      "file": "core/host-projection/src/hosts/mcp_stdio_harness/task_tools.rs",
+      "description": "tool_task_create 幂等性仅检查文件存在，task_id 重用时 title 可能静默漂移",
+      "detail": "task_tools.rs 第38-67行：当 task_id 目录已有 TASK_LEDGER.jsonl 时返回 created=false 不做任何更新。但调用方可传入不同 title，该 title（第32行）被忽略。如果协作场景下两个上下文用同一 task_id 但不同 title，第一个调用的 title 通过 set_task_focus 固定后不会更新。",
+      "fix": "(1)幂等时检查参数一致性：如果新 title 与已有 title 不同则更新或报错；(2)添加 title 更新工具或参数"
+    },
+    {
+      "id": "HPM-19",
+      "severity": "P3",
+      "category": "Schema Drift",
+      "file": "core/host-projection/src/hosts/host_extensions/schema_drift.rs",
+      "description": "schema_drift.rs 的 snapshot_host_hooks 仅检测不修复，GATE_TIMEOUT_SECS 硬编码",
+      "detail": "snapshot_host_hooks 第198-252行检测钩子配置漂移但无自动修复机制。GATE_TIMEOUT_SECS 数组（第50-80行）对所有宿主共用同样的超时值，不支持按宿主定制。对比模板时使用钩子文档的 event keys 排序后比较（第152-159行），排序引入 O(n log n) 开销但较为稳健。",
+      "fix": "(1)添加可选的自修复回调（如自动写回正确的 timeout 值）；(2)将 GATE_TIMEOUT_SECS 改为 per-host 配置或从 registry 读取；(3) keys 比较优化为 HashSet 差异检测"
+    },
+    {
+      "id": "HPM-20",
+      "severity": "P3",
+      "category": "同步/异步",
+      "file": "core/host-projection/src/hosts/mcp_stdio_harness/mod.rs",
+      "description": "connection_session_id 生成使用 unwrap_or_default 导致时间戳退化为 0",
+      "detail": "generate_connection_session_id 第420-423行使用 duration_since(UNIX_EPOCH).unwrap_or_default()，如果系统时间在 UNIX_EPOCH 之前（非常罕见但可能）则 nanos=0，session_id 退化为 '{host_id}-0'。多个同时连接可能产生相同 session_id。",
+      "fix": "使用线程安全的递增计数器或 uuid crate 生成唯一 session_id，避免依赖系统时钟"
+    }
+  ]
+}

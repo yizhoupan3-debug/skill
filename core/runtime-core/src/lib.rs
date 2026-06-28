@@ -251,8 +251,9 @@ pub fn init_hooks() {
                 // browser_dispatch (1 field) — default; set_browser_dispatch overrides via OnceLock
                 browser_dispatch: |_| Err(core_errors::FrameworkError::validation("browser-mcp dispatch not registered")),
                 // runtime_trace_transport (2 fields)
-                attach_runtime_event_transport: |payload| fr_exec::trace_attach::attach_runtime_event_transport(payload).map_err(Into::into),
-                inspect_trace_stream: |payload| fr_exec::trace_stream_io::inspect_trace_stream(payload).map_err(Into::into),
+                attach_runtime_event_transport:
+                    fr_exec::trace_attach::attach_runtime_event_transport,
+                inspect_trace_stream: fr_exec::trace_stream_io::inspect_trace_stream,
             },
         );
 

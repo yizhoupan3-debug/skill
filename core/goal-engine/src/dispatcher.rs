@@ -195,7 +195,7 @@ fn apply_subprocess_rlimits() -> Result<(), std::io::Error> {
 /// Resolve the subagent binary path from `ROUTER_RS_SUBAGENT_BIN` env var.
 /// Returns an error if the env var is not set or is empty.
 pub fn resolve_subagent_binary() -> Result<String, LoopError> {
-    crate::env_flags::subagent_binary().map_err(LoopError::SpawnFailed)
+    crate::env_flags::subagent_binary().map_err(|e| LoopError::SpawnFailed(e.to_string()))
 }
 
 /// Execute a single action synchronously through a subagent process, with kill-signal and timeout support.

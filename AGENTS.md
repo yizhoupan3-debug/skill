@@ -17,7 +17,7 @@
 ## Lifecycle
 
 - **无固定阶段 lifecycle**。Task 是运行时底层执行引擎（§Task Engine），Loop Goal 是 Task 上的策略与可选自动化层，QG Route 是可插拔质量门注册表。
-- **Lifecycle Profile 已从 GOAL_STATE.json 移除**（Wave 2a）。运行时行为由 `RUNTIME_REGISTRY.json` 中的 `lifecycle_profiles` 配置驱动（代码中 `lifecycle_profile_is_loop_capable()`、`lifecycle_profile_disables_spawn_first_nudge()` 等功能完好），不写入 GOAL_STATE.json。
+- **Lifecycle Profile 已从 GOAL_STATE.json 移除**（Wave 2a）。运行时行为由 `RUNTIME_REGISTRY.json` 中的 `lifecycle_profiles` 配置驱动，不写入 GOAL_STATE.json。
 - **Review**：Review findings-only。显式 `$code-review-deep` 或 review 请求仍适用。详见 `skills/code-review-deep/SKILL.md`。
 
 ## Task Engine（底层执行引擎）
