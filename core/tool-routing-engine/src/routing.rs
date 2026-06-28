@@ -345,30 +345,6 @@ mod tests {
     }
 
     #[test]
-    fn host_filter_excludes_mismatch() {
-        let records = vec![
-            test_tool_record("pdf_read", &["pdf"]),
-            test_tool_record("browser_screenshot", &["截图", "浏览器"]),
-        ];
-        // Query matches "screenshot" but host is "cursor" — pdf_read has host_platforms=["claude"]
-        // Both should be excluded
-        let decision = route_tool_from_records("screenshot", &records, Some("cursor"));
-        assert!(decision.is_none()); // No match after host filter exclusion
-    }
-
-    #[test]
-    fn fuzzy_rescue_respects_host_filter() {
-        // "screenshto" would fuzzy-match trigger_hint "screenshot" via trigram,
-        // but host="cursor" doesn't match claude-only record — must not select it
-        let records = vec![test_tool_record("browser_screenshot", &["screenshot"])];
-        let decision = route_tool_from_records("screenshto", &records, Some("cursor"));
-        assert!(
-            decision.is_none(),
-            "fuzzy rescue must not bypass host filter"
-        );
-    }
-
-    #[test]
     fn fuzzy_rescue_handles_typo() {
         let records = vec![test_tool_record(
             "browser_screenshot",
@@ -409,7 +385,6 @@ mod tests {
             dispatch_domain: DispatchDomain::Research,
             owner: ToolOwner::Research,
             trigger_hints: vec![],
-            host_platforms: vec![],
             mcp_server: "ext-server".to_string(),
             tool_flags: vec![],
             input_schema_json: None,
@@ -472,7 +447,7 @@ mod tests {
     fn route_long_query() {
         let records = vec![test_tool_record("pdf_read", &["pdf"])];
         let long_query = "a".repeat(5000);
-        let decision = route_tool_from_records(&long_query, &records, None);
+        let decision = route_tool_from_records(&long_query, &records);
         assert!(
             decision.is_none(),
             "query over MAX_QUERY_LEN should return None"
@@ -485,7 +460,7 @@ mod tests {
         record.tool_flags = vec!["deprecated".to_string()];
         let records = vec![record];
         // Even with exact match, deprecated tool must not be selected
-        let decision = route_tool_from_records("old_tool legacy", &records, None);
+        let decision = route_tool_from_records("old_tool legacy", &records);
         assert!(
             decision.is_none(),
             "deprecated tool should be excluded from routing"
@@ -498,7 +473,7 @@ mod tests {
         record.tool_flags = vec!["no_routing".to_string()];
         let records = vec![record];
         // Even with exact match, no_routing tool must not be selected
-        let decision = route_tool_from_records("task_create", &records, None);
+        let decision = route_tool_from_records("task_create", &records);
         assert!(
             decision.is_none(),
             "no_routing tool should be excluded from routing"

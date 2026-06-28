@@ -12,7 +12,6 @@ mod routing_integration_tests {
             dispatch_domain: DispatchDomain::DomainFramework,
             owner: ToolOwner::Framework,
             trigger_hints: keywords.iter().map(|s| s.to_string()).collect(),
-            host_platforms: vec!["claude".to_string()],
             mcp_server: "router-rs".to_string(),
             tool_flags: vec![],
             input_schema_json: None,
@@ -47,7 +46,7 @@ mod routing_integration_tests {
     fn route_exact_match() {
         let records = make_records();
         let decision =
-            tool_routing_engine::routing::route_tool_from_records("pdf-read", &records, None);
+            tool_routing_engine::routing::route_tool_from_records("pdf-read", &records);
         assert!(decision.is_some());
         assert_eq!(decision.unwrap().selected_tool, "pdf-read");
     }
@@ -56,7 +55,7 @@ mod routing_integration_tests {
     fn route_chinese_keyword() {
         let records = make_records();
         let decision =
-            tool_routing_engine::routing::route_tool_from_records("帮我截图", &records, None);
+            tool_routing_engine::routing::route_tool_from_records("帮我截图", &records);
         assert!(decision.is_some());
         assert_eq!(decision.unwrap().selected_tool, "browser-screenshot");
     }
@@ -65,7 +64,7 @@ mod routing_integration_tests {
     fn route_browser_action() {
         let records = make_records();
         let decision =
-            tool_routing_engine::routing::route_tool_from_records("click 按钮", &records, None);
+            tool_routing_engine::routing::route_tool_from_records("click 按钮", &records);
         assert!(decision.is_some());
         assert_eq!(decision.unwrap().selected_tool, "browser-click");
     }
@@ -74,7 +73,7 @@ mod routing_integration_tests {
     fn route_web_fetch() {
         let records = make_records();
         let decision =
-            tool_routing_engine::routing::route_tool_from_records("抓取网页内容", &records, None);
+            tool_routing_engine::routing::route_tool_from_records("抓取网页内容", &records);
         assert!(decision.is_some());
         assert_eq!(decision.unwrap().selected_tool, "web-fetch");
     }
@@ -83,7 +82,7 @@ mod routing_integration_tests {
     fn route_code_search() {
         let records = make_records();
         let decision =
-            tool_routing_engine::routing::route_tool_from_records("搜索代码", &records, None);
+            tool_routing_engine::routing::route_tool_from_records("搜索代码", &records);
         assert!(decision.is_some());
         assert_eq!(decision.unwrap().selected_tool, "codegraph-search");
     }
@@ -100,26 +99,15 @@ mod routing_integration_tests {
     fn route_empty_returns_none() {
         let records = make_records();
         assert!(
-            tool_routing_engine::routing::route_tool_from_records("", &records, None).is_none()
+            tool_routing_engine::routing::route_tool_from_records("", &records).is_none()
         );
-    }
-
-    #[test]
-    fn route_host_filter() {
-        let records = make_records();
-        let decision = tool_routing_engine::routing::route_tool_from_records(
-            "PDF 文档",
-            &records,
-            Some("cursor"),
-        );
-        assert!(decision.is_none());
     }
 
     #[test]
     fn route_fuzzy_typo() {
         let records = make_records();
         let decision =
-            tool_routing_engine::routing::route_tool_from_records("screeenshot", &records, None);
+            tool_routing_engine::routing::route_tool_from_records("screeenshot", &records);
         assert!(decision.is_some(), "typo should fuzzy-match");
         let d = decision.unwrap();
         assert!(d.fuzzy_match, "should be flagged as fuzzy match");
@@ -133,17 +121,17 @@ mod routing_integration_tests {
             test_record("tool-beta", "Tool Beta", &["search"]),
         ];
         let decision =
-            tool_routing_engine::routing::route_tool_from_records("search", &records, None);
+            tool_routing_engine::routing::route_tool_from_records("search", &records);
         assert!(decision.is_some(), "tie should still return a result");
     }
 
     #[test]
     fn route_emoji_or_punctuation_query() {
         let records = make_records();
-        let decision = tool_routing_engine::routing::route_tool_from_records("😊", &records, None);
+        let decision = tool_routing_engine::routing::route_tool_from_records("😊", &records);
         assert!(decision.is_none(), "emoji-only query should not match");
         let decision2 =
-            tool_routing_engine::routing::route_tool_from_records("!@#$%^&*", &records, None);
+            tool_routing_engine::routing::route_tool_from_records("!@#$%^&*", &records);
         assert!(
             decision2.is_none(),
             "punctuation-only query should not match"
@@ -156,7 +144,6 @@ mod routing_integration_tests {
         let decision = tool_routing_engine::routing::route_tool_from_records(
             "something totally unrelated",
             &records,
-            None,
         );
         assert!(
             decision.is_none(),
@@ -211,7 +198,7 @@ mod routing_integration_tests {
                 continue;
             }
             let decision =
-                tool_routing_engine::routing::route_tool_from_records(&record.slug, &records, None);
+                tool_routing_engine::routing::route_tool_from_records(&record.slug, &records);
             assert!(
                 decision.is_some(),
                 "tool '{}' should be reachable by exact slug match",

@@ -40,10 +40,7 @@ pub fn search_tools(
     let query_lower = query.to_lowercase();
     let query_tokens = tokenize_text(&query_lower);
 
-    // Pre-compute host filter for efficiency
-    let hid_lower = host_id.map(|h| h.to_lowercase());
-
-    // Primary: token-based scoring (skip no_routing, deprecated, host-mismatched)
+    // Primary: token-based scoring (skip no_routing, deprecated)
     let mut results: Vec<McpToolDecision> = records
         .iter()
         .filter_map(|record| {
@@ -170,29 +167,6 @@ mod tests {
         assert!(!results.is_empty(), "typo should fuzzy-match in search");
         assert!(results[0].fuzzy_match, "should be flagged as fuzzy match");
         assert_eq!(results[0].selected_tool, "browser_screenshot");
-    }
-
-    #[test]
-    fn search_host_filter_excludes_mismatch() {
-        let records = vec![
-            test_tool_record("pdf_read", &["pdf", "文档"]),
-            test_tool_record("browser_screenshot", &["截图", "screenshot"]),
-        ];
-        // Query matches "screenshot" but host is "cursor" — pdf_read has host_platforms=["claude"]
-        // Both records should be excluded by host filter
-        let results = search_tools("screenshot", &records, 5, Some("cursor"));
-        assert!(results.is_empty(), "host filter should exclude all records");
-    }
-
-    #[test]
-    fn search_host_filter_fuzzy_rescue() {
-        let records = vec![test_tool_record("browser_screenshot", &["screenshot"])];
-        // Fuzzy match but host mismatch — must not appear in results
-        let results = search_tools("screeenshot", &records, 5, Some("cursor"));
-        assert!(
-            results.is_empty(),
-            "fuzzy rescue must not bypass host filter"
-        );
     }
 
     #[test]

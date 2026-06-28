@@ -62,9 +62,7 @@ pub fn evaluate_tool_routing_cases(
                 return None;
             }
 
-            let host_id = case.host_id.as_deref();
-
-            let decision = route_tool_from_records(&task, records, host_id);
+            let decision = route_tool_from_records(&task, records);
             let selected_tool = decision.as_ref().map(|d| d.selected_tool.clone());
 
             let category = case.category.trim().to_string();

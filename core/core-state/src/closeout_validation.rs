@@ -65,7 +65,7 @@ pub fn evaluate_closeout_record_value(payload: Value) -> Result<Value> {
         .to_string();
     match serde_json::from_value::<CloseoutRecord>(payload) {
         Ok(record) => {
-            let response = evaluate_record(&record);
+            let response = evaluate_record(&record, None);
             Ok(serde_json::to_value(response)?)
         }
         Err(err) => parse_error_response(&task_id, raw_shape, &err.to_string()),
@@ -88,29 +88,7 @@ pub fn evaluate_closeout_record_value_with_context(
         .to_string();
     match serde_json::from_value::<CloseoutRecord>(payload) {
         Ok(record) => {
-            let mut response = evaluate_record(&record);
-            // R8: cross-check EVIDENCE_INDEX
-            let has_success = ctx.has_successful_verification;
-            let status = record.verification_status.trim().to_ascii_lowercase();
-            if status == "passed"
-                && record.commands_run.is_empty()
-                && !has_success
-                && !response
-                    .violations
-                    .iter()
-                    .any(|v| v.rule == "claimed_passed_without_evidence")
-            {
-                response.violations.push(CloseoutViolation::new(
-                    "claimed_passed_without_evidence_index_rows", "block",
-                    "verification_status=passed and commands_run is empty, and EVIDENCE_INDEX.json has no successful rows",
-                ));
-                response
-                    .missing_evidence
-                    .push("evidence_index_successful_row".into());
-                response.closeout_allowed = false;
-            }
-            let has_hard = response.violations.iter().any(|v| v.category == "hard");
-            response.can_proceed = !has_hard;
+            let response = evaluate_record(&record, Some(ctx));
             Ok(serde_json::to_value(response)?)
         }
         Err(err) => parse_error_response(&task_id, raw_shape, &err.to_string()),
@@ -243,7 +221,7 @@ struct CloseoutResponse {
 
 // ── Core evaluation (R1–R7) ───────────────────────────────────────────
 
-fn evaluate_record(record: &CloseoutRecord) -> CloseoutResponse {
+fn evaluate_record(record: &CloseoutRecord, ctx: Option<&CloseoutEvidenceContext>) -> CloseoutResponse {
     let mut violations = Vec::new();
     let mut missing = Vec::new();
 
@@ -401,6 +379,29 @@ fn evaluate_record(record: &CloseoutRecord) -> CloseoutResponse {
         violations.push(CloseoutViolation::new("claimed_passed_without_evidence", "block",
             "verification_status=passed but commands_run/artifacts_checked/risks/blockers all empty"));
         missing.push("evidence_or_acknowledgement".into());
+    }
+
+    // R8: Cross-check EVIDENCE_INDEX when evidence context is available.
+    // R8's commands_run.is_empty() guard: if commands_run is present and non-empty,
+    // the closeout record's own commands already serve as evidence of verification
+    // activity. R8 only triggers when there are no commands_run (the record claims
+    // "passed" purely through the evidence summary), because in that case the
+    // EVIDENCE_INDEX.json is the sole verification source and must independently
+    // confirm success.
+    if let Some(ctx) = ctx {
+        let has_success = ctx.has_successful_verification;
+        let status = record.verification_status.trim().to_ascii_lowercase();
+        if status == "passed"
+            && record.commands_run.is_empty()
+            && !has_success
+            && !violations.iter().any(|v| v.rule == "claimed_passed_without_evidence")
+        {
+            violations.push(CloseoutViolation::new(
+                "claimed_passed_without_evidence_index_rows", "block",
+                "verification_status=passed and commands_run is empty, and EVIDENCE_INDEX.json has no successful rows",
+            ));
+            missing.push("evidence_index_successful_row".into());
+        }
     }
 
     let blocking = violations.iter().any(|v| v.severity == "block");
