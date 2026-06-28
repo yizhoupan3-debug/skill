@@ -207,8 +207,7 @@ pub fn validate_external_research_strict(v: &Value) -> Result<(), FrameworkError
     Ok(())
 }
 
-/// Validates optional structured external research blob for `append_round`.
-/// Aligns with lane-templates **deep mode** YAML (`claims`, `contradiction_sweep`, `retrieval_trace`, optional `unknowns` / `quantitative_replays`).
+/// Validates optional structured external research blob (`claims`, `contradiction_sweep`, `retrieval_trace`, optional `unknowns` / `quantitative_replays`).
 pub fn validate_external_research_structured(v: &Value) -> Result<(), FrameworkError> {
     let obj = v
         .as_object()

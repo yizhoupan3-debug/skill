@@ -15,7 +15,6 @@ pub fn handle_research_tool(name: &str, arguments: &Value) -> Result<String, Fra
         "research_review_dimensions" => Ok(tool_research_review_dimensions(arguments)?),
         "research_claim_drift" => Ok(tool_research_claim_drift(arguments)?),
         "research_review_loop" => Ok(tool_research_review_loop(arguments)?),
-        "research_smoke" => Ok(tool_research_smoke(arguments)?),
         _ if name.starts_with("math_") => Ok(math_tool_dispatch(name, arguments)?),
         _ if name.starts_with("research_verification_") => {
             verification_tool_dispatch(name, arguments)
@@ -30,17 +29,13 @@ pub fn handle_research_tool(name: &str, arguments: &Value) -> Result<String, Fra
 
 fn math_tool_dispatch(name: &str, arguments: &Value) -> Result<String, FrameworkError> {
     match name {
-        "math_prove_inequality" => tool_math_prove_inequality(arguments),
-        "math_backend_available" => tool_math_backend_available(arguments),
         "math_asymptotic_estimate" => tool_math_asymptotic_estimate(arguments),
-        "math_asymptotic_chain" => tool_math_asymptotic_chain(arguments),
         "math_proof_dag_init" => tool_math_proof_dag_init(arguments),
         "math_proof_dag_decompose" => tool_math_proof_dag_decompose(arguments),
         "math_proof_dag_verify" => tool_math_proof_dag_verify(arguments),
         "math_proof_dag_status" => tool_math_proof_dag_status(arguments),
         "math_sympy_verify" => tool_math_sympy_verify(arguments),
         "math_sympy_simplify" => tool_math_sympy_simplify(arguments),
-        "math_lean_verify" => tool_math_lean_verify(arguments),
         _ => Err(FrameworkError::validation(format!(
             "unknown math tool: {name}"
         ))),
@@ -51,11 +46,8 @@ fn math_tool_dispatch(name: &str, arguments: &Value) -> Result<String, Framework
 
 fn verification_tool_dispatch(name: &str, arguments: &Value) -> Result<String, FrameworkError> {
     match name {
-        "research_verification_literature" => tool_verification_literature(arguments),
         "research_verification_prose" => tool_verification_prose(arguments),
-        "research_verification_reproducibility" => tool_verification_reproducibility(arguments),
         "research_verification_statistical" => tool_verification_statistical(arguments),
-        "research_verification_structure" => tool_verification_structure(arguments),
         _ => Err(FrameworkError::validation(format!(
             "unknown verification tool: {name}"
         ))),
@@ -63,66 +55,6 @@ fn verification_tool_dispatch(name: &str, arguments: &Value) -> Result<String, F
 }
 
 // ── Literature verification ──
-
-fn tool_verification_literature(arguments: &Value) -> Result<String, FrameworkError> {
-    let check =
-        arguments
-            .get("check")
-            .and_then(Value::as_str)
-            .ok_or(FrameworkError::validation(
-                "literature verification requires 'check' (doi|claim_coverage)",
-            ))?;
-    match check {
-        "doi" => {
-            let doi =
-                arguments
-                    .get("doi")
-                    .and_then(Value::as_str)
-                    .ok_or(FrameworkError::validation(
-                        "doi check requires 'doi' (string)",
-                    ))?;
-            let reachable = tokio::runtime::Handle::current()
-                .block_on(crate::verification::literature::verify_doi_reachable(doi))
-                .map_err(|e| FrameworkError::validation(format!("DOI check failed: {e}")))?;
-            serde_json::to_string_pretty(&json!({
-                "check": "doi_reachability", "doi": doi, "reachable": reachable,
-            }))
-            .map_err(FrameworkError::Json)
-        }
-        "claim_coverage" => {
-            let claims: Vec<String> = arguments
-                .get("claims")
-                .and_then(Value::as_array)
-                .ok_or(FrameworkError::validation(
-                    "claim_coverage requires 'claims' array",
-                ))?
-                .iter()
-                .filter_map(|v| v.as_str().map(String::from))
-                .collect();
-            let references: Vec<String> = arguments
-                .get("references")
-                .and_then(Value::as_array)
-                .ok_or(FrameworkError::validation(
-                    "claim_coverage requires 'references' array",
-                ))?
-                .iter()
-                .filter_map(|v| v.as_str().map(String::from))
-                .collect();
-            let score =
-                crate::verification::literature::verify_claim_coverage(&claims, &references)
-                    .map_err(|e| {
-                        FrameworkError::validation(format!("claim coverage failed: {e}"))
-                    })?;
-            serde_json::to_string_pretty(&json!({
-                "check": "claim_coverage", "claims_analyzed": claims.len(),
-                "coverage_score": format!("{:.2}", score), "covered_pct": (score * 100.0).round() as u64,
-            })).map_err(FrameworkError::Json)
-        }
-        _ => Err(FrameworkError::validation(format!(
-            "unknown literature check: {check}"
-        ))),
-    }
-}
 
 // ── Prose QC ──
 
@@ -209,57 +141,6 @@ fn tool_verification_prose(arguments: &Value) -> Result<String, FrameworkError> 
 
 // ── Reproducibility verification ──
 
-fn tool_verification_reproducibility(arguments: &Value) -> Result<String, FrameworkError> {
-    let experiment_dir = arguments
-        .get("experiment_dir")
-        .and_then(Value::as_str)
-        .ok_or(FrameworkError::validation(
-            "reproducibility audit requires 'experiment_dir' (string path)",
-        ))?;
-    let dir = Path::new(experiment_dir);
-
-    let run_paths: Option<Vec<&Path>> =
-        arguments
-            .get("run_paths")
-            .and_then(Value::as_array)
-            .map(|arr| {
-                arr.iter()
-                    .filter_map(|v| v.as_str().map(Path::new))
-                    .collect()
-            });
-
-    let report =
-        crate::verification::reproducibility::run_reproducibility_audit(dir, run_paths.as_deref())
-            .map_err(|e| {
-                FrameworkError::validation(format!("reproducibility audit failed: {e}"))
-            })?;
-
-    let checks: Vec<Value> = report
-        .checks
-        .iter()
-        .map(|c| {
-            let (status, detail) = match &c.status {
-                crate::verification::reproducibility::CheckStatus::Pass => ("PASS", String::new()),
-                crate::verification::reproducibility::CheckStatus::Fail(msg) => {
-                    ("FAIL", msg.clone())
-                }
-                crate::verification::reproducibility::CheckStatus::Warn(msg) => {
-                    ("WARN", msg.clone())
-                }
-                crate::verification::reproducibility::CheckStatus::Skip(msg) => {
-                    ("SKIP", msg.clone())
-                }
-            };
-            json!({"name": c.name, "status": status, "detail": detail})
-        })
-        .collect();
-
-    serde_json::to_string_pretty(&json!({
-        "module": "reproducibility", "checks": checks,
-        "all_pass": report.checks.iter().all(|c| matches!(c.status, crate::verification::reproducibility::CheckStatus::Pass)),
-    })).map_err(FrameworkError::Json)
-}
-
 // ── Statistical verification ──
 
 fn tool_verification_statistical(arguments: &Value) -> Result<String, FrameworkError> {
@@ -345,106 +226,7 @@ fn tool_verification_statistical(arguments: &Value) -> Result<String, FrameworkE
 
 // ── Structure verification ──
 
-fn tool_verification_structure(arguments: &Value) -> Result<String, FrameworkError> {
-    let check =
-        arguments
-            .get("check")
-            .and_then(Value::as_str)
-            .ok_or(FrameworkError::validation(
-                "structure verification requires 'check' (latex|figures)",
-            ))?;
-    match check {
-        "latex" => {
-            let path =
-                arguments
-                    .get("path")
-                    .and_then(Value::as_str)
-                    .ok_or(FrameworkError::validation(
-                        "latex check requires 'path' (string path to .tex file)",
-                    ))?;
-            core_state_utils::path_guard::reject_unsafe_path(Path::new(path))
-                .map_err(|e| FrameworkError::validation(format!("path rejected: {e}")))?;
-            let passed = crate::verification::structure::check_latex_compilable(Path::new(path))
-                .map_err(|e| {
-                    FrameworkError::validation(format!("LaTeX compilation check failed: {e}"))
-                })?;
-            serde_json::to_string_pretty(&json!({
-                "check": "latex_compilation", "path": path, "passed": passed,
-                "detail": if passed { "LaTeX syntax check passed (balanced braces + environments)".to_string() }
-                    else { "LaTeX syntax check FAILED — unbalanced braces or environments".to_string() },
-            })).map_err(FrameworkError::Json)
-        }
-        "figures" => {
-            let path =
-                arguments
-                    .get("path")
-                    .and_then(Value::as_str)
-                    .ok_or(FrameworkError::validation(
-                        "figures check requires 'path' (string path to .tex file)",
-                    ))?;
-            core_state_utils::path_guard::reject_unsafe_path(Path::new(path))
-                .map_err(|e| FrameworkError::validation(format!("path rejected: {e}")))?;
-            let missing = crate::verification::structure::check_figure_references(Path::new(path))
-                .map_err(|e| {
-                    FrameworkError::validation(format!("figure reference check failed: {e}"))
-                })?;
-            serde_json::to_string_pretty(&json!({
-                "check": "figure_references", "path": path,
-                "missing_refs": missing, "has_missing": !missing.is_empty(),
-                "total_missing": missing.len(),
-            }))
-            .map_err(FrameworkError::Json)
-        }
-        _ => Err(FrameworkError::validation(format!(
-            "unknown structure check: {check}"
-        ))),
-    }
-}
-
 // ── Inequality tool functions ──
-
-fn tool_math_prove_inequality(arguments: &Value) -> Result<String, FrameworkError> {
-    let expr =
-        arguments
-            .get("expression")
-            .and_then(Value::as_str)
-            .ok_or(FrameworkError::validation(
-                "math_prove_inequality requires 'expression' (string)",
-            ))?;
-    let timeout = arguments.get("timeout_ms").and_then(Value::as_u64);
-    let vr = crate::verification::inequality::check_inequality(expr, timeout);
-    serde_json::to_string_pretty(&json!({
-        "check_name": vr.check_name, "status": format!("{:?}", vr.status),
-        "details": vr.details, "expression": expr,
-    }))
-    .map_err(FrameworkError::Json)
-}
-
-fn tool_math_backend_available(_arguments: &Value) -> Result<String, FrameworkError> {
-    let lean_status = crate::verification::lean_bridge::check_lean_status();
-    let (lean_available, lean_desc) = match &lean_status {
-        crate::verification::lean_bridge::LeanStatus::Available => {
-            (true, "Lean 4 theorem prover is installed".to_string())
-        }
-        crate::verification::lean_bridge::LeanStatus::NotFound { install_guide, .. } => (
-            false,
-            format!("Lean 4 — not found. Install guide: {install_guide}"),
-        ),
-    };
-    serde_json::to_string_pretty(&json!({
-        "inequality_engine": {
-            "available": crate::verification::inequality::solver_available(),
-            "description": "minilp-based linear inequality verification (pure Rust)",
-        },
-        "sympy": {
-            "available": crate::verification::sympy_bridge::sympy_available(),
-            "description": "Symbolic identity verification (pure Rust, no Python dependency)",
-        },
-        "lean": { "available": lean_available, "description": lean_desc },
-        "install_hint": "All math tools are pure Rust — no Python dependencies required.",
-    }))
-    .map_err(FrameworkError::Json)
-}
 
 // ── Asymptotic tool functions ──
 
@@ -473,43 +255,6 @@ fn tool_math_asymptotic_estimate(arguments: &Value) -> Result<String, FrameworkE
     serde_json::to_string_pretty(&json!({
         "check_name": vr.check_name, "status": format!("{:?}", vr.status),
         "details": vr.details, "expression": expr,
-    }))
-    .map_err(FrameworkError::Json)
-}
-
-fn tool_math_asymptotic_chain(arguments: &Value) -> Result<String, FrameworkError> {
-    let steps_val =
-        arguments
-            .get("steps")
-            .and_then(Value::as_array)
-            .ok_or(FrameworkError::validation(
-                "math_asymptotic_chain requires 'steps' array",
-            ))?;
-    let var = arguments
-        .get("variable")
-        .and_then(Value::as_str)
-        .unwrap_or("x");
-    let regime = arguments
-        .get("regime")
-        .and_then(Value::as_str)
-        .unwrap_or("oo");
-    let sympy_check = arguments
-        .get("sympy_check")
-        .and_then(Value::as_bool)
-        .unwrap_or(true);
-    let steps: Vec<crate::verification::asymptotic::AsymptoticStep> =
-        serde_json::from_value(serde_json::Value::Array(steps_val.clone()))
-            .map_err(|e| FrameworkError::Json(e))?;
-    let vr = crate::verification::asymptotic::verify_asymptotic_chain_with_name(
-        &steps,
-        var,
-        regime,
-        sympy_check,
-        "math_asymptotic_chain",
-    );
-    serde_json::to_string_pretty(&json!({
-        "check_name": vr.check_name, "status": format!("{:?}", vr.status),
-        "details": vr.details, "steps": steps_val,
     }))
     .map_err(FrameworkError::Json)
 }
@@ -663,22 +408,6 @@ fn tool_math_sympy_simplify(arguments: &Value) -> Result<String, FrameworkError>
     serde_json::to_string_pretty(&json!({
         "check_name": vr.check_name, "status": format!("{:?}", vr.status),
         "details": vr.details, "expression": expr,
-    }))
-    .map_err(FrameworkError::Json)
-}
-
-fn tool_math_lean_verify(arguments: &Value) -> Result<String, FrameworkError> {
-    let script =
-        arguments
-            .get("script")
-            .and_then(Value::as_str)
-            .ok_or(FrameworkError::validation(
-                "math_lean_verify requires 'script' (string)",
-            ))?;
-    let vr = crate::verification::lean_bridge::verify_lean_theorem(script);
-    serde_json::to_string_pretty(&json!({
-        "check_name": vr.check_name, "status": format!("{:?}", vr.status),
-        "details": vr.details,
     }))
     .map_err(FrameworkError::Json)
 }

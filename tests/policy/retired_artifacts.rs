@@ -81,7 +81,7 @@ fn retired_runtime_owned_skill_directories_stay_removed() {
 
 #[test]
 fn doc_and_xlsx_skills_have_no_python_scripts() {
-    for skill in ["skills/doc", "skills/primary-runtime/spreadsheets"] {
+    for skill in ["skills/doc", "skills/spreadsheets"] {
         assert!(
             collect_files_with_extension(&project_root().join(skill), "py").is_empty(),
             "{skill} still contains Python scripts"

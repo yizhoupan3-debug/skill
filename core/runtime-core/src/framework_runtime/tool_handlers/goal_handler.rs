@@ -128,12 +128,6 @@ pub(crate) fn goal_state_manage_dispatch(
                 })?;
             payload["blocker"] = json!(blocker);
         }
-        "append_round" => {
-            return Err(FrameworkError::validation(
-                "append_round is no longer supported. \
-                 Use framework_quality_gate (or task_ledger_dispatch with kind=quality_gate) instead.",
-            ));
-        }
         "pause" | "resume" | "complete" | "clear" => {}
         "amend" => {
             if let Some(ng) = arguments.get("non_goals").and_then(Value::as_array) {

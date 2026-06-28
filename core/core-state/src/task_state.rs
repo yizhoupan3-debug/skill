@@ -1201,7 +1201,6 @@ mod tests {
                 "task_id": tid,
                 "last_seq": 0,
                 "goal_state": {"status": "planned", "goal": "old"},
-                "rfv_loop_state": null,
                 "evidence": {"evidence_rows_non_empty": false, "has_successful_verification": false}
             }))
             .unwrap(),

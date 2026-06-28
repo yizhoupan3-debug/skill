@@ -1,12 +1,12 @@
 {
   "schema_version": "mcp-tool-registry-v2",
   "scope": {
-    "total_count": 40,
-    "builtin_count": 13,
+    "total_count": 42,
+    "builtin_count": 15,
     "research_count": 1,
     "independent_count": 15,
     "external_count": 11,
-    "_comment": "scope counts are auto-generated — update this when adding/removing scopes"
+    "_comment": "auto-generated — update via tools when adding/removing tools. This is the SOLE source of truth for all tool routing."
   },
   "tools": [
     {
@@ -153,6 +153,86 @@
           "max_bytes": {
             "type": "integer",
             "description": "最大返回字节数"
+          }
+        }
+      }
+    },
+    {
+      "slug": "goal_state_read",
+      "display_name": "Goal 状态读取",
+      "description": "读取当前活跃 Goal 状态（任务状态、迭代轮次、blockers）",
+      "layer": "builtin",
+      "dispatch_domain": "domain:goal",
+      "owner": "framework",
+      "trigger_hints": [
+        "goal",
+        "目标",
+        "状态"
+      ],
+      "mcp_server": "router-rs-framework",
+      "tool_flags": [],
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "description": "任务 ID"
+          }
+        }
+      }
+    },
+    {
+      "slug": "goal_state_manage",
+      "display_name": "Goal 管理",
+      "description": "管理 Goal 生命周期：start/checkpoint/complete/pause/resume/block/amend/clear",
+      "layer": "builtin",
+      "dispatch_domain": "domain:goal",
+      "owner": "framework",
+      "trigger_hints": [
+        "goal",
+        "目标",
+        "goal start"
+      ],
+      "mcp_server": "router-rs-framework",
+      "tool_flags": [
+        "no_routing"
+      ],
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "operation",
+          "task_id"
+        ],
+        "properties": {
+          "operation": {
+            "type": "string",
+            "description": "操作类型"
+          },
+          "task_id": {
+            "type": "string",
+            "description": "任务 ID"
+          },
+          "goal": {
+            "type": "string",
+            "description": "Goal 描述"
+          },
+          "non_goals": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "done_when": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "validation_commands": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         }
       }

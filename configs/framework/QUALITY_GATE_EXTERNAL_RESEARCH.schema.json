@@ -8,7 +8,7 @@
     "claims": {
       "type": "array",
       "minItems": 1,
-      "description": "Structured claims. Under task-level external_research_strict (default true on new QG starts), router-rs additionally requires ≥2 traceable sources per claim; see validate_external_research_strict in quality_gate.rs.",
+      "description": "Structured claims. Under task-level external_research_strict (default true on new QG starts), router-rs additionally requires ≥2 traceable sources per claim; see validate_external_research_strict in core-state/src/state_manager/validation.rs.",
       "items": {
         "type": "object",
         "required": ["claim", "sources"],

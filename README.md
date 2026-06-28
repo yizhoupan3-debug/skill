@@ -25,6 +25,7 @@ cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework docto
 - `docs/architecture.md` — 八层架构规约（L0-L7 层、DAG 验证矩阵、宿主隔离契约）
 - `skills/` — 所有 skill 源文件（`skills/<name>/SKILL.md`）
 - `skills/SKILL_ROUTING_RUNTIME.json` — 运行时路由入口（唯一热表）
+- `configs/framework/MCP_TOOL_REGISTRY.json` — 工具路由唯一真源（40 工具，11 MCP servers）
 - `core/router-rs/` — 编译器、校验、路由刷新入口
 - `tests/` — 策略与路由约束测试
 - `.github/workflows/` — CI 自动校验

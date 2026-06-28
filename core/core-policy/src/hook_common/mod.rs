@@ -33,7 +33,7 @@ pub use review_signals::{
     REVIEW_GATE_LINE_CLEAR_MARKERS, has_delegation_override, has_override, has_review_override,
     is_deep_review_gate_lane_normalized, is_framework_non_goal_entrypoint_prompt,
     is_narrow_review_prompt, is_parallel_delegation_prompt, is_review_prompt,
-    is_reviewer_lane_normalized, normalize_subagent_type, review_gate_advisory_only,
+    is_reviewer_lane_normalized, normalize_subagent_type,
     review_gate_hard_block_disabled, review_gate_stop_would_nudge, saw_reject_reason,
     should_inject_spawn_first_review_nudge, should_inject_subagent_model_inherit_nudge,
 };

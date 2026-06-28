@@ -11,7 +11,7 @@ metadata:
   - research
   version: '1.0.0'
 name: reproducibility-verification
-scene: general
+scene: research
 sub_scene: reproducibility
 risk: low
 routing_gate: none

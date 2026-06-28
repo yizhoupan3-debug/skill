@@ -222,13 +222,6 @@ pub fn should_inject_spawn_first_review_nudge(
         && crate::registry_review_gate::review_spawn_first_enabled(repo_root)
 }
 
-/// Global posture: REVIEW_GATE at Stop is advisory-only on all hosts (no `continue:false` /
-/// `decision:block` for review incomplete). L4 handlers use [`review_gate_stop_would_nudge`] for
-/// nudge injection; closeout may still hard-block when `ROUTER_RS_CLOSEOUT_ENFORCEMENT` applies.
-pub fn review_gate_advisory_only() -> bool {
-    true
-}
-
 /// Whether the full review-gate Stop path is suppressed (interactive profile or env disable via host
 /// `*_review_gate_suppressed`): skips arming **and** Stop nudges, not merely hard block.
 /// When [`review_gate_advisory_only`] is true, non-suppressed hosts still inject advisory text.
@@ -563,10 +556,6 @@ mod tests {
     }
 
     #[test]
-    fn review_gate_advisory_only_is_global() {
-        assert!(review_gate_advisory_only());
-    }
-
     #[test]
     fn review_gate_hard_block_disabled_false_when_not_task_profile() {
         let _lock = crate::test_env_sync::process_env_lock();

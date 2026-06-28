@@ -1514,7 +1514,7 @@
       null,
       "local",
       null,
-      "general",
+      "research",
       "reproducibility"
     ],
     [
@@ -2103,12 +2103,20 @@
         "工作簿"
       ],
       "local",
-      "skills/primary-runtime/spreadsheets/SKILL.md",
+      "skills/spreadsheets/SKILL.md",
       null,
       "skill",
       [],
       "Route workbook-native spreadsheet work to the right implementation lane",
-      null,
+      [
+        "excel",
+        "spreadsheet",
+        "xlsx",
+        "xls",
+        "csv",
+        "tsv",
+        "artifact-tool"
+      ],
       null,
       [
         "spreadsheet",
@@ -2117,7 +2125,6 @@
         "office"
       ],
       {
-        "alias_for": "primary-runtime/spreadsheets",
         "version": "2.0.0"
       },
       "low",
@@ -2130,7 +2137,9 @@
       ],
       null,
       "local",
-      null,
+      [
+        "file overwrite"
+      ],
       "general",
       null
     ],

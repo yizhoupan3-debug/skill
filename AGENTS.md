@@ -12,7 +12,7 @@
 
 - **Python 环境（macOS）**：uv-only、默认 3.12、每仓库 `uv.lock`；禁止 `pip`。重度 Python/ML 任务须高频 `gc.collect()` / `torch.mps.empty_cache()`。
 - **Skill Routing**：热入口 `skills/SKILL_ROUTING_RUNTIME.json`；只读命中项 `skill_path`。
-- **Tool Routing**：PreToolUse/PostToolUse hook 覆盖所有工具（含 MCP）。`ToolOrigin` 分类：NativeHost / McpServer / Unknown。MCP 工具安全审查：`dangerous_mcp_tool_reason()`。
+- **Tool Routing**：MCP_TOOL_REGISTRY.json 唯一真源驱动。11 个 MCP server 共 70+ 工具。所有工具路由由注册表决定，无硬编码。
 
 ## Lifecycle
 
@@ -42,7 +42,6 @@ Task 是框架的**底层执行引擎**，不是可选组件。用户层表现�
 ### Quality Gate
 
 - 退出门：双阶段防欺诈（Stage 1 evidence check，不区分 scene）+ QGRoute evaluate（Stage 2 scene 分发 checker 链）。
-- MCP 工具：`framework_quality_gate`（stdio 分发）、`closeout_gate`（已在 MCP_TOOL_REGISTRY.json 注册）。
 - **注意**：`quality_gate_manage` MCP 工具**不存在**（可能在旧文档中被引用），不要生成或引导用户调用。
 
 ### 会话级作用域
@@ -54,8 +53,9 @@ Task 是框架的**底层执行引擎**，不是可选组件。用户层表现�
 ### 真源路径
 
 - 真源：`artifacts/current/<task_id>/`；**无** hook 自动 digest / Stop checkpoint 默认路径。
-- Goal 磁盘：`GOAL_STATE.json` / `RFV_LOOP_STATE.json`（旧名，只读兼容保留，不再写入）；显式 stdio：`framework_goal_drive` / `framework_quality_gate`。
+- Goal 磁盘：`GOAL_STATE.json`；显式 stdio：`framework_goal_drive` / `framework_quality_gate`。
 - 闭集宿主由 `RUNTIME_REGISTRY.json` 驱动。
+- 工具路由唯一真源：`configs/framework/MCP_TOOL_REGISTRY.json`。
 
 ## Task Intake
 
@@ -86,6 +86,7 @@ Task 是框架的**底层执行引擎**，不是可选组件。用户层表现�
 ## CodeGraph 自动触发规则（跨宿主硬约束）
 
 **核心原则**：在该使用 codegraph 的时候，必须自动调用，即使用户没有明确提及 codegraph。
+CodeGraph 8 个工具通过独立 MCP server（mcp-codegraph）暴露，直接可见可调用。
 
 ### 场景与工具映射
 

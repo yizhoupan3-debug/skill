@@ -27,7 +27,7 @@ fn router_rs_main_binary_compiles() {
 fn doc_and_xlsx_skill_docs_point_to_rust_tooling() {
     let docs = markdown_text_under(&[
         project_root().join("skills/doc"),
-        project_root().join("skills/primary-runtime/spreadsheets"),
+        project_root().join("skills/spreadsheets"),
     ]);
     for forbidden in [
         "openpyxl",
@@ -58,7 +58,7 @@ fn doc_and_xlsx_skill_docs_point_to_rust_tooling() {
 fn doc_and_xlsx_agent_prompts_are_rust_first() {
     let prompts = [
         project_root().join("skills/doc/agents/openai.yaml"),
-        project_root().join("skills/primary-runtime/spreadsheets/agents/openai.yaml"),
+        project_root().join("skills/spreadsheets/agents/openai.yaml"),
     ]
     .iter()
     .map(|path| read_text(path))
