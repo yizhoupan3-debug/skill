@@ -221,9 +221,7 @@ pub fn dispatch_framework_command(command: FrameworkCommand) -> Result<(), Frame
             let payload = parse_json_input::<Value>(&command.input_json, "framework step ledger")?;
             print_json_value(&handle_step_ledger_operation(payload)?)
         }
-        FrameworkCommand::Maint { command } => {
-            runtime_core::framework_maint::dispatch(command)
-        }
+        FrameworkCommand::Maint { command } => runtime_core::framework_maint::dispatch(command),
         FrameworkCommand::Skills { command } => dispatch_framework_skills(command),
         FrameworkCommand::HostIntegration(command) => {
             let payload = run_host_integration_from_args(&command.args)?;
@@ -417,11 +415,9 @@ host_id: {hid}
             }));
         } else {
             if let Some(parent) = full_path.parent() {
-                fs::create_dir_all(parent)
-                    .map_err(|e| FrameworkError::Io(e))?;
+                fs::create_dir_all(parent).map_err(|e| FrameworkError::Io(e))?;
             }
-            fs::write(&full_path, content)
-                .map_err(|e| FrameworkError::Io(e))?;
+            fs::write(&full_path, content).map_err(|e| FrameworkError::Io(e))?;
             generated.push(serde_json::json!({
                 "path": path,
                 "action": "created",
@@ -466,7 +462,10 @@ host_id: {hid}
 /// Generic hook dispatch routed by host_id via dispatch registry.
 /// Dispatchers are registered once at first call from the host layer types.
 #[tracing::instrument(level = "info", skip_all, fields(host_id))]
-pub fn dispatch_hook_command(host_id: &str, command: GenericHookCommand) -> Result<(), FrameworkError> {
+pub fn dispatch_hook_command(
+    host_id: &str,
+    command: GenericHookCommand,
+) -> Result<(), FrameworkError> {
     let f = host_projection::hosts::find_hook_dispatch(host_id).ok_or_else(|| {
         FrameworkError::registry(format!(
             "hook dispatch not implemented for host `{host_id}`; \
@@ -517,7 +516,11 @@ pub fn ensure_host_dispatchers_registered() {
 /// All lifecycle events (pretooluse, userpromptsubmit, posttooluse, stop, sessionstart,
 /// subagentstart, subagentstop) are routed via the host's `HostHookDispatcher::dispatch()`.
 /// Each host returns its registered dispatcher from the host provider registry.
-fn dispatch_host_hook(host_id: &str, event: &str, repo_root: Option<&Path>) -> Result<(), FrameworkError> {
+fn dispatch_host_hook(
+    host_id: &str,
+    event: &str,
+    repo_root: Option<&Path>,
+) -> Result<(), FrameworkError> {
     let repo_root = resolve_repo_root_arg(repo_root)?;
 
     // Bootstrap for lifecycle events
@@ -588,7 +591,10 @@ pub fn dispatch_host_command(command: HostCommand) -> Result<(), FrameworkError>
 }
 
 /// Agent dispatch routed by host_id via dispatch registry.
-pub fn dispatch_agent_command(host_id: &str, command: GenericAgentCommand) -> Result<(), FrameworkError> {
+pub fn dispatch_agent_command(
+    host_id: &str,
+    command: GenericAgentCommand,
+) -> Result<(), FrameworkError> {
     let f = host_projection::hosts::find_agent_dispatch(host_id).ok_or_else(|| {
         FrameworkError::registry(format!(
             "agent dispatch not implemented for host `{host_id}`; \
@@ -613,7 +619,9 @@ pub fn dispatch_trace_command(command: TraceCommand) -> Result<(), FrameworkErro
                 &command.input_json,
                 "trace record event",
             )?;
-            print_json_value(&record_trace_event(payload).map_err(|e| FrameworkError::hook(e.to_string()))?)
+            print_json_value(
+                &record_trace_event(payload).map_err(|e| FrameworkError::hook(e.to_string()))?,
+            )
         }
         TraceCommand::StreamReplay(command) => {
             let payload = parse_json_input::<TraceStreamReplayRequestPayload>(
@@ -634,7 +642,9 @@ pub fn dispatch_trace_command(command: TraceCommand) -> Result<(), FrameworkErro
                 &command.input_json,
                 "trace compact",
             )?;
-            print_json_value(&compact_trace_stream(payload).map_err(|e| FrameworkError::hook(e.to_string()))?)
+            print_json_value(
+                &compact_trace_stream(payload).map_err(|e| FrameworkError::hook(e.to_string()))?,
+            )
         }
         TraceCommand::WriteCompactionDelta(command) => {
             let payload = parse_json_input::<TraceCompactionDeltaWriteRequestPayload>(
@@ -739,21 +749,22 @@ pub fn dispatch_hook_policy_command(command: HookPolicyCommand) -> Result<(), Fr
 pub fn dispatch_closeout_command(command: CloseoutCommand) -> Result<(), FrameworkError> {
     match command {
         CloseoutCommand::Evaluate(args) => {
-            let raw =
-                match (args.input_json.as_deref(), args.record_path.as_deref()) {
-                    (Some(_), Some(_)) => return Err(FrameworkError::validation(
+            let raw = match (args.input_json.as_deref(), args.record_path.as_deref()) {
+                (Some(_), Some(_)) => {
+                    return Err(FrameworkError::validation(
                         "closeout evaluate: --input-json and --record-path are mutually exclusive",
-                    )),
-                    (Some(text), None) => text.to_string(),
-                    (None, Some(path)) => fs::read_to_string(path).map_err(|err| {
-                        FrameworkError::Io(err)
-                    })?,
-                    (None, None) => {
-                        return Err(FrameworkError::validation(
-                            "closeout evaluate: provide --input-json or --record-path",
-                        ));
-                    }
-                };
+                    ));
+                }
+                (Some(text), None) => text.to_string(),
+                (None, Some(path)) => {
+                    fs::read_to_string(path).map_err(|err| FrameworkError::Io(err))?
+                }
+                (None, None) => {
+                    return Err(FrameworkError::validation(
+                        "closeout evaluate: provide --input-json or --record-path",
+                    ));
+                }
+            };
             let record_value: Value = serde_json::from_str(&raw)?;
             let response = match (
                 args.repo_root.as_deref(),
@@ -850,16 +861,18 @@ pub fn dispatch_loop_command(command: LoopCommand) -> Result<(), FrameworkError>
         LoopCommand::Run(args) => {
             let repo_root = resolve_repo_root_arg(None)?;
             let registry_path = repo_root.join("configs/framework/LOOP_REGISTRY.json");
-            let raw = fs::read_to_string(&registry_path)
-                .map_err(|e| FrameworkError::Io(e))?;
-            let registry: goal_engine::LoopRegistryRoot =
-                serde_json::from_str(&raw).map_err(|e| FrameworkError::config(format!("parse LOOP_REGISTRY.json: {e}")))?;
+            let raw = fs::read_to_string(&registry_path).map_err(|e| FrameworkError::Io(e))?;
+            let registry: goal_engine::LoopRegistryRoot = serde_json::from_str(&raw)
+                .map_err(|e| FrameworkError::config(format!("parse LOOP_REGISTRY.json: {e}")))?;
             let entry = registry
                 .loops
                 .iter()
                 .find(|e| e.loop_id == args.loop_id)
                 .ok_or_else(|| {
-                    FrameworkError::validation(format!("loop '{}' not found in LOOP_REGISTRY.json", args.loop_id))
+                    FrameworkError::validation(format!(
+                        "loop '{}' not found in LOOP_REGISTRY.json",
+                        args.loop_id
+                    ))
                 })?;
             let timeout = std::time::Duration::from_secs(args.timeout);
             let ctx = goal_engine::runner::RunContext {
@@ -870,8 +883,8 @@ pub fn dispatch_loop_command(command: LoopCommand) -> Result<(), FrameworkError>
                 depth_remaining: goal_engine::runner::RunContext::default_max_depth(),
                 host_id: args.host_id,
             };
-            let aggregate =
-                goal_engine::runner::run_loop(&ctx).map_err(|e| FrameworkError::hook(format!("loop run failed: {e}")))?;
+            let aggregate = goal_engine::runner::run_loop(&ctx)
+                .map_err(|e| FrameworkError::hook(format!("loop run failed: {e}")))?;
             print_json_value(&serde_json::json!({
                 "ok": true,
                 "loop_id": args.loop_id,
@@ -946,7 +959,9 @@ fn dispatch_research_aigc_check(args: ResearchAigcCheckCommand) -> Result<(), Fr
     #[cfg(not(feature = "research"))]
     {
         let _ = args;
-        Err(FrameworkError::unsupported("research feature not enabled; rebuild with --features research"))
+        Err(FrameworkError::unsupported(
+            "research feature not enabled; rebuild with --features research",
+        ))
     }
     #[cfg(feature = "research")]
     {
@@ -960,7 +975,8 @@ fn dispatch_research_aigc_check(args: ResearchAigcCheckCommand) -> Result<(), Fr
             },
             ..Default::default()
         };
-        let results = detect(&args.text, &config).map_err(|e| FrameworkError::hook(e.to_string()))?;
+        let results =
+            detect(&args.text, &config).map_err(|e| FrameworkError::hook(e.to_string()))?;
         let scored = research_harness::aigc::scorer::score(&results);
         print_json_value(&serde_json::json!({
             "ai_generated_probability": results.iter().map(|r| r.ai_probability).collect::<Vec<_>>(),
@@ -974,7 +990,9 @@ fn dispatch_research_smoke(args: ResearchSmokeCommand) -> Result<(), FrameworkEr
     #[cfg(not(feature = "research"))]
     {
         let _ = args;
-        Err(FrameworkError::unsupported("research feature not enabled; rebuild with --features research"))
+        Err(FrameworkError::unsupported(
+            "research feature not enabled; rebuild with --features research",
+        ))
     }
     #[cfg(feature = "research")]
     {
@@ -1005,9 +1023,19 @@ fn dispatch_research_verify_literature(
             let client = reqwest::blocking::Client::builder()
                 .timeout(std::time::Duration::from_secs(15))
                 .build()
-                .map_err(|e| FrameworkError::Io(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())))?;
+                .map_err(|e| {
+                    FrameworkError::Io(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        e.to_string(),
+                    ))
+                })?;
             let url = format!("https://doi.org/{}", doi);
-            let resp = client.head(&url).send().map_err(|e| FrameworkError::Io(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())))?;
+            let resp = client.head(&url).send().map_err(|e| {
+                FrameworkError::Io(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    e.to_string(),
+                ))
+            })?;
             let reachable = resp.status().is_success() || resp.status().is_redirection();
             print_json_value(&serde_json::json!({
                 "doi": doi,
@@ -1027,16 +1055,26 @@ fn dispatch_research_verify_literature(
                 let claims: Vec<String> = args
                     .claims
                     .as_deref()
-                    .ok_or_else(|| FrameworkError::validation("claims is required for check=claim_coverage"))
+                    .ok_or_else(|| {
+                        FrameworkError::validation("claims is required for check=claim_coverage")
+                    })
                     .and_then(|s| {
-                        serde_json::from_str(s).map_err(|e| FrameworkError::validation(format!("invalid claims JSON: {e}")))
+                        serde_json::from_str(s).map_err(|e| {
+                            FrameworkError::validation(format!("invalid claims JSON: {e}"))
+                        })
                     })?;
                 let references: Vec<String> = args
                     .references
                     .as_deref()
-                    .ok_or_else(|| FrameworkError::validation("references is required for check=claim_coverage"))
+                    .ok_or_else(|| {
+                        FrameworkError::validation(
+                            "references is required for check=claim_coverage",
+                        )
+                    })
                     .and_then(|s| {
-                        serde_json::from_str(s).map_err(|e| FrameworkError::validation(format!("invalid references JSON: {e}")))
+                        serde_json::from_str(s).map_err(|e| {
+                            FrameworkError::validation(format!("invalid references JSON: {e}"))
+                        })
                     })?;
                 let result = research_harness::verification::literature::verify_claim_coverage(
                     &claims,
@@ -1046,15 +1084,21 @@ fn dispatch_research_verify_literature(
                 print_json_value(&result)
             }
         }
-        other => Err(FrameworkError::unsupported(format!("unknown literature check: {other}"))),
+        other => Err(FrameworkError::unsupported(format!(
+            "unknown literature check: {other}"
+        ))),
     }
 }
 
-fn dispatch_research_verify_structure(args: ResearchVerifyStructureCommand) -> Result<(), FrameworkError> {
+fn dispatch_research_verify_structure(
+    args: ResearchVerifyStructureCommand,
+) -> Result<(), FrameworkError> {
     #[cfg(not(feature = "research"))]
     {
         let _ = args;
-        Err(FrameworkError::unsupported("research feature not enabled; rebuild with --features research"))
+        Err(FrameworkError::unsupported(
+            "research feature not enabled; rebuild with --features research",
+        ))
     }
     #[cfg(feature = "research")]
     {
@@ -1071,7 +1115,9 @@ fn dispatch_research_verify_structure(args: ResearchVerifyStructureCommand) -> R
                         .map_err(|e| FrameworkError::hook(e.to_string()))?;
                 print_json_value(&result)
             }
-            other => Err(FrameworkError::unsupported(format!("unknown structure check: {other}"))),
+            other => Err(FrameworkError::unsupported(format!(
+                "unknown structure check: {other}"
+            ))),
         }
     }
 }
@@ -1082,7 +1128,9 @@ fn dispatch_research_verify_reproducibility(
     #[cfg(not(feature = "research"))]
     {
         let _ = args;
-        Err(FrameworkError::unsupported("research feature not enabled; rebuild with --features research"))
+        Err(FrameworkError::unsupported(
+            "research feature not enabled; rebuild with --features research",
+        ))
     }
     #[cfg(feature = "research")]
     {
@@ -1127,7 +1175,9 @@ fn dispatch_math_prove(args: MathProveCommand) -> Result<(), FrameworkError> {
     #[cfg(not(feature = "research"))]
     {
         let _ = args;
-        Err(FrameworkError::unsupported("research feature not enabled; rebuild with --features research"))
+        Err(FrameworkError::unsupported(
+            "research feature not enabled; rebuild with --features research",
+        ))
     }
     #[cfg(feature = "research")]
     {
@@ -1142,7 +1192,9 @@ fn dispatch_math_prove(args: MathProveCommand) -> Result<(), FrameworkError> {
 fn dispatch_math_backend() -> Result<(), FrameworkError> {
     #[cfg(not(feature = "research"))]
     {
-        Err(FrameworkError::unsupported("research feature not enabled; rebuild with --features research"))
+        Err(FrameworkError::unsupported(
+            "research feature not enabled; rebuild with --features research",
+        ))
     }
     #[cfg(feature = "research")]
     {
@@ -1161,12 +1213,15 @@ fn dispatch_math_asymptotic_chain(args: MathAsymptoticChainCommand) -> Result<()
     #[cfg(not(feature = "research"))]
     {
         let _ = args;
-        Err(FrameworkError::unsupported("research feature not enabled; rebuild with --features research"))
+        Err(FrameworkError::unsupported(
+            "research feature not enabled; rebuild with --features research",
+        ))
     }
     #[cfg(feature = "research")]
     {
         let steps: Vec<research_harness::verification::asymptotic::AsymptoticStep> =
-            serde_json::from_str(&args.steps).map_err(|e| FrameworkError::validation(format!("invalid steps JSON: {e}")))?;
+            serde_json::from_str(&args.steps)
+                .map_err(|e| FrameworkError::validation(format!("invalid steps JSON: {e}")))?;
         let result = research_harness::verification::asymptotic::verify_asymptotic_chain_with_name(
             &steps,
             &args.variable,
@@ -1182,13 +1237,14 @@ fn dispatch_math_lean_verify(args: MathLeanVerifyCommand) -> Result<(), Framewor
     #[cfg(not(feature = "research"))]
     {
         let _ = args;
-        Err(FrameworkError::unsupported("research feature not enabled; rebuild with --features research"))
+        Err(FrameworkError::unsupported(
+            "research feature not enabled; rebuild with --features research",
+        ))
     }
     #[cfg(feature = "research")]
     {
         use std::fs;
-        let script = fs::read_to_string(&args.script_path)
-            .map_err(|e| FrameworkError::Io(e))?;
+        let script = fs::read_to_string(&args.script_path).map_err(|e| FrameworkError::Io(e))?;
         let result = research_harness::verification::lean_bridge::verify_lean_theorem(&script);
         print_json_value(&result)
     }
@@ -1229,7 +1285,12 @@ fn dispatch_web_fetch(args: WebFetchCommand) -> Result<(), FrameworkError> {
         for addr in addrs {
             builder = builder.resolve(host, *addr);
         }
-        builder.build().map_err(|e| FrameworkError::Io(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())))
+        builder.build().map_err(|e| {
+            FrameworkError::Io(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                e.to_string(),
+            ))
+        })
     }
 
     let mut client = build_pinned_client(&origin_host, &addrs)?;
@@ -1274,7 +1335,12 @@ fn dispatch_web_fetch(args: WebFetchCommand) -> Result<(), FrameworkError> {
             .get(current_url.as_str())
             .header("User-Agent", "router-rs-cli/0.1")
             .send()
-            .map_err(|e| FrameworkError::Io(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())))?;
+            .map_err(|e| {
+                FrameworkError::Io(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    e.to_string(),
+                ))
+            })?;
 
         let status = resp.status();
 
@@ -1303,14 +1369,13 @@ fn dispatch_web_fetch(args: WebFetchCommand) -> Result<(), FrameworkError> {
             // SSRF check on the redirect target.
             // resolve_web_fetch_redirect joins location against current_url, then
             // validates through the same SSRF guard (DNS resolve + IP check).
-            let resolved = web_fetch_guard::resolve_web_fetch_redirect(
-                &current_url,
-                &location,
-            )?;
+            let resolved = web_fetch_guard::resolve_web_fetch_redirect(&current_url, &location)?;
 
             // Parse the resolved URL for scheme comparison and DNS pinning.
             let resolved_url = reqwest::Url::parse(&resolved).map_err(|e| {
-                FrameworkError::validation(format!("web_fetch invalid redirect target URL: {resolved}: {e}"))
+                FrameworkError::validation(format!(
+                    "web_fetch invalid redirect target URL: {resolved}: {e}"
+                ))
             })?;
 
             // HTTPS → HTTP scheme downgrade check (uses Url::scheme()).
@@ -1321,7 +1386,9 @@ fn dispatch_web_fetch(args: WebFetchCommand) -> Result<(), FrameworkError> {
             let redirect_host = resolved_url
                 .host_str()
                 .ok_or_else(|| {
-                    FrameworkError::validation(format!("web_fetch redirect target missing host: {resolved}"))
+                    FrameworkError::validation(format!(
+                        "web_fetch redirect target missing host: {resolved}"
+                    ))
                 })?
                 .to_string();
 

@@ -151,7 +151,10 @@ pub(super) fn tool_skill_search(
     )?)
 }
 
-pub(super) fn tool_skill_read(arguments: &Value, repo_root: &Path) -> Result<String, FrameworkError> {
+pub(super) fn tool_skill_read(
+    arguments: &Value,
+    repo_root: &Path,
+) -> Result<String, FrameworkError> {
     let slug = arguments
         .get("skill")
         .and_then(Value::as_str)
@@ -163,7 +166,8 @@ pub(super) fn tool_skill_read(arguments: &Value, repo_root: &Path) -> Result<Str
         .clamp(1, 50_000) as usize;
 
     let path = skill_body_path(repo_root, slug)?;
-    let content = fs::read_to_string(&path).map_err(|e| FrameworkError::from(format!("{}: {e}", path.display())))?;
+    let content = fs::read_to_string(&path)
+        .map_err(|e| FrameworkError::from(format!("{}: {e}", path.display())))?;
     let truncated = content.chars().count() > max_chars;
     let truncated_content: String = content.chars().take(max_chars).collect();
 
@@ -202,14 +206,21 @@ fn skill_body_path(repo_root: &Path, slug: &str) -> Result<PathBuf, FrameworkErr
 /// Additionally checks that symlink-resolved paths remain within the
 /// skills directory (catches redirections in intermediate components).
 /// Returns the path on success.
-fn finalize_skill_path(repo_root: &Path, path: &Path, slug: &str) -> Result<PathBuf, FrameworkError> {
+fn finalize_skill_path(
+    repo_root: &Path,
+    path: &Path,
+    slug: &str,
+) -> Result<PathBuf, FrameworkError> {
     use core_state_utils::path_guard::{path_is_within_repo_root, reject_unsafe_path};
 
     reject_unsafe_path(path)?;
 
     // HPM-15: canonicalize first to detect symlink swaps before the is_file check.
     let canonical_path = path.canonicalize().map_err(|_| {
-        FrameworkError::from(format!("skill path not found or unresolvable: {}", path.display()))
+        FrameworkError::from(format!(
+            "skill path not found or unresolvable: {}",
+            path.display()
+        ))
     })?;
 
     let skills_dir = repo_root.join("skills");
@@ -230,7 +241,10 @@ fn finalize_skill_path(repo_root: &Path, path: &Path, slug: &str) -> Result<Path
     }
 
     if !canonical_path.is_file() {
-        return Err(FrameworkError::from(format!("skill body not found: {}", path.display())));
+        return Err(FrameworkError::from(format!(
+            "skill body not found: {}",
+            path.display()
+        )));
     }
 
     Ok(canonical_path)
@@ -296,73 +310,10 @@ pub fn build_evidence_entry(arguments: &Value) -> Result<Map<String, Value>, Fra
     Ok(entry)
 }
 
-pub(super) fn tool_record_evidence(arguments: &Value, repo_root: &Path) -> Result<String, FrameworkError> {
-    let entry = build_evidence_entry(arguments)?;
-    let tool_name = entry
-        .get("tool_name")
-        .and_then(Value::as_str)
-        .map(str::to_string);
-    let tool_name_display = tool_name.as_deref().unwrap_or("");
-    let command = entry
-        .get("command_preview")
-        .and_then(Value::as_str)
-        .map(str::to_string);
-    let command_display = command.as_deref().unwrap_or("");
-    let exit_code = arguments.get("exit_code").and_then(Value::as_i64);
-
-    crate::hooks::append_evidence_index(repo_root, None, entry)?;
-
-    let exit_display = exit_code
-        .map(|ec| ec.to_string())
-        .unwrap_or_else(|| "null".to_string());
-    let honor_note = " (honor-system: not bound to host tool execution — verify independently)";
-    Ok(json!({"result": format!(
-        "Evidence recorded{honor_note}: {tool_name_display} '{command_display}' -> exit={exit_display}"
-    )}).to_string())
-}
-
 /// 获取 evidence output 的最大字符数配置。
 /// 默认 2000 字符，可通过 `ROUTER_RS_EVIDENCE_OUTPUT_MAX_CHARS` 环境变量覆盖。
 pub(super) fn evidence_output_max_chars() -> usize {
     env_cache_typed!(usize, "ROUTER_RS_EVIDENCE_OUTPUT_MAX_CHARS", 2000)
-}
-
-pub(super) fn tool_session_checkpoint(
-    arguments: &Value,
-    repo_root: &Path,
-) -> Result<String, FrameworkError> {
-    let summary = arguments
-        .get("summary")
-        .and_then(Value::as_str)
-        .ok_or_else(|| FrameworkError::from("Missing required argument: summary".to_string()))?;
-    let next_actions: Vec<String> = arguments
-        .get("next_actions")
-        .and_then(Value::as_array)
-        .map(|arr| {
-            arr.iter()
-                .filter_map(|v| v.as_str().map(str::to_string))
-                .collect()
-        })
-        .unwrap_or_default();
-    let task_id = arguments.get("task_id").and_then(Value::as_str);
-
-    let payload = crate::hooks::build_automatic_continuity_checkpoint_payload(
-        repo_root,
-        summary,
-        &next_actions.join(", "),
-        task_id,
-        true,
-        false,
-    );
-    crate::hooks::write_framework_session_artifacts(payload)
-        .map_err(|e| FrameworkError::from(format!("Checkpoint write failed: {e}")))?;
-
-    Ok(json!({"result": format!(
-        "Checkpoint written: summary={}, next_actions_count={}",
-        summary.chars().count(),
-        next_actions.len()
-    )})
-    .to_string())
 }
 
 pub fn tool_closeout_gate(
@@ -383,13 +334,6 @@ pub(super) fn tool_closeout_record_write(
     Ok(crate::hooks::tool_closeout_record_write_dispatch(
         arguments, repo_root,
     )?)
-}
-
-pub(super) fn tool_goal_state_read(arguments: &Value, repo_root: &Path) -> Result<String, FrameworkError> {
-    let task_id = arguments.get("task_id").and_then(Value::as_str);
-    let state = core_state::state_manager::read_goal_state(repo_root, task_id)
-        .map_err(|e| FrameworkError::from(e.to_string()))?;
-    serde_json::to_string_pretty(&state).map_err(|e| FrameworkError::from(e.to_string()))
 }
 
 pub(super) fn tool_goal_state_manage(

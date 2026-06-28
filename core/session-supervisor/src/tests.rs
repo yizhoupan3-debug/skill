@@ -1341,4 +1341,3 @@ fn resume_due_skips_worker_not_yet_due() {
 
     let _ = fs::remove_file(state_path);
 }
-

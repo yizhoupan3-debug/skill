@@ -30,27 +30,16 @@ session-supervisor = { path = "../session-supervisor" }
 runtime-core-contracts = { path = "../runtime-core-contracts" }
 runtime-infra = { path = "../runtime-infra" }
 runtime-storage = { path = "../runtime-storage" }
-# agent-orchestrator = { path = "../agent-orchestrator" }
 trace-runtime = { path = "../trace-runtime" }
-chrono.workspace = true
-clap.workspace = true
-fs2.workspace = true
 hex.workspace = true
-libc.workspace = true
-rayon.workspace = true
-regex.workspace = true
 reqwest.workspace = true
-rusqlite.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
 tokio.workspace = true
-tungstenite.workspace = true
 tracing.workspace = true
-which.workspace = true
 codegraph-rs = { path = "../codegraph-rs", optional = true }
 eval-route = { path = "../eval-route" }
-goal-engine = { path = "../goal-engine" }
 mcp-tool-registry = { path = "../mcp-tool-registry" }
 quality-gate = { path = "../quality-gate" }
 tool-routing-engine = { path = "../tool-routing-engine" }

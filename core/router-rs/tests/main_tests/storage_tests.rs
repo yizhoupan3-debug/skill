@@ -250,7 +250,8 @@ fn write_text_payload_rejects_path_traversal_with_dotdot() {
     );
     let err = result.unwrap_err();
     assert!(
-        err.to_string().contains("must not contain '..' traversal segments"),
+        err.to_string()
+            .contains("must not contain '..' traversal segments"),
         "error should mention traversal rejection, got: {err}"
     );
 }

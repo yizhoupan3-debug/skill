@@ -58,14 +58,19 @@ pub fn evaluate_qg_route(scene: &str, ctx: &CheckContext) -> GateVerdict {
     match QG_ROUTE.get() {
         Some(registry) => registry.evaluate(scene, ctx),
         None => {
-            tracing::warn!("evaluate_qg_route called before init_qg_route() — returning blocked (fail-closed)");
+            tracing::warn!(
+                "evaluate_qg_route called before init_qg_route() — returning blocked (fail-closed)"
+            );
             quality_gate::types::GateVerdict {
                 passed: false,
                 checkers_ran: 0,
                 blockers: vec![],
                 advisories: vec![],
-                reason: Some("QG Route not initialized — returning blocked to prevent silent fail-open".to_string()),
+                reason: Some(
+                    "QG Route not initialized — returning blocked to prevent silent fail-open"
+                        .to_string(),
+                ),
             }
-        },
+        }
     }
 }

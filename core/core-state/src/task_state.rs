@@ -5,11 +5,11 @@
 //! **Writes** serialize via `task_write_lock`
 //! (phase 2); this module only aggregates read models (`ResolvedTaskView`, `ContinuityFrame`).
 
-use core_errors::FrameworkError;
 use crate::state_manager::{read_goal_state, task_evidence_artifacts_summary_for_task};
 use crate::state_manager::{
     validate_external_research_strict, validate_external_research_structured,
 };
+use core_errors::FrameworkError;
 
 use serde_json::Value;
 use std::path::Path;
@@ -49,10 +49,11 @@ macro_rules! cached_env_bool {
 // Cached env var lookups — avoid repeated OS syscalls in hot paths.
 // Disabled in test builds so tests can set env vars per-test.
 fn depth_score_mode_is_strict() -> bool {
-    cached_env_bool!("ROUTER_RS_DEPTH_SCORE_MODE", |v: &Result<String, std::env::VarError>| {
-        v.as_deref()
-            .map(|s| s.trim() == "strict")
-            .unwrap_or(false)
+    cached_env_bool!("ROUTER_RS_DEPTH_SCORE_MODE", |v: &Result<
+        String,
+        std::env::VarError,
+    >| {
+        v.as_deref().map(|s| s.trim() == "strict").unwrap_or(false)
     })
 }
 
@@ -76,13 +77,6 @@ pub const RESOLUTION_NOTE_DUAL_GOAL_POINTER_CONFLICT: &str =
 
 /// Marker string in RFV cross_check field indicating a PASS round without an evidence window.
 pub const NO_EVIDENCE_WINDOW_MARKER: &str = "no_evidence_window";
-
-/// Zh line appended to Codex continuity digest and Cursor SessionStart when
-/// [`task_view_has_active_goal_focus_mismatch_note`] is true (same bytes as legacy digest string).
-pub const CONTINUITY_ACTIVE_FOCUS_GOAL_MISMATCH_HINT_ZH: &str = concat!(
-    "连续性提示: active 无 GOAL 而 focus 有 GOAL；下一帧 continuity 将尝试把 focus 提升为 active（见 ADR-001）。",
-    "若仍未修复请核对 `artifacts/current/active_task.json`。",
-);
 
 /// Pushes [`RESOLUTION_NOTE_ACTIVE_GOAL_MISSING_FOCUS_HAS_GOAL`] when appropriate. Active may still
 /// have RFV or other task-scoped state with no readable GOAL; the note is about pointers vs
@@ -206,8 +200,7 @@ pub fn maybe_promote_focus_to_active_pointer(repo_root: &Path) -> bool {
             {
                 return Ok(None); // Active already has a goal → no promotion needed.
             }
-            let Some(focus_id) = pointers.focus_task_id.as_deref().filter(|s| !s.is_empty())
-            else {
+            let Some(focus_id) = pointers.focus_task_id.as_deref().filter(|s| !s.is_empty()) else {
                 return Ok(None);
             };
             if active_id == focus_id {
@@ -277,9 +270,17 @@ fn goal_hydration_diagnostics_scan_fallback(repo_root: &Path) -> Option<(Value, 
 }
 
 fn goal_diagnostics_scan_hydrate_enabled() -> bool {
-    cached_env_bool!("ROUTER_RS_GOAL_DIAGNOSTICS_SCAN_HYDRATE", |v: &Result<String, std::env::VarError>| {
+    cached_env_bool!("ROUTER_RS_GOAL_DIAGNOSTICS_SCAN_HYDRATE", |v: &Result<
+        String,
+        std::env::VarError,
+    >| {
         v.as_deref()
-            .map(|s| matches!(s.trim().to_lowercase().as_str(), "1" | "true" | "yes" | "on"))
+            .map(|s| {
+                matches!(
+                    s.trim().to_lowercase().as_str(),
+                    "1" | "true" | "yes" | "on"
+                )
+            })
             .unwrap_or(false)
     })
 }
@@ -504,11 +505,7 @@ pub fn read_task_ledger_transactions(
 pub fn hydrate_task_state_hybrid(
     repo_root: &Path,
     task_id: &str,
-) -> (
-    Option<Value>,
-    Option<EvidenceRollup>,
-    Vec<String>,
-) {
+) -> (Option<Value>, Option<EvidenceRollup>, Vec<String>) {
     let mut resolution_notes = Vec::new();
     let mut goal_state: Option<Value> = None;
     // TASK_STATE.json aggregate was removed in Wave 2b.
@@ -530,9 +527,10 @@ pub fn hydrate_task_state_hybrid(
     // Find the last `state_checkpoint` entry. If one exists, use its state
     // as the replay base so readers avoid replaying the full ledger from
     // scratch on every hydrate call.
-    let replay_start = match txs.iter().rposition(|tx| {
-        tx.tx_type == crate::task_ledger::STATE_CHECKPOINT_TX_TYPE
-    }) {
+    let replay_start = match txs
+        .iter()
+        .rposition(|tx| tx.tx_type == crate::task_ledger::STATE_CHECKPOINT_TX_TYPE)
+    {
         Some(idx) => {
             let cp = &txs[idx];
             // Apply checkpoint state — overrides physical file state.
@@ -543,7 +541,10 @@ pub fn hydrate_task_state_hybrid(
                 if let Some(ern) = ev.get("evidence_rows_non_empty").and_then(Value::as_bool) {
                     evidence_rows_non_empty = ern;
                 }
-                if let Some(hsv) = ev.get("has_successful_verification").and_then(Value::as_bool) {
+                if let Some(hsv) = ev
+                    .get("has_successful_verification")
+                    .and_then(Value::as_bool)
+                {
                     has_successful_verification = hsv;
                 }
             }

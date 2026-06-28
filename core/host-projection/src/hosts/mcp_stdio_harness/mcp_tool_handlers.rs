@@ -2,13 +2,11 @@ use super::*;
 use core_errors::FrameworkError;
 use serde_json::Value;
 use std::collections::HashMap;
-use std::sync::Arc;
 
 /// Context for tool call dispatch.
 pub struct ToolCallContext {
     pub repo_root: std::path::PathBuf,
     pub host_id: String,
-    pub connection_session_id: Arc<String>,
 }
 
 /// Trait for a group of related MCP tools.
@@ -63,7 +61,9 @@ impl CompositeRegistry {
         if let Some(&idx) = self.name_to_handler.get(tool_name) {
             self.handlers[idx].dispatch(tool_name, args, ctx)
         } else {
-            Err(FrameworkError::not_found(format!("Unknown tool: {tool_name}")))
+            Err(FrameworkError::not_found(format!(
+                "Unknown tool: {tool_name}"
+            )))
         }
     }
 }
@@ -93,7 +93,9 @@ impl ToolHandler for RoutingTools {
             "skill_search" => tool_skill_search(args, &ctx.repo_root, &ctx.host_id),
             "skill_read" => tool_skill_read(args, &ctx.repo_root),
             "skill_route_status" => tool_skill_route_status(&ctx.repo_root),
-            _ => Err(FrameworkError::not_found(format!("RoutingTools: unknown tool: {tool_name}"))),
+            _ => Err(FrameworkError::not_found(format!(
+                "RoutingTools: unknown tool: {tool_name}"
+            ))),
         }
     }
 }
@@ -114,7 +116,9 @@ impl ToolHandler for ToolDomainTools {
             "route_tool" => tool_route_tool(args, &ctx.repo_root, &ctx.host_id),
             "search_tools" => tool_search_tools(args, &ctx.repo_root, &ctx.host_id),
             "tool_registry_status" => tool_registry_status(),
-            _ => Err(FrameworkError::not_found(format!("ToolDomainTools: unknown tool: {tool_name}"))),
+            _ => Err(FrameworkError::not_found(format!(
+                "ToolDomainTools: unknown tool: {tool_name}"
+            ))),
         }
     }
 }
@@ -146,7 +150,9 @@ impl ToolHandler for TaskCrudTools {
             "task_complete" => Ok(tool_task_complete(args, &ctx.repo_root)?),
             "task_focus" => Ok(tool_task_focus(args, &ctx.repo_root)?),
             "task_chain_advance" => Ok(tool_task_chain_advance(args, &ctx.repo_root)?),
-            _ => Err(FrameworkError::not_found(format!("TaskCrudTools: unknown tool: {tool_name}"))),
+            _ => Err(FrameworkError::not_found(format!(
+                "TaskCrudTools: unknown tool: {tool_name}"
+            ))),
         }
     }
 }
@@ -179,7 +185,11 @@ fn tool_route_tool(
     let registry_path = resolve_tool_registry_path(ctx_repo_root);
     let decision =
         tool_routing_engine::routing::route_tool(query, &registry_path, Some(effective_host))?
-            .ok_or_else(|| FrameworkError::from(format!("route_tool: no matching tool found for query '{query}'")))?;
+            .ok_or_else(|| {
+                FrameworkError::from(format!(
+                    "route_tool: no matching tool found for query '{query}'"
+                ))
+            })?;
     serde_json::to_string(&decision).map_err(|e| FrameworkError::from(e.to_string()))
 }
 
@@ -190,10 +200,9 @@ fn tool_search_tools(
     ctx_repo_root: &std::path::Path,
     host_id: &str,
 ) -> Result<String, FrameworkError> {
-    let query = args
-        .get("query")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| FrameworkError::from("search_tools: missing 'query' parameter".to_string()))?;
+    let query = args.get("query").and_then(|v| v.as_str()).ok_or_else(|| {
+        FrameworkError::from("search_tools: missing 'query' parameter".to_string())
+    })?;
     let top_k = args.get("top_k").and_then(|v| v.as_u64()).unwrap_or(5) as usize;
     let effective_host = args
         .get("host_id")
@@ -210,10 +219,16 @@ fn tool_search_tools(
 
 /// tool_registry_status: report registry metadata (count, schema version, layers).
 fn tool_registry_status() -> Result<String, FrameworkError> {
-    let registry_path = mcp_tool_registry::resolve_tool_registry_path()
-        .ok_or_else(|| FrameworkError::from("tool_registry_status: registry path not configured (hooks not registered)".to_string()))?;
-    let records = mcp_tool_registry::load_tool_records_cached(&registry_path)
-        .map_err(|e| FrameworkError::from(format!("tool_registry_status: failed to load registry: {e}")))?;
+    let registry_path = mcp_tool_registry::resolve_tool_registry_path().ok_or_else(|| {
+        FrameworkError::from(
+            "tool_registry_status: registry path not configured (hooks not registered)".to_string(),
+        )
+    })?;
+    let records = mcp_tool_registry::load_tool_records_cached(&registry_path).map_err(|e| {
+        FrameworkError::from(format!(
+            "tool_registry_status: failed to load registry: {e}"
+        ))
+    })?;
     let total = records.len();
     let builtin = records.iter().filter(|r| r.layer == "builtin").count();
     let research = records.iter().filter(|r| r.layer == "research").count();

@@ -32,7 +32,9 @@ pub fn subagent_binary() -> Result<String, FrameworkError> {
     std::env::var("ROUTER_RS_SUBAGENT_BIN")
         .ok()
         .filter(|v| !v.is_empty())
-        .ok_or_else(|| FrameworkError::config("subagent binary not found. Set ROUTER_RS_SUBAGENT_BIN."))
+        .ok_or_else(|| {
+            FrameworkError::config("subagent binary not found. Set ROUTER_RS_SUBAGENT_BIN.")
+        })
 }
 
 /// Resolve the autoresearch binary path (`ROUTER_RS_AUTORESEARCH_BIN`).

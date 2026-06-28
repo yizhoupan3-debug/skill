@@ -11,8 +11,7 @@ use serde_json::{Value, json};
 type Result<T> = std::result::Result<T, FrameworkError>;
 
 pub const CLOSEOUT_RECORD_SCHEMA_VERSION: &str = "closeout-record-v1";
-const CLOSEOUT_RESPONSE_SCHEMA_VERSION: &str =
-    "router-rs-closeout-response-v1";
+const CLOSEOUT_RESPONSE_SCHEMA_VERSION: &str = "router-rs-closeout-response-v1";
 const CLOSEOUT_AUTHORITY: &str = "core-state-closeout-validation";
 
 const ALLOWED_VERIFICATION_STATUSES: &[&str] = &["passed", "failed", "partial", "not_run"];

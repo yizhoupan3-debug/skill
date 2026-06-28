@@ -1539,7 +1539,10 @@ fn browser_mcp_session_inspect_returns_not_implemented() {
     )
     .expect("response");
     assert_eq!(response["result"]["isError"], true);
-    assert_eq!(response["result"]["structuredContent"]["error"]["code"], "NOT_IMPLEMENTED");
+    assert_eq!(
+        response["result"]["structuredContent"]["error"]["code"],
+        "NOT_IMPLEMENTED"
+    );
     fs::remove_dir_all(repo_root).expect("cleanup");
 }
 
@@ -1553,7 +1556,10 @@ fn browser_mcp_session_terminate_returns_not_implemented() {
     )
     .expect("response");
     assert_eq!(response["result"]["isError"], true);
-    assert_eq!(response["result"]["structuredContent"]["error"]["code"], "NOT_IMPLEMENTED");
+    assert_eq!(
+        response["result"]["structuredContent"]["error"]["code"],
+        "NOT_IMPLEMENTED"
+    );
     fs::remove_dir_all(repo_root).expect("cleanup");
 }
 
@@ -1567,7 +1573,10 @@ fn browser_mcp_session_mark_blocked_returns_not_implemented() {
     )
     .expect("response");
     assert_eq!(response["result"]["isError"], true);
-    assert_eq!(response["result"]["structuredContent"]["error"]["code"], "NOT_IMPLEMENTED");
+    assert_eq!(
+        response["result"]["structuredContent"]["error"]["code"],
+        "NOT_IMPLEMENTED"
+    );
     fs::remove_dir_all(repo_root).expect("cleanup");
 }
 
@@ -1581,7 +1590,10 @@ fn browser_mcp_background_inspect_returns_not_implemented() {
     )
     .expect("response");
     assert_eq!(response["result"]["isError"], true);
-    assert_eq!(response["result"]["structuredContent"]["error"]["code"], "NOT_IMPLEMENTED");
+    assert_eq!(
+        response["result"]["structuredContent"]["error"]["code"],
+        "NOT_IMPLEMENTED"
+    );
     fs::remove_dir_all(repo_root).expect("cleanup");
 }
 
@@ -1595,7 +1607,10 @@ fn browser_mcp_background_terminate_returns_not_implemented() {
     )
     .expect("response");
     assert_eq!(response["result"]["isError"], true);
-    assert_eq!(response["result"]["structuredContent"]["error"]["code"], "NOT_IMPLEMENTED");
+    assert_eq!(
+        response["result"]["structuredContent"]["error"]["code"],
+        "NOT_IMPLEMENTED"
+    );
     fs::remove_dir_all(repo_root).expect("cleanup");
 }
 

@@ -111,7 +111,7 @@ pub fn dispatch_stdio_json_request_payload(
     request: StdioJsonRequestPayload,
 ) -> StdioJsonResponsePayload {
     let id = request.id.clone();
-    use std::panic::{catch_unwind, AssertUnwindSafe};
+    use std::panic::{AssertUnwindSafe, catch_unwind};
     match catch_unwind(AssertUnwindSafe(|| {
         dispatch_stdio_json_request(&request.op, request.payload)
     })) {
@@ -281,10 +281,7 @@ fn dispatch_runtime_stdio_request(op: &str, payload: Value) -> Result<Value, Fra
     match op {
         "execute" => {
             let request = parse_payload::<ExecuteRequestPayload>(payload, "execute")?;
-            serialize_payload(
-                execute_request(request)?,
-                "execute",
-            )
+            serialize_payload(execute_request(request)?, "execute")
         }
         "execution_contract_bundle" => Ok(Value::Object(build_execution_contract_bundle())),
         "normalize_execution_kernel_metadata_contract" => {
@@ -328,47 +325,27 @@ fn dispatch_runtime_stdio_request(op: &str, payload: Value) -> Result<Value, Fra
         "background_control" => parse_and_dispatch::<BackgroundControlRequestPayload, _, _>(
             payload,
             "background control",
-            |p| {
-                framework_extra::orchestration_controller::build_background_control_response(p)
-            },
+            |p| framework_extra::orchestration_controller::build_background_control_response(p),
         ),
         #[cfg(feature = "l5-state")]
-        "background_state" => {
-            handle_background_state_operation(payload)
-        }
+        "background_state" => handle_background_state_operation(payload),
         #[cfg(not(feature = "l5-state"))]
         "background_state" => Err(FrameworkError::hook(
             "background_state requires L5 state feature (compile-time gate)",
         )),
-        "session_supervisor" => {
-            framework_kernel::runtime_hooks::try_hooks()
-                .ok_or_else(|| FrameworkError::hook("runtime hooks not registered"))?
-                .handle_orchestrator_operation(payload)
-        }
-        "describe_transport" => {
-            build_trace_transport_descriptor(payload)
-        }
-        "describe_handoff" => {
-            build_trace_handoff_descriptor(payload)
-        }
-        "checkpoint_resume_manifest" => {
-            build_checkpoint_resume_manifest(payload)
-        }
+        "session_supervisor" => framework_kernel::runtime_hooks::try_hooks()
+            .ok_or_else(|| FrameworkError::hook("runtime hooks not registered"))?
+            .handle_orchestrator_operation(payload),
+        "describe_transport" => build_trace_transport_descriptor(payload),
+        "describe_handoff" => build_trace_handoff_descriptor(payload),
+        "checkpoint_resume_manifest" => build_checkpoint_resume_manifest(payload),
         "runtime_checkpoint_control_plane" => {
             build_checkpoint_control_plane_compiler_payload(payload)
         }
-        "write_transport_binding" => {
-            write_transport_binding_payload(payload)
-        }
-        "write_checkpoint_resume_manifest" => {
-            write_checkpoint_resume_manifest_payload(payload)
-        }
-        "attach_runtime_event_transport" => {
-            attach_runtime_event_transport(payload)
-        }
-        "subscribe_attached_runtime_events" => {
-            subscribe_attached_runtime_events(payload)
-        }
+        "write_transport_binding" => write_transport_binding_payload(payload),
+        "write_checkpoint_resume_manifest" => write_checkpoint_resume_manifest_payload(payload),
+        "attach_runtime_event_transport" => attach_runtime_event_transport(payload),
+        "subscribe_attached_runtime_events" => subscribe_attached_runtime_events(payload),
         "cleanup_attached_runtime_event_transport" => {
             cleanup_attached_runtime_event_transport(payload)
         }
@@ -446,12 +423,8 @@ fn dispatch_framework_stdio_request(op: &str, payload: Value) -> Result<Value, F
             let content = resolver.resolve_one(&hash)?;
             Ok(serde_json::json!({ "content": content }))
         }
-        "framework_session_artifact_write" => {
-            write_framework_session_artifacts(payload)
-        }
-        "framework_hook_evidence_append" => {
-            framework_hook_evidence_append(payload)
-        }
+        "framework_session_artifact_write" => write_framework_session_artifacts(payload),
+        "framework_hook_evidence_append" => framework_hook_evidence_append(payload),
         "framework_goal_drive" => runtime_infra::kernel_utils::framework_goal_drive(payload),
         "framework_quality_gate" => {
             // First-class entry point for the two-stage quality gate.

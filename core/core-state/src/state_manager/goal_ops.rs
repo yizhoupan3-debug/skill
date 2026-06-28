@@ -400,6 +400,15 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
         "start" | "upsert" => {
             let task_id = resolve_task_id_strict(&payload)?;
             crate::utils::path_guard::validate_task_id_component(&task_id)?;
+
+            // Idempotent start guard: reject if GOAL_STATE.json already exists.
+            let existing = read_goal_state(&repo_root, Some(&task_id))?;
+            if existing.is_some() {
+                return Err(FrameworkError::validation(format!(
+                    "goal already exists for task '{task_id}' — use amend or clear to modify"
+                )));
+            }
+
             let goal = payload
                 .get("goal")
                 .and_then(Value::as_str)
@@ -622,10 +631,7 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
                             let mut qg_state = state;
                             if let Some(obj) = qg_state.as_object_mut() {
                                 obj.insert("status".to_string(), json!("review_pending"));
-                                obj.insert(
-                                    "blockers".to_string(),
-                                    blockers.clone(),
-                                );
+                                obj.insert("blockers".to_string(), blockers.clone());
                                 obj.insert(
                                     "updated_at".to_string(),
                                     json!(framework_kernel::time::now_iso()),
@@ -1061,6 +1067,12 @@ fn set_terminal_flags(
     if current == "completed" || current == "review_pending" {
         return Err(FrameworkError::validation(format!(
             "cannot set status '{status}' on a goal in '{current}' state"
+        )));
+    }
+    // Idempotent pause/block guard: reject same-state transition.
+    if !current.is_empty() && current == status {
+        return Err(FrameworkError::validation(format!(
+            "goal is already in '{status}' state"
         )));
     }
     obj.insert("status".to_string(), json!(status));

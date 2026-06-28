@@ -42,9 +42,7 @@ pub(super) fn read_persisted_state(
                 return Ok(None);
             }
             let storage_root = state_path.parent().ok_or_else(|| {
-                FrameworkError::validation(
-                    "Background state path is missing a parent directory.",
-                )
+                FrameworkError::validation("Background state path is missing a parent directory.")
             })?;
             let stable_key = sqlite_storage_key(storage_root, state_path)?;
             let legacy_key = state_path
@@ -122,9 +120,7 @@ pub(super) fn write_persisted_state(
                 ));
             };
             let storage_root = state_path.parent().ok_or_else(|| {
-                FrameworkError::validation(
-                    "Background state path is missing a parent directory.",
-                )
+                FrameworkError::validation("Background state path is missing a parent directory.")
             })?;
             let payload_key = sqlite_storage_key(storage_root, state_path)?;
             let conn = open_sqlite_connection(db_path)?;
@@ -280,10 +276,9 @@ fn apply_mutation_handler(
     request: &BackgroundStateRequestPayload,
     response: &mut Value,
 ) -> Result<(), FrameworkError> {
-    let job_id = request
-        .job_id
-        .as_deref()
-        .ok_or_else(|| FrameworkError::validation("Background state apply_mutation is missing job_id."))?;
+    let job_id = request.job_id.as_deref().ok_or_else(|| {
+        FrameworkError::validation("Background state apply_mutation is missing job_id.")
+    })?;
     let mutation = request.mutation.as_ref().ok_or_else(|| {
         FrameworkError::validation("Background state apply_mutation is missing mutation.")
     })?;
@@ -319,10 +314,9 @@ fn get_active_job_handler(
     request: &BackgroundStateRequestPayload,
     response: &mut Value,
 ) -> Result<(), FrameworkError> {
-    let session_id = request
-        .session_id
-        .as_deref()
-        .ok_or_else(|| FrameworkError::validation("Background state get_active_job is missing session_id."))?;
+    let session_id = request.session_id.as_deref().ok_or_else(|| {
+        FrameworkError::validation("Background state get_active_job is missing session_id.")
+    })?;
     response["active_job_id"] = store
         .active_job(session_id)
         .map(Value::String)
@@ -335,24 +329,15 @@ fn arbitrate_session_takeover_handler(
     request: &BackgroundStateRequestPayload,
     response: &mut Value,
 ) -> Result<(), FrameworkError> {
-    let arbitration_operation = request
-        .arbitration_operation
-        .as_deref()
-        .ok_or_else(|| {
-            FrameworkError::validation(
-                "Background state arbitration is missing arbitration_operation.",
-            )
-        })?;
-    let session_id = request
-        .session_id
-        .as_deref()
-        .ok_or_else(|| FrameworkError::validation("Background state arbitration is missing session_id."))?;
-    let incoming_job_id = request
-        .incoming_job_id
-        .as_deref()
-        .ok_or_else(|| {
-            FrameworkError::validation("Background state arbitration is missing incoming_job_id.")
-        })?;
+    let arbitration_operation = request.arbitration_operation.as_deref().ok_or_else(|| {
+        FrameworkError::validation("Background state arbitration is missing arbitration_operation.")
+    })?;
+    let session_id = request.session_id.as_deref().ok_or_else(|| {
+        FrameworkError::validation("Background state arbitration is missing session_id.")
+    })?;
+    let incoming_job_id = request.incoming_job_id.as_deref().ok_or_else(|| {
+        FrameworkError::validation("Background state arbitration is missing incoming_job_id.")
+    })?;
     let (takeover, persisted_payload_text) =
         store.arbitrate_session_takeover(arbitration_operation, session_id, incoming_job_id)?;
     response["takeover"] = serde_json::to_value(takeover).map_err(FrameworkError::Json)?;
@@ -369,16 +354,12 @@ fn reserve_claim_release_handler(
     request: &BackgroundStateRequestPayload,
     response: &mut Value,
 ) -> Result<(), FrameworkError> {
-    let session_id = request
-        .session_id
-        .as_deref()
-        .ok_or_else(|| FrameworkError::validation("Background state operation is missing session_id."))?;
-    let incoming_job_id = request
-        .incoming_job_id
-        .as_deref()
-        .ok_or_else(|| {
-            FrameworkError::validation("Background state operation is missing incoming_job_id.")
-        })?;
+    let session_id = request.session_id.as_deref().ok_or_else(|| {
+        FrameworkError::validation("Background state operation is missing session_id.")
+    })?;
+    let incoming_job_id = request.incoming_job_id.as_deref().ok_or_else(|| {
+        FrameworkError::validation("Background state operation is missing incoming_job_id.")
+    })?;
     let (takeover, persisted_payload_text) =
         store.arbitrate_session_takeover(&request.operation, session_id, incoming_job_id)?;
     response["takeover"] = serde_json::to_value(takeover).map_err(FrameworkError::Json)?;
@@ -395,14 +376,11 @@ fn parallel_group_summary_handler(
     request: &BackgroundStateRequestPayload,
     response: &mut Value,
 ) -> Result<(), FrameworkError> {
-    let parallel_group_id = request
-        .parallel_group_id
-        .as_deref()
-        .ok_or_else(|| {
-            FrameworkError::validation(
-                "Background state parallel_group_summary is missing parallel_group_id.",
-            )
-        })?;
+    let parallel_group_id = request.parallel_group_id.as_deref().ok_or_else(|| {
+        FrameworkError::validation(
+            "Background state parallel_group_summary is missing parallel_group_id.",
+        )
+    })?;
     response["parallel_group_summary"] = store
         .parallel_group_summary(parallel_group_id)
         .map(|summary| serde_json::to_value(summary).map_err(FrameworkError::Json))

@@ -742,7 +742,9 @@ fn background_state_arbitration_dispatch_requires_explicit_operation() {
     }))
     .expect_err("missing arbitration operation should fail closed");
     assert!(
-        missing.to_string().contains("missing arbitration_operation"),
+        missing
+            .to_string()
+            .contains("missing arbitration_operation"),
         "expected arbitration operation error, got: {missing}"
     );
 

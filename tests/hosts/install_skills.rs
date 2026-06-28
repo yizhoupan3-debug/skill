@@ -62,6 +62,8 @@ fn install_skills_cursor_target_installs_only_cursor() {
         repo_root.to_str().unwrap(),
         "--host-home",
         &format!("claude={}", home.to_str().unwrap()),
+        "--host-home",
+        &format!("cursor={}", home.join(".cursor").to_str().unwrap()),
         "--bootstrap-output-dir",
         tmp.path().join("bootstrap").to_str().unwrap(),
         "cursor",

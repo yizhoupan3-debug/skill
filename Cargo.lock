@@ -677,13 +677,10 @@ dependencies = [
  "core-state-types",
  "core-state-utils",
  "framework-kernel",
- "fs2",
- "libc",
  "proptest",
  "serde",
  "serde_json",
  "sha2 0.11.0",
- "thiserror 2.0.18",
  "tracing",
 ]
 
@@ -704,7 +701,6 @@ dependencies = [
  "fs2",
  "insta",
  "libc",
- "serde",
  "serde_json",
  "tracing",
 ]
@@ -1241,7 +1237,6 @@ dependencies = [
  "core-policy",
  "core-state",
  "core-state-utils",
- "fr-contracts",
  "fr-exec",
  "fr-utils",
  "framework-kernel",
@@ -1250,13 +1245,11 @@ dependencies = [
  "insta",
  "routing-engine",
  "runtime-core-contracts",
- "runtime-infra",
  "runtime-storage",
  "serde",
  "serde_json",
  "sha2 0.11.0",
  "tempfile",
- "trace-runtime",
  "tracing",
 ]
 
@@ -1476,7 +1469,6 @@ dependencies = [
  "core-errors",
  "core-state",
  "core-state-utils",
- "fr-contracts",
  "fr-utils",
  "framework-kernel",
  "serde",
@@ -3344,8 +3336,6 @@ checksum = "6c20b6793b5c2fa6553b250154b78d6d0db37e72700ae35fad9387a46f487c97"
 name = "runtime-core"
 version = "0.1.0"
 dependencies = [
- "chrono",
- "clap",
  "codegraph-rs",
  "core-errors",
  "core-policy",
@@ -3358,23 +3348,17 @@ dependencies = [
  "framework-extra",
  "framework-kernel",
  "framework-maint",
- "fs2",
- "goal-engine",
  "hex",
  "host-projection",
  "insta",
- "libc",
  "mcp-tool-registry",
  "quality-gate",
- "rayon",
- "regex",
  "reqwest",
  "routing-core",
  "routing-engine",
  "runtime-core-contracts",
  "runtime-infra",
  "runtime-storage",
- "rusqlite",
  "serde",
  "serde_json",
  "serial_test",
@@ -3385,8 +3369,6 @@ dependencies = [
  "tool-routing-engine",
  "trace-runtime",
  "tracing",
- "tungstenite",
- "which",
 ]
 
 [[package]]

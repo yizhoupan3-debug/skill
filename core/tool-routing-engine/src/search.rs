@@ -112,7 +112,9 @@ pub fn search_tools(
                     decision_schema_version: DECISION_SCHEMA_VERSION.to_string(),
                     selected_tool: record.slug.clone(),
                     score: fuzzy_score,
-                    reasons: vec![format!("fuzzy_rescue: weighted n-gram similarity {fuzzy_score:.1}")],
+                    reasons: vec![format!(
+                        "fuzzy_rescue: weighted n-gram similarity {fuzzy_score:.1}"
+                    )],
                     matched_token_count: 0,
                     dispatch_domain: record.dispatch_domain.to_string(),
                     mcp_server: record.mcp_server.clone(),

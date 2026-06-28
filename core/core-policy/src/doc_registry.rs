@@ -14,9 +14,7 @@ use std::path::{Path, PathBuf};
 
 // ── 核心文档 ──
 
-/// 架构规约（L0-L7、DAG、原则）
-pub const DOC_ARCHITECTURE: &str = "docs/architecture.md";
-/// 一站式文档地图
+/// 一站式文档地图（架构参考真源）
 pub const DOC_README: &str = "docs/README.md";
 
 // ── 研发文档 ──
@@ -43,6 +41,7 @@ pub const DIR_PLANS: &str = "docs/plans";
 /// 已删除的文档路径集合
 pub const DEPRECATED: &[&str] = &[
     "docs/spec.md",
+    "docs/architecture.md",
     "docs/framework_naming_conventions.md",
     "docs/framework_profile_contract.md",
     "docs/generated.md",
@@ -76,13 +75,7 @@ pub fn exists(root: &Path, key: &str) -> bool {
 
 /// 所有活跃文档路径。
 pub fn all_keys() -> &'static [&'static str] {
-    &[
-        DOC_ARCHITECTURE,
-        DOC_README,
-        DOC_OPS_INDEX,
-        AGENTS_MD,
-        ROOT_README,
-    ]
+    &[DOC_README, DOC_OPS_INDEX, AGENTS_MD, ROOT_README]
 }
 
 /// 框架治理的文档目录。

@@ -156,16 +156,16 @@ pub fn storage_read_text(
     match storage_backend {
         Some(ResolvedStorageBackend::Filesystem) | None => {
             if path.exists() {
-                return fs::read_to_string(path)
-                    .map_err(FrameworkError::Io);
+                return fs::read_to_string(path).map_err(FrameworkError::Io);
             }
             Err(FrameworkError::not_found(format!(
                 "artifact does not exist: {}",
                 path.display()
             )))
         }
-        Some(ResolvedStorageBackend::Memory) => fs::read_to_string(memory_artifact_path(path)?)
-            .map_err(FrameworkError::Io),
+        Some(ResolvedStorageBackend::Memory) => {
+            fs::read_to_string(memory_artifact_path(path)?).map_err(FrameworkError::Io)
+        }
         Some(ResolvedStorageBackend::Sqlite {
             db_path,
             storage_root,
@@ -406,8 +406,9 @@ pub fn runtime_storage_operation(
             }
         }
         "write_text" => {
-            let payload = payload_text
-                .ok_or_else(|| FrameworkError::validation("runtime_storage write_text requires payload_text"))?;
+            let payload = payload_text.ok_or_else(|| {
+                FrameworkError::validation("runtime_storage write_text requires payload_text")
+            })?;
             let digest = payload_sha256(&payload);
             match &backend {
                 ResolvedStorageBackend::Filesystem => filesystem_write_text(&path, &payload)?,
@@ -433,8 +434,9 @@ pub fn runtime_storage_operation(
             )
         }
         "append_text" => {
-            let payload = payload_text
-                .ok_or_else(|| FrameworkError::validation("runtime_storage append_text requires payload_text"))?;
+            let payload = payload_text.ok_or_else(|| {
+                FrameworkError::validation("runtime_storage append_text requires payload_text")
+            })?;
             let bytes_written = payload.len();
             match &backend {
                 ResolvedStorageBackend::Filesystem => {
@@ -458,7 +460,8 @@ pub fn runtime_storage_operation(
                         .append(true)
                         .open(&artifact_path)
                         .map_err(FrameworkError::Io)?;
-                    file.write_all(payload.as_bytes()).map_err(FrameworkError::Io)?;
+                    file.write_all(payload.as_bytes())
+                        .map_err(FrameworkError::Io)?;
                 }
                 ResolvedStorageBackend::Sqlite { db_path, .. } => {
                     sqlite_append_text(&path, db_path, &constrained_storage_root, &payload)?;
@@ -467,9 +470,11 @@ pub fn runtime_storage_operation(
             let digest = digest_after_append_text(&path, &backend, &constrained_storage_root)?;
             (true, None, Some(bytes_written), None, digest, None, None)
         }
-        other => return Err(FrameworkError::unsupported(format!(
-            "unsupported runtime_storage operation: {other:?}"
-        ))),
+        other => {
+            return Err(FrameworkError::unsupported(format!(
+                "unsupported runtime_storage operation: {other:?}"
+            )));
+        }
     };
 
     Ok(RuntimeStorageResponsePayload {
@@ -552,21 +557,29 @@ fn build_service_projection_for_backend(
 }
 
 #[tracing::instrument(level = "debug", skip_all)]
-pub fn build_checkpoint_control_plane_compiler_payload(payload: Value) -> Result<Value, FrameworkError> {
+pub fn build_checkpoint_control_plane_compiler_payload(
+    payload: Value,
+) -> Result<Value, FrameworkError> {
     let control_plane_descriptor = payload.get("control_plane_descriptor");
     let paths = payload
         .get("paths")
         .and_then(Value::as_object)
-        .ok_or_else(|| FrameworkError::validation("runtime checkpoint control plane requires paths"))?;
+        .ok_or_else(|| {
+            FrameworkError::validation("runtime checkpoint control plane requires paths")
+        })?;
     let capabilities = payload
         .get("capabilities")
         .and_then(Value::as_object)
-        .ok_or_else(|| FrameworkError::validation("runtime checkpoint control plane requires capabilities"))?;
+        .ok_or_else(|| {
+            FrameworkError::validation("runtime checkpoint control plane requires capabilities")
+        })?;
     let raw_backend_family = capabilities
         .get("backend_family")
         .and_then(Value::as_str)
         .ok_or_else(|| {
-            FrameworkError::validation("runtime checkpoint control plane capabilities must include backend_family")
+            FrameworkError::validation(
+                "runtime checkpoint control plane capabilities must include backend_family",
+            )
         })?;
     let backend_capabilities = runtime_backend_capabilities(raw_backend_family)?;
     let backend_family = backend_capabilities.backend_family;

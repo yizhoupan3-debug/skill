@@ -174,7 +174,7 @@ cargo run --release --manifest-path core/router-rs/Cargo.toml --features codegra
 | 完成归档 | `goal_state_manage(operation="complete")` | `goal_ops.rs:554` |
 | 单 session 管理 | 自动（goal 仅创建它的 session 活跃） | `core/core-state/src/state_manager/mod.rs:105` |
 
-完整原理与状态机详见 [`docs/architecture.md §1.3`](../architecture.md#13-无固定阶段-lifecycle)。
+完整原理与状态机详见 [`docs/README.md §2`](../README.md#2-v10-运行层3-概念)。
 
 ---
 

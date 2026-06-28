@@ -48,13 +48,14 @@
 ```text
 L0  agent-swarm-orchestration, gh-address-comments, gh-fix-ci, sentry,
     skill-framework-developer, systematic-debugging, update
-L1  deepinterview, citation-management, plan-mode
-L2  code-review-deep, gitx, paper-workbench, research-discovery, research-execution
-    (reroute alias: paper-writing → paper-workbench/SKILL.md)
-L3  design-md, diagramming, doc, experiment-reproducibility, infographic,
-    tikz-paper-figure, visual-review
-L4  math-derivation, scientific-figure-plotting, statistical-analysis (hot)
-    algo-trading (sub-skill: financial-data-fetching), email-template (hot)
+L1  deepinterview, plan-mode, goalx
+L2  code-review-deep, citation-management, deep-research, gitx,
+    paper-workbench, research-discovery, research-execution
+L3  design-md, doc, experiment-reproducibility, mcp-server-management, pdf,
+    slides, spreadsheets, tikz-paper-figure, visual-review
+L4  formal-verification, literature-verification, math-derivation,
+    prose-verification, python-env-management, reproducibility-verification,
+    statistical-analysis, statistical-verification, structure-verification
 Runtime lanes  planning, execution/code, language/framework, platform/integration,
                verification/review, memory and prompt policy, research workflow
 ```

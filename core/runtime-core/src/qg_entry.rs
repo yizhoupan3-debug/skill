@@ -106,7 +106,9 @@ pub fn trigger(
 ///
 /// Payload: { repo_root, task_id, scene (default GENERAL), goal,
 ///           sub_scene (optional), round (default 1), output_data (optional) }
-pub(crate) fn evaluate_quality_gate_hook(payload: serde_json::Value) -> Result<serde_json::Value, core_errors::FrameworkError> {
+pub(crate) fn evaluate_quality_gate_hook(
+    payload: serde_json::Value,
+) -> Result<serde_json::Value, core_errors::FrameworkError> {
     use std::path::Path;
 
     let repo_root_str = payload
@@ -114,7 +116,10 @@ pub(crate) fn evaluate_quality_gate_hook(payload: serde_json::Value) -> Result<s
         .and_then(|v| v.as_str())
         .unwrap_or(".");
     let repo_root = Path::new(repo_root_str);
-    let task_id = payload.get("task_id").and_then(|v| v.as_str()).unwrap_or("");
+    let task_id = payload
+        .get("task_id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
     let scene = payload
         .get("scene")
         .and_then(|v| v.as_str())
@@ -128,10 +133,18 @@ pub(crate) fn evaluate_quality_gate_hook(payload: serde_json::Value) -> Result<s
     let round = payload.get("round").and_then(|v| v.as_u64()).unwrap_or(1);
     let output_data = payload.get("output_data").cloned();
 
-    let verdict = trigger(repo_root, task_id, scene, goal, sub_scene, round, None, output_data);
-    serde_json::to_value(&verdict).map_err(|e| {
-        core_errors::FrameworkError::validation(format!("serialize GateVerdict: {e}"))
-    })
+    let verdict = trigger(
+        repo_root,
+        task_id,
+        scene,
+        goal,
+        sub_scene,
+        round,
+        None,
+        output_data,
+    );
+    serde_json::to_value(&verdict)
+        .map_err(|e| core_errors::FrameworkError::validation(format!("serialize GateVerdict: {e}")))
 }
 
 #[cfg(test)]

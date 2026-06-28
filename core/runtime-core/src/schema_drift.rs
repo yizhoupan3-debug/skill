@@ -92,8 +92,9 @@ pub fn resolve_task_id_for_schema_drift(
     task_id: Option<&str>,
 ) -> Result<String> {
     if let Some(id) = task_id.map(str::trim).filter(|s| !s.is_empty()) {
-        core_state_utils::path_guard::safe_task_id_component(id)
-            .ok_or_else(|| FrameworkError::from(format!("schema-drift: invalid task_id {:?}", id)))?;
+        core_state_utils::path_guard::safe_task_id_component(id).ok_or_else(|| {
+            FrameworkError::from(format!("schema-drift: invalid task_id {:?}", id))
+        })?;
         return Ok(id.to_string());
     }
     Err(FrameworkError::validation(
@@ -195,7 +196,10 @@ fn sha256_hex_lines(lines: &[String]) -> String {
     hex::encode(hasher.finalize())
 }
 
-pub(crate) fn snapshot_task_artifacts(repo_root: &Path, task_id: &str) -> TaskArtifactsDriftSnapshot {
+pub(crate) fn snapshot_task_artifacts(
+    repo_root: &Path,
+    task_id: &str,
+) -> TaskArtifactsDriftSnapshot {
     let task_dir = repo_root.join("artifacts/current").join(task_id);
     let req_path = task_dir.join("REQUIREMENTS.md");
     let road_path = task_dir.join("ROADMAP.md");

@@ -10,7 +10,9 @@ use std::path::{Component, Path, PathBuf};
 pub fn normalize_runtime_path(value: &str) -> Result<PathBuf, FrameworkError> {
     let candidate = PathBuf::from(value.trim());
     if candidate.as_os_str().is_empty() {
-        return Err(FrameworkError::validation("runtime storage path must be non-empty"));
+        return Err(FrameworkError::validation(
+            "runtime storage path must be non-empty",
+        ));
     }
     let absolute = if candidate.is_absolute() {
         candidate
@@ -100,9 +102,9 @@ pub fn canonicalize_existing_ancestors(path: &Path) -> Result<PathBuf, Framework
         }
     }
 
-    let canonical = current.canonicalize().map_err(|err| {
-        FrameworkError::Io(err)
-    })?;
+    let canonical = current
+        .canonicalize()
+        .map_err(|err| FrameworkError::Io(err))?;
 
     let mut result = canonical;
     for name in tail.iter().rev() {
@@ -119,14 +121,15 @@ pub fn resolve_runtime_storage_path_with_root(
     let storage_root = match request_storage_root {
         Some(value) => normalize_runtime_path(value)?,
         None => {
-            let cwd = std::env::current_dir()
-                ?;
+            let cwd = std::env::current_dir()?;
             canonicalize_or_clean_absolute_path(&cwd)?
         }
     };
     let trimmed_path = request_path.trim();
     if trimmed_path.is_empty() {
-        return Err(FrameworkError::validation("runtime storage path must be non-empty"));
+        return Err(FrameworkError::validation(
+            "runtime storage path must be non-empty",
+        ));
     }
     let candidate = PathBuf::from(trimmed_path);
     let absolute_candidate = if candidate.is_absolute() {

@@ -153,7 +153,9 @@ pub fn route_tool_from_records(
         decision_schema_version: DECISION_SCHEMA_VERSION.to_string(),
         selected_tool: fuzzy_record.slug.clone(),
         score: fuzzy_score,
-        reasons: vec![format!("fuzzy_rescue: weighted n-gram similarity {fuzzy_score:.1}")],
+        reasons: vec![format!(
+            "fuzzy_rescue: weighted n-gram similarity {fuzzy_score:.1}"
+        )],
         matched_token_count: 0,
         dispatch_domain: fuzzy_record.dispatch_domain.to_string(),
         mcp_server: fuzzy_record.mcp_server.clone(),
@@ -444,8 +446,12 @@ mod tests {
             input_schema_json: None,
         };
         let query_tokens = tokenize_text("ext_tool");
-        let (score_builtin, _, _) =
-            score_tool(&make_record(ToolLayer::Builtin), "ext_tool", &query_tokens, &weights);
+        let (score_builtin, _, _) = score_tool(
+            &make_record(ToolLayer::Builtin),
+            "ext_tool",
+            &query_tokens,
+            &weights,
+        );
         let (score_external, reasons, _) = score_tool(
             &make_record(ToolLayer::External),
             "ext_tool",

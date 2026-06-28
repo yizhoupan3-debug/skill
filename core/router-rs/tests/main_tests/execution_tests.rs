@@ -393,7 +393,10 @@ fn validate_live_execute_aggregator_base_url_rejects_private_ip_literal() {
     with_execute_allowlist_env(None, || {
         let err = validate_live_execute_aggregator_base_url("https://10.10.10.2/v1")
             .expect_err("private IP literal should be rejected");
-        assert!(err.to_string().contains("unsafe aggregator_base_url host IP"));
+        assert!(
+            err.to_string()
+                .contains("unsafe aggregator_base_url host IP")
+        );
     });
 }
 

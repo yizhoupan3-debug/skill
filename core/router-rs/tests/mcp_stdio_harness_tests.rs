@@ -628,7 +628,8 @@ mod parameter_validation_tests {
         let result = crate::mcp_stdio_harness::tool_goal_state_manage_test_helper(&args, "block");
         if let Err(ref err) = result {
             assert!(
-                !err.to_string().contains("Missing required argument: blocker"),
+                !err.to_string()
+                    .contains("Missing required argument: blocker"),
                 "blocker validation broken: {err}"
             );
         }

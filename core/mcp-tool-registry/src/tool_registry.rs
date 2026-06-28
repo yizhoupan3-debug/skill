@@ -240,7 +240,9 @@ pub fn invalidate_tool_cache_for_path(registry_path: &Path) {
             guard.remove(&path_buf);
         }
         Err(poisoned) => {
-            tracing::warn!("tool registry cache lock poisoned during path invalidation, recovering");
+            tracing::warn!(
+                "tool registry cache lock poisoned during path invalidation, recovering"
+            );
             drop(poisoned.into_inner());
         }
     }

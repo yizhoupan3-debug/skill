@@ -16,8 +16,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 pub static MEMORY_APPEND_MUTEX: OnceLock<Mutex<()>> = OnceLock::new();
 #[tracing::instrument(level = "debug", skip_all)]
 pub fn memory_storage_root() -> Result<PathBuf, FrameworkError> {
-    let cwd =
-        std::env::current_dir().map_err(FrameworkError::Io)?;
+    let cwd = std::env::current_dir().map_err(FrameworkError::Io)?;
     let mut digest = Sha256::new();
     digest.update(cwd.display().to_string().as_bytes());
     let namespace = hex::encode(digest.finalize());
@@ -88,9 +87,7 @@ pub fn acquire_runtime_path_lock(path: &Path) -> Result<RuntimePathLockGuard, Fr
         ))
     })?;
     if !parent.as_os_str().is_empty() {
-        fs::create_dir_all(parent).map_err(|err| {
-            FrameworkError::Io(err)
-        })?;
+        fs::create_dir_all(parent).map_err(|err| FrameworkError::Io(err))?;
     }
     let file_name = path
         .file_name()
@@ -103,9 +100,7 @@ pub fn acquire_runtime_path_lock(path: &Path) -> Result<RuntimePathLockGuard, Fr
         .read(true)
         .write(true)
         .open(&lock_path)
-        .map_err(|err| {
-            FrameworkError::Io(err)
-        })?;
+        .map_err(|err| FrameworkError::Io(err))?;
     let mut attempt = 0u64;
     loop {
         match file.try_lock_exclusive() {
@@ -170,7 +165,8 @@ pub fn filesystem_append_text(path: &Path, payload_text: &str) -> Result<(), Fra
     let _path_lock = acquire_runtime_path_lock(path)?;
     filesystem_reject_symlink_write_target(path)?;
     let mut file = filesystem_open_append_text(path)?;
-    file.write_all(payload_text.as_bytes()).map_err(FrameworkError::Io)?;
+    file.write_all(payload_text.as_bytes())
+        .map_err(FrameworkError::Io)?;
     file.sync_data().map_err(FrameworkError::Io)?;
     Ok(())
 }

@@ -1051,7 +1051,7 @@
       "local",
       null,
       "research",
-      "formal"
+      null
     ],
     [
       "mcp-server-management",
@@ -1853,7 +1853,7 @@
         ],
         "version": "1.0.0"
       },
-      "low",
+      "medium",
       [
         "Read",
         "Write",

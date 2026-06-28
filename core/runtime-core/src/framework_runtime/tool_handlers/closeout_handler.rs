@@ -261,7 +261,10 @@ pub(crate) fn evaluate_closeout_gate_hook(
         .and_then(|v| v.as_str())
         .unwrap_or(".");
     let repo_root = Path::new(repo_root_str);
-    let host_id = payload.get("host_id").and_then(|v| v.as_str()).unwrap_or("unknown");
+    let host_id = payload
+        .get("host_id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("unknown");
     let task_id = payload.get("task_id").and_then(|v| v.as_str());
     let task_view = core_state::task_state::resolve_task_view(repo_root, task_id);
 
@@ -283,7 +286,9 @@ pub(crate) fn evaluate_closeout_gate_hook(
             "review_gate_router_observation",
         )
     {
-        findings.push(format!("harness: review_gate_router_observation — {rationale}"));
+        findings.push(format!(
+            "harness: review_gate_router_observation — {rationale}"
+        ));
     }
 
     findings.push(format!(
@@ -309,9 +314,7 @@ pub(crate) fn evaluate_closeout_gate_hook(
     } else {
         findings.push("evidence: successful records present".to_string());
         if !tid.is_empty()
-            && core_state::state_manager::task_evidence_success_only_self_attested(
-                repo_root, tid,
-            )
+            && core_state::state_manager::task_evidence_success_only_self_attested(repo_root, tid)
         {
             findings.push(
                 "WARN: evidence: only self-attested MCP record_evidence rows — verify independently"

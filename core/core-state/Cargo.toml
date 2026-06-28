@@ -12,12 +12,9 @@ core-policy = { path = "../core-policy" }
 core-state-types = { path = "../core-state-types" }
 core-state-utils = { path = "../core-state-utils" }
 framework-kernel = { path = "../framework-kernel" }
-fs2.workspace = true
-libc.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
-thiserror.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]

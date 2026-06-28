@@ -23,7 +23,7 @@ fn rust_contracts_doc_no_longer_uses_stale_transition_wording() {
 fn host_and_contract_docs_avoid_stale_codex_wording() {
     let root = project_root();
     let mut paths = vec![
-        doc_registry::DOC_ARCHITECTURE.to_string(),
+        doc_registry::DOC_README.to_string(),
         doc_registry::AGENTS_MD.to_string(),
     ];
     let hosts_dir = root.join("docs/hosts");
@@ -83,16 +83,16 @@ fn top_level_docs_do_not_revive_removed_legacy_python_work_as_active() {
 }
 
 fn rust_contracts_doc() -> String {
-    // Content originally in spec.md, now in architecture.md
-    read_text(&project_root().join(doc_registry::DOC_ARCHITECTURE))
+    // Content originally in spec.md, now in docs/README.md (architecture reference)
+    read_text(&project_root().join(doc_registry::DOC_README))
 }
 
 #[test]
 fn harness_policy_map_documents_ship_readiness_stop_orchestration() {
-    // Content originally in spec.md, now in architecture.md
-    let doc = read_text(&project_root().join(doc_registry::DOC_ARCHITECTURE));
+    // Content originally in spec.md, now in docs/README.md (architecture reference)
+    let doc = read_text(&project_root().join(doc_registry::DOC_README));
     assert!(
         doc.contains("ship_readiness") || doc.contains("Stop") || doc.contains("closeout"),
-        "architecture.md must document Stop/closeout orchestration"
+        "docs/README.md must document Stop/closeout orchestration"
     );
 }

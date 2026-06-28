@@ -5,7 +5,7 @@
 //! into the shared `CheckerRegistry`.
 //!
 //! ## Scene → Checker 链
-//! - `general`     → AdversarialChecker
+//! - `general`     → EvidenceChecker + AdversarialChecker
 //! - `research`    → AdversarialChecker（基础兜底）；专业 checker（LogicAndEvidence,
 //!                   ProseQC, Statistical, Literature, Structure 等 11 个）
 //!                   从 `research-harness` 通过 extern 注册
@@ -67,8 +67,7 @@ fn find_rust_files_recursive(dir: &Path, files: &mut Vec<std::path::PathBuf>) {
 /// Register all in-place checkers into the registry.
 /// Called once at startup from `runtime_core::init_quality_gate()`.
 pub(crate) fn register_checkers(registry: &mut quality_gate::CheckerRegistry) {
-    // Note: EvidenceChecker 不在 Stage 2 注册——Stage 1 反欺诈门（qg_entry::trigger()）
-    // 已做证据完整性验证，Stage 2 重复检查无新增价值。
+    registry.register(scene::GENERAL, Box::new(evidence_checker::EvidenceChecker));
     registry.register(
         scene::GENERAL,
         Box::new(adversarial_checker::AdversarialChecker),

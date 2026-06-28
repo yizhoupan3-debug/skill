@@ -21,7 +21,8 @@ pub trait HostProjectionOps: Send + Sync {
         scope: &str,
     ) -> std::result::Result<Value, FrameworkError>;
 
-    fn status(&self, roots: &ResolvedProjectionRoots) -> std::result::Result<Value, FrameworkError>;
+    fn status(&self, roots: &ResolvedProjectionRoots)
+    -> std::result::Result<Value, FrameworkError>;
 
     fn remove(
         &self,

@@ -343,9 +343,7 @@ fn merge_route_metadata_payload(
             )
         {
             return Err(FrameworkError::Validation {
-                message: format!(
-                    "unsupported fallback_policy.mode `{mode}` for skill `{slug}`"
-                ),
+                message: format!("unsupported fallback_policy.mode `{mode}` for skill `{slug}`"),
             });
         }
         if positive_triggers.is_empty()
@@ -405,26 +403,18 @@ pub fn load_records_from_runtime(path: &Path) -> Result<Vec<SkillRecord>, Framew
 
     let index = build_key_index(keys, path)?;
 
-    let idx_slug = *index
-        .get("slug")
-        .ok_or_else(|| FrameworkError::NotFound {
-            what: format!("runtime index missing slug key: {}", path.display()),
-        })?;
-    let idx_layer = *index
-        .get("layer")
-        .ok_or_else(|| FrameworkError::NotFound {
-            what: format!("runtime index missing layer key: {}", path.display()),
-        })?;
-    let idx_owner = *index
-        .get("owner")
-        .ok_or_else(|| FrameworkError::NotFound {
-            what: format!("runtime index missing owner key: {}", path.display()),
-        })?;
-    let idx_gate = *index
-        .get("gate")
-        .ok_or_else(|| FrameworkError::NotFound {
-            what: format!("runtime index missing gate key: {}", path.display()),
-        })?;
+    let idx_slug = *index.get("slug").ok_or_else(|| FrameworkError::NotFound {
+        what: format!("runtime index missing slug key: {}", path.display()),
+    })?;
+    let idx_layer = *index.get("layer").ok_or_else(|| FrameworkError::NotFound {
+        what: format!("runtime index missing layer key: {}", path.display()),
+    })?;
+    let idx_owner = *index.get("owner").ok_or_else(|| FrameworkError::NotFound {
+        what: format!("runtime index missing owner key: {}", path.display()),
+    })?;
+    let idx_gate = *index.get("gate").ok_or_else(|| FrameworkError::NotFound {
+        what: format!("runtime index missing gate key: {}", path.display()),
+    })?;
     let idx_summary = *index
         .get("summary")
         .or_else(|| index.get("description"))
@@ -434,13 +424,11 @@ pub fn load_records_from_runtime(path: &Path) -> Result<Vec<SkillRecord>, Framew
     let idx_trigger_hints = *index
         .get("trigger_hints")
         .or_else(|| index.get("triggers"))
-        .ok_or_else(|| {
-            FrameworkError::NotFound {
-                what: format!(
-                    "runtime index missing trigger_hints key: {}",
-                    path.display()
-                ),
-            }
+        .ok_or_else(|| FrameworkError::NotFound {
+            what: format!(
+                "runtime index missing trigger_hints key: {}",
+                path.display()
+            ),
         })?;
     let idx_priority = index.get("priority").copied();
     let idx_session_start = index.get("session_start").copied();

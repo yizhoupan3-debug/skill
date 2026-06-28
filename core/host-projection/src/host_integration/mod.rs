@@ -470,7 +470,9 @@ mod tests {
         assert!(fail.is_err(), "expected generator failure");
         let fail_msg = fail.err().unwrap();
         assert!(
-            fail_msg.to_string().contains("generated artifact generator failed"),
+            fail_msg
+                .to_string()
+                .contains("generated artifact generator failed"),
             "failure message should include generator failed marker: {fail_msg}"
         );
         assert!(

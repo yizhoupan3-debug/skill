@@ -30,11 +30,8 @@ pub const RUNTIME_REGISTRY_SCHEMA_VERSION: &str = "framework-runtime-registry-v2
 pub const RUNTIME_REGISTRY_PATH: &str = "configs/framework/RUNTIME_REGISTRY.json";
 
 /// Canonical list of managed MCP server IDs. Used as fallback when registry is unavailable.
-pub const DEFAULT_MANAGED_MCP_SERVER_IDS: &[&str] = &[
-    "router-rs-framework",
-    "browser-mcp",
-    "paperplain",
-];
+pub const DEFAULT_MANAGED_MCP_SERVER_IDS: &[&str] =
+    &["router-rs-framework", "browser-mcp", "paperplain"];
 
 /// Path to the host adapter contract spec (relative to framework root).
 pub const HOST_ADAPTER_CONTRACT_PATH: &str = "AGENTS.md";

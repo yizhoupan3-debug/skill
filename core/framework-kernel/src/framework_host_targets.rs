@@ -205,6 +205,7 @@ pub fn validate_host_providers_against_registry(registry: &Value) -> Result<(), 
 }
 
 /// Ensure each `host_providers` row matches `hosts/mod.rs` `#[cfg(feature)]` provider mods and optional hooks mods.
+#[cfg(test)]
 pub(crate) fn validate_host_provider_mod_declarations(
     registry: &Value,
     _hosts_mod_rs: &str,
@@ -246,6 +247,7 @@ pub(crate) fn validate_host_provider_mod_declarations(
     Ok(())
 }
 
+#[cfg(test)]
 fn cargo_toml_declares_feature(cargo_toml: &str, feature: &str) -> bool {
     let needle = format!("{feature} =");
     cargo_toml

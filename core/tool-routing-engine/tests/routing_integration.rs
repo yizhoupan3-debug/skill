@@ -140,12 +140,14 @@ mod routing_integration_tests {
     #[test]
     fn route_emoji_or_punctuation_query() {
         let records = make_records();
-        let decision =
-            tool_routing_engine::routing::route_tool_from_records("😊", &records, None);
+        let decision = tool_routing_engine::routing::route_tool_from_records("😊", &records, None);
         assert!(decision.is_none(), "emoji-only query should not match");
         let decision2 =
             tool_routing_engine::routing::route_tool_from_records("!@#$%^&*", &records, None);
-        assert!(decision2.is_none(), "punctuation-only query should not match");
+        assert!(
+            decision2.is_none(),
+            "punctuation-only query should not match"
+        );
     }
 
     #[test]
@@ -156,19 +158,18 @@ mod routing_integration_tests {
             &records,
             None,
         );
-        assert!(decision.is_none(), "empty hint string should not match anything");
+        assert!(
+            decision.is_none(),
+            "empty hint string should not match anything"
+        );
     }
 
     #[test]
     fn search_top_k_overflow() {
         let records = make_records();
-        let results =
-            tool_routing_engine::search::search_tools("pdf", &records, 9999, None);
+        let results = tool_routing_engine::search::search_tools("pdf", &records, 9999, None);
         assert!(!results.is_empty(), "should still return results");
-        assert!(
-            results.len() <= 100,
-            "top_k should be clamped to MAX_TOP_K"
-        );
+        assert!(results.len() <= 100, "top_k should be clamped to MAX_TOP_K");
         assert!(
             results.len() <= records.len(),
             "results should not exceed total record count"

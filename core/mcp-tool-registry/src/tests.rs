@@ -17,9 +17,7 @@ use crate::tool_registry::{
     invalidate_tool_cache, invalidate_tool_cache_for_path, load_tool_records,
     load_tool_records_cached, set_cache_entry_for_test,
 };
-use crate::tool_types::{
-    DispatchDomain, McpToolInputSchema, McpToolRecord, ToolLayer, ToolOwner,
-};
+use crate::tool_types::{DispatchDomain, McpToolInputSchema, McpToolRecord, ToolLayer, ToolOwner};
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -378,7 +376,8 @@ fn test_input_schema_bad_type_rejected() {
 
     let err = load_tool_records(&path).unwrap_err();
     assert!(
-        err.to_string().contains("input_schema type must be 'object'"),
+        err.to_string()
+            .contains("input_schema type must be 'object'"),
         "error: {err}"
     );
 }
@@ -528,8 +527,8 @@ fn test_cache_reload_failure_eventually_propagates() {
     set_cache_entry_for_test(
         path.clone(),
         vec![dummy_record.clone()],
-        0,                           // consecutive_failures = 0
-        Duration::from_secs(60),      // expired TTL (60s ago)
+        0,                       // consecutive_failures = 0
+        Duration::from_secs(60), // expired TTL (60s ago)
     );
 
     // Now the file doesn't exist; each call tries to reload, fails, and increments the counter.

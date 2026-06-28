@@ -35,11 +35,10 @@ pub mod test_shim;
 
 pub use host_provider::{
     AgentDispatchFn, HookDispatchFn, HostCapabilities, HostLifecycle, HostProvider, HostTelemetry,
-    find_agent_dispatch, find_hook_dispatch, host_lifecycle_for_id,
-    host_provider_for_id, host_provider_for_install_tool, host_provider_for_routing_spelling,
-    host_provider_registry, host_provider_routing_aliases,
-    host_provider_strict_pre_tool_fallback_hint, host_telemetry_for_id,
-    register_agent_dispatchers, register_hook_dispatchers,
+    find_agent_dispatch, find_hook_dispatch, host_lifecycle_for_id, host_provider_for_id,
+    host_provider_for_install_tool, host_provider_for_routing_spelling, host_provider_registry,
+    host_provider_routing_aliases, host_provider_strict_pre_tool_fallback_hint,
+    host_telemetry_for_id, register_agent_dispatchers, register_hook_dispatchers,
 };
 
 // ── Shared MCP agent loop (registry-driven: host_id from RUNTIME_REGISTRY) ──
@@ -48,7 +47,10 @@ use core_errors::FrameworkError;
 use std::io;
 use std::path::Path;
 
-pub fn run_agent_mcp_loop(repo_root_arg: Option<&Path>, host_id: &str) -> Result<(), FrameworkError> {
+pub fn run_agent_mcp_loop(
+    repo_root_arg: Option<&Path>,
+    host_id: &str,
+) -> Result<(), FrameworkError> {
     let repo_root = framework_kernel::repo_roots::resolve_repo_root_arg(repo_root_arg)?;
     let stdin = io::stdin();
     let stdout = io::stdout();

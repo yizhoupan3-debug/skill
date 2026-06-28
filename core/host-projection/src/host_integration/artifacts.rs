@@ -193,9 +193,7 @@ pub fn generated_artifacts_status(
     }))
 }
 
-fn validate_generated_artifact_entry(
-    artifact: &GeneratedArtifactManifestEntry,
-) -> Result<()> {
+fn validate_generated_artifact_entry(artifact: &GeneratedArtifactManifestEntry) -> Result<()> {
     if Path::new(&artifact.path).is_absolute()
         || artifact.path.contains("..")
         || (artifact.path.starts_with('.') && !allowed_dot_generated_artifact(&artifact.path))
@@ -233,10 +231,12 @@ pub fn generated_artifact_drifted(
             let Some(regenerated) = regenerated else {
                 return Ok(true);
             };
-            let checked_in = std::str::from_utf8(checked_in)
-                .map_err(|err| FrameworkError::validation(format!("normalized-text artifact is not UTF-8: {err}")))?;
-            let regenerated = std::str::from_utf8(regenerated)
-                .map_err(|err| FrameworkError::validation(format!("normalized-text artifact is not UTF-8: {err}")))?;
+            let checked_in = std::str::from_utf8(checked_in).map_err(|err| {
+                FrameworkError::validation(format!("normalized-text artifact is not UTF-8: {err}"))
+            })?;
+            let regenerated = std::str::from_utf8(regenerated).map_err(|err| {
+                FrameworkError::validation(format!("normalized-text artifact is not UTF-8: {err}"))
+            })?;
             Ok(
                 normalize_generated_artifact_text(checked_in, &[framework_root, regenerated_root])
                     != normalize_generated_artifact_text(
@@ -338,22 +338,15 @@ pub fn prepare_generated_artifact_temp_root(
     Ok(GeneratedArtifactTempRoot { path: temp_root })
 }
 
-pub fn copy_framework_tree_for_generation(
-    source: &Path,
-    destination: &Path,
-) -> Result<()> {
-    fs::create_dir_all(destination)
-        .map_err(FrameworkError::Io)?;
-    for entry in fs::read_dir(source)
-        .map_err(FrameworkError::Io)?
-    {
+pub fn copy_framework_tree_for_generation(source: &Path, destination: &Path) -> Result<()> {
+    fs::create_dir_all(destination).map_err(FrameworkError::Io)?;
+    for entry in fs::read_dir(source).map_err(FrameworkError::Io)? {
         let entry = entry.map_err(FrameworkError::Io)?;
         let path = entry.path();
         let name = entry.file_name();
         let name_text = name.to_string_lossy();
         let target = destination.join(&name);
-        let metadata = fs::symlink_metadata(&path)
-            .map_err(FrameworkError::Io)?;
+        let metadata = fs::symlink_metadata(&path).map_err(FrameworkError::Io)?;
         if metadata.file_type().is_symlink() {
             continue;
         }
@@ -367,8 +360,7 @@ pub fn copy_framework_tree_for_generation(
                 continue;
             }
             if let Some(parent) = target.parent() {
-                fs::create_dir_all(parent)
-                    .map_err(FrameworkError::Io)?;
+                fs::create_dir_all(parent).map_err(FrameworkError::Io)?;
             }
             fs::copy(&path, &target).map_err(FrameworkError::Io)?;
         }
@@ -393,10 +385,8 @@ pub fn run_generated_artifact_generator(
     let log_stamp = Local::now().timestamp_nanos_opt().unwrap_or_default();
     let stdout_path = temp_root.join(format!(".generated-artifact-{log_stamp}.stdout.log"));
     let stderr_path = temp_root.join(format!(".generated-artifact-{log_stamp}.stderr.log"));
-    let stdout_file = fs::File::create(&stdout_path)
-        .map_err(FrameworkError::Io)?;
-    let stderr_file = fs::File::create(&stderr_path)
-        .map_err(FrameworkError::Io)?;
+    let stdout_file = fs::File::create(&stdout_path).map_err(FrameworkError::Io)?;
+    let stderr_file = fs::File::create(&stderr_path).map_err(FrameworkError::Io)?;
     // SAFETY: generator comes from GENERATED_ARTIFACTS.json (version-controlled config),
     // not from direct user input. If user-controlled input is ever accepted as generator,
     // this `sh -c` call becomes a shell injection vector and must be hardened.
@@ -508,7 +498,12 @@ pub fn undeclared_generated_framework_artifacts(
     for path in candidates {
         let rel = path
             .strip_prefix(framework_root)
-            .map_err(|_| FrameworkError::validation(format!("path {} is not under framework root", path.display())))?
+            .map_err(|_| {
+                FrameworkError::validation(format!(
+                    "path {} is not under framework root",
+                    path.display()
+                ))
+            })?
             .to_string_lossy()
             .into_owned();
         if !declared_paths.contains(&rel) && !allowed_reports.contains(&rel) {
@@ -520,9 +515,7 @@ pub fn undeclared_generated_framework_artifacts(
     Ok(undeclared)
 }
 
-pub fn surface_policy_generated_reports(
-    framework_root: &Path,
-) -> Result<BTreeSet<String>> {
+pub fn surface_policy_generated_reports(framework_root: &Path) -> Result<BTreeSet<String>> {
     let path = framework_root.join("configs/framework/FRAMEWORK_SURFACE_POLICY.json");
     let Some(policy) = read_json_if_exists(&path)? else {
         return Ok(BTreeSet::new());
@@ -665,7 +658,9 @@ pub fn skills_source_rel(repo_root: &Path) -> Result<String> {
 pub fn validate_source_rel(source_rel: &str) -> Result<()> {
     let candidate = Path::new(source_rel);
     if candidate.as_os_str().is_empty() {
-        return Err(FrameworkError::validation("skills source_rel must not be empty"));
+        return Err(FrameworkError::validation(
+            "skills source_rel must not be empty",
+        ));
     }
     if candidate.is_absolute() {
         return Err(FrameworkError::validation(format!(

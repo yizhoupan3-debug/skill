@@ -217,10 +217,12 @@ pub fn destination_for_current_artifact(
         return None;
     }
     let name = path.file_name()?.to_str()?;
-    let suffix = || if path.parent() == Some(current_root.as_path()) {
-        PathBuf::from(name)
-    } else {
-        PathBuf::from(active_task_id).join(name)
+    let suffix = || {
+        if path.parent() == Some(current_root.as_path()) {
+            PathBuf::from(name)
+        } else {
+            PathBuf::from(active_task_id).join(name)
+        }
     };
     if name == "framework_default_bootstrap.json" || name == "hermes_default_bootstrap.json" {
         return Some(
@@ -341,10 +343,7 @@ pub fn bootstrap_payload_matches_contract(payload: &Value, repo_root: &Path) -> 
         .unwrap_or(false)
 }
 
-pub fn ensure_default_bootstrap(
-    repo_root: &Path,
-    output_dir: Option<&Path>,
-) -> Result<Value> {
+pub fn ensure_default_bootstrap(repo_root: &Path, output_dir: Option<&Path>) -> Result<Value> {
     let resolved_output_dir = output_dir
         .map(Path::to_path_buf)
         .unwrap_or_else(|| default_bootstrap_output_dir(repo_root));

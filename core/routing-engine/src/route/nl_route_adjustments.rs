@@ -170,9 +170,7 @@ fn validate_signal(name: &str) -> Result<(), FrameworkError> {
         Ok(())
     } else {
         Err(FrameworkError::Validation {
-            message: format!(
-                "unknown when.signal `{name}` (not in NL_SIGNAL_REGISTRY)"
-            ),
+            message: format!("unknown when.signal `{name}` (not in NL_SIGNAL_REGISTRY)"),
         })
     }
 }
@@ -238,10 +236,8 @@ fn parse_record_filter(filter: Option<&Value>) -> Result<RecordFilter, Framework
         .get("slug")
         .map(|v| {
             v.as_str()
-                .ok_or_else(|| {
-                    FrameworkError::Validation {
-                        message: "record.slug must be string".into(),
-                    }
+                .ok_or_else(|| FrameworkError::Validation {
+                    message: "record.slug must be string".into(),
                 })
                 .map(str::to_string)
         })
@@ -249,22 +245,14 @@ fn parse_record_filter(filter: Option<&Value>) -> Result<RecordFilter, Framework
     let slugs = obj
         .get("slugs")
         .map(|v| -> Result<Vec<String>, FrameworkError> {
-            let arr = v
-                .as_array()
-                .ok_or_else(|| {
-                    FrameworkError::Validation {
-                        message: "record.slugs must be array".into(),
-                    }
-                })?;
+            let arr = v.as_array().ok_or_else(|| FrameworkError::Validation {
+                message: "record.slugs must be array".into(),
+            })?;
             let mut out = Vec::with_capacity(arr.len());
             for item in arr {
-                let s = item
-                    .as_str()
-                    .ok_or_else(|| {
-                        FrameworkError::Validation {
-                            message: "record.slugs entries must be strings".into(),
-                        }
-                    })?;
+                let s = item.as_str().ok_or_else(|| FrameworkError::Validation {
+                    message: "record.slugs entries must be strings".into(),
+                })?;
                 out.push(s.to_string());
             }
             Ok::<Vec<String>, FrameworkError>(out)
@@ -274,10 +262,8 @@ fn parse_record_filter(filter: Option<&Value>) -> Result<RecordFilter, Framework
         .get("gate_lower")
         .map(|v| {
             v.as_str()
-                .ok_or_else(|| {
-                    FrameworkError::Validation {
-                        message: "record.gate_lower must be string".into(),
-                    }
+                .ok_or_else(|| FrameworkError::Validation {
+                    message: "record.gate_lower must be string".into(),
                 })
                 .map(str::to_string)
         })
@@ -295,8 +281,9 @@ fn parse_when(expr: &Value) -> Result<WhenExpr, FrameworkError> {
         Value::Object(map) => {
             if map.is_empty() {
                 return Err(FrameworkError::Validation {
-                    message: "when: empty object is not allowed (use true or a single recognized key)"
-                        .into(),
+                    message:
+                        "when: empty object is not allowed (use true or a single recognized key)"
+                            .into(),
                 });
             }
             for k in map.keys() {
@@ -315,11 +302,9 @@ fn parse_when(expr: &Value) -> Result<WhenExpr, FrameworkError> {
                         message: "when: `all` must be the sole object key".into(),
                     });
                 }
-                let arr = arr
-                    .as_array()
-                    .ok_or_else(|| FrameworkError::Validation {
-                        message: "when.all must be array".into(),
-                    })?;
+                let arr = arr.as_array().ok_or_else(|| FrameworkError::Validation {
+                    message: "when.all must be array".into(),
+                })?;
                 let mut out = Vec::with_capacity(arr.len());
                 for item in arr {
                     out.push(parse_when(item)?);
@@ -332,11 +317,9 @@ fn parse_when(expr: &Value) -> Result<WhenExpr, FrameworkError> {
                         message: "when: `any` must be the sole object key".into(),
                     });
                 }
-                let arr = arr
-                    .as_array()
-                    .ok_or_else(|| FrameworkError::Validation {
-                        message: "when.any must be array".into(),
-                    })?;
+                let arr = arr.as_array().ok_or_else(|| FrameworkError::Validation {
+                    message: "when.any must be array".into(),
+                })?;
                 let mut out = Vec::with_capacity(arr.len());
                 for item in arr {
                     out.push(parse_when(item)?);

@@ -42,12 +42,17 @@ pub fn hooks() -> RuntimeCoreHooks {
 /// Try to get registered hooks without panicking.
 /// Returns `None` if `register()` has not been called yet.
 pub fn try_hooks() -> Option<RuntimeCoreHooks> {
-    RUNTIME_CORE_HOOKS.read().unwrap_or_else(|e| e.into_inner()).clone()
+    RUNTIME_CORE_HOOKS
+        .read()
+        .unwrap_or_else(|e| e.into_inner())
+        .clone()
 }
 
 /// Register hooks. Only the first call takes effect; subsequent calls are logged as warnings.
 pub fn register(h: RuntimeCoreHooks) {
-    let mut guard = RUNTIME_CORE_HOOKS.write().unwrap_or_else(|e| e.into_inner());
+    let mut guard = RUNTIME_CORE_HOOKS
+        .write()
+        .unwrap_or_else(|e| e.into_inner());
     if guard.is_some() {
         tracing::warn!("RuntimeCoreHooks already registered — ignoring duplicate");
         return;
@@ -60,7 +65,9 @@ pub fn register(h: RuntimeCoreHooks) {
 /// Thread-safe via `RwLock` — no `unsafe` required.
 #[cfg(test)]
 pub fn unregister_hooks() {
-    *RUNTIME_CORE_HOOKS.write().unwrap_or_else(|e| e.into_inner()) = None;
+    *RUNTIME_CORE_HOOKS
+        .write()
+        .unwrap_or_else(|e| e.into_inner()) = None;
 }
 
 // ── Host provider hook group ──
@@ -92,7 +99,10 @@ impl RuntimeCoreHooks {
     pub fn handle_orchestrator_operation(&self, payload: Value) -> Result<Value, FrameworkError> {
         (self.handle_orchestrator_operation)(payload)
     }
-    pub fn handle_background_state_operation(&self, payload: Value) -> Result<Value, FrameworkError> {
+    pub fn handle_background_state_operation(
+        &self,
+        payload: Value,
+    ) -> Result<Value, FrameworkError> {
         (self.handle_background_state_operation)(payload)
     }
     pub fn runtime_concurrency_defaults_payload(&self) -> Result<Value, FrameworkError> {
@@ -108,7 +118,10 @@ impl RuntimeCoreHooks {
     ) -> Result<Value, FrameworkError> {
         (self.run_eval_route)(cases_path, runtime)
     }
-    pub fn generated_artifacts_status_for_repo(&self, repo_root: &Path) -> Result<String, FrameworkError> {
+    pub fn generated_artifacts_status_for_repo(
+        &self,
+        repo_root: &Path,
+    ) -> Result<String, FrameworkError> {
         (self.generated_artifacts_status_for_repo)(repo_root)
     }
     pub fn ensure_kernel_bootstrap(&self) {
@@ -149,7 +162,8 @@ pub struct RuntimeCoreHooks {
     // ── Route evaluation ──
     pub eval_route_contract: fn() -> Value,
     #[allow(clippy::type_complexity)]
-    pub run_eval_route: fn(cases_path: &Path, runtime: Option<&Path>) -> Result<Value, FrameworkError>,
+    pub run_eval_route:
+        fn(cases_path: &Path, runtime: Option<&Path>) -> Result<Value, FrameworkError>,
 
     // ── Diagnostics ──
     pub generated_artifacts_status_for_repo: fn(repo_root: &Path) -> Result<String, FrameworkError>,

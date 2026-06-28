@@ -318,8 +318,9 @@ pub fn host_hooks_json_ok(hooks: &Value) -> bool {
 /// 2. If host has registered_hook_events → verify all events are registered in hooks.json
 /// 3. Launcher command pattern derived from host_id
 pub fn verify_host_projection(repo_root: &Path, host_id: &str) -> Result<(), FrameworkError> {
-    let provider = crate::hosts::host_provider_for_id(host_id)
-        .ok_or_else(|| FrameworkError::not_found(format!("verify_host_projection: unknown host {host_id}")))?;
+    let provider = crate::hosts::host_provider_for_id(host_id).ok_or_else(|| {
+        FrameworkError::not_found(format!("verify_host_projection: unknown host {host_id}"))
+    })?;
 
     let hooks_manifest_path = provider.hooks_manifest_path();
 
@@ -332,10 +333,12 @@ pub fn verify_host_projection(repo_root: &Path, host_id: &str) -> Result<(), Fra
             )));
         }
 
-        let text = std::fs::read_to_string(&hooks_path)
-            .map_err(|e| FrameworkError::config(format!("verify_{host_id}: read {hooks_rel}: {e}")))?;
-        let payload: Value = serde_json::from_str(&text)
-            .map_err(|e| FrameworkError::config(format!("verify_{host_id}: parse {hooks_rel}: {e}")))?;
+        let text = std::fs::read_to_string(&hooks_path).map_err(|e| {
+            FrameworkError::config(format!("verify_{host_id}: read {hooks_rel}: {e}"))
+        })?;
+        let payload: Value = serde_json::from_str(&text).map_err(|e| {
+            FrameworkError::config(format!("verify_{host_id}: parse {hooks_rel}: {e}"))
+        })?;
         let hooks = payload
             .get("hooks")
             .and_then(Value::as_object)
@@ -354,9 +357,7 @@ pub fn verify_host_projection(repo_root: &Path, host_id: &str) -> Result<(), Fra
                 .and_then(Value::as_array)
                 .filter(|a| !a.is_empty())
                 .ok_or_else(|| {
-                    FrameworkError::config(format!(
-                        "verify_{host_id}: missing hook event {event}"
-                    ))
+                    FrameworkError::config(format!("verify_{host_id}: missing hook event {event}"))
                 })?;
             let cmds: Vec<&str> = entries
                 .iter()

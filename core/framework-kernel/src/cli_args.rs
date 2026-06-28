@@ -1062,7 +1062,10 @@ mod tests {
                 assert_eq!(cmd.loop_id, "my-loop");
                 assert!(!cmd.dry_run);
                 assert_eq!(cmd.timeout, 600);
-                assert_eq!(cmd.host_id, "goal-engine", "default host_id should be goal-engine");
+                assert_eq!(
+                    cmd.host_id, "goal-engine",
+                    "default host_id should be goal-engine"
+                );
             }
             other => panic!("expected Loop::Run, got {:?}", other),
         }

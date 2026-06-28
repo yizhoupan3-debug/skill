@@ -200,8 +200,8 @@ fn append_text(path: &Path, payload: &str) -> Result<(), TraceError> {
     // (2) cross-process file lock, (3) OS append-mode write atomicity.
     // The ordering is safe: path lock is acquired AFTER the Mutex so there
     // is no lock-order inversion risk (both are write-only, no back-edge).
-    let _path_lock = acquire_runtime_path_lock(path)
-        .map_err(|e| TraceError::validation(e.to_string()))?;
+    let _path_lock =
+        acquire_runtime_path_lock(path).map_err(|e| TraceError::validation(e.to_string()))?;
     let mut file = fs::OpenOptions::new()
         .create(true)
         .append(true)

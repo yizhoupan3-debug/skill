@@ -20,10 +20,14 @@ pub(crate) fn tool_task_create(
     let task_id = arguments
         .get("task_id")
         .and_then(Value::as_str)
-        .ok_or_else(|| FrameworkError::from("task_create: missing required argument 'task_id'".to_string()))?
+        .ok_or_else(|| {
+            FrameworkError::from("task_create: missing required argument 'task_id'".to_string())
+        })?
         .trim();
     if task_id.is_empty() {
-        return Err(FrameworkError::from("task_create: task_id must not be empty".to_string()));
+        return Err(FrameworkError::from(
+            "task_create: task_id must not be empty".to_string(),
+        ));
     }
 
     let title = arguments
@@ -198,7 +202,11 @@ pub(crate) fn tool_task_complete(
         .filter(|s| !s.is_empty())
         .map(str::to_string)
         .or_else(|| core_state::state_manager::read_active_task_id(repo_root))
-        .ok_or_else(|| FrameworkError::from("task_complete: no task_id provided and no active task".to_string()))?;
+        .ok_or_else(|| {
+            FrameworkError::from(
+                "task_complete: no task_id provided and no active task".to_string(),
+            )
+        })?;
 
     let task_id_owned = task_id.clone();
     let repo_root_owned = repo_root.to_path_buf();
@@ -278,10 +286,14 @@ pub(crate) fn tool_task_focus(
     let task_id = arguments
         .get("task_id")
         .and_then(Value::as_str)
-        .ok_or_else(|| FrameworkError::from("task_focus: missing required argument 'task_id'".to_string()))?
+        .ok_or_else(|| {
+            FrameworkError::from("task_focus: missing required argument 'task_id'".to_string())
+        })?
         .trim();
     if task_id.is_empty() {
-        return Err(FrameworkError::from("task_focus: task_id must not be empty".to_string()));
+        return Err(FrameworkError::from(
+            "task_focus: task_id must not be empty".to_string(),
+        ));
     }
 
     // Validate task_id is a safe path component before using it in filesystem ops

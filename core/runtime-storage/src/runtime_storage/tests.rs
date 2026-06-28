@@ -465,7 +465,10 @@ fn runtime_storage_append_text_rejects_missing_payload_text() {
         tail_lines: None,
     };
     let err = runtime_storage_operation(request).expect_err("missing payload must fail");
-    assert!(err.to_string().contains("append_text requires payload_text"));
+    assert!(
+        err.to_string()
+            .contains("append_text requires payload_text")
+    );
 }
 
 #[test]
@@ -686,7 +689,12 @@ fn clean_absolute_path_collapses_parent() {
 fn clean_absolute_path_rejects_escape_beyond_root() {
     let result = clean_absolute_path(Path::new("/../escape"));
     assert!(result.is_err());
-    assert!(result.unwrap_err().to_string().contains("escapes filesystem root"));
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("escapes filesystem root")
+    );
 }
 
 // ── canonicalize_or_clean_absolute_path ──
@@ -1151,7 +1159,12 @@ fn resolve_runtime_storage_path_with_root_rejects_escape() {
         Some(&root.display().to_string()),
     );
     assert!(result.is_err());
-    assert!(result.unwrap_err().to_string().contains("must stay under storage root"));
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("must stay under storage root")
+    );
 }
 
 #[test]
@@ -1823,7 +1836,12 @@ fn filesystem_reject_symlink_write_target_rejects_symlink() {
     symlink(&real, &alias).expect("symlink");
     let result = filesystem_reject_symlink_write_target(&alias);
     assert!(result.is_err());
-    assert!(result.unwrap_err().to_string().contains("must not be a symlink"));
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("must not be a symlink")
+    );
 }
 
 // ── env helpers ──

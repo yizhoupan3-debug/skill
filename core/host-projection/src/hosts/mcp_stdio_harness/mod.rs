@@ -169,7 +169,9 @@ impl ToolDispatchTable {
         let records = match mcp_tool_registry::load_tool_records_cached(&registry_path) {
             Ok(records) => records,
             Err(e) => {
-                tracing::warn!("ToolDispatchTable: failed to load registry: {e}; using fallback CLI tool list");
+                tracing::warn!(
+                    "ToolDispatchTable: failed to load registry: {e}; using fallback CLI tool list"
+                );
                 // HPM-9: when registry is unavailable, populate with known CLI tools
                 // so they don't fall through to research-harness handlers.
                 let mut targets = HashMap::new();
@@ -195,7 +197,9 @@ impl ToolDispatchTable {
 
         // HPM-9: ensure known CLI tools are always mapped even if absent from registry
         for slug in KNOWN_CLI_TOOLS {
-            targets.entry(slug.to_string()).or_insert(McpDispatchTarget::CliSubprocess);
+            targets
+                .entry(slug.to_string())
+                .or_insert(McpDispatchTarget::CliSubprocess);
         }
 
         Self { targets }
@@ -264,7 +268,8 @@ pub(super) fn dispatch_tool(
         let connection_session_id = connection_session_id.to_string();
         let (tx, rx) = mpsc::channel();
         std::thread::spawn(move || {
-            let reg = REGISTRY.get()
+            let reg = REGISTRY
+                .get()
                 .unwrap_or_else(|| panic!("REGISTRY not initialized before dispatch"));
             let ctx = ToolCallContext {
                 repo_root,
@@ -287,7 +292,9 @@ pub(super) fn dispatch_tool(
     if let Some(dispatch) = crate::hooks::get_research_tool_dispatch() {
         dispatch(tool_name, args).map_err(|e| FrameworkError::validation(e.to_string()))
     } else {
-        Err(FrameworkError::not_found(format!("Unknown tool: {tool_name}")))
+        Err(FrameworkError::not_found(format!(
+            "Unknown tool: {tool_name}"
+        )))
     }
 }
 
@@ -380,7 +387,9 @@ fn read_mcp_message<R: BufRead>(
                 .read_line(&mut header)
                 .map_err(|err| FrameworkError::from(format!("read MCP header failed: {err}")))?;
             if bytes == 0 {
-                return Err(FrameworkError::from("MCP header ended before blank line".to_string()));
+                return Err(FrameworkError::from(
+                    "MCP header ended before blank line".to_string(),
+                ));
             }
             // HPM-7: enforce 8KB per header line
             if header.len() > MAX_HEADER_LINE {
@@ -422,12 +431,14 @@ fn parse_content_length(line: &str) -> Result<usize, FrameworkError> {
     })?;
     let header_name = lower[..colon_pos].trim();
     if header_name != "content-length" {
-        return Err(FrameworkError::from(format!("invalid Content-Length header: {line}")));
+        return Err(FrameworkError::from(format!(
+            "invalid Content-Length header: {line}"
+        )));
     }
     let value_str = line[colon_pos + 1..].trim();
-    value_str
-        .parse::<usize>()
-        .map_err(|err| FrameworkError::from(format!("invalid MCP content length '{value_str}': {err}")))
+    value_str.parse::<usize>().map_err(|err| {
+        FrameworkError::from(format!("invalid MCP content length '{value_str}': {err}"))
+    })
 }
 
 fn write_mcp_response<W: Write>(
@@ -862,22 +873,16 @@ pub fn tool_closeout_record_write_for_test(
 /// 2. Cap at `max_len` bytes (prevent oversized payloads)
 fn validate_cli_arg(value: &str, max_len: usize) -> Result<String, FrameworkError> {
     if value.len() > max_len {
-        return Err(FrameworkError::from(format!("argument too long (max {max_len} bytes)")));
+        return Err(FrameworkError::from(format!(
+            "argument too long (max {max_len} bytes)"
+        )));
     }
     if value.starts_with("--") {
-        return Err(FrameworkError::from("argument cannot start with '--'".to_string()));
+        return Err(FrameworkError::from(
+            "argument cannot start with '--'".to_string(),
+        ));
     }
     Ok(value.to_string())
-}
-
-/// Validate and serialize a JSON array/object CLI argument (64KB serialized limit).
-fn validate_cli_json_arg(value: &Value) -> Result<String, FrameworkError> {
-    let json_str = serde_json::to_string(value)
-        .map_err(|e| FrameworkError::from(format!("argument serialization failed: {e}")))?;
-    if json_str.len() > 64 * 1024 {
-        return Err(FrameworkError::from("JSON argument exceeds 64KB limit".to_string()));
-    }
-    Ok(json_str)
 }
 
 /// Map MCP tool name and JSON arguments to `router-rs-cli` subcommand arguments.
@@ -888,10 +893,9 @@ fn map_tool_to_cli_args(tool_name: &str, args: &Value) -> Result<Vec<String>, Fr
     const MAX_ARG_LEN: usize = 4096;
     match tool_name {
         "web_fetch" => {
-            let url = args
-                .get("url")
-                .and_then(Value::as_str)
-                .ok_or_else(|| FrameworkError::from("Missing required argument: url".to_string()))?;
+            let url = args.get("url").and_then(Value::as_str).ok_or_else(|| {
+                FrameworkError::from("Missing required argument: url".to_string())
+            })?;
             let url = validate_cli_arg(url, MAX_ARG_LEN)?;
             let mut cmd = vec!["web".to_string(), "fetch".to_string(), url];
             if let Some(max_bytes) = args.get("max_bytes").and_then(Value::as_u64) {
@@ -901,14 +905,20 @@ fn map_tool_to_cli_args(tool_name: &str, args: &Value) -> Result<Vec<String>, Fr
             Ok(cmd)
         }
 
-        _ => Err(FrameworkError::from(format!("Unknown CLI-routed tool: {tool_name}"))),
+        _ => Err(FrameworkError::from(format!(
+            "Unknown CLI-routed tool: {tool_name}"
+        ))),
     }
 }
 
 /// Spawn a `router-rs-cli` subprocess for the given tool name and arguments.
 /// The subprocess is spawned with the repo_root as the current directory.
 /// Temp files (e.g., for lean-verify) are cleaned up after the subprocess finishes.
-fn spawn_cli_tool(tool_name: &str, args: &Value, repo_root: &Path) -> Result<String, FrameworkError> {
+fn spawn_cli_tool(
+    tool_name: &str,
+    args: &Value,
+    repo_root: &Path,
+) -> Result<String, FrameworkError> {
     use std::io::Read;
 
     let cli_args = map_tool_to_cli_args(tool_name, args)?;
@@ -921,7 +931,11 @@ fn spawn_cli_tool(tool_name: &str, args: &Value, repo_root: &Path) -> Result<Str
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .spawn()
-        .map_err(|e| FrameworkError::from(format!("router-rs-cli subprocess failed (is it in PATH or built?): {e}")))?;
+        .map_err(|e| {
+            FrameworkError::from(format!(
+                "router-rs-cli subprocess failed (is it in PATH or built?): {e}"
+            ))
+        })?;
 
     // HPM-10: take stdout/stderr handles before moving child into wait thread
     let mut child_stdout = child.stdout.take();
@@ -938,7 +952,11 @@ fn spawn_cli_tool(tool_name: &str, args: &Value, repo_root: &Path) -> Result<Str
     // Block until child exits or timeout expires
     let status = match rx.recv_timeout(timeout) {
         Ok(Ok(status)) => status,
-        Ok(Err(e)) => return Err(FrameworkError::from(format!("router-rs-cli subprocess wait error: {e}"))),
+        Ok(Err(e)) => {
+            return Err(FrameworkError::from(format!(
+                "router-rs-cli subprocess wait error: {e}"
+            )));
+        }
         Err(_) => {
             // Timed out: kill child process via OS signal
             #[cfg(unix)]
@@ -967,8 +985,7 @@ fn spawn_cli_tool(tool_name: &str, args: &Value, repo_root: &Path) -> Result<Str
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_nanos();
-        let tmp_path =
-            std::env::temp_dir().join(format!("router_rs_lean_{nanos}.lean"));
+        let tmp_path = std::env::temp_dir().join(format!("router_rs_lean_{nanos}.lean"));
         let _ = std::fs::remove_file(&tmp_path);
     }
 
@@ -1163,10 +1180,7 @@ mod tests {
     #[test]
     fn parse_content_length_mixed_ows() {
         // Multiple spaces before colon (OWS) — HPM-13 fix enables this.
-        assert_eq!(
-            parse_content_length("Content-Length  : 42").unwrap(),
-            42
-        );
+        assert_eq!(parse_content_length("Content-Length  : 42").unwrap(), 42);
     }
 
     // ── E2E chain tests: JSON-RPC tools/call → dispatch → research handler ──

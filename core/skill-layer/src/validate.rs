@@ -100,11 +100,20 @@ pub fn validate_all(repo_root: &Path) -> Result<ValidationReport, FrameworkError
         .map(|rows| {
             let key_names: Vec<String> = runtime["keys"]
                 .as_array()
-                .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|v| v.as_str().map(String::from))
+                        .collect()
+                })
                 .unwrap_or_default();
             let slug_idx = key_names.iter().position(|k| k == "slug");
             rows.iter()
-                .filter_map(|row| slug_idx.and_then(|i| row.get(i)).and_then(|v| v.as_str()).map(String::from))
+                .filter_map(|row| {
+                    slug_idx
+                        .and_then(|i| row.get(i))
+                        .and_then(|v| v.as_str())
+                        .map(String::from)
+                })
                 .collect()
         })
         .unwrap_or_default();
@@ -395,31 +404,47 @@ fn frontmatter_field_to_value(
         "name" => Some(Value::String(fm.name.clone())),
         "description" => Some(Value::String(fm.description.clone())),
         "routing_layer" => Some(Value::String(fm.layer_str().to_string())),
-        "routing_owner" => Some(Value::String(format!("{:?}", fm.routing_owner).to_lowercase())),
-        "routing_gate" => Some(Value::String(format!("{:?}", fm.routing_gate).to_lowercase())),
+        "routing_owner" => Some(Value::String(
+            format!("{:?}", fm.routing_owner).to_lowercase(),
+        )),
+        "routing_gate" => Some(Value::String(
+            format!("{:?}", fm.routing_gate).to_lowercase(),
+        )),
         "routing_priority" => Some(Value::String(format!("{:?}", fm.routing_priority))),
         "session_start" => match fm.session_start {
             crate::frontmatter::SessionStart::NA => Some(Value::String("n/a".into())),
-            _ => Some(Value::String(format!("{:?}", fm.session_start).to_lowercase())),
+            _ => Some(Value::String(
+                format!("{:?}", fm.session_start).to_lowercase(),
+            )),
         },
         "trigger_hints" => Some(Value::Array(
-            fm.trigger_hints.iter().map(|s| Value::String(s.clone())).collect()
+            fm.trigger_hints
+                .iter()
+                .map(|s| Value::String(s.clone()))
+                .collect(),
         )),
-        "short_description" => fm.short_description.as_ref().map(|s| Value::String(s.clone())),
+        "short_description" => fm
+            .short_description
+            .as_ref()
+            .map(|s| Value::String(s.clone())),
         "risk" => fm.risk.as_ref().map(|v| Value::String(v.clone())),
         "source" => fm.source.as_ref().map(|v| Value::String(v.clone())),
         "metadata" => fm.metadata.clone(),
-        "allowed_tools" => fm.allowed_tools.as_ref().map(|v| {
-            Value::Array(v.iter().map(|s| Value::String(s.clone())).collect())
-        }),
+        "allowed_tools" => fm
+            .allowed_tools
+            .as_ref()
+            .map(|v| Value::Array(v.iter().map(|s| Value::String(s.clone())).collect())),
         "runtime_requirements" => fm.runtime_requirements.clone(),
         "network_access" => fm.network_access.as_ref().map(|v| Value::String(v.clone())),
-        "approval_required_tools" => fm.approval_required_tools.as_ref().map(|v| {
-            Value::Array(v.iter().map(|s| Value::String(s.clone())).collect())
-        }),
+        "approval_required_tools" => fm
+            .approval_required_tools
+            .as_ref()
+            .map(|v| Value::Array(v.iter().map(|s| Value::String(s.clone())).collect())),
         "kind" => fm.kind.and_then(|k| match k {
             crate::frontmatter::RecordKind::Skill => None,
-            crate::frontmatter::RecordKind::FrameworkCommand => Some(Value::String("framework_command".into())),
+            crate::frontmatter::RecordKind::FrameworkCommand => {
+                Some(Value::String("framework_command".into()))
+            }
         }),
         "scene" => fm.scene.as_ref().map(|s| Value::String(s.clone())),
         "sub_scene" => fm.sub_scene.as_ref().map(|s| Value::String(s.clone())),

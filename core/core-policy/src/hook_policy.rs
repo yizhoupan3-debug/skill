@@ -317,7 +317,10 @@ pub fn relative_candidate_path(path: &str, repo_root: Option<&Path>) -> String {
         && let Some(root) = repo_root
     {
         let normalized_candidate = candidate.canonicalize().unwrap_or_else(|e| {
-            tracing::warn!("canonicalize failed for candidate path {}: {e}", candidate.display());
+            tracing::warn!(
+                "canonicalize failed for candidate path {}: {e}",
+                candidate.display()
+            );
             candidate.clone()
         });
         let normalized_root = root.canonicalize().unwrap_or_else(|e| {
@@ -620,11 +623,17 @@ fn split_shell_segments(command: &str) -> Vec<String> {
 
 fn same_path(left: &Path, right: &Path) -> bool {
     let left = left.canonicalize().unwrap_or_else(|e| {
-        tracing::warn!("canonicalize failed for same_path left {}: {e}", left.display());
+        tracing::warn!(
+            "canonicalize failed for same_path left {}: {e}",
+            left.display()
+        );
         left.to_path_buf()
     });
     let right = right.canonicalize().unwrap_or_else(|e| {
-        tracing::warn!("canonicalize failed for same_path right {}: {e}", right.display());
+        tracing::warn!(
+            "canonicalize failed for same_path right {}: {e}",
+            right.display()
+        );
         right.to_path_buf()
     });
     left == right

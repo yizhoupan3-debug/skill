@@ -207,10 +207,12 @@ fn sync_host_entrypoints_single_root(
 ) -> Result<SingleSyncReport, FrameworkError> {
     let mut report = SingleSyncReport::default();
     for relative in section.text_files.iter().chain(section.json_files.iter()) {
-        let desired = desired_files
-            .files
-            .get(relative)
-            .ok_or_else(|| FrameworkError::not_found(format!("missing generated host-entrypoint payload for {}", relative)))?;
+        let desired = desired_files.files.get(relative).ok_or_else(|| {
+            FrameworkError::not_found(format!(
+                "missing generated host-entrypoint payload for {}",
+                relative
+            ))
+        })?;
         sync_host_entrypoint_file(
             desired,
             relative,
@@ -245,7 +247,9 @@ fn sync_host_entrypoint_file(
 
     if changed && apply {
         let text = std::str::from_utf8(desired).map_err(|_| {
-            FrameworkError::validation(format!("host entrypoint {relative} payload must be UTF-8 text for atomic write"))
+            FrameworkError::validation(format!(
+                "host entrypoint {relative} payload must be UTF-8 text for atomic write"
+            ))
         })?;
         core_state_utils::atomic_write::write_atomic_text(&destination, text)?;
     }
@@ -291,11 +295,17 @@ fn semantic_json_changed(existing: &Option<Vec<u8>>, desired: &[u8]) -> bool {
     }
 }
 
-fn extend_report_array(report: &mut Value, key: &str, items: Vec<String>) -> Result<(), FrameworkError> {
+fn extend_report_array(
+    report: &mut Value,
+    key: &str,
+    items: Vec<String>,
+) -> Result<(), FrameworkError> {
     let array = report
         .get_mut(key)
         .and_then(Value::as_array_mut)
-        .ok_or_else(|| FrameworkError::validation(format!("host-entrypoint sync report missing {key} array")))?;
+        .ok_or_else(|| {
+            FrameworkError::validation(format!("host-entrypoint sync report missing {key} array"))
+        })?;
     array.extend(items.into_iter().map(Value::String));
     Ok(())
 }
@@ -304,7 +314,9 @@ fn sort_report_array(report: &mut Value, key: &str) -> Result<(), FrameworkError
     let array = report
         .get_mut(key)
         .and_then(Value::as_array_mut)
-        .ok_or_else(|| FrameworkError::validation(format!("host-entrypoint sync report missing {key} array")))?;
+        .ok_or_else(|| {
+            FrameworkError::validation(format!("host-entrypoint sync report missing {key} array"))
+        })?;
     let mut values = array
         .iter()
         .filter_map(Value::as_str)
@@ -319,9 +331,7 @@ fn normalize_repo_root(path: &Path) -> Result<PathBuf, FrameworkError> {
     if path.is_absolute() {
         Ok(path.to_path_buf())
     } else {
-        Ok(env::current_dir()
-            .map_err(FrameworkError::Io)?
-            .join(path))
+        Ok(env::current_dir().map_err(FrameworkError::Io)?.join(path))
     }
 }
 

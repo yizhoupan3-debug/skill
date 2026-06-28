@@ -20,7 +20,6 @@ thiserror.workspace = true
 tracing.workspace = true
 
 framework-kernel = { path = "../framework-kernel" }
-fr-contracts = { path = "../fr-contracts" }
 core-state = { path = "../core-state" }
 fr-utils = { path = "../fr-utils" }
 

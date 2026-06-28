@@ -156,7 +156,8 @@ mod tests {
             "entries": []
         });
         let path = dir.join("artifacts/current/test-task/TASK_POINTERS.json");
-        fs::write(&path, serde_json::to_string_pretty(&pointers).unwrap()).expect("write task pointers");
+        fs::write(&path, serde_json::to_string_pretty(&pointers).unwrap())
+            .expect("write task pointers");
     }
 
     #[test]

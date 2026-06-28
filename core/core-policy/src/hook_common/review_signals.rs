@@ -383,7 +383,6 @@ pub(crate) fn install_review_prompt_test_deps() {
                 .map(|s| s.to_ascii_lowercase())
                 .collect()
         }
-
     }
 
     framework_kernel::install_tokenizer_provider(Box::new(WhitespaceTokenizer));

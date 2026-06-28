@@ -21,15 +21,11 @@ framework-kernel = { path = "../framework-kernel" }
 
 # L4
 fr-utils = { path = "../fr-utils" }
-fr-contracts = { path = "../fr-contracts" }
 fr-exec = { path = "../fr-exec" }
-trace-runtime = { path = "../trace-runtime" }
 runtime-core-contracts = { path = "../runtime-core-contracts" }
 runtime-storage = { path = "../runtime-storage" }
 routing-engine = { path = "../routing-engine" }
 host-projection = { path = "../host-projection" }
-# L4 (runtime infrastructure)
-runtime-infra = { path = "../runtime-infra" }
 
 # B10 codegraph-rs (feature-gated)
 codegraph-rs = { path = "../codegraph-rs", optional = true }

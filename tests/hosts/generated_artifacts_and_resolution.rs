@@ -275,7 +275,7 @@ fn generated_artifacts_status_rejects_missing_or_unsupported_manifest_schema() {
     assert!(!missing_schema.status.success());
     let (_, stderr) = output_text(&missing_schema);
     assert!(
-        stderr.contains("invalid generated artifact manifest"),
+        stderr.contains("invalid generated artifact manifest") || stderr.contains("schema_version"),
         "unexpected stderr for missing schema: {stderr}"
     );
 

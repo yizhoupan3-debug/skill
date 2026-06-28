@@ -22,7 +22,7 @@ cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework docto
 
 - `AGENTS.md` — 四宿主（Claude、Codex、Cursor、OpenCode）共同项目规则（含宿主行为差异附录）
 - `docs/README.md` — 文档索引
-- `docs/architecture.md` — 八层架构规约（L0-L7 层、DAG 验证矩阵、宿主隔离契约）
+- `docs/README.md` — 五层架构参考（crate 归属表、v10 运行时概念、Scene 模型）
 - `skills/` — 所有 skill 源文件（`skills/<name>/SKILL.md`）
 - `skills/SKILL_ROUTING_RUNTIME.json` — 运行时路由入口（唯一热表）
 - `configs/framework/MCP_TOOL_REGISTRY.json` — 工具路由唯一真源（40 工具，11 MCP servers）

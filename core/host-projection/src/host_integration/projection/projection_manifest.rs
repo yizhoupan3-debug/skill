@@ -191,7 +191,11 @@ pub fn entrypoint_target(
     if scope == "user" {
         Ok(roots
             .host_home_root(host_id)
-            .ok_or_else(|| FrameworkError::config(format!("{host_id} host must be registered in projection roots")))?
+            .ok_or_else(|| {
+                FrameworkError::config(format!(
+                    "{host_id} host must be registered in projection roots"
+                ))
+            })?
             .join(subdir)
             .join(filename))
     } else {
@@ -262,7 +266,9 @@ pub fn mcp_config_path(
 ) -> Result<PathBuf> {
     let rel = framework_kernel::runtime_registry::host_projection_mcp_relative(host_id, scope);
     if rel.is_empty() {
-        return Err(FrameworkError::unsupported(format!("no mcp config path for {host_id} scope {scope}")));
+        return Err(FrameworkError::unsupported(format!(
+            "no mcp config path for {host_id} scope {scope}"
+        )));
     }
     if scope == "user" {
         if framework_kernel::runtime_registry::host_projection_mcp_base_is_account(host_id, "user")
@@ -318,18 +324,18 @@ pub(super) fn mcp_servers_mut<'a>(
     if !payload.is_object() {
         *payload = json!({});
     }
-    let root = payload
-        .as_object_mut()
-        .ok_or_else(|| FrameworkError::unsupported(format!("{host_id} MCP config must be a JSON object")))?;
+    let root = payload.as_object_mut().ok_or_else(|| {
+        FrameworkError::unsupported(format!("{host_id} MCP config must be a JSON object"))
+    })?;
     let container = root
         .entry(servers_key.to_string())
         .or_insert_with(|| json!({}));
     if !container.is_object() {
         *container = json!({});
     }
-    container
-        .as_object_mut()
-        .ok_or_else(|| FrameworkError::unsupported(format!("{host_id} MCP servers must be an object")))
+    container.as_object_mut().ok_or_else(|| {
+        FrameworkError::unsupported(format!("{host_id} MCP servers must be an object"))
+    })
 }
 
 fn install_mcp_impl_snake_case(
@@ -438,11 +444,7 @@ pub fn mcp_entry_is_framework_owned_stale(existing: &Value, framework_root: &Pat
     is_repo_build_executable_path(cmd, framework_root)
 }
 
-pub fn remove_mcp_server(
-    path: &Path,
-    framework_root: &Path,
-    host_id: &str,
-) -> Result<bool> {
+pub fn remove_mcp_server(path: &Path, framework_root: &Path, host_id: &str) -> Result<bool> {
     let format =
         if framework_kernel::runtime_registry::host_mcp_config_format(host_id) == "snake_case" {
             McpConfigFormat::JSON_SNAKE_CASE
@@ -565,10 +567,7 @@ pub fn mcp_server_payload(roots: &ResolvedProjectionRoots) -> Value {
     }
 }
 
-pub fn projection_manifest_manages_key_path(
-    path: &Path,
-    key_path: &str,
-) -> Result<bool> {
+pub fn projection_manifest_manages_key_path(path: &Path, key_path: &str) -> Result<bool> {
     let Some(manifest) = read_json_if_exists(path)? else {
         return Ok(false);
     };
@@ -679,10 +678,7 @@ pub fn managed_projection_file_exists(path: &Path) -> Result<bool> {
     Ok(is_managed_projection_content(&content))
 }
 
-pub(super) fn projection_file_status(
-    path: &Path,
-    host_projection: &str,
-) -> Result<Value> {
+pub(super) fn projection_file_status(path: &Path, host_projection: &str) -> Result<Value> {
     let content = read_text_if_exists(path)?;
     let marker_managed = content
         .as_deref()
@@ -736,10 +732,7 @@ pub fn install_skills_projection_tools(
     }
 }
 
-pub fn canonical_tool_name(
-    raw: &str,
-    framework_root: &Path,
-) -> Result<String> {
+pub fn canonical_tool_name(raw: &str, framework_root: &Path) -> Result<String> {
     let normalized = raw.trim().to_lowercase();
     if crate::host_integration::projection::projection_ops_trait::projection_ops_for_tool(
         &normalized,

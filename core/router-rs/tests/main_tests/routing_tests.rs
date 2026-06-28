@@ -120,11 +120,19 @@ fn stdio_request_routes_common_ops_to_expected_domains() {
 
     let runtime_error = dispatch_stdio_json_request("runtime_storage", json!({}))
         .expect_err("runtime op should parse runtime storage payload");
-    assert!(runtime_error.to_string().contains("parse runtime storage input failed"));
+    assert!(
+        runtime_error
+            .to_string()
+            .contains("parse runtime storage input failed")
+    );
 
     let trace_error = dispatch_stdio_json_request("trace_compact", json!({}))
         .expect_err("trace op should parse trace compact payload");
-    assert!(trace_error.to_string().contains("parse trace compact input failed"));
+    assert!(
+        trace_error
+            .to_string()
+            .contains("parse trace compact input failed")
+    );
 
     let framework_error = dispatch_stdio_json_request("framework_runtime_snapshot", json!({}))
         .expect_err("framework op should require repo_root");
@@ -564,7 +572,9 @@ fn framework_command_aliases_require_literal_entrypoints() {
     )
     .expect_err("retired team framework alias must fail closed");
     assert!(
-        team_alias_err.to_string().contains("Unknown framework alias `team`"),
+        team_alias_err
+            .to_string()
+            .contains("Unknown framework alias `team`"),
         "unexpected error: {team_alias_err}"
     );
 
@@ -782,7 +792,11 @@ fn route_policy_matches_mode_matrix() {
     assert!(!rust.strict_verification_required);
 
     let unsupported = build_route_policy("python").expect_err("unsupported route mode");
-    assert!(unsupported.to_string().contains("unsupported route policy mode"));
+    assert!(
+        unsupported
+            .to_string()
+            .contains("unsupported route policy mode")
+    );
 }
 
 #[test]

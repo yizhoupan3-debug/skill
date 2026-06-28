@@ -62,7 +62,9 @@ fn parse_execute_aggregator_host_allowlist() -> Result<Option<HashSet<String>>, 
     Ok(Some(hosts))
 }
 
-pub fn execute_request(payload: ExecuteRequestPayload) -> Result<ExecuteResponsePayload, FrameworkError> {
+pub fn execute_request(
+    payload: ExecuteRequestPayload,
+) -> Result<ExecuteResponsePayload, FrameworkError> {
     if payload.dry_run {
         return Ok(build_dry_run_execute_response(&payload));
     }
@@ -290,8 +292,7 @@ where
     F: FnMut(&Value) -> Result<(u16, String), FrameworkError>,
 {
     use std::time::Duration;
-    let mut last_error =
-        FrameworkError::validation("router-rs live execute request failed");
+    let mut last_error = FrameworkError::validation("router-rs live execute request failed");
     for attempt in 0..=1usize {
         match send_request(request_body) {
             Ok((status_code, response_body)) => {
@@ -309,12 +310,11 @@ where
                     // 4xx client errors (401/403/404 etc.): return immediately, no retry
                     return Err(last_error);
                 }
-                return serde_json::from_str::<Value>(&response_body)
-                    .map_err(|err| {
-                        FrameworkError::validation(format!(
-                            "parse router-rs live execute response failed: {err}"
-                        ))
-                    })
+                return serde_json::from_str::<Value>(&response_body).map_err(|err| {
+                    FrameworkError::validation(format!(
+                        "parse router-rs live execute response failed: {err}"
+                    ))
+                });
             }
             Err(err) => {
                 last_error = FrameworkError::validation(format!(
@@ -567,9 +567,7 @@ pub fn perform_live_execute(
             .json(request_body)
             .send()
             .map_err(|err| {
-                FrameworkError::validation(format!(
-                    "router-rs live execute request failed: {err}"
-                ))
+                FrameworkError::validation(format!("router-rs live execute request failed: {err}"))
             })?;
         let status = response.status().as_u16();
         let response_body = response.text().map_err(|err| {

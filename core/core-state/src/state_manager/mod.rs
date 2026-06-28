@@ -44,8 +44,8 @@ pub use goal_ops::{
 
 // Re-export from scrub_ops
 pub use scrub_ops::{
-    merge_hook_nudge_paragraph, scrub_followup_fields_in_hook_output,
-    scrub_spoof_host_followup_lines, strip_followup_paragraphs_with_line_prefix,
+    merge_hook_nudge_paragraph, scrub_spoof_host_followup_lines,
+    strip_followup_paragraphs_with_line_prefix,
 };
 
 // ── Goal state path ──
@@ -355,8 +355,11 @@ mod tests {
             .join("artifacts/current")
             .join(task_id)
             .join("TASK_POINTERS.json");
-        fs::write(&path, serde_json::to_string_pretty(&ptrs).expect("serialize task pointers"))
-            .expect("write TASK_POINTERS.json");
+        fs::write(
+            &path,
+            serde_json::to_string_pretty(&ptrs).expect("serialize task pointers"),
+        )
+        .expect("write TASK_POINTERS.json");
     }
 
     #[test]

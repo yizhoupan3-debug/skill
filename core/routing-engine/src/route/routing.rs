@@ -290,11 +290,12 @@ pub fn filter_record_indices_for_host(
             indices.push(idx);
             continue;
         }
-        let allowed = record.host_platforms.is_empty() || record.host_platforms.iter().any(|platform| {
-            aliases
-                .iter()
-                .any(|alias| platform.eq_ignore_ascii_case(alias))
-        });
+        let allowed = record.host_platforms.is_empty()
+            || record.host_platforms.iter().any(|platform| {
+                aliases
+                    .iter()
+                    .any(|alias| platform.eq_ignore_ascii_case(alias))
+            });
         saw_host |= allowed;
         if allowed {
             indices.push(idx);

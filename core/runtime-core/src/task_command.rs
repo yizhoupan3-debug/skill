@@ -61,9 +61,7 @@ pub(crate) fn parse_task_ledger_command_envelope(
 /// Dispatch without taking an extra outer lock (`apply_task_ledger_mutation` is invoked inside handlers where needed).
 pub fn dispatch_task_ledger_command(cmd: TaskLedgerCommand) -> Result<Value, FrameworkError> {
     match cmd {
-        TaskLedgerCommand::GoalDrive(p) => {
-            runtime_infra::kernel_utils::framework_goal_drive(p)
-        }
+        TaskLedgerCommand::GoalDrive(p) => runtime_infra::kernel_utils::framework_goal_drive(p),
         TaskLedgerCommand::QualityGate(p) => {
             let repo_root =
                 std::path::Path::new(p.get("repo_root").and_then(|v| v.as_str()).unwrap_or("."));

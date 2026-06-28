@@ -96,18 +96,19 @@ static RUNTIME_INIT: OnceLock<()> = OnceLock::new();
 
 /// Combined orchestrator handler: background control operations → framework-extra,
 /// team/agent/worker/session operations → session-supervisor.
-fn combined_orchestrator_handler(payload: serde_json::Value) -> Result<serde_json::Value, core_errors::FrameworkError> {
+fn combined_orchestrator_handler(
+    payload: serde_json::Value,
+) -> Result<serde_json::Value, core_errors::FrameworkError> {
     let operation = payload.get("operation").and_then(serde_json::Value::as_str);
     match operation {
-        Some("batch-plan" | "enqueue" | "interrupt" | "claim" | "complete"
-            | "completion-race" | "retry-claim" | "interrupt-finalize"
-            | "retry" | "session-release") => {
-            framework_extra::orchestration_controller::handle_orchestrator_operation(payload)
-        }
-        Some(_) => {
-            session_supervisor::handle_session_supervisor_operation(payload)
-        }
-        None => Err(core_errors::FrameworkError::validation("orchestrator: missing 'operation' field")),
+        Some(
+            "batch-plan" | "enqueue" | "interrupt" | "claim" | "complete" | "completion-race"
+            | "retry-claim" | "interrupt-finalize" | "retry" | "session-release",
+        ) => framework_extra::orchestration_controller::handle_orchestrator_operation(payload),
+        Some(_) => session_supervisor::handle_session_supervisor_operation(payload),
+        None => Err(core_errors::FrameworkError::validation(
+            "orchestrator: missing 'operation' field",
+        )),
     }
 }
 

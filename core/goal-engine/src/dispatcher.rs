@@ -304,7 +304,11 @@ fn resolve_cached_git_diff(repo_root: &Path) -> Vec<String> {
             .collect(),
         _ => Vec::new(),
     };
-    *guard = Some((std::time::Instant::now(), repo_root.to_path_buf(), changes.clone()));
+    *guard = Some((
+        std::time::Instant::now(),
+        repo_root.to_path_buf(),
+        changes.clone(),
+    ));
     changes
 }
 

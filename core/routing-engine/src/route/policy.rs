@@ -21,7 +21,7 @@ pub fn build_route_diff_report(
         _ => {
             return Err(FrameworkError::Unsupported {
                 what: format!("unsupported route report mode: {mode}"),
-            })
+            });
         }
     };
     let (verified_contract_fields, contract_mismatch_fields) =
@@ -153,13 +153,12 @@ pub fn build_route_policy(mode: &str) -> Result<RouteExecutionPolicyPayload, Fra
         _ => {
             return Err(FrameworkError::Unsupported {
                 what: format!("unsupported route policy mode: {mode}"),
-            })
+            });
         }
     };
     if policy.diagnostic_report_required && policy.diagnostic_route_mode == "none" {
         return Err(FrameworkError::Validation {
-            message: "route policy declared diagnostics outside the diagnostic route mode"
-                .into(),
+            message: "route policy declared diagnostics outside the diagnostic route mode".into(),
         });
     }
     if policy.strict_verification_required && !policy.diagnostic_report_required {
