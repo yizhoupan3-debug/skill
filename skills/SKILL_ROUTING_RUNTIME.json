@@ -59,7 +59,11 @@
         "behavior:hot_retry_eligible"
       ],
       "Decide local vs orchestrated execution for multi-agent workflows",
-      null,
+      [
+        "agent",
+        "team",
+        "orchestration"
+      ],
       null,
       null,
       {
@@ -126,7 +130,14 @@
       "skill",
       [],
       "Research workspace CLI — claims, hypotheses, runs, logs, barrier escalation",
-      null,
+      [
+        "research",
+        "workspace",
+        "claims",
+        "hypotheses",
+        "logs",
+        "barrier"
+      ],
       null,
       null,
       {
@@ -185,7 +196,14 @@
       "skill",
       [],
       "Verify and format academic citations",
-      null,
+      [
+        "citation",
+        "bibliography",
+        "bibtex",
+        "reference",
+        "doi",
+        "academic"
+      ],
       null,
       null,
       {
@@ -250,7 +268,13 @@
         "behavior:code_review_deep_overlay"
       ],
       "Adversarial code review with severity-sorted findings",
-      null,
+      [
+        "code-review",
+        "security",
+        "correctness",
+        "delegation",
+        "adversarial-review"
+      ],
       null,
       null,
       {
@@ -315,7 +339,13 @@
       "skill",
       [],
       "Deep research harness — web-first multi-source fact-checked report",
-      null,
+      [
+        "research",
+        "harness",
+        "web",
+        "fact-check",
+        "multi-source"
+      ],
       null,
       null,
       {
@@ -371,7 +401,12 @@
         "behavior:low_score_override:20.0"
       ],
       "Evidence-first requirement clarification and convergence review",
-      null,
+      [
+        "deepinterview",
+        "review",
+        "alias",
+        "convergence"
+      ],
       null,
       null,
       {
@@ -434,7 +469,13 @@
         "behavior:design_md_scored"
       ],
       "Manage design-system contracts and visual tokens",
-      null,
+      [
+        "design-system",
+        "design-md",
+        "design-tokens",
+        "ui-design",
+        "acceptance"
+      ],
       null,
       null,
       {
@@ -490,7 +531,13 @@
         "behavior:hot_retry_eligible"
       ],
       "Handle Word .docx creation, edits, and review",
-      null,
+      [
+        "docx",
+        "word",
+        "rust",
+        "pagination",
+        "document-layout"
+      ],
       null,
       null,
       {
@@ -556,7 +603,14 @@
       "skill",
       [],
       "Manage research experiment reproducibility end-to-end",
-      null,
+      [
+        "reproducibility",
+        "experiment-tracking",
+        "environment",
+        "seed",
+        "data-versioning",
+        "mlops"
+      ],
       null,
       null,
       {
@@ -611,7 +665,14 @@
       "skill",
       [],
       "CAS identity, SMT consistency, witness validation, dimensional analysis",
-      null,
+      [
+        "math",
+        "formal",
+        "verification",
+        "CAS",
+        "SMT",
+        "research"
+      ],
       null,
       null,
       {
@@ -672,7 +733,13 @@
         "behavior:ci_gate_fuzzy_rescue_excluded"
       ],
       "Address comments in a GitHub PR review",
-      null,
+      [
+        "github",
+        "pull-request",
+        "review-comments",
+        "gh-cli",
+        "code-review"
+      ],
       null,
       null,
       {
@@ -746,7 +813,13 @@
         "behavior:nl_exempt_framework_alias"
       ],
       "Triage and fix failing GitHub Actions PR checks",
-      null,
+      [
+        "github",
+        "ci",
+        "github-actions",
+        "gh-cli",
+        "pull-request"
+      ],
       null,
       null,
       {
@@ -809,7 +882,14 @@
       "framework_command",
       [],
       "Run the Git closeout workflow with deep review on the substantive diff before commit/merge (no default push).",
-      null,
+      [
+        "git",
+        "git-closeout",
+        "review",
+        "commit",
+        "worktree",
+        "push"
+      ],
       null,
       null,
       {
@@ -863,7 +943,12 @@
       "skill",
       [],
       "Verify DOI reachability, citation-claim alignment, contradiction sweep",
-      null,
+      [
+        "literature",
+        "citation",
+        "verification",
+        "research"
+      ],
       null,
       null,
       {
@@ -919,7 +1004,23 @@
       "skill",
       [],
       "Rigorous mathematical derivations and theorem proofs",
-      null,
+      [
+        "mathematics",
+        "proof",
+        "derivation",
+        "theorem",
+        "LaTeX",
+        "formal-reasoning",
+        "inequality",
+        "ODE",
+        "PDE",
+        "convergence",
+        "asymptotic",
+        "order of magnitude",
+        "≲",
+        "≪",
+        "≍"
+      ],
       null,
       null,
       {
@@ -977,7 +1078,13 @@
       "skill",
       [],
       "创建、配置、调试和注册 MCP server",
-      null,
+      [
+        "mcp",
+        "mcp-server",
+        "tool-integration",
+        "fastmcp",
+        "model-context-protocol"
+      ],
       null,
       null,
       {
@@ -1066,7 +1173,15 @@
         "behavior:nl_exempt_framework_alias"
       ],
       "论文全流程：审稿、返修、rebuttal、写作、投稿",
-      null,
+      [
+        "paper",
+        "manuscript",
+        "review",
+        "revise",
+        "submission",
+        "orchestrator",
+        "top-tier"
+      ],
       null,
       null,
       {
@@ -1128,7 +1243,13 @@
         "behavior:hot_retry_eligible"
       ],
       "Handle PDF reading, editing, repair, and review",
-      null,
+      [
+        "pdf",
+        "rendering",
+        "layout",
+        "typography",
+        "reportlab"
+      ],
       null,
       null,
       {
@@ -1186,7 +1307,11 @@
       "skill",
       [],
       "Plan 门控：证据先行、可验收 todo、计划 vs 实际收口",
-      null,
+      [
+        "plan",
+        "gate",
+        "closeout"
+      ],
       null,
       null,
       {
@@ -1237,7 +1362,13 @@
       "skill",
       [],
       "Verify terminology, style guide, claim drift, and language register",
-      null,
+      [
+        "prose",
+        "writing",
+        "verification",
+        "style",
+        "research"
+      ],
       null,
       null,
       {
@@ -1294,7 +1425,15 @@
       "skill",
       [],
       "macOS Python governance with uv-only packaging",
-      null,
+      [
+        "python",
+        "uv",
+        "packaging",
+        "macos",
+        "path",
+        "venv",
+        "reproducibility"
+      ],
       null,
       null,
       {
@@ -1346,7 +1485,12 @@
       "skill",
       [],
       "Verify experiment reproducibility: seed, determinism, environment",
-      null,
+      [
+        "reproducibility",
+        "verification",
+        "environment",
+        "research"
+      ],
       null,
       null,
       {
@@ -1412,7 +1556,13 @@
       "skill",
       [],
       "Research discovery, literature survey, and theory-background router",
-      null,
+      [
+        "research",
+        "literature-research",
+        "discovery",
+        "survey",
+        "theory-background"
+      ],
       null,
       null,
       {
@@ -1477,7 +1627,14 @@
       "skill",
       [],
       "Research execution lanes — experiment design, math, code, reproducibility",
-      null,
+      [
+        "research",
+        "experiment-design",
+        "math",
+        "modeling",
+        "reproducibility",
+        "execution"
+      ],
       null,
       null,
       {
@@ -1544,7 +1701,13 @@
       "skill",
       [],
       "Research Knowledge Graph — navigate, visualize, trace connections",
-      null,
+      [
+        "research",
+        "knowledge-graph",
+        "graph",
+        "entities",
+        "hub"
+      ],
       null,
       null,
       {
@@ -1601,7 +1764,13 @@
         "behavior:hot_retry_eligible"
       ],
       "Inspect Sentry production errors and triage issues",
-      null,
+      [
+        "sentry",
+        "production-errors",
+        "triage",
+        "error-monitoring",
+        "incident-debugging"
+      ],
       null,
       [
         "production",
@@ -1662,7 +1831,13 @@
       "skill",
       [],
       "Three-dimension parallel code simplification (reuse/quality/efficiency)",
-      null,
+      [
+        "code-quality",
+        "simplification",
+        "refactoring",
+        "quality-gate",
+        "parallel-agents"
+      ],
       null,
       null,
       {
@@ -1729,7 +1904,15 @@
         "behavior:gate_exception_framework_dev"
       ],
       "Tune cross-host skill routing and framework behavior",
-      null,
+      [
+        "multi-host",
+        "host-agnostic",
+        "skill-authoring",
+        "routing",
+        "trigger-debugging",
+        "skill-splitting",
+        "first-turn-routing"
+      ],
       null,
       null,
       {
@@ -1793,7 +1976,13 @@
         "behavior:systematic_debugging_high_threshold"
       ],
       "Investigate unknown failures before fixing",
-      null,
+      [
+        "debugging",
+        "root-cause-analysis",
+        "reproduction",
+        "hypothesis-testing",
+        "incident-triage"
+      ],
       null,
       null,
       {
@@ -1851,7 +2040,15 @@
         "artifact_exception:source_slide_formats"
       ],
       "Create and edit PPT, PPTX, and slide deck presentations",
-      null,
+      [
+        "powerpoint",
+        "ppt",
+        "pptx",
+        "slides",
+        "presentation",
+        "rust-ppt",
+        "proxy"
+      ],
       null,
       null,
       {
@@ -1969,7 +2166,14 @@
       "skill",
       [],
       "Guide research statistics: test choice, effect sizes, interpretation",
-      null,
+      [
+        "statistics",
+        "hypothesis-testing",
+        "effect-size",
+        "bayesian",
+        "regression",
+        "research"
+      ],
       null,
       [
         "write code",
@@ -2027,7 +2231,12 @@
       "skill",
       [],
       "Verify statistical results: p-values, GRIM, effect sizes",
-      null,
+      [
+        "statistics",
+        "verification",
+        "audit",
+        "research"
+      ],
       null,
       null,
       {
@@ -2077,7 +2286,13 @@
       "skill",
       [],
       "Verify LaTeX compilation, cross-references, and format compliance",
-      null,
+      [
+        "structure",
+        "verification",
+        "LaTeX",
+        "format",
+        "research"
+      ],
       null,
       null,
       {
@@ -2139,7 +2354,13 @@
       "skill",
       [],
       "Convert AI/raster drafts into paper-ready TikZ standalone figures",
-      null,
+      [
+        "tikz",
+        "latex",
+        "standalone",
+        "paper-figure",
+        "figure-conversion"
+      ],
       null,
       null,
       {
@@ -2196,7 +2417,15 @@
       "framework_command",
       [],
       "Refresh key docs, git tracking, and stale/dead repo surfaces; framework checks when applicable.",
-      null,
+      [
+        "maintenance",
+        "docs",
+        "research-docs",
+        "git-tracking",
+        "cleanup",
+        "contracts",
+        "router-rs"
+      ],
       null,
       null,
       {
@@ -2259,7 +2488,15 @@
         "behavior:gate_exception_visual_debugging"
       ],
       "Review screenshots and rendered visuals",
-      null,
+      [
+        "visual",
+        "review",
+        "screenshot",
+        "screenshot-ui",
+        "chart",
+        "accessibility",
+        "evidence"
+      ],
       null,
       null,
       {
@@ -2316,7 +2553,12 @@
       "framework_command",
       [],
       "Guaranteed entry point for Goal management lifecycle",
-      null,
+      [
+        "goal",
+        "goalx",
+        "goal-management",
+        "framework-command"
+      ],
       null,
       null,
       {
@@ -2366,17 +2608,17 @@
         "core"
       ],
       {
+        "category": "framework",
         "platforms": [
           "supported"
         ],
-        "version": "1.0.0",
         "tags": [
           "runtime",
           "kernel",
           "framework",
           "core"
         ],
-        "category": "framework"
+        "version": "1.0.0"
       },
       "medium",
       [

@@ -4,9 +4,16 @@
 //! `impl GateChecker` as an adapter. This module coordinates registration
 //! into the shared `CheckerRegistry`.
 //!
-//! ## Available checkers
-//! - `evidence_checker`: validates that task evidence exists
-//! - (Wave 4b+) ProseQC, LogicAndEvidence, LiteracyChecker, etc.
+//! ## Scene → Checker 链
+//! - `general`     → AdversarialChecker
+//! - `research`    → AdversarialChecker（基础兜底）；专业 checker（LogicAndEvidence,
+//!                   ProseQC, Statistical, Literature, Structure 等 11 个）
+//!                   从 `research-harness` 通过 extern 注册
+//! - `code_review` → CorrectnessChecker + SecurityChecker
+//! - `slides`      → OverflowChecker
+//! - `visual`      → ScreenshotLayoutChecker
+//!
+//! Note: EvidenceChecker 不在 Stage 2 注册——Stage 1 反欺诈门已做证据完整性验证。
 //!
 //! ## RESEARCH scene checkers
 //! Research verification checkers are registered via the extern mechanism
@@ -60,16 +67,14 @@ fn find_rust_files_recursive(dir: &Path, files: &mut Vec<std::path::PathBuf>) {
 /// Register all in-place checkers into the registry.
 /// Called once at startup from `runtime_core::init_quality_gate()`.
 pub(crate) fn register_checkers(registry: &mut quality_gate::CheckerRegistry) {
-    // EvidenceChecker is registered under all scenes it declares via scenes()
-    // (GENERAL, CODE_REVIEW, RESEARCH) so it runs for every scene evaluation.
-    registry.register(scene::GENERAL, Box::new(evidence_checker::EvidenceChecker));
-    registry.register(
-        scene::CODE_REVIEW,
-        Box::new(evidence_checker::EvidenceChecker),
-    );
-    registry.register(scene::RESEARCH, Box::new(evidence_checker::EvidenceChecker));
+    // Note: EvidenceChecker 不在 Stage 2 注册——Stage 1 反欺诈门（qg_entry::trigger()）
+    // 已做证据完整性验证，Stage 2 重复检查无新增价值。
     registry.register(
         scene::GENERAL,
+        Box::new(adversarial_checker::AdversarialChecker),
+    );
+    registry.register(
+        scene::RESEARCH,
         Box::new(adversarial_checker::AdversarialChecker),
     );
     registry.register(

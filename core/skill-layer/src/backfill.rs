@@ -6,10 +6,10 @@
 //! preserved (backfill is null-only).
 //!
 //! Columns that can be backfilled from SKILL.md frontmatter:
-//!   short_description, metadata, risk, allowed_tools,
+//!   short_description, metadata, tags, risk, allowed_tools,
 //!   runtime_requirements, network_access, approval_required_tools
 //!
-//! Columns NOT backfilled (no frontmatter source): tags, when_to_use, do_not_use
+//! Columns NOT backfilled (no frontmatter source): when_to_use, do_not_use
 
 use crate::frontmatter::RecordKind;
 use crate::frontmatter_parser;
@@ -44,6 +44,7 @@ pub struct BackfillReport {
 const BACKFILLABLE_FIELDS: &[(&str, &str)] = &[
     ("short_description", "short_description"),
     ("metadata", "metadata"),
+    ("tags", "tags"),
     ("risk", "risk"),
     ("allowed_tools", "allowed_tools"),
     ("runtime_requirements", "runtime_requirements"),
@@ -74,6 +75,12 @@ fn frontmatter_field_to_value(
             .as_ref()
             .map(|v| Value::String(v.clone())),
         "metadata" => fm.metadata.clone(),
+        "tags" => fm
+            .metadata
+            .as_ref()
+            .and_then(|m| m.get("tags"))
+            .filter(|v| v.is_array())
+            .map(|v| v.clone()),
         "risk" => fm.risk.as_ref().map(|v| Value::String(v.clone())),
         "allowed_tools" => fm
             .allowed_tools

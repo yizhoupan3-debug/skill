@@ -246,12 +246,9 @@ pub(super) fn dispatch_tool(
     let registry = REGISTRY.get_or_init(|| {
         let mut r = CompositeRegistry::new();
         r.register(RoutingTools);
-        r.register(GoalTools);
-        r.register(CloseoutTools);
-        r.register(FrameworkTools);
+        r.register(RoutingTools);
         r.register(ToolDomainTools);
         r.register(TaskCrudTools);
-        r.register(OrchestratorTools);
         r
     });
 
@@ -903,25 +900,7 @@ fn map_tool_to_cli_args(tool_name: &str, args: &Value) -> Result<Vec<String>, Fr
             }
             Ok(cmd)
         }
-        "research_aigc_check" => {
-            let text = args
-                .get("text")
-                .and_then(Value::as_str)
-                .ok_or_else(|| FrameworkError::from("Missing required argument: text".to_string()))?;
-            let text = validate_cli_arg(text, MAX_ARG_LEN)?;
-            let mut cmd = vec![
-                "research".to_string(),
-                "aigc-check".to_string(),
-                "--text".to_string(),
-                text,
-            ];
-            if let Some(lang) = args.get("language").and_then(Value::as_str) {
-                let lang = validate_cli_arg(lang, MAX_ARG_LEN)?;
-                cmd.push("--language".to_string());
-                cmd.push(lang);
-            }
-            Ok(cmd)
-        }
+
         "research_smoke" => {
             let mut cmd = vec!["research".to_string(), "smoke".to_string()];
             if let Some(source) = args.get("source").and_then(Value::as_str) {

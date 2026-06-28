@@ -54,7 +54,7 @@ pub fn init_qg_route() {
 /// Returns an aggregated `GateVerdict`. Returns a blocked verdict with
 /// reason "QG Route not initialized" if `init_qg_route()` has not been called,
 /// preventing silent fail-open behavior.
-pub(crate) fn evaluate_qg_route(scene: &str, ctx: &CheckContext) -> GateVerdict {
+pub fn evaluate_qg_route(scene: &str, ctx: &CheckContext) -> GateVerdict {
     match QG_ROUTE.get() {
         Some(registry) => registry.evaluate(scene, ctx),
         None => {

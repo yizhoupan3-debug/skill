@@ -5,7 +5,6 @@
 //! Higher layers (runtime-infra, router-rs) delegate via thin wrappers.
 
 pub mod backfill;
-pub mod columnar;
 pub mod constants;
 pub mod discovery;
 pub mod frontmatter;

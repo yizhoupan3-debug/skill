@@ -3,7 +3,6 @@
 //! This is the skill layer's own validation infrastructure. All skill-specific
 //! logic lives here; runtime-infra delegates via thin wrappers.
 
-use crate::columnar;
 use crate::discovery;
 use crate::frontmatter::{RecordKind, RoutingGate, RoutingOwner};
 use crate::frontmatter_parser;
@@ -96,7 +95,19 @@ pub fn validate_all(repo_root: &Path) -> Result<ValidationReport, FrameworkError
     // 4. Disk slug discovery + cross-reference
     let disk_slugs = discovery::discover_skill_md_slugs(&skills_root)?;
     let disk_set: HashSet<&String> = disk_slugs.iter().collect();
-    let runtime_slugs: HashSet<String> = columnar::extract_slugs(&runtime).into_iter().collect();
+    let runtime_slugs: HashSet<String> = runtime["skills"]
+        .as_array()
+        .map(|rows| {
+            let key_names: Vec<String> = runtime["keys"]
+                .as_array()
+                .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+                .unwrap_or_default();
+            let slug_idx = key_names.iter().position(|k| k == "slug");
+            rows.iter()
+                .filter_map(|row| slug_idx.and_then(|i| row.get(i)).and_then(|v| v.as_str()).map(String::from))
+                .collect()
+        })
+        .unwrap_or_default();
 
     // 4. Frontmatter schema validation
     const MAX_SKILL_MD_SIZE: u64 = 10 * 1024 * 1024; // 10 MiB
@@ -230,7 +241,7 @@ fn collect_missing_skill_paths(
                 .collect()
         })
         .unwrap_or_default();
-    let path_idx = crate::columnar::key_index(&keys, "skill_path");
+    let path_idx = keys.iter().position(|k| k == "skill_path");
 
     for row in rows {
         let rel = path_idx.and_then(|i| row.get(i)).and_then(|v| v.as_str());

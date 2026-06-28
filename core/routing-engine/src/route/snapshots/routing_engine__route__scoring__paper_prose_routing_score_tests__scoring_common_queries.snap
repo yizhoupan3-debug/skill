@@ -41,10 +41,9 @@ expression: results
       {
         "reasons": [
           "Routing gate matched: bug.",
-          "ngram_similarity:0.4",
-          "Session-start required boost applied (+8)."
+          "ngram_similarity:0.4"
         ],
-        "score": 31.398883142100807,
+        "score": 23.398883142100807,
         "slug": "systematic-debugging"
       },
       {
@@ -130,6 +129,15 @@ expression: results
     "top3": [
       {
         "reasons": [
+          "ngram_similarity:0.6",
+          "Description keywords matched: audit.",
+          "Skill alias hints matched: audit."
+        ],
+        "score": 19.614309449638355,
+        "slug": "statistical-verification"
+      },
+      {
+        "reasons": [
           "ngram_similarity:0.5",
           "Session-start required boost applied (+8)."
         ],
@@ -143,14 +151,6 @@ expression: results
         ],
         "score": 13.464372803808859,
         "slug": "agent-swarm-orchestration"
-      },
-      {
-        "reasons": [
-          "ngram_similarity:0.4",
-          "Session-start required boost applied (+8)."
-        ],
-        "score": 13.386483727255415,
-        "slug": "systematic-debugging"
       }
     ]
   }
