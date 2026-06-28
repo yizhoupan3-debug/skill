@@ -137,7 +137,7 @@ Then: preamble (Scope / Lenses / Omitted), verdict, findings grouped by lens, te
 
 ### Spawn-first pairing
 
-For broad/deep/PR-level review, LLM 根据 scope 自行决定串行或并行 spawn reviewer lane（`fork_context=false`, lane in `reviewer_lanes`; Cursor 可选 `Task` + `subagent_type=deep-reviewer`）。Explore lanes **do not count** as review evidence。跨 domain 的宽范围时优先并行减少延迟，同区域多透镜需避免冲突时串行。LLM 自主权衡。
+For broad/deep/PR-level review, LLM 根据 scope 自行决定串行或并行 spawn reviewer lane（`fork_context=false`, lane in `reviewer_lanes`）。Explore lanes **do not count** as review evidence。跨 domain 的宽范围时优先并行减少延迟，同区域多透镜需避免冲突时串行。LLM 自主权衡。
 
 **Narrow scope** (single-file, `small_task`, or explicit「不用子代理」): no multi-lane requirement; hosts skip arming `review_required`.
 

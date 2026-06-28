@@ -231,6 +231,14 @@ pub struct LoopRegistryEntry {
     /// Only meaningful for loops that use the RFV loop protocol.
     #[serde(default)]
     pub verify_rfv_convergence: Option<bool>,
+    /// When true, the runner fires the two-stage quality gate (anti-fraud + checker chain)
+    /// during the Verifying phase. If the QG gate blocks, the aggregate is downgraded to "fail".
+    #[serde(default)]
+    pub verify_quality_gate: Option<bool>,
+    /// When true, the runner fires the closeout gate readiness check during the Verifying phase.
+    /// Results are advisory (no blocking).
+    #[serde(default)]
+    pub verify_closeout_gate: Option<bool>,
     /// Pre-defined static action list. When present, the runner uses these actions
     /// directly instead of spawning a subagent for discovery.
     #[serde(default)]

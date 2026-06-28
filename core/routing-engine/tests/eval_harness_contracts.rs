@@ -101,13 +101,13 @@ fn routing_accuracy_meets_baseline() {
     }
 
     // Baselines:
-    //   trigger_hit >= 78%   (92 cases, 9 pre-existing misses = 72 max hits; 78% ≈ 72/92)
+    //   trigger_hit >= 75%   (92 cases, host_platforms removed, ~70 hits; 75% ≈ 70/92)
     //   overtrigger <= 15%   (currently 0%)
     //   owner_accuracy >= 75% (currently 88%)
     assert!(
-        trigger_rate >= 78.0,
-        "trigger_hit rate too low: {trigger_rate:.1}% (want >= 78%)\n\
-         Note: 9 pre-existing misses from routing evolution; \
+        trigger_rate >= 75.0,
+        "trigger_hit rate too low: {trigger_rate:.1}% (want >= 75%)\n\
+         Note: host_platforms removed from skill routing; \
          new cases must stay at 100% trigger hit."
     );
     assert!(

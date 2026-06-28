@@ -82,7 +82,7 @@ trigger_hints:
 2. **回归向量**：对本仓库与改动面相称的 **`cargo test` / `clippy` / `pytest` / `npm test` 等按需跑最小充分组合**；若 touch 契约与文档策略，补上或确认已有 **`cargo test policy_contracts`（或等价 `policy_contracts` 门禁）** 等既定策略测试通过。
 3. **风险收口**：策略/契约、hook、路由、skill 等跨界改动，核对是否与 `AGENTS.md` / runtime 真源冲突；有怀疑处先 **fix** 再提交，不把「待定风险」带进 push。
 4. **验证记录**：收口说明里要带 **通过的命令摘要**（或明确 blocker）；避免「未跑测试却声称完成」。
-5. **并行审阅**：在 Cursor 上若拆 reviewer lane，约定输出为 **可操作性发现项**（问题位置 + 建议修复方向），由收口执行面合并决策与落地修改（见上文 **并行 reviewer lane**）。
+5. **并行审阅**：若拆 reviewer lane，约定输出为 **可操作性发现项**（问题位置 + 建议修复方向），由收口执行面合并决策与落地修改（见上文 **并行 reviewer lane**）。
 
 ### 对用户可见的深度审结论（对齐 code-review-deep compact）
 

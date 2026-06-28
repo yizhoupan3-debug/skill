@@ -243,6 +243,115 @@ pub fn closeout_gate_evaluate(
     Ok(serde_json::to_string(&json!({"result": formatted})).map_err(|e| e.to_string())?)
 }
 
+/// Hook-compatible closeout gate evaluation wrapper.
+///
+/// Parses a Value payload, calls `closeout_gate_evaluate()`, returns structured
+/// Value with passed/findings/result. Registered as `evaluate_closeout_gate`
+/// in RuntimeCoreHooks.
+///
+/// Payload: { repo_root: String, task_id: String, host_id: String }
+/// Returns: { passed: bool, findings: Vec<String>, result: String }
+pub fn evaluate_closeout_gate_hook(
+    payload: serde_json::Value,
+) -> Result<serde_json::Value, core_errors::FrameworkError> {
+    use std::path::Path;
+
+    let repo_root_str = payload
+        .get("repo_root")
+        .and_then(|v| v.as_str())
+        .unwrap_or(".");
+    let repo_root = Path::new(repo_root_str);
+    let host_id = payload.get("host_id").and_then(|v| v.as_str()).unwrap_or("unknown");
+    let task_id = payload.get("task_id").and_then(|v| v.as_str());
+    let task_view = core_state::task_state::resolve_task_view(repo_root, task_id);
+
+    let mut findings: Vec<String> = Vec::new();
+
+    if let Some(rationale) =
+        framework_kernel::runtime_registry::harness_capability_exception_rationale(
+            repo_root,
+            host_id,
+            "closeout_evidence_hooks",
+        )
+    {
+        findings.push(format!("harness: closeout_evidence_hooks — {rationale}"));
+    }
+    if let Some(rationale) =
+        framework_kernel::runtime_registry::harness_capability_exception_rationale(
+            repo_root,
+            host_id,
+            "review_gate_router_observation",
+        )
+    {
+        findings.push(format!("harness: review_gate_router_observation — {rationale}"));
+    }
+
+    findings.push(format!(
+        "review_gate: {host_id} has no hook REVIEW_GATE — reviewer evidence is honor-system / self-attested"
+    ));
+
+    let goal_present = task_view.goal_state.is_some();
+    if !goal_present {
+        findings.push("goal_state: no GOAL_STATE.json".to_string());
+    } else {
+        findings.push("goal_state: present".to_string());
+    }
+
+    let evidence_success = task_view
+        .evidence
+        .as_ref()
+        .map(|e| e.has_successful_verification)
+        .unwrap_or(false);
+    let tid = task_view.task_id.as_deref().unwrap_or("");
+
+    if !evidence_success {
+        findings.push("evidence: no successful EVIDENCE_INDEX records".to_string());
+    } else {
+        findings.push("evidence: successful records present".to_string());
+        if !tid.is_empty()
+            && core_state::state_manager::task_evidence_success_only_self_attested(
+                repo_root, tid,
+            )
+        {
+            findings.push(
+                "WARN: evidence: only self-attested MCP record_evidence rows — verify independently"
+                    .to_string(),
+            );
+        }
+    }
+
+    let summary_path = repo_root
+        .join("artifacts")
+        .join("current")
+        .join(if tid.is_empty() { "" } else { tid })
+        .join("SESSION_SUMMARY.md");
+    let has_summary = summary_path.is_file();
+    if !has_summary {
+        findings.push(format!(
+            "checkpoint: missing SESSION_SUMMARY at {}",
+            summary_path.display()
+        ));
+    } else {
+        findings.push("checkpoint: SESSION_SUMMARY.md on disk".to_string());
+    }
+
+    let all_clear = goal_present && evidence_success && has_summary;
+    let passed = all_clear;
+
+    let verdict_label = if all_clear {
+        "PASS: all closeout gates satisfied"
+    } else {
+        "ADVISORY: closeout gates not satisfied"
+    };
+
+    let result = format!("[Closeout Gate] {verdict_label}");
+    Ok(serde_json::json!({
+        "passed": passed,
+        "result": result,
+        "findings": findings,
+    }))
+}
+
 /// Minimal check: does the goal mention review-related work?
 fn check_goal_suggests_review(goal_state: &Value) -> bool {
     let goal_text = goal_state.get("goal").and_then(Value::as_str).unwrap_or("");

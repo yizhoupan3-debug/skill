@@ -319,6 +319,8 @@ pub fn init_hooks() {
                     .map(|v| v.to_string())
             },
             ensure_kernel_bootstrap: kernel_bootstrap::ensure_kernel_bootstrap,
+            evaluate_quality_gate: crate::qg_entry::evaluate_quality_gate_hook,
+            evaluate_closeout_gate: crate::framework_runtime::tool_handlers::closeout_handler::evaluate_closeout_gate_hook,
         });
 
         // 4. QG Route: scene-dispatched CheckerRegistry

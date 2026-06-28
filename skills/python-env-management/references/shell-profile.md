@@ -7,7 +7,7 @@ Applies to **login + interactive** shells. Goal: **uv-only Python resolution**, 
 | File | When loaded | Typical risk |
 |------|-------------|--------------|
 | `~/.zprofile` | login shells | python.org `Python.framework` prepended here |
-| `~/.zshrc` | **every interactive terminal** (Cursor, Ghostty, iTerm) | `export PATH="$HOME/Library/Python/3.11/bin:..."` prepended **after** login |
+| `~/.zshrc` | **every interactive terminal**  | `export PATH="$HOME/Library/Python/3.11/bin:..."` prepended **after** login |
 
 Fixing only `.zprofile` leaves interactive terminals on legacy `Library/Python` or framework `python3`.
 

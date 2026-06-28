@@ -33,7 +33,6 @@ pub const RUNTIME_REGISTRY_PATH: &str = "configs/framework/RUNTIME_REGISTRY.json
 pub const DEFAULT_MANAGED_MCP_SERVER_IDS: &[&str] = &[
     "router-rs-framework",
     "browser-mcp",
-    "mcp-codegraph",
     "paperplain",
 ];
 
@@ -252,26 +251,6 @@ mod tests {
             "claude-desktop"
         );
         assert_eq!(registry_projection_host_key("claude"), "claude");
-    }
-
-    #[test]
-    fn managed_mcp_tool_semantic_dispatch_resolves_codegraph_tools() {
-        let registry = json!({
-            "managed_mcp_servers": {
-                "mcp-codegraph": {
-                    "tools": ["codegraph_search", "codegraph_status"]
-                }
-            }
-        });
-        assert_eq!(
-            managed_mcp_server_for_tool(&registry, "codegraph_search").as_deref(),
-            Some("mcp-codegraph")
-        );
-        assert!(resolves_managed_mcp_tool(
-            &registry,
-            "mcp__mcp-codegraph__codegraph_status"
-        ));
-        assert!(!resolves_managed_mcp_tool(&registry, "grep"));
     }
 }
 

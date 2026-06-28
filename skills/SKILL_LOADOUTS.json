@@ -19,7 +19,6 @@
         "statistical-analysis",
         "experiment-reproducibility",
         "math-derivation",
-        "scientific-figure-plotting",
         "deep-research",
         "pdf",
         "plan-mode",
@@ -80,15 +79,12 @@
       "description": "Design and content creation: diagrams, infographics, slides, docx, pdf, visual review, design system.",
       "tier_activation": "explicit_opt_in",
       "skill_slugs": [
-        "diagramming",
-        "infographic",
         "slides",
         "doc",
         "pdf",
         "design-md",
         "visual-review",
-        "tikz-paper-figure",
-        "scientific-figure-plotting"
+        "tikz-paper-figure"
       ]
     },
     "general_dev_loadout": {
@@ -99,7 +95,6 @@
         "systematic-debugging",
         "python-env-management",
         "mcp-server-management",
-        "email-template",
         "spreadsheets"
       ]
     }

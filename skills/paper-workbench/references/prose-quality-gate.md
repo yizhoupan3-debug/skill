@@ -106,6 +106,6 @@ prose_qc_fixes: <none | 1-line summary of rewrites applied>
 | `$paper-workbench` intake | `language_register` + Claim card |
 | `$paper-workbench` inline revision batch | 结构改完后触句仍须 `prose_qc` |
 | L2 `PROSE_QC_LOG.md` | 每轮 append `prose_qc` 摘要（可选） |
-| L4 `PAPER_PROSE_QUALITY_HOOK` | **默认开**；提醒自动 ladder + register（`ROUTER_RS_CURSOR_PAPER_PROSE_HOOK=0` 关） |
+| L4 `PAPER_PROSE_QUALITY_HOOK` | **默认开**；提醒自动 ladder + register |
 
 契约真源：[`../../paper-workbench/references/prose-chain-contract.md`](../../paper-workbench/references/prose-chain-contract.md)。

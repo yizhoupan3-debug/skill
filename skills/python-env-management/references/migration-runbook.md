@@ -92,7 +92,7 @@ Replace README / scripts: `python` → `uv run python`.
 | Has `pyproject.toml` | `uv lock && uv sync` |
 | Only `requirements.txt` | `uv init` + `uv add -r requirements.txt` |
 | Stray `.venv` wrong path | delete `.venv`, `uv sync` |
-| Cursor agent commands | prefix `uv run` |
+| Agent shell commands | prefix `uv run` |
 
 **Inventory command** (operator):
 

@@ -80,4 +80,3 @@
 
 - `skills/plan-mode/SKILL.md` — 跨宿主通用 plan-mode 规范（主文件）。
 - [references/research-scope-and-examples.md](research-scope-and-examples.md) — 调研范围、能力联动与弱/强示例。
-- [references/cursor-createplan-contract.md](cursor-createplan-contract.md) — Cursor 宿主专属契约。

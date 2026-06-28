@@ -1,975 +1,930 @@
 {
-    "schema_version": "routing-eval-cases-v1",
-    "cases": [
-        {
-            "id": "skill-framework-developer-generic-review-case",
-            "category": "gate-vs-owner-conflict",
-            "task": "深度review现在的路由系统和 skill 边界。",
-            "focus_skill": "skill-framework-developer",
-            "expected_owner": "skill-framework-developer",
-            "expected_overlay": "code-review-deep",
-            "first_turn": true
-        },
-        {
-            "id": "skill-framework-subtraction-behavior-review",
-            "category": "gate-vs-owner-conflict",
-            "task": "减法视角和第一性原理review我的skill系统，是否已经清晰的变成行为驱动（讨论-规划-执行-验证），是否还有多余入口和不必要抽象",
-            "focus_skill": "skill-framework-developer",
-            "expected_owner": "skill-framework-developer",
-            "expected_overlay": null,
-            "forbidden_owners": [],
-            "first_turn": true
-        },
-        {
-            "id": "skill-framework-current-system-optimization-case",
-            "category": "gate-vs-owner-conflict",
-            "task": "继续核查现在的skill系统，给优化方向",
-            "focus_skill": "skill-framework-developer",
-            "expected_owner": "skill-framework-developer",
-            "expected_overlay": null,
-            "forbidden_owners": [
-                "deep-research",
-                "plan-mode"
-            ],
-            "first_turn": true
-        },
-        {
-            "id": "skill-framework-route-miss-repair-case",
-            "category": "gate-vs-owner-conflict",
-            "task": "skill 路由没触发怎么办，帮我做 miss repair 并减少 token 消耗",
-            "focus_skill": "skill-framework-developer",
-            "expected_owner": "skill-framework-developer",
-            "expected_overlay": null,
-            "forbidden_owners": [
-                "deep-research",
-                "plan-mode"
-            ],
-            "first_turn": true
-        },
-        {
-            "id": "plan-mode-cursor-plan-verifiable-todos-case",
-            "category": "should-trigger",
-            "task": "用 Cursor Plan：在策划文档闸门列出可验收 todo，按 plan revision round 迭代；对照计划与实际给我 delta；代码与测试通过后完成分支合并推送前的收口对照。",
-            "focus_skill": "plan-mode",
-            "expected_owner": "plan-mode",
-            "expected_overlay": null,
-            "first_turn": true
-        },
-        {
-            "id": "native-runtime-planning-does-not-force-skill",
-            "category": "should-not-trigger",
-            "task": "根据既定 PRD 直接实现 React 页面，不要重新做蓝图规划。",
-            "focus_skill": null,
-            "expected_owner": "none",
-            "expected_overlay": null,
-            "forbidden_owners": [],
-            "first_turn": true
-        },
-        {
-            "id": "generic-multi-agent-delegation-gate-case",
-            "category": "gate-vs-owner-conflict",
-            "task": "需要多 agent 执行，先判断是否应该拆 bounded subagent sidecar。",
-            "focus_skill": "agent-swarm-orchestration",
-            "expected_owner": "agent-swarm-orchestration",
-            "expected_overlay": null,
-            "forbidden_owners": [],
-            "first_turn": true
-        },
-        {
-            "id": "natural-language-parallel-research-delegation-case",
-            "category": "gate-vs-owner-conflict",
-            "task": "同时调研前端、后端、测试三个方向，然后汇总方案",
-            "focus_skill": "agent-swarm-orchestration",
-            "expected_owner": "agent-swarm-orchestration",
-            "expected_overlay": null,
-            "forbidden_owners": [],
-            "first_turn": true,
-            "route_context": {
-                "execution_protocol": "four_step",
-                "verification_required": true,
-                "evidence_required": true,
-                "supervisor_required": false,
-                "delegation_candidate": true,
-                "continue_safe_local_steps": false,
-                "route_reason": "delegation_gate_candidate"
-            }
-        },
-        {
-            "id": "natural-language-parallel-regression-risk-case",
-            "category": "gate-vs-owner-conflict",
-            "task": "并行检查 API、数据库和 UI 三个模块的回归风险",
-            "focus_skill": "agent-swarm-orchestration",
-            "expected_owner": "agent-swarm-orchestration",
-            "expected_overlay": null,
-            "forbidden_owners": [
-                "deep-research"
-            ],
-            "first_turn": true,
-            "route_context": {
-                "execution_protocol": "four_step",
-                "verification_required": true,
-                "evidence_required": true,
-                "supervisor_required": false,
-                "delegation_candidate": true,
-                "continue_safe_local_steps": false,
-                "route_reason": "delegation_gate_candidate"
-            }
-        },
-        {
-            "id": "natural-language-split-lanes-delegation-case",
-            "category": "gate-vs-owner-conflict",
-            "task": "请分三路并行研究这个问题：策略、实现、测试",
-            "focus_skill": "agent-swarm-orchestration",
-            "expected_owner": "agent-swarm-orchestration",
-            "expected_overlay": null,
-            "first_turn": true,
-            "route_context": {
-                "execution_protocol": "implementation",
-                "verification_required": true,
-                "evidence_required": false,
-                "supervisor_required": false,
-                "delegation_candidate": true,
-                "continue_safe_local_steps": false,
-                "route_reason": "delegation_gate_candidate"
-            }
-        },
-        {
-            "id": "disjoint-worker-write-scope-delegation-gate-case",
-            "category": "gate-vs-owner-conflict",
-            "task": "use parallel workers to implement disjoint files with lane-local write scopes",
-            "focus_skill": "agent-swarm-orchestration",
-            "expected_owner": "agent-swarm-orchestration",
-            "expected_overlay": null,
-            "forbidden_owners": [],
-            "first_turn": true
-        },
-        {
-            "id": "broad-architecture-review-delegation-gate-case",
-            "category": "gate-vs-owner-conflict",
-            "task": "全面 review 这套架构，先给我结构层面的判断。",
-            "focus_skill": "agent-swarm-orchestration",
-            "expected_owner": "agent-swarm-orchestration",
-            "expected_overlay": null,
-            "forbidden_owners": [
-                "plan-mode",
-                "deep-research"
-            ],
-            "first_turn": true
-        },
-        {
-            "id": "design-md-brand-routing-case",
-            "category": "should-trigger",
-            "task": "先别直接开始改页面，先帮我把这个产品做得像 Linear 一样，给我参考源、verified tokens 和可借的组件气质。",
-            "focus_skill": "design-md",
-            "expected_owner": "design-md",
-            "expected_overlay": null,
-            "forbidden_owners": [
-                "visual-review"
-            ],
-            "first_turn": true
-        },
-        {
-            "id": "design-md-mixed-source-case",
-            "category": "wrong-owner-near-miss",
-            "task": "我想要 Stripe 的品牌 token，再混一点 liquid glass motion，先给我参考源和取舍，不要直接开始改页面。",
-            "focus_skill": "design-md",
-            "expected_owner": "design-md",
-            "expected_overlay": null,
-            "forbidden_owners": [],
-            "first_turn": true
-        },
-        {
-            "id": "screenshot-review-reroute-case",
-            "category": "gate-vs-owner-conflict",
-            "task": "基于这张界面图做 UI 重叠、层级和可读性审查，直接告诉我哪里有视觉问题。",
-            "focus_skill": "visual-review",
-            "expected_owner": "visual-review",
-            "expected_overlay": null,
-            "forbidden_owners": [],
-            "first_turn": true
-        },
-        {
-            "id": "design-md-ui-contract-before-implementation",
-            "category": "gate-vs-owner-conflict",
-            "task": "做一个有统一视觉身份的 landing page，不要 AI 味，先沉淀 UI 设计规范和 design tokens。",
-            "focus_skill": "design-md",
-            "expected_owner": "design-md",
-            "expected_overlay": null,
-            "forbidden_owners": [
-                "visual-review"
-            ],
-            "first_turn": true
-        },
-        {
-            "id": "design-md-ppt-contract-before-slides",
-            "category": "gate-vs-artifact-gate-conflict",
-            "task": "做一个高级感品牌 PPT，先统一设计规范、视觉身份、主题 token 和图表配色，再开始做 slides。",
-            "focus_skill": "design-md",
-            "expected_owner": "design-md",
-            "expected_overlay": null,
-            "forbidden_owners": [
-                "slides",
-                "visual-review"
-            ],
-            "first_turn": true
-        },
-        {
-            "id": "design-md-existing-contract-before-ppt",
-            "category": "gate-vs-artifact-gate-conflict",
-            "task": "根据这个 DESIGN.md 做一个产品发布会 PPT，必须复用里面的颜色、字体、组件和章节页规则。",
-            "focus_skill": "design-md",
-            "expected_owner": "design-md",
-            "expected_overlay": null,
-            "forbidden_owners": [
-                "slides"
-            ],
-            "first_turn": true
-        },
-        {
-            "id": "slides-quick-ppt-stays-slides",
-            "category": "should-trigger",
-            "task": "快速做一个普通汇报 PPT，不需要设计系统，能讲清楚就行。",
-            "focus_skill": "slides",
-            "expected_owner": "slides",
-            "expected_overlay": null,
-            "forbidden_owners": [
-                "design-md"
-            ],
-            "first_turn": true
-        },
-        {
-            "id": "gh-fix-ci-shorthand-ci-failure-beats-generic-debugging",
-            "category": "wrong-owner-near-miss",
-            "task": "CI 失败帮我修",
-            "focus_skill": "gh-fix-ci",
-            "expected_owner": "gh-fix-ci",
-            "expected_overlay": null,
-            "forbidden_owners": [
-                "agent-swarm-orchestration"
-            ],
-            "first_turn": true
-        },
-        {
-            "id": "scientific-figure-plotting-beats-hot-visual-chart",
-            "category": "wrong-owner-near-miss",
-            "task": "publication chart matplotlib",
-            "focus_skill": "scientific-figure-plotting",
-            "expected_owner": "scientific-figure-plotting",
-            "expected_overlay": null,
-            "forbidden_owners": [
-                "visual-review"
-            ],
-            "first_turn": true
-        },
-        {
-            "id": "scientific-figure-plotting-export-png-stays-plotting",
-            "category": "wrong-owner-near-miss",
-            "task": "publication chart matplotlib export png",
-            "focus_skill": "scientific-figure-plotting",
-            "expected_owner": "scientific-figure-plotting",
-            "expected_overlay": null,
-            "forbidden_owners": [
-                "visual-review"
-            ],
-            "first_turn": true
-        },
-        {
-            "id": "scientific-figure-plotting-beats-raster-image-trigger",
-            "category": "wrong-owner-near-miss",
-            "task": "科研出图，matplotlib 改成期刊风格",
-            "focus_skill": "scientific-figure-plotting",
-            "expected_owner": "scientific-figure-plotting",
-            "expected_overlay": null,
-            "forbidden_owners": [
-                "visual-review"
-            ],
-            "first_turn": true
-        },
-        {
-            "id": "mac-memory-management-non-mac-memory-near-miss",
-            "category": "should-not-trigger",
-            "task": "优化这个 Python 服务的内存占用，跑在 Linux/CUDA 服务器上，不涉及 Mac、Apple Silicon 或 MPS。",
-            "focus_skill": null,
-            "expected_owner": null,
-            "expected_overlay": null,
-            "forbidden_owners": [
-                "python-env-management"
-            ],
-            "first_turn": true
-        },
-        {
-            "id": "mac-memory-management-generic-code-acceleration-near-miss",
-            "category": "should-not-trigger",
-            "task": "把 pandas 热路径加速，考虑换成 polars 或更快的序列化方案。",
-            "focus_skill": null,
-            "expected_owner": null,
-            "expected_overlay": null,
-            "forbidden_owners": [
-                "python-env-management"
-            ],
-            "first_turn": true
-        },
-        {
-            "id": "mac-memory-management-mac-non-ml-near-miss",
-            "category": "should-not-trigger",
-            "task": "MacBook 上这个 Node 应用内存泄漏，帮我定位普通服务端内存问题。",
-            "focus_skill": null,
-            "expected_owner": null,
-            "expected_overlay": null,
-            "forbidden_owners": [
-                "python-env-management"
-            ],
-            "first_turn": true
-        },
-        {
-            "id": "skill-framework-audit-merge-slim-runtime",
-            "category": "should-trigger",
-            "task": "全面核查现在的skill，哪些应该合并，哪些应该精简，哪些应该沉到runtime",
-            "focus_skill": "skill-framework-developer",
-            "expected_owner": "skill-framework-developer",
-            "expected_overlay": null,
-            "forbidden_owners": [
-                "agent-swarm-orchestration",
-                "agent-swarm-orchestration"
-            ],
-            "first_turn": true
-        },
-        {
-            "id": "diagramming-chinese-flowchart",
-            "category": "should-trigger",
-            "task": "帮我画一个技术路线图和研究流程图，用 Mermaid 表达",
-            "focus_skill": "diagramming",
-            "expected_owner": "diagramming",
-            "expected_overlay": null,
-            "forbidden_owners": [
-                "slides",
-                "visual-review"
-            ],
-            "first_turn": true
-        },
-        {
-            "id": "workflow-orchestration-natural-language-falls-back-to-delegation-gate",
-            "category": "framework-alias",
-            "task": "帮我组织 worker 协作，判断是否需要 bounded sidecar 多 agent",
-            "focus_skill": "agent-swarm-orchestration",
-            "expected_owner": "agent-swarm-orchestration",
-            "expected_overlay": null,
-            "forbidden_owners": [],
-            "first_turn": true
-        },
-        {
-            "id": "route-001-ppt-deck",
-            "category": "should-trigger",
-            "task": "帮我做一个演示文稿，关于河川修复的",
-            "expected_owner": "slides",
-            "expected_overlay": null,
-            "notes": "PPT/slides request should route to slides skill"
-        },
-        {
-            "id": "route-002-pdf-document",
-            "category": "should-trigger",
-            "task": "把这个 PDF 里的表格提取出来",
-            "expected_owner": "pdf",
-            "expected_overlay": null,
-            "notes": "PDF artifact gate should route to pdf skill"
-        },
-        {
-            "id": "route-003-word-docx",
-            "category": "should-trigger",
-            "task": "帮我整理一个 Word 文档模板，并导出 docx",
-            "expected_owner": "doc",
-            "expected_overlay": null,
-            "notes": "Word/docx artifact gate should route to doc skill"
-        },
-        {
-            "id": "route-004-git-commit",
-            "category": "should-trigger",
-            "task": "/gitx 提交代码并推送到远端",
-            "expected_owner": "gitx",
-            "expected_overlay": null,
-            "notes": "Git operations via explicit /gitx entrypoint should route to gitx"
-        },
-        {
-            "id": "route-004b-update-codegen",
-            "category": "should-trigger",
-            "task": "/update",
-            "expected_owner": "update",
-            "expected_overlay": null,
-            "notes": "Explicit /update routes to tracked-codegen refresh workflow (framework command alias)"
-        },
-        {
-            "id": "route-006-ci-fix",
-            "category": "should-trigger",
-            "task": "GitHub Actions CI 挂了，帮我修一下",
-            "expected_owner": "gh-fix-ci",
-            "expected_overlay": null,
-            "notes": "CI failure should route to gh-fix-ci (L0)"
-        },
-        {
-            "id": "route-007-multi-agent",
-            "category": "should-trigger",
-            "task": "需要多 agent 并行处理这个跨模块任务",
-            "expected_owner": "agent-swarm-orchestration",
-            "expected_overlay": null,
-            "notes": "Multi-agent delegation should route to agent-swarm-orchestration gate"
-        },
-        {
-            "id": "route-009b-sci-polish-abstract",
-            "category": "should-trigger",
-            "task": "SCI润色 abstract",
-            "expected_owner": "paper-workbench",
-            "expected_overlay": null,
-            "notes": "Standalone academic polish without 论文 token routes to paper-workbench via has_paper_prose_edit_context"
-        },
-        {
-            "id": "route-009c-polish-abstract-en",
-            "category": "should-trigger",
-            "task": "polish this abstract for clarity",
-            "expected_owner": "paper-workbench",
-            "expected_overlay": null,
-            "notes": "English polish+section without manuscript context word"
-        },
-        {
-            "id": "route-009-paper-writing",
-            "category": "should-trigger",
-            "task": "帮我写论文的 related work 部分",
-            "expected_owner": "paper-workbench",
-            "expected_overlay": null,
-            "notes": "Manuscript section writing enters paper-workbench front door; inline paper-writing with prose-quality-gate"
-        },
-        {
-            "id": "route-009d-paper-review-only-negation",
-            "category": "should-trigger",
-            "task": "只审不改，别润色，看 claim 和证据",
-            "expected_owner": "paper-workbench",
-            "expected_overlay": null,
-            "notes": "Review-only with prose negation boosts paper-workbench (inline paper-reviewer)"
-        },
-        {
-            "id": "route-009e-latex-ci-not-manuscript",
-            "category": "should-not-trigger",
-            "task": "修复 CI 里 latex 模板编译失败",
-            "expected_owner": "gh-fix-ci",
-            "expected_overlay": null,
-            "forbidden_owners": [
-                "paper-workbench"
-            ],
-            "notes": "CI LaTeX fix routes gh-fix-ci; must not false-positive paper-workbench prose chain"
-        },
-        {
-            "id": "route-009f-direct-reviewer-revision",
-            "category": "should-trigger",
-            "task": "根据 reviewer comments 直接改稿，别先给方案",
-            "expected_owner": "paper-workbench",
-            "expected_overlay": null,
-            "notes": "Direct revision context boosts paper-workbench front door"
-        },
-        {
-            "id": "route-009g-figure-layout-review",
-            "category": "should-trigger",
-            "task": "论文 figure layout 只 review 排版",
-            "expected_owner": "paper-workbench",
-            "expected_overlay": null,
-            "notes": "Figure/layout review slice; review token is whole-word only"
-        },
-        {
-            "id": "route-009h-prose-negation-science-critique",
-            "category": "should-trigger",
-            "task": "不润色，只批评这篇论文的科学性",
-            "expected_owner": "paper-workbench",
-            "expected_overlay": null,
-            "notes": "Prose negation + paper review judgment"
-        },
-        {
-            "id": "route-010-visual-review",
-            "category": "should-trigger",
-            "task": "基于这组截图做 UI 审查，告诉我哪里有视觉问题",
-            "expected_owner": "visual-review",
-            "expected_overlay": null,
-            "notes": "Screenshot review should route to visual-review"
-        },
-        {
-            "id": "route-011-phd-proposal-paper-workbench",
-            "category": "should-trigger",
-            "task": "博士开题：整体推进这篇论文，先判断能不能投和还缺哪些硬证据",
-            "expected_owner": "paper-workbench",
-            "expected_overlay": null,
-            "notes": "开题级叙事与可投性应走 paper-workbench 前门而非单一专科"
-        },
-        {
-            "id": "route-012-prereg-reproducibility",
-            "category": "should-trigger",
-            "task": "预注册和主分析、探索性分析怎么切分，方案偏离要怎么记录",
-            "expected_owner": "experiment-reproducibility",
-            "expected_overlay": null,
-            "notes": "预注册边界与偏离记录优先路由 experiment-reproducibility"
-        },
-        {
-            "id": "route-013-math-derivation-proof",
-            "category": "should-trigger",
-            "task": "请给出严格的数学推导与证明：证明柯西-施瓦茨不等式，每一步都要可检验。",
-            "focus_skill": "math-derivation",
-            "expected_owner": "math-derivation",
-            "expected_overlay": null,
-            "expected_layer": "L4",
-            "first_turn": true,
-            "notes": "纯定理证明/数学推导优先 math-derivation，不与 research-discovery/execution 抢路由"
-        },
-        {
-            "id": "route-014-scientific-figure-plotting",
-            "category": "should-trigger",
-            "task": "用 matplotlib 和 seaborn 做科研出图，双栏论文插图风格，加 statistical annotations。",
-            "focus_skill": "scientific-figure-plotting",
-            "expected_owner": "scientific-figure-plotting",
-            "expected_overlay": null,
-            "expected_layer": "L4",
-            "first_turn": true,
-            "notes": "代码生成论文级科研图走 scientific-figure-plotting"
-        },
-        {
-            "id": "route-015-research-execution-ablation",
-            "category": "should-trigger",
-            "task": "帮我设计实验：两组 ablation 怎么做，baseline 和控制变量怎么定。",
-            "focus_skill": "research-execution",
-            "expected_owner": "research-execution",
-            "expected_overlay": null,
-            "expected_layer": "L2",
-            "first_turn": true,
-            "notes": "实验/ablation 编排走 research-execution；与纯数学 do_not_use 不冲突"
-        },
-        {
-            "id": "route-016-python-env-management",
-            "category": "should-trigger",
-            "task": "macOS 上 Python 环境混乱，想长期不用 pip，用 uv 和 uv.lock 治理 PATH。",
-            "focus_skill": "python-env-management",
-            "expected_owner": "python-env-management",
-            "expected_overlay": null,
-            "expected_layer": "L4",
-            "first_turn": true,
-            "notes": "冷表 skill；manifest L4 层路由；AGENTS 要求显式 $python-env-management"
-        },
-        {
-            "id": "fuzzy-rescue-code-bug-review",
-            "category": "fuzzy-rescue",
-            "task": "帮我 review 这段代码，找出 bug 和逻辑错误",
-            "focus_skill": null,
-            "expected_owner": null,
-            "expected_overlay": null,
-            "first_turn": true,
-            "notes": "Fuzzy rescue should not route generic code queries to paper/slides/ci skills",
-            "forbidden_owners": [
-                "paper-workbench",
-                "slides",
-                "gh-fix-ci"
-            ]
-        },
-        {
-            "id": "overlay-skill-name-in-query",
-            "category": "overlay",
-            "task": "深度review这个 skill 路由系统的架构，顺便看看 code review 的质量",
-            "focus_skill": "skill-framework-developer",
-            "expected_owner": "skill-framework-developer",
-            "expected_overlay": "code-review-deep",
-            "first_turn": true,
-            "notes": "When query mentions overlay skill name explicitly, it should be selected as overlay"
-        },
-        {
-            "id": "stop-token-deploy-to-production",
-            "category": "stop-token",
-            "task": "部署到生产",
-            "focus_skill": null,
-            "expected_owner": null,
-            "expected_overlay": null,
-            "first_turn": true,
-            "notes": "After removing 部署 from stop tokens, query should be able to match deployment-related skills"
-        },
-        {
-            "id": "research-discovery-literature-survey",
-            "category": "should-trigger",
-            "task": "帮我做文献综述，调研一下这个方向的最新进展",
-            "focus_skill": "research-discovery",
-            "expected_owner": "research-discovery",
-            "expected_overlay": null,
-            "expected_layer": "L2",
-            "first_turn": true,
-            "notes": "文献综述/调研方向触发 research-discovery 前门"
-        },
-        {
-            "id": "research-discovery-paper-search",
-            "category": "should-trigger",
-            "task": "查一下有哪些论文在用 attention 机制做时间序列预测",
-            "focus_skill": "research-discovery",
-            "expected_owner": "none",
-            "expected_overlay": null,
-            "first_turn": true,
-            "notes": "日常查论文用语；当前路由无匹配触发词，期望为 none"
-        },
-        {
-            "id": "research-discovery-math-background",
-            "category": "should-trigger",
-            "task": "这个物理过程该用什么数学理论来描述？有什么相关定理？",
-            "focus_skill": "research-discovery",
-            "expected_owner": "research-discovery",
-            "expected_overlay": null,
-            "expected_layer": "L2",
-            "first_turn": true,
-            "notes": "理论背景/数学背景查询触发 research-discovery math_background_inquiry lane"
-        },
-        {
-            "id": "research-discovery-barrier-escalation",
-            "category": "should-trigger",
-            "task": "这个方向走不通了，瓶颈在 attention 的计算复杂度，有什么替代方案？",
-            "focus_skill": "research-discovery",
-            "expected_owner": "research-discovery",
-            "expected_overlay": null,
-            "expected_layer": "L2",
-            "first_turn": true,
-            "notes": "barrier 信号（走不通/瓶颈）触发 research-discovery 的 barrier escalation"
-        },
-        {
-            "id": "autoresearch-workspace-init",
-            "category": "should-trigger",
-            "task": "帮我初始化一个研究方向：improving LLM reasoning via structured memory",
-            "focus_skill": null,
-            "expected_owner": "research-discovery",
-            "expected_overlay": null,
-            "expected_layer": "L2",
-            "first_turn": true,
-            "notes": "研究方向触发词当前归 research-discovery；待 autoresearch 触发词同步后改回"
-        },
-        {
-            "id": "autoresearch-barrier-command",
-            "category": "should-trigger",
-            "task": "自动研究一下这个瓶颈：模型在长文本上推理准确率突破不了 60%",
-            "focus_skill": "autoresearch",
-            "expected_owner": "research-discovery",
-            "expected_overlay": null,
-            "expected_layer": "L2",
-            "first_turn": true,
-            "notes": "自动研究+瓶颈关键词当前归 research-discovery；待 autoresearch 触发词同步后改回"
-        },
-        {
-            "id": "research-execution-experiment-design",
-            "category": "should-trigger",
-            "task": "帮我设计 ablation 实验，控制变量，定 baseline",
-            "focus_skill": "research-execution",
-            "expected_owner": "research-execution",
-            "expected_overlay": null,
-            "expected_layer": "L2",
-            "first_turn": true,
-            "notes": "实验设计触发 research-execution experiment_design lane"
-        },
-        {
-            "id": "eval-algo-trading-backtest",
-            "category": "should-trigger",
-            "task": "帮我写一个A股均值回归量化回测策略，计算夏普比率和最大回撤",
-            "focus_skill": "algo-trading",
-            "expected_owner": "algo-trading",
-            "expected_overlay": null,
-            "first_turn": true,
-            "notes": "新覆盖 algo-trading 冷表技能"
-        },
-        {
-            "id": "eval-citation-management-bibtex",
-            "category": "should-trigger",
-            "task": "按GB/T 7714格式整理参考文献，输出BibTeX格式，检查文中引用对应",
-            "focus_skill": "citation-management",
-            "expected_owner": "citation-management",
-            "expected_overlay": null,
-            "first_turn": true,
-            "notes": "新覆盖 citation-management 冷表技能"
-        },
-        {
-            "id": "eval-deep-research-rag-report",
-            "category": "should-trigger",
-            "task": "帮我查一下RAG技术的最新进展，做多源验证和网络信息收集后给一份有引用的报告",
-            "focus_skill": "deep-research",
-            "expected_owner": "deep-research",
-            "expected_overlay": null,
-            "first_turn": true,
-            "notes": "新覆盖 deep-research 技能"
-        },
-        {
-            "id": "eval-deepinterview-clarify",
-            "category": "should-trigger",
-            "task": "需求还不清楚，先做深度采访把需求和边界问清楚再开始做",
-            "focus_skill": "deepinterview",
-            "expected_owner": "deepinterview",
-            "expected_overlay": null,
-            "first_turn": true,
-            "notes": "新覆盖 deepinterview 框架命令技能"
-        },
-        {
-            "id": "eval-email-template-newsletter",
-            "category": "should-trigger",
-            "task": "帮我做一个产品周报的HTML邮件模板，兼容Outlook和Gmail客户端",
-            "focus_skill": "email-template",
-            "expected_owner": "email-template",
-            "expected_overlay": null,
-            "first_turn": true,
-            "notes": "新覆盖 email-template 冷表技能"
-        },
-        {
-            "id": "eval-formal-verification-smt",
-            "category": "should-trigger",
-            "task": "对这个公式做CAS验证和SMT检查，确认形式验证通过",
-            "focus_skill": "formal-verification",
-            "expected_owner": "formal-verification",
-            "expected_overlay": null,
-            "first_turn": true,
-            "notes": "新覆盖 formal-verification 冷表技能"
-        },
-        {
-            "id": "eval-gh-address-comments-pr",
-            "category": "should-trigger",
-            "task": "/gh-address-comments 帮我在GitHub PR上逐条处理review comments",
-            "focus_skill": "gh-address-comments",
-            "expected_owner": "gh-address-comments",
-            "expected_overlay": null,
-            "first_turn": true,
-            "notes": "新覆盖 gh-address-comments 技能"
-        },
-        {
-            "id": "eval-infographic-knowledge-card",
-            "category": "should-trigger",
-            "task": "把这篇技术文档做成一张知识卡片信息图，一图读懂核心内容",
-            "focus_skill": "infographic",
-            "expected_owner": "infographic",
-            "expected_overlay": null,
-            "first_turn": true,
-            "notes": "新覆盖 infographic 冷表技能"
-        },
-        {
-            "id": "eval-literature-verification-doi",
-            "category": "should-trigger",
-            "task": "做literature-verification：引用审查和DOI验证，检查论文引用准确性",
-            "focus_skill": "literature-verification",
-            "expected_owner": "literature-verification",
-            "expected_overlay": null,
-            "first_turn": true,
-            "notes": "新覆盖 literature-verification 冷表技能"
-        },
-        {
-            "id": "eval-mcp-server-create",
-            "category": "should-trigger",
-            "task": "帮我把这个天气预报API封装成一个MCP server，用Python FastMCP实现",
-            "focus_skill": "mcp-server-management",
-            "expected_owner": "mcp-server-management",
-            "expected_overlay": null,
-            "first_turn": true,
-            "notes": "新覆盖 mcp-server-management 技能"
-        },
-        {
-            "id": "eval-prose-verification-terminology",
-            "category": "should-trigger",
-            "task": "检查论文的文体验证：术语一致性和风格检查，看有没有claim drift",
-            "focus_skill": "prose-verification",
-            "expected_owner": "prose-verification",
-            "expected_overlay": null,
-            "first_turn": true,
-            "notes": "新覆盖 prose-verification 冷表技能"
-        },
-        {
-            "id": "eval-reproducibility-verification-seed",
-            "category": "should-trigger",
-            "task": "做可复现性验证：确定性种子检查和环境复现验证",
-            "focus_skill": "reproducibility-verification",
-            "expected_owner": "reproducibility-verification",
-            "expected_overlay": null,
-            "first_turn": true,
-            "notes": "新覆盖 reproducibility-verification 冷表技能"
-        },
-        {
-            "id": "eval-research-knowledge-graph-viz",
-            "category": "should-trigger",
-            "task": "查看research-knowledge-graph，帮我导航研究方向间的连接和障碍路径",
-            "focus_skill": "research-knowledge-graph",
-            "expected_owner": "research-knowledge-graph",
-            "expected_overlay": null,
-            "first_turn": true,
-            "notes": "新覆盖 research-knowledge-graph 技能"
-        },
-        {
-            "id": "eval-sentry-production-error",
-            "category": "should-trigger",
-            "task": "Sentry上报了生产错误，帮我排查根因和影响范围",
-            "focus_skill": "sentry",
-            "expected_owner": "sentry",
-            "expected_overlay": null,
-            "first_turn": true,
-            "notes": "新覆盖 sentry 技能"
-        },
-        {
-            "id": "eval-simplify-code-cleanup",
-            "category": "should-trigger",
-            "task": "不用找bug，帮我简化这段代码消除重复和过度工程",
-            "focus_skill": "simplify",
-            "expected_owner": "simplify",
-            "expected_overlay": null,
-            "first_turn": true,
-            "notes": "新覆盖 simplify 技能"
-        },
-        {
-            "id": "eval-systematic-debugging-crash",
-            "category": "should-trigger",
-            "task": "这个测试偶发失败，先做根因分析定位问题来源",
-            "focus_skill": "systematic-debugging",
-            "expected_owner": "systematic-debugging",
-            "expected_overlay": null,
-            "first_turn": true,
-            "notes": "新覆盖 systematic-debugging 技能"
-        },
-        {
-            "id": "eval-spreadsheets-excel-analysis",
-            "category": "should-trigger",
-            "task": "帮我分析这个Excel工作簿里的销售数据趋势和工作表结构",
-            "focus_skill": "spreadsheets",
-            "expected_owner": "spreadsheets",
-            "expected_overlay": null,
-            "first_turn": true,
-            "notes": "新覆盖 spreadsheets 技能"
-        },
-        {
-            "id": "eval-statistical-analysis-test-choice",
-            "category": "should-trigger",
-            "task": "两组对照实验前测后测数据，该用什么统计检验方法，效应量怎么报",
-            "focus_skill": "statistical-analysis",
-            "expected_owner": "statistical-analysis",
-            "expected_overlay": null,
-            "first_turn": true,
-            "notes": "新覆盖 statistical-analysis 技能"
-        },
-        {
-            "id": "eval-statistical-verification-pvalue",
-            "category": "should-trigger",
-            "task": "做统计审查：p值验证和GRIM test，检查统计报告",
-            "focus_skill": "statistical-verification",
-            "expected_owner": "statistical-verification",
-            "expected_overlay": null,
-            "first_turn": true,
-            "notes": "新覆盖 statistical-verification 冷表技能"
-        },
-        {
-            "id": "eval-structure-verification-latex",
-            "category": "should-trigger",
-            "task": "做结构验证：检查LaTeX编译、cross-reference和图表引用检查",
-            "focus_skill": "structure-verification",
-            "expected_owner": "structure-verification",
-            "expected_overlay": null,
-            "first_turn": true,
-            "notes": "新覆盖 structure-verification 冷表技能"
-        },
-        {
-            "id": "eval-tikz-paper-figure-convert",
-            "category": "should-trigger",
-            "task": "把这张架构截图转换为论文级别的TikZ独立配图",
-            "focus_skill": "tikz-paper-figure",
-            "expected_owner": "tikz-paper-figure",
-            "expected_overlay": null,
-            "first_turn": true,
-            "notes": "新覆盖 tikz-paper-figure 技能"
-        },
-        {
-            "id": "eval-goalx-create-goal",
-            "category": "should-trigger",
-            "task": "/goalx 帮我创建一个新goal：2026年下半年全面审计",
-            "focus_skill": "goalx",
-            "expected_owner": "goalx",
-            "expected_overlay": null,
-            "first_turn": true,
-            "notes": "新覆盖 goalx 框架命令技能"
-        },
-        {
-            "id": "eval-code-review-deep-direct-owner",
-            "category": "should-trigger",
-            "task": "做深度代码审查，只允许审不改，帮我 review 这段Rust并发代码",
-            "focus_skill": "code-review-deep",
-            "expected_owner": "code-review-deep",
-            "expected_overlay": null,
-            "forbidden_owners": [],
-            "first_turn": true,
-            "notes": "code-review-deep 作为 owner 的直接触发覆盖"
-        },
-        {
-            "id": "eval-deep-research-fact-check",
-            "category": "should-trigger",
-            "task": "帮我查一下这个科学声称是否有可靠的多源证据支持",
-            "focus_skill": "deep-research",
-            "expected_owner": "deep-research",
-            "expected_overlay": null,
-            "first_turn": true,
-            "notes": "deep-research 附加 case：多源事实核验场景"
-        },
-        {
-            "id": "eval-systematic-debugging-root-cause-first",
-            "category": "gate-vs-owner-conflict",
-            "task": "这个crash先做root cause分析，用systematic-debugging方法定位根因",
-            "focus_skill": "systematic-debugging",
-            "expected_owner": "systematic-debugging",
-            "expected_overlay": null,
-            "first_turn": true,
-            "notes": "验证 root-cause 分析优先于 hotfix 快速修复"
-        },
-        {
-            "id": "eval-statistical-analysis-ab-power",
-            "category": "should-trigger",
-            "task": "A/B测试的统计功效怎么算，需要多少样本量才能达到80%统计功效",
-            "focus_skill": "statistical-analysis",
-            "expected_owner": "statistical-analysis",
-            "expected_overlay": null,
-            "first_turn": true,
-            "notes": "statistical-analysis 附加 case：样本量与统计功效"
-        },
-        {
-            "id": "eval-sentry-error-context",
-            "category": "gate-vs-owner-conflict",
-            "task": "生产环境有个500错误，先在Sentry上看看上下文和调用栈",
-            "focus_skill": "sentry",
-            "expected_owner": "sentry",
-            "expected_overlay": null,
-            "first_turn": true,
-            "notes": "测试 sentry 在错误排查场景优先于通用调试"
-        },
-        {
-            "id": "eval-mcp-server-debug-connectivity",
-            "category": "gate-vs-owner-conflict",
-            "task": "我的MCP server连不上了，帮我排查stdio传输模式的连接问题",
-            "focus_skill": "mcp-server-management",
-            "expected_owner": "mcp-server-management",
-            "expected_overlay": null,
-            "first_turn": true,
-            "notes": "mcp-server-management 附加 case：连接调试排查场景"
-        },
-        {
-            "id": "eval-spreadsheets-csv-cleanup",
-            "category": "should-trigger",
-            "task": "用spreadsheets把这个CSV导入电子表格，做数据清洗后导出xlsx",
-            "focus_skill": "spreadsheets",
-            "expected_owner": "spreadsheets",
-            "expected_overlay": null,
-            "first_turn": true,
-            "notes": "spreadsheets 附加 case：CSV导入与清洗场景"
-        },
-        {
-            "id": "eval-simplify-vs-review",
-            "category": "gate-vs-owner-conflict",
-            "task": "/simplify 不需要找bug，做代码简化清理消除过度工程",
-            "focus_skill": "simplify",
-            "expected_owner": "simplify",
-            "expected_overlay": null,
-            "forbidden_owners": ["code-review-deep"],
-            "first_turn": true,
-            "notes": "测试 simplify 在简化场景优先于 code-review-deep"
-        },
-        {
-            "id": "eval-research-knowledge-graph-entity",
-            "category": "should-trigger",
-            "task": "在研究知识图谱中搜一下与attention机制相关的所有实体和连接",
-            "focus_skill": "research-knowledge-graph",
-            "expected_owner": "research-knowledge-graph",
-            "expected_overlay": null,
-            "first_turn": true,
-            "notes": "research-knowledge-graph 附加 case：实体搜索场景"
-        }
-    ]
+  "schema_version": "routing-eval-cases-v1",
+  "cases": [
+    {
+      "id": "skill-framework-developer-generic-review-case",
+      "category": "gate-vs-owner-conflict",
+      "task": "深度review现在的路由系统和 skill 边界。",
+      "focus_skill": "skill-framework-developer",
+      "expected_owner": "skill-framework-developer",
+      "expected_overlay": "code-review-deep",
+      "first_turn": true
+    },
+    {
+      "id": "skill-framework-subtraction-behavior-review",
+      "category": "gate-vs-owner-conflict",
+      "task": "减法视角和第一性原理review我的skill系统，是否已经清晰的变成行为驱动（讨论-规划-执行-验证），是否还有多余入口和不必要抽象",
+      "focus_skill": "skill-framework-developer",
+      "expected_owner": "skill-framework-developer",
+      "expected_overlay": null,
+      "forbidden_owners": [],
+      "first_turn": true
+    },
+    {
+      "id": "skill-framework-current-system-optimization-case",
+      "category": "gate-vs-owner-conflict",
+      "task": "继续核查现在的skill系统，给优化方向",
+      "focus_skill": "skill-framework-developer",
+      "expected_owner": "skill-framework-developer",
+      "expected_overlay": null,
+      "forbidden_owners": [
+        "deep-research",
+        "plan-mode"
+      ],
+      "first_turn": true
+    },
+    {
+      "id": "skill-framework-route-miss-repair-case",
+      "category": "gate-vs-owner-conflict",
+      "task": "skill 路由没触发怎么办，帮我做 miss repair 并减少 token 消耗",
+      "focus_skill": "skill-framework-developer",
+      "expected_owner": "skill-framework-developer",
+      "expected_overlay": null,
+      "forbidden_owners": [
+        "deep-research",
+        "plan-mode"
+      ],
+      "first_turn": true
+    },
+    {
+      "id": "plan-mode-cursor-plan-verifiable-todos-case",
+      "category": "should-trigger",
+      "task": "用 Cursor Plan：在策划文档闸门列出可验收 todo，按 plan revision round 迭代；对照计划与实际给我 delta；代码与测试通过后完成分支合并推送前的收口对照。",
+      "focus_skill": "plan-mode",
+      "expected_owner": "plan-mode",
+      "expected_overlay": null,
+      "first_turn": true
+    },
+    {
+      "id": "native-runtime-planning-does-not-force-skill",
+      "category": "should-not-trigger",
+      "task": "根据既定 PRD 直接实现 React 页面，不要重新做蓝图规划。",
+      "focus_skill": null,
+      "expected_owner": "none",
+      "expected_overlay": null,
+      "forbidden_owners": [],
+      "first_turn": true
+    },
+    {
+      "id": "generic-multi-agent-delegation-gate-case",
+      "category": "gate-vs-owner-conflict",
+      "task": "需要多 agent 执行，先判断是否应该拆 bounded subagent sidecar。",
+      "focus_skill": "agent-swarm-orchestration",
+      "expected_owner": "agent-swarm-orchestration",
+      "expected_overlay": null,
+      "forbidden_owners": [],
+      "first_turn": true
+    },
+    {
+      "id": "natural-language-parallel-research-delegation-case",
+      "category": "gate-vs-owner-conflict",
+      "task": "同时调研前端、后端、测试三个方向，然后汇总方案",
+      "focus_skill": "agent-swarm-orchestration",
+      "expected_owner": "agent-swarm-orchestration",
+      "expected_overlay": null,
+      "forbidden_owners": [],
+      "first_turn": true,
+      "route_context": {
+        "execution_protocol": "four_step",
+        "verification_required": true,
+        "evidence_required": true,
+        "supervisor_required": false,
+        "delegation_candidate": true,
+        "continue_safe_local_steps": false,
+        "route_reason": "delegation_gate_candidate"
+      }
+    },
+    {
+      "id": "natural-language-parallel-regression-risk-case",
+      "category": "gate-vs-owner-conflict",
+      "task": "并行检查 API、数据库和 UI 三个模块的回归风险",
+      "focus_skill": "agent-swarm-orchestration",
+      "expected_owner": "agent-swarm-orchestration",
+      "expected_overlay": null,
+      "forbidden_owners": [
+        "deep-research"
+      ],
+      "first_turn": true,
+      "route_context": {
+        "execution_protocol": "four_step",
+        "verification_required": true,
+        "evidence_required": true,
+        "supervisor_required": false,
+        "delegation_candidate": true,
+        "continue_safe_local_steps": false,
+        "route_reason": "delegation_gate_candidate"
+      }
+    },
+    {
+      "id": "natural-language-split-lanes-delegation-case",
+      "category": "gate-vs-owner-conflict",
+      "task": "请分三路并行研究这个问题：策略、实现、测试",
+      "focus_skill": "agent-swarm-orchestration",
+      "expected_owner": "agent-swarm-orchestration",
+      "expected_overlay": null,
+      "first_turn": true,
+      "route_context": {
+        "execution_protocol": "implementation",
+        "verification_required": true,
+        "evidence_required": false,
+        "supervisor_required": false,
+        "delegation_candidate": true,
+        "continue_safe_local_steps": false,
+        "route_reason": "delegation_gate_candidate"
+      }
+    },
+    {
+      "id": "disjoint-worker-write-scope-delegation-gate-case",
+      "category": "gate-vs-owner-conflict",
+      "task": "use parallel workers to implement disjoint files with lane-local write scopes",
+      "focus_skill": "agent-swarm-orchestration",
+      "expected_owner": "agent-swarm-orchestration",
+      "expected_overlay": null,
+      "forbidden_owners": [],
+      "first_turn": true
+    },
+    {
+      "id": "broad-architecture-review-delegation-gate-case",
+      "category": "gate-vs-owner-conflict",
+      "task": "全面 review 这套架构，先给我结构层面的判断。",
+      "focus_skill": "agent-swarm-orchestration",
+      "expected_owner": "agent-swarm-orchestration",
+      "expected_overlay": null,
+      "forbidden_owners": [
+        "plan-mode",
+        "deep-research"
+      ],
+      "first_turn": true
+    },
+    {
+      "id": "design-md-brand-routing-case",
+      "category": "should-trigger",
+      "task": "先别直接开始改页面，先帮我把这个产品做得像 Linear 一样，给我参考源、verified tokens 和可借的组件气质。",
+      "focus_skill": "design-md",
+      "expected_owner": "design-md",
+      "expected_overlay": null,
+      "forbidden_owners": [
+        "visual-review"
+      ],
+      "first_turn": true
+    },
+    {
+      "id": "design-md-mixed-source-case",
+      "category": "wrong-owner-near-miss",
+      "task": "我想要 Stripe 的品牌 token，再混一点 liquid glass motion，先给我参考源和取舍，不要直接开始改页面。",
+      "focus_skill": "design-md",
+      "expected_owner": "design-md",
+      "expected_overlay": null,
+      "forbidden_owners": [],
+      "first_turn": true
+    },
+    {
+      "id": "screenshot-review-reroute-case",
+      "category": "gate-vs-owner-conflict",
+      "task": "基于这张界面图做 UI 重叠、层级和可读性审查，直接告诉我哪里有视觉问题。",
+      "focus_skill": "visual-review",
+      "expected_owner": "visual-review",
+      "expected_overlay": null,
+      "forbidden_owners": [],
+      "first_turn": true
+    },
+    {
+      "id": "design-md-ui-contract-before-implementation",
+      "category": "gate-vs-owner-conflict",
+      "task": "做一个有统一视觉身份的 landing page，不要 AI 味，先沉淀 UI 设计规范和 design tokens。",
+      "focus_skill": "design-md",
+      "expected_owner": "design-md",
+      "expected_overlay": null,
+      "forbidden_owners": [
+        "visual-review"
+      ],
+      "first_turn": true
+    },
+    {
+      "id": "design-md-ppt-contract-before-slides",
+      "category": "gate-vs-artifact-gate-conflict",
+      "task": "做一个高级感品牌 PPT，先统一设计规范、视觉身份、主题 token 和图表配色，再开始做 slides。",
+      "focus_skill": "design-md",
+      "expected_owner": "design-md",
+      "expected_overlay": null,
+      "forbidden_owners": [
+        "slides",
+        "visual-review"
+      ],
+      "first_turn": true
+    },
+    {
+      "id": "design-md-existing-contract-before-ppt",
+      "category": "gate-vs-artifact-gate-conflict",
+      "task": "根据这个 DESIGN.md 做一个产品发布会 PPT，必须复用里面的颜色、字体、组件和章节页规则。",
+      "focus_skill": "design-md",
+      "expected_owner": "design-md",
+      "expected_overlay": null,
+      "forbidden_owners": [
+        "slides"
+      ],
+      "first_turn": true
+    },
+    {
+      "id": "slides-quick-ppt-stays-slides",
+      "category": "should-trigger",
+      "task": "快速做一个普通汇报 PPT，不需要设计系统，能讲清楚就行。",
+      "focus_skill": "slides",
+      "expected_owner": "slides",
+      "expected_overlay": null,
+      "forbidden_owners": [
+        "design-md"
+      ],
+      "first_turn": true
+    },
+    {
+      "id": "gh-fix-ci-shorthand-ci-failure-beats-generic-debugging",
+      "category": "wrong-owner-near-miss",
+      "task": "CI 失败帮我修",
+      "focus_skill": "gh-fix-ci",
+      "expected_owner": "gh-fix-ci",
+      "expected_overlay": null,
+      "forbidden_owners": [
+        "agent-swarm-orchestration"
+      ],
+      "first_turn": true
+    },
+    {
+      "id": "mac-memory-management-non-mac-memory-near-miss",
+      "category": "should-not-trigger",
+      "task": "优化这个 Python 服务的内存占用，跑在 Linux/CUDA 服务器上，不涉及 Mac、Apple Silicon 或 MPS。",
+      "focus_skill": null,
+      "expected_owner": null,
+      "expected_overlay": null,
+      "forbidden_owners": [
+        "python-env-management"
+      ],
+      "first_turn": true
+    },
+    {
+      "id": "mac-memory-management-generic-code-acceleration-near-miss",
+      "category": "should-not-trigger",
+      "task": "把 pandas 热路径加速，考虑换成 polars 或更快的序列化方案。",
+      "focus_skill": null,
+      "expected_owner": null,
+      "expected_overlay": null,
+      "forbidden_owners": [
+        "python-env-management"
+      ],
+      "first_turn": true
+    },
+    {
+      "id": "mac-memory-management-mac-non-ml-near-miss",
+      "category": "should-not-trigger",
+      "task": "MacBook 上这个 Node 应用内存泄漏，帮我定位普通服务端内存问题。",
+      "focus_skill": null,
+      "expected_owner": null,
+      "expected_overlay": null,
+      "forbidden_owners": [
+        "python-env-management"
+      ],
+      "first_turn": true
+    },
+    {
+      "id": "skill-framework-audit-merge-slim-runtime",
+      "category": "should-trigger",
+      "task": "全面核查现在的skill，哪些应该合并，哪些应该精简，哪些应该沉到runtime",
+      "focus_skill": "skill-framework-developer",
+      "expected_owner": "skill-framework-developer",
+      "expected_overlay": null,
+      "forbidden_owners": [
+        "agent-swarm-orchestration",
+        "agent-swarm-orchestration"
+      ],
+      "first_turn": true
+    },
+    {
+      "id": "diagramming-chinese-flowchart",
+      "category": "should-trigger",
+      "task": "帮我画一个技术路线图和研究流程图，用 Mermaid 表达",
+      "focus_skill": "diagramming",
+      "expected_owner": "diagramming",
+      "expected_overlay": null,
+      "forbidden_owners": [
+        "slides",
+        "visual-review"
+      ],
+      "first_turn": true
+    },
+    {
+      "id": "workflow-orchestration-natural-language-falls-back-to-delegation-gate",
+      "category": "framework-alias",
+      "task": "帮我组织 worker 协作，判断是否需要 bounded sidecar 多 agent",
+      "focus_skill": "agent-swarm-orchestration",
+      "expected_owner": "agent-swarm-orchestration",
+      "expected_overlay": null,
+      "forbidden_owners": [],
+      "first_turn": true
+    },
+    {
+      "id": "route-001-ppt-deck",
+      "category": "should-trigger",
+      "task": "帮我做一个演示文稿，关于河川修复的",
+      "expected_owner": "slides",
+      "expected_overlay": null,
+      "notes": "PPT/slides request should route to slides skill"
+    },
+    {
+      "id": "route-002-pdf-document",
+      "category": "should-trigger",
+      "task": "把这个 PDF 里的表格提取出来",
+      "expected_owner": "pdf",
+      "expected_overlay": null,
+      "notes": "PDF artifact gate should route to pdf skill"
+    },
+    {
+      "id": "route-003-word-docx",
+      "category": "should-trigger",
+      "task": "帮我整理一个 Word 文档模板，并导出 docx",
+      "expected_owner": "doc",
+      "expected_overlay": null,
+      "notes": "Word/docx artifact gate should route to doc skill"
+    },
+    {
+      "id": "route-004-git-commit",
+      "category": "should-trigger",
+      "task": "/gitx 提交代码并推送到远端",
+      "expected_owner": "gitx",
+      "expected_overlay": null,
+      "notes": "Git operations via explicit /gitx entrypoint should route to gitx"
+    },
+    {
+      "id": "route-004b-update-codegen",
+      "category": "should-trigger",
+      "task": "/update",
+      "expected_owner": "update",
+      "expected_overlay": null,
+      "notes": "Explicit /update routes to tracked-codegen refresh workflow (framework command alias)"
+    },
+    {
+      "id": "route-006-ci-fix",
+      "category": "should-trigger",
+      "task": "GitHub Actions CI 挂了，帮我修一下",
+      "expected_owner": "gh-fix-ci",
+      "expected_overlay": null,
+      "notes": "CI failure should route to gh-fix-ci (L0)"
+    },
+    {
+      "id": "route-007-multi-agent",
+      "category": "should-trigger",
+      "task": "需要多 agent 并行处理这个跨模块任务",
+      "expected_owner": "agent-swarm-orchestration",
+      "expected_overlay": null,
+      "notes": "Multi-agent delegation should route to agent-swarm-orchestration gate"
+    },
+    {
+      "id": "route-009b-sci-polish-abstract",
+      "category": "should-trigger",
+      "task": "SCI润色 abstract",
+      "expected_owner": "paper-workbench",
+      "expected_overlay": null,
+      "notes": "Standalone academic polish without 论文 token routes to paper-workbench via has_paper_prose_edit_context"
+    },
+    {
+      "id": "route-009c-polish-abstract-en",
+      "category": "should-trigger",
+      "task": "polish this abstract for clarity",
+      "expected_owner": "paper-workbench",
+      "expected_overlay": null,
+      "notes": "English polish+section without manuscript context word"
+    },
+    {
+      "id": "route-009-paper-writing",
+      "category": "should-trigger",
+      "task": "帮我写论文的 related work 部分",
+      "expected_owner": "paper-workbench",
+      "expected_overlay": null,
+      "notes": "Manuscript section writing enters paper-workbench front door; inline paper-writing with prose-quality-gate"
+    },
+    {
+      "id": "route-009d-paper-review-only-negation",
+      "category": "should-trigger",
+      "task": "只审不改，别润色，看 claim 和证据",
+      "expected_owner": "paper-workbench",
+      "expected_overlay": null,
+      "notes": "Review-only with prose negation boosts paper-workbench (inline paper-reviewer)"
+    },
+    {
+      "id": "route-009e-latex-ci-not-manuscript",
+      "category": "should-not-trigger",
+      "task": "修复 CI 里 latex 模板编译失败",
+      "expected_owner": "gh-fix-ci",
+      "expected_overlay": null,
+      "forbidden_owners": [
+        "paper-workbench"
+      ],
+      "notes": "CI LaTeX fix routes gh-fix-ci; must not false-positive paper-workbench prose chain"
+    },
+    {
+      "id": "route-009f-direct-reviewer-revision",
+      "category": "should-trigger",
+      "task": "根据 reviewer comments 直接改稿，别先给方案",
+      "expected_owner": "paper-workbench",
+      "expected_overlay": null,
+      "notes": "Direct revision context boosts paper-workbench front door"
+    },
+    {
+      "id": "route-009g-figure-layout-review",
+      "category": "should-trigger",
+      "task": "论文 figure layout 只 review 排版",
+      "expected_owner": "paper-workbench",
+      "expected_overlay": null,
+      "notes": "Figure/layout review slice; review token is whole-word only"
+    },
+    {
+      "id": "route-009h-prose-negation-science-critique",
+      "category": "should-trigger",
+      "task": "不润色，只批评这篇论文的科学性",
+      "expected_owner": "paper-workbench",
+      "expected_overlay": null,
+      "notes": "Prose negation + paper review judgment"
+    },
+    {
+      "id": "route-010-visual-review",
+      "category": "should-trigger",
+      "task": "基于这组截图做 UI 审查，告诉我哪里有视觉问题",
+      "expected_owner": "visual-review",
+      "expected_overlay": null,
+      "notes": "Screenshot review should route to visual-review"
+    },
+    {
+      "id": "route-011-phd-proposal-paper-workbench",
+      "category": "should-trigger",
+      "task": "博士开题：整体推进这篇论文，先判断能不能投和还缺哪些硬证据",
+      "expected_owner": "paper-workbench",
+      "expected_overlay": null,
+      "notes": "开题级叙事与可投性应走 paper-workbench 前门而非单一专科"
+    },
+    {
+      "id": "route-012-prereg-reproducibility",
+      "category": "should-trigger",
+      "task": "预注册和主分析、探索性分析怎么切分，方案偏离要怎么记录",
+      "expected_owner": "experiment-reproducibility",
+      "expected_overlay": null,
+      "notes": "预注册边界与偏离记录优先路由 experiment-reproducibility"
+    },
+    {
+      "id": "route-013-math-derivation-proof",
+      "category": "should-trigger",
+      "task": "请给出严格的数学推导与证明：证明柯西-施瓦茨不等式，每一步都要可检验。",
+      "focus_skill": "math-derivation",
+      "expected_owner": "math-derivation",
+      "expected_overlay": null,
+      "expected_layer": "L4",
+      "first_turn": true,
+      "notes": "纯定理证明/数学推导优先 math-derivation，不与 research-discovery/execution 抢路由"
+    },
+    {
+      "id": "route-015-research-execution-ablation",
+      "category": "should-trigger",
+      "task": "帮我设计实验：两组 ablation 怎么做，baseline 和控制变量怎么定。",
+      "focus_skill": "research-execution",
+      "expected_owner": "research-execution",
+      "expected_overlay": null,
+      "expected_layer": "L2",
+      "first_turn": true,
+      "notes": "实验/ablation 编排走 research-execution；与纯数学 do_not_use 不冲突"
+    },
+    {
+      "id": "route-016-python-env-management",
+      "category": "should-trigger",
+      "task": "macOS 上 Python 环境混乱，想长期不用 pip，用 uv 和 uv.lock 治理 PATH。",
+      "focus_skill": "python-env-management",
+      "expected_owner": "python-env-management",
+      "expected_overlay": null,
+      "expected_layer": "L4",
+      "first_turn": true,
+      "notes": "冷表 skill；manifest L4 层路由；AGENTS 要求显式 $python-env-management"
+    },
+    {
+      "id": "fuzzy-rescue-code-bug-review",
+      "category": "fuzzy-rescue",
+      "task": "帮我 review 这段代码，找出 bug 和逻辑错误",
+      "focus_skill": null,
+      "expected_owner": null,
+      "expected_overlay": null,
+      "first_turn": true,
+      "notes": "Fuzzy rescue should not route generic code queries to paper/slides/ci skills",
+      "forbidden_owners": [
+        "paper-workbench",
+        "slides",
+        "gh-fix-ci"
+      ]
+    },
+    {
+      "id": "overlay-skill-name-in-query",
+      "category": "overlay",
+      "task": "深度review这个 skill 路由系统的架构，顺便看看 code review 的质量",
+      "focus_skill": "skill-framework-developer",
+      "expected_owner": "skill-framework-developer",
+      "expected_overlay": "code-review-deep",
+      "first_turn": true,
+      "notes": "When query mentions overlay skill name explicitly, it should be selected as overlay"
+    },
+    {
+      "id": "stop-token-deploy-to-production",
+      "category": "stop-token",
+      "task": "部署到生产",
+      "focus_skill": null,
+      "expected_owner": null,
+      "expected_overlay": null,
+      "first_turn": true,
+      "notes": "After removing 部署 from stop tokens, query should be able to match deployment-related skills"
+    },
+    {
+      "id": "research-discovery-literature-survey",
+      "category": "should-trigger",
+      "task": "帮我做文献综述，调研一下这个方向的最新进展",
+      "focus_skill": "research-discovery",
+      "expected_owner": "research-discovery",
+      "expected_overlay": null,
+      "expected_layer": "L2",
+      "first_turn": true,
+      "notes": "文献综述/调研方向触发 research-discovery 前门"
+    },
+    {
+      "id": "research-discovery-paper-search",
+      "category": "should-trigger",
+      "task": "查一下有哪些论文在用 attention 机制做时间序列预测",
+      "focus_skill": "research-discovery",
+      "expected_owner": "none",
+      "expected_overlay": null,
+      "first_turn": true,
+      "notes": "日常查论文用语；当前路由无匹配触发词，期望为 none"
+    },
+    {
+      "id": "research-discovery-math-background",
+      "category": "should-trigger",
+      "task": "这个物理过程该用什么数学理论来描述？有什么相关定理？",
+      "focus_skill": "research-discovery",
+      "expected_owner": "research-discovery",
+      "expected_overlay": null,
+      "expected_layer": "L2",
+      "first_turn": true,
+      "notes": "理论背景/数学背景查询触发 research-discovery math_background_inquiry lane"
+    },
+    {
+      "id": "research-discovery-barrier-escalation",
+      "category": "should-trigger",
+      "task": "这个方向走不通了，瓶颈在 attention 的计算复杂度，有什么替代方案？",
+      "focus_skill": "research-discovery",
+      "expected_owner": "research-discovery",
+      "expected_overlay": null,
+      "expected_layer": "L2",
+      "first_turn": true,
+      "notes": "barrier 信号（走不通/瓶颈）触发 research-discovery 的 barrier escalation"
+    },
+    {
+      "id": "autoresearch-workspace-init",
+      "category": "should-trigger",
+      "task": "帮我初始化一个研究方向：improving LLM reasoning via structured memory",
+      "focus_skill": null,
+      "expected_owner": "research-discovery",
+      "expected_overlay": null,
+      "expected_layer": "L2",
+      "first_turn": true,
+      "notes": "研究方向触发词当前归 research-discovery；待 autoresearch 触发词同步后改回"
+    },
+    {
+      "id": "autoresearch-barrier-command",
+      "category": "should-trigger",
+      "task": "自动研究一下这个瓶颈：模型在长文本上推理准确率突破不了 60%",
+      "focus_skill": "autoresearch",
+      "expected_owner": "research-discovery",
+      "expected_overlay": null,
+      "expected_layer": "L2",
+      "first_turn": true,
+      "notes": "自动研究+瓶颈关键词当前归 research-discovery；待 autoresearch 触发词同步后改回"
+    },
+    {
+      "id": "research-execution-experiment-design",
+      "category": "should-trigger",
+      "task": "帮我设计 ablation 实验，控制变量，定 baseline",
+      "focus_skill": "research-execution",
+      "expected_owner": "research-execution",
+      "expected_overlay": null,
+      "expected_layer": "L2",
+      "first_turn": true,
+      "notes": "实验设计触发 research-execution experiment_design lane"
+    },
+    {
+      "id": "eval-algo-trading-backtest",
+      "category": "should-trigger",
+      "task": "帮我写一个A股均值回归量化回测策略，计算夏普比率和最大回撤",
+      "focus_skill": "algo-trading",
+      "expected_owner": "algo-trading",
+      "expected_overlay": null,
+      "first_turn": true,
+      "notes": "新覆盖 algo-trading 冷表技能"
+    },
+    {
+      "id": "eval-citation-management-bibtex",
+      "category": "should-trigger",
+      "task": "按GB/T 7714格式整理参考文献，输出BibTeX格式，检查文中引用对应",
+      "focus_skill": "citation-management",
+      "expected_owner": "citation-management",
+      "expected_overlay": null,
+      "first_turn": true,
+      "notes": "新覆盖 citation-management 冷表技能"
+    },
+    {
+      "id": "eval-deep-research-rag-report",
+      "category": "should-trigger",
+      "task": "帮我查一下RAG技术的最新进展，做多源验证和网络信息收集后给一份有引用的报告",
+      "focus_skill": "deep-research",
+      "expected_owner": "deep-research",
+      "expected_overlay": null,
+      "first_turn": true,
+      "notes": "新覆盖 deep-research 技能"
+    },
+    {
+      "id": "eval-deepinterview-clarify",
+      "category": "should-trigger",
+      "task": "需求还不清楚，先做深度采访把需求和边界问清楚再开始做",
+      "focus_skill": "deepinterview",
+      "expected_owner": "deepinterview",
+      "expected_overlay": null,
+      "first_turn": true,
+      "notes": "新覆盖 deepinterview 框架命令技能"
+    },
+    {
+      "id": "eval-email-template-newsletter",
+      "category": "should-trigger",
+      "task": "帮我做一个产品周报的HTML邮件模板，兼容Outlook和Gmail客户端",
+      "focus_skill": "email-template",
+      "expected_owner": "email-template",
+      "expected_overlay": null,
+      "first_turn": true,
+      "notes": "新覆盖 email-template 冷表技能"
+    },
+    {
+      "id": "eval-formal-verification-smt",
+      "category": "should-trigger",
+      "task": "对这个公式做CAS验证和SMT检查，确认形式验证通过",
+      "focus_skill": "formal-verification",
+      "expected_owner": "formal-verification",
+      "expected_overlay": null,
+      "first_turn": true,
+      "notes": "新覆盖 formal-verification 冷表技能"
+    },
+    {
+      "id": "eval-gh-address-comments-pr",
+      "category": "should-trigger",
+      "task": "/gh-address-comments 帮我在GitHub PR上逐条处理review comments",
+      "focus_skill": "gh-address-comments",
+      "expected_owner": "gh-address-comments",
+      "expected_overlay": null,
+      "first_turn": true,
+      "notes": "新覆盖 gh-address-comments 技能"
+    },
+    {
+      "id": "eval-infographic-knowledge-card",
+      "category": "should-trigger",
+      "task": "把这篇技术文档做成一张知识卡片信息图，一图读懂核心内容",
+      "focus_skill": "infographic",
+      "expected_owner": "infographic",
+      "expected_overlay": null,
+      "first_turn": true,
+      "notes": "新覆盖 infographic 冷表技能"
+    },
+    {
+      "id": "eval-literature-verification-doi",
+      "category": "should-trigger",
+      "task": "做literature-verification：引用审查和DOI验证，检查论文引用准确性",
+      "focus_skill": "literature-verification",
+      "expected_owner": "literature-verification",
+      "expected_overlay": null,
+      "first_turn": true,
+      "notes": "新覆盖 literature-verification 冷表技能"
+    },
+    {
+      "id": "eval-mcp-server-create",
+      "category": "should-trigger",
+      "task": "帮我把这个天气预报API封装成一个MCP server，用Python FastMCP实现",
+      "focus_skill": "mcp-server-management",
+      "expected_owner": "mcp-server-management",
+      "expected_overlay": null,
+      "first_turn": true,
+      "notes": "新覆盖 mcp-server-management 技能"
+    },
+    {
+      "id": "eval-prose-verification-terminology",
+      "category": "should-trigger",
+      "task": "检查论文的文体验证：术语一致性和风格检查，看有没有claim drift",
+      "focus_skill": "prose-verification",
+      "expected_owner": "prose-verification",
+      "expected_overlay": null,
+      "first_turn": true,
+      "notes": "新覆盖 prose-verification 冷表技能"
+    },
+    {
+      "id": "eval-reproducibility-verification-seed",
+      "category": "should-trigger",
+      "task": "做可复现性验证：确定性种子检查和环境复现验证",
+      "focus_skill": "reproducibility-verification",
+      "expected_owner": "reproducibility-verification",
+      "expected_overlay": null,
+      "first_turn": true,
+      "notes": "新覆盖 reproducibility-verification 冷表技能"
+    },
+    {
+      "id": "eval-research-knowledge-graph-viz",
+      "category": "should-trigger",
+      "task": "查看research-knowledge-graph，帮我导航研究方向间的连接和障碍路径",
+      "focus_skill": "research-knowledge-graph",
+      "expected_owner": "research-knowledge-graph",
+      "expected_overlay": null,
+      "first_turn": true,
+      "notes": "新覆盖 research-knowledge-graph 技能"
+    },
+    {
+      "id": "eval-sentry-production-error",
+      "category": "should-trigger",
+      "task": "Sentry上报了生产错误，帮我排查根因和影响范围",
+      "focus_skill": "sentry",
+      "expected_owner": "sentry",
+      "expected_overlay": null,
+      "first_turn": true,
+      "notes": "新覆盖 sentry 技能"
+    },
+    {
+      "id": "eval-simplify-code-cleanup",
+      "category": "should-trigger",
+      "task": "不用找bug，帮我简化这段代码消除重复和过度工程",
+      "focus_skill": "simplify",
+      "expected_owner": "simplify",
+      "expected_overlay": null,
+      "first_turn": true,
+      "notes": "新覆盖 simplify 技能"
+    },
+    {
+      "id": "eval-systematic-debugging-crash",
+      "category": "should-trigger",
+      "task": "这个测试偶发失败，先做根因分析定位问题来源",
+      "focus_skill": "systematic-debugging",
+      "expected_owner": "systematic-debugging",
+      "expected_overlay": null,
+      "first_turn": true,
+      "notes": "新覆盖 systematic-debugging 技能"
+    },
+    {
+      "id": "eval-spreadsheets-excel-analysis",
+      "category": "should-trigger",
+      "task": "帮我分析这个Excel工作簿里的销售数据趋势和工作表结构",
+      "focus_skill": "spreadsheets",
+      "expected_owner": "spreadsheets",
+      "expected_overlay": null,
+      "first_turn": true,
+      "notes": "新覆盖 spreadsheets 技能"
+    },
+    {
+      "id": "eval-statistical-analysis-test-choice",
+      "category": "should-trigger",
+      "task": "两组对照实验前测后测数据，该用什么统计检验方法，效应量怎么报",
+      "focus_skill": "statistical-analysis",
+      "expected_owner": "statistical-analysis",
+      "expected_overlay": null,
+      "first_turn": true,
+      "notes": "新覆盖 statistical-analysis 技能"
+    },
+    {
+      "id": "eval-statistical-verification-pvalue",
+      "category": "should-trigger",
+      "task": "做统计审查：p值验证和GRIM test，检查统计报告",
+      "focus_skill": "statistical-verification",
+      "expected_owner": "statistical-verification",
+      "expected_overlay": null,
+      "first_turn": true,
+      "notes": "新覆盖 statistical-verification 冷表技能"
+    },
+    {
+      "id": "eval-structure-verification-latex",
+      "category": "should-trigger",
+      "task": "做结构验证：检查LaTeX编译、cross-reference和图表引用检查",
+      "focus_skill": "structure-verification",
+      "expected_owner": "structure-verification",
+      "expected_overlay": null,
+      "first_turn": true,
+      "notes": "新覆盖 structure-verification 冷表技能"
+    },
+    {
+      "id": "eval-tikz-paper-figure-convert",
+      "category": "should-trigger",
+      "task": "把这张架构截图转换为论文级别的TikZ独立配图",
+      "focus_skill": "tikz-paper-figure",
+      "expected_owner": "tikz-paper-figure",
+      "expected_overlay": null,
+      "first_turn": true,
+      "notes": "新覆盖 tikz-paper-figure 技能"
+    },
+    {
+      "id": "eval-goalx-create-goal",
+      "category": "should-trigger",
+      "task": "/goalx 帮我创建一个新goal：2026年下半年全面审计",
+      "focus_skill": "goalx",
+      "expected_owner": "goalx",
+      "expected_overlay": null,
+      "first_turn": true,
+      "notes": "新覆盖 goalx 框架命令技能"
+    },
+    {
+      "id": "eval-code-review-deep-direct-owner",
+      "category": "should-trigger",
+      "task": "做深度代码审查，只允许审不改，帮我 review 这段Rust并发代码",
+      "focus_skill": "code-review-deep",
+      "expected_owner": "code-review-deep",
+      "expected_overlay": null,
+      "forbidden_owners": [],
+      "first_turn": true,
+      "notes": "code-review-deep 作为 owner 的直接触发覆盖"
+    },
+    {
+      "id": "eval-deep-research-fact-check",
+      "category": "should-trigger",
+      "task": "帮我查一下这个科学声称是否有可靠的多源证据支持",
+      "focus_skill": "deep-research",
+      "expected_owner": "deep-research",
+      "expected_overlay": null,
+      "first_turn": true,
+      "notes": "deep-research 附加 case：多源事实核验场景"
+    },
+    {
+      "id": "eval-systematic-debugging-root-cause-first",
+      "category": "gate-vs-owner-conflict",
+      "task": "这个crash先做root cause分析，用systematic-debugging方法定位根因",
+      "focus_skill": "systematic-debugging",
+      "expected_owner": "systematic-debugging",
+      "expected_overlay": null,
+      "first_turn": true,
+      "notes": "验证 root-cause 分析优先于 hotfix 快速修复"
+    },
+    {
+      "id": "eval-statistical-analysis-ab-power",
+      "category": "should-trigger",
+      "task": "A/B测试的统计功效怎么算，需要多少样本量才能达到80%统计功效",
+      "focus_skill": "statistical-analysis",
+      "expected_owner": "statistical-analysis",
+      "expected_overlay": null,
+      "first_turn": true,
+      "notes": "statistical-analysis 附加 case：样本量与统计功效"
+    },
+    {
+      "id": "eval-sentry-error-context",
+      "category": "gate-vs-owner-conflict",
+      "task": "生产环境有个500错误，先在Sentry上看看上下文和调用栈",
+      "focus_skill": "sentry",
+      "expected_owner": "sentry",
+      "expected_overlay": null,
+      "first_turn": true,
+      "notes": "测试 sentry 在错误排查场景优先于通用调试"
+    },
+    {
+      "id": "eval-mcp-server-debug-connectivity",
+      "category": "gate-vs-owner-conflict",
+      "task": "我的MCP server连不上了，帮我排查stdio传输模式的连接问题",
+      "focus_skill": "mcp-server-management",
+      "expected_owner": "mcp-server-management",
+      "expected_overlay": null,
+      "first_turn": true,
+      "notes": "mcp-server-management 附加 case：连接调试排查场景"
+    },
+    {
+      "id": "eval-spreadsheets-csv-cleanup",
+      "category": "should-trigger",
+      "task": "用spreadsheets把这个CSV导入电子表格，做数据清洗后导出xlsx",
+      "focus_skill": "spreadsheets",
+      "expected_owner": "spreadsheets",
+      "expected_overlay": null,
+      "first_turn": true,
+      "notes": "spreadsheets 附加 case：CSV导入与清洗场景"
+    },
+    {
+      "id": "eval-simplify-vs-review",
+      "category": "gate-vs-owner-conflict",
+      "task": "/simplify 不需要找bug，做代码简化清理消除过度工程",
+      "focus_skill": "simplify",
+      "expected_owner": "simplify",
+      "expected_overlay": null,
+      "forbidden_owners": [
+        "code-review-deep"
+      ],
+      "first_turn": true,
+      "notes": "测试 simplify 在简化场景优先于 code-review-deep"
+    },
+    {
+      "id": "eval-research-knowledge-graph-entity",
+      "category": "should-trigger",
+      "task": "在研究知识图谱中搜一下与attention机制相关的所有实体和连接",
+      "focus_skill": "research-knowledge-graph",
+      "expected_owner": "research-knowledge-graph",
+      "expected_overlay": null,
+      "first_turn": true,
+      "notes": "research-knowledge-graph 附加 case：实体搜索场景"
+    }
+  ]
 }

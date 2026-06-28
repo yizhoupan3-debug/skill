@@ -81,7 +81,7 @@ This skill is the one front door for paper work.
 
 启用外研时，审稿/校准产出须满足 [`docs/architecture.md`](../../docs/routing/architecture.md) §A–B 的 **`Claims`**、**Contradiction sweep**、**Unknowns** 与可追溯 **retrieval_trace**（不能仅靠「读起来专业」的综述）；门面仍由本会话收口，细节上复用 **`@lane:reviewer`** 的 External lane shape 约定。
 
-**宿主 hook（L4 短码）**：`router-rs` 在宿主提交命中写作/润色语境时合并 **`PAPER_PROSE_QUALITY_HOOK`**（真源 `configs/framework/PAPER_PROSE_QUALITY_HOOK.txt`，**默认开**）；手稿审稿/改稿语境可另合并 **`PAPER_ADVERSARIAL_HOOK`**（opt-in）。受 `ROUTER_RS_OPERATOR_INJECT` 总闸约束。Prose 子开关：`ROUTER_RS_<HOST>_PAPER_PROSE_HOOK`（unset=开，`0`=关）。Adversarial：`ROUTER_RS_<HOST>_PAPER_ADVERSARIAL_HOOK=1` 启用。见 [`references/prose-chain-contract.md`](references/prose-chain-contract.md) §L4。
+**宿主 hook（L4 短码）**：`router-rs` 在宿主提交命中写作/润色语境时合并 **`PAPER_PROSE_QUALITY_HOOK`**（真源 `configs/framework/PAPER_PROSE_QUALITY_HOOK.txt`，**默认开**）；手稿审稿/改稿语境可另合并 **`PAPER_ADVERSARIAL_HOOK`**（opt-in）。受 `ROUTER_RS_OPERATOR_INJECT` 总闸约束。Prose 子开关：`ROUTER_RS_PAPER_PROSE_HOOK`（unset=开，`0`=关）。Adversarial：`ROUTER_RS_PAPER_ADVERSARIAL_HOOK=1` 启用。见 [`references/prose-chain-contract.md`](references/prose-chain-contract.md) §L4。
 
 It exists so the user does not need to decide first whether the job is
 `@lane:reviewer`, `@lane:writer`, or a review/revision dimension mode.
@@ -206,7 +206,7 @@ separate "known blocker" from "uncertainty that needs lookup".
 | 5 | Inline `@lane:writer`：`ladder-full` → `tone_audit` + `prose_qc` → Stage B |
 | 6 | 收口：可选 append `paper_story/PROSE_QC_LOG.md` |
 
-宿主短码：**`PAPER_PROSE_QUALITY_HOOK` 默认开**（`ROUTER_RS_CURSOR_PAPER_PROSE_HOOK=0` 关闭），见 prose-chain-contract §L4。
+**`PAPER_PROSE_QUALITY_HOOK` 默认开**，见 prose-chain-contract §L4。
 
 ## Anti-bad-output rules
 

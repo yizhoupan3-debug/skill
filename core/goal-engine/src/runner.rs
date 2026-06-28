@@ -43,6 +43,8 @@ pub struct RunContext<'a> {
     /// Decremented on each recursive call; `run_loop` returns `ResearchEscalation`
     /// instead of recursing when this reaches 0.
     pub depth_remaining: u32,
+    /// Host identifier for harness capability lookups (used by closeout gate).
+    pub host_id: String,
 }
 
 impl RunContext<'_> {
@@ -303,6 +305,116 @@ fn run_loop_inner(
                 violations.join(", ")
             );
             aggregate.overall_status = "fail".to_string();
+        }
+    }
+
+    // ── Quality Gate (verify_quality_gate) ──
+    // Two-stage exit gate: Stage 1 anti-fraud evidence check + Stage 2 scene-dispatched checker evaluation.
+    // If the QG gate blocks, the aggregate is downgraded to "fail".
+    if entry.verify_quality_gate.unwrap_or(false) && aggregate.overall_status == "pass" {
+        let task_id = actions
+            .first()
+            .map(|a| {
+                a.action_id
+                    .strip_suffix("-orchestrator")
+                    .unwrap_or(&a.action_id)
+                    .to_string()
+            })
+            .unwrap_or_default();
+        if !task_id.is_empty() {
+            if let Some(qg_hooks) = framework_kernel::runtime_hooks::try_hooks() {
+                let qg_payload = serde_json::json!({
+                    "repo_root": ctx.repo_root.to_string_lossy().to_string(),
+                    "task_id": task_id,
+                    "scene": "general",
+                    "goal": entry.loop_id,
+                    "round": 1,
+                });
+                match qg_hooks.evaluate_quality_gate(qg_payload) {
+                    Ok(verdict) => {
+                        let passed = verdict
+                            .get("passed")
+                            .and_then(|v| v.as_bool())
+                            .unwrap_or(false);
+                        if !passed {
+                            let blockers: Vec<String> = verdict
+                                .get("blockers")
+                                .and_then(|v| v.as_array())
+                                .map(|arr| {
+                                    arr.iter()
+                                        .filter_map(|b| {
+                                            b.get("description")
+                                                .and_then(|d| d.as_str())
+                                                .map(|s| s.to_string())
+                                        })
+                                        .collect()
+                                })
+                                .unwrap_or_default();
+                            tracing::warn!(
+                                "Quality gate blocked (verify_quality_gate=true): {}",
+                                blockers.join("; ")
+                            );
+                            aggregate.overall_status = "fail".to_string();
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!("Quality gate hook error (verify_quality_gate=true): {e}");
+                        // Hook failure does not block the loop
+                    }
+                }
+            } else {
+                tracing::warn!(
+                    "verify_quality_gate=true but RuntimeCoreHooks not registered — skipping QG gate"
+                );
+            }
+        }
+    }
+
+    // ── Closeout Gate (verify_closeout_gate) ──
+    // Readiness check for goal_state, evidence, session_summary.
+    // Results are advisory only — does not downgrade aggregate.
+    if entry.verify_closeout_gate.unwrap_or(false) && aggregate.overall_status == "pass" {
+        let task_id = actions
+            .first()
+            .map(|a| {
+                a.action_id
+                    .strip_suffix("-orchestrator")
+                    .unwrap_or(&a.action_id)
+                    .to_string()
+            })
+            .unwrap_or_default();
+        if let Some(cg_hooks) = framework_kernel::runtime_hooks::try_hooks() {
+            let closeout_payload = serde_json::json!({
+                "repo_root": ctx.repo_root.to_string_lossy().to_string(),
+                "task_id": task_id,
+                "host_id": ctx.host_id,
+            });
+            match cg_hooks.evaluate_closeout_gate(closeout_payload) {
+                Ok(result) => {
+                    let passed = result
+                        .get("passed")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false);
+                    let findings: Vec<String> = result
+                        .get("findings")
+                        .and_then(|v| v.as_array())
+                        .map(|arr| {
+                            arr.iter()
+                                .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    if !passed {
+                        tracing::warn!(
+                            "Closeout gate advisory (verify_closeout_gate=true): {} findings",
+                            findings.len()
+                        );
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!("Closeout gate hook error (verify_closeout_gate=true): {e}");
+                }
+            }
         }
     }
 

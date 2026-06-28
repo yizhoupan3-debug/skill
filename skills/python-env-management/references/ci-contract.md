@@ -39,7 +39,7 @@ uv sync --frozen
 uv run pytest -q
 ```
 
-## Cursor / agent background commands
+## Agent background commands
 
 **Bad**
 
@@ -55,7 +55,6 @@ cd repo && uv sync && uv run python scripts/long_job.py
 
 ## This framework repository (`skill`)
 
-**Status (2026-05-20):** Root `pyproject.toml` + `uv.lock`; `.github/workflows/skill-ci.yml` uses `astral-sh/setup-uv@v5`, `uv sync --frozen`, and `uv run python` for hook tests. Local runs: `ROUTER_RS=./core/router-rs/target/debug/router-rs uv run python .cursor/hook-tests/test_install_codex_hooks.py`.
 
 ## Environment variables
 

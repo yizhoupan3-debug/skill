@@ -41,9 +41,10 @@ expression: results
       {
         "reasons": [
           "Routing gate matched: bug.",
-          "ngram_similarity:0.4"
+          "ngram_similarity:0.4",
+          "Session-start required boost applied (+8)."
         ],
-        "score": 23.398883142100807,
+        "score": 31.398883142100807,
         "slug": "systematic-debugging"
       },
       {
@@ -148,8 +149,8 @@ expression: results
           "ngram_similarity:0.4",
           "Session-start required boost applied (+8)."
         ],
-        "score": 13.361478445646025,
-        "slug": "slides"
+        "score": 13.386483727255415,
+        "slug": "systematic-debugging"
       }
     ]
   }

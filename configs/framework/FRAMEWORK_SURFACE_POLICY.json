@@ -22,8 +22,7 @@
       "plan-mode",
       "research-discovery",
       "research-execution",
-      "math-derivation",
-      "scientific-figure-plotting"
+      "math-derivation"
     ],
     "lean_default_owners": [],
     "tier_activation_defaults": {

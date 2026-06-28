@@ -134,19 +134,6 @@
     },
     {
       "when": {
-        "signal": "has_scientific_figure_plotting_context"
-      },
-      "action": {
-        "type": "boost",
-        "delta": 70.0,
-        "reason": "Scientific-figure boost applied: code-generated paper or publication figure wording detected."
-      },
-      "record": {
-        "slug": "scientific-figure-plotting"
-      }
-    },
-    {
-      "when": {
         "signal": "has_skill_framework_maintenance_context"
       },
       "action": {
@@ -156,19 +143,6 @@
       },
       "record": {
         "slug": "skill-framework-developer"
-      }
-    },
-    {
-      "when": {
-        "signal": "has_diagramming_context"
-      },
-      "action": {
-        "type": "boost",
-        "delta": 72.0,
-        "reason": "Diagramming boost applied: explicit Mermaid/Graphviz or text-diagram wording detected."
-      },
-      "record": {
-        "slug": "diagramming"
       }
     },
     {

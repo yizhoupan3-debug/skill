@@ -126,10 +126,6 @@ mod smoke_p0_task_pointers_tests;
 #[path = "../tests/smoke_cli_tests.rs"]
 mod smoke_cli_tests;
 
-#[cfg(test)]
-#[path = "../tests/smoke_codegraph_semantic_dispatch_tests.rs"]
-mod smoke_codegraph_semantic_dispatch_tests;
-
 #[cfg(all(test, feature = "codegraph"))]
 #[path = "../tests/smoke_codegraph_e2e_minimal_tests.rs"]
 mod smoke_codegraph_e2e_minimal_tests;

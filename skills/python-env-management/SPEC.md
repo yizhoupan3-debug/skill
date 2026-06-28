@@ -154,7 +154,7 @@ Normative detail: [`references/shell-profile.md`](references/shell-profile.md).
 
 **Summary**
 
-macOS zsh loads **both** `~/.zprofile` (login) and `~/.zshrc` (interactive). Cursor/Ghostty terminals are usually **interactive**; fixing only `.zprofile` is insufficient if `.zshrc` re-injects legacy Python paths.
+macOS zsh loads **both** `~/.zprofile` (login) and `~/.zshrc` (interactive). Interactive terminals are usually **interactive**; fixing only `.zprofile` is insufficient if `.zshrc` re-injects legacy Python paths.
 
 1. **`~/.zprofile`**: Remove loops that prepend  
    `/Library/Frameworks/Python.framework/Versions/3.11/bin` and `.../3.14/bin`.

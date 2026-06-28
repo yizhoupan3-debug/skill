@@ -114,6 +114,20 @@ impl RuntimeCoreHooks {
     pub fn ensure_kernel_bootstrap(&self) {
         (self.ensure_kernel_bootstrap)()
     }
+
+    pub fn evaluate_quality_gate(
+        &self,
+        payload: serde_json::Value,
+    ) -> Result<serde_json::Value, core_errors::FrameworkError> {
+        (self.evaluate_quality_gate)(payload)
+    }
+
+    pub fn evaluate_closeout_gate(
+        &self,
+        payload: serde_json::Value,
+    ) -> Result<serde_json::Value, core_errors::FrameworkError> {
+        (self.evaluate_closeout_gate)(payload)
+    }
 }
 
 /// All hooks that require callbacks into runtime-core.
@@ -142,4 +156,17 @@ pub struct RuntimeCoreHooks {
 
     // ── Kernel bootstrap ──
     pub ensure_kernel_bootstrap: fn(),
+
+    // ── Quality Gate evaluation (wraps qg_entry::trigger) ──
+    /// Payload: { repo_root: String, task_id: String, scene: String, goal: String,
+    ///            sub_scene: Option<String>, round: u64, output_data: Option<Value> }
+    /// Returns: GateVerdict as Value { passed: bool, blockers: [...], advisories: [...] }
+    pub evaluate_quality_gate:
+        fn(serde_json::Value) -> Result<serde_json::Value, core_errors::FrameworkError>,
+
+    // ── Closeout Gate evaluation (wraps closeout_gate_evaluate) ──
+    /// Payload: { repo_root: String, task_id: String, host_id: String }
+    /// Returns: { result: String, passed: bool, findings: Vec<String> }
+    pub evaluate_closeout_gate:
+        fn(serde_json::Value) -> Result<serde_json::Value, core_errors::FrameworkError>,
 }

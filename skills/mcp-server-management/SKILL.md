@@ -3,7 +3,7 @@
 description: |-
   创建、配置、调试和注册 MCP server，实现 AI agent 工具集成。
   覆盖 stdio/SSE/streamable-http 三种传输模式，Python FastMCP 和 Rust 两种主流实现，
-  以及 Claude Code / Claude Desktop 集成、MCP Registry 注册、调试故障排查全流程。
+  以及 MCP Registry 注册、调试故障排查全流程。
 metadata:
   platforms:
   - supported
@@ -84,7 +84,7 @@ if __name__ == "__main__":
 
 ### Rust 实现
 
-参考本仓库四个 Rust MCP server（跨四宿主统一注册）：
+参考本仓库 Rust MCP server（跨宿主统一注册）：
 - `router-rs-framework`：stdio 模式，框架路由 / goal / closeout 工具集
 - `browser-mcp`：stdio 模式，带 session supervisor 的浏览器自动化
 - `mcp-codegraph`：stdio 模式，代码知识图谱（search/callers/callees/impact）

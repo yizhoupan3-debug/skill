@@ -51,12 +51,7 @@
       ],
       "project",
       "skills/agent-swarm-orchestration/SKILL.md",
-      [
-        "claude",
-        "codex",
-        "cursor",
-        "opencode"
-      ],
+      null,
       "skill",
       [
         "scoring:agent_swarm",
@@ -84,85 +79,6 @@
         "Read",
         "Bash",
         "Grep"
-      ],
-      null,
-      "conditional",
-      null,
-      "general",
-      null
-    ],
-    [
-      "algo-trading",
-      "L4",
-      "owner",
-      "none",
-      "P3",
-      "Design and implement algorithmic trading strategies, backtests, execution logic, and risk management. Sub-skill: financial data fetching.",
-      "n/a",
-      [
-        "A股数据",
-        "OHLCV",
-        "Sharpe",
-        "algo-trading",
-        "alpha",
-        "backtest",
-        "crypto data",
-        "drawdown",
-        "factor research",
-        "financial-data",
-        "fundamentals",
-        "market data",
-        "pairs trading",
-        "risk rules",
-        "roe",
-        "trading",
-        "trading bot",
-        "交易策略",
-        "回测",
-        "因子研究",
-        "统计套利",
-        "量化",
-        "量化策略",
-        "金融数据"
-      ],
-      "local",
-      "skills/algo-trading/SKILL.md",
-      [
-        "claude",
-        "codex",
-        "cursor",
-        "opencode"
-      ],
-      "skill",
-      [],
-      "Design algorithmic trading strategies, backtests, and risk management",
-      null,
-      null,
-      null,
-      {
-        "category": "finance",
-        "platforms": [
-          "supported"
-        ],
-        "tags": [
-          "algo-trading",
-          "quant",
-          "backtesting",
-          "strategy-design",
-          "execution",
-          "risk-management",
-          "factor-research"
-        ],
-        "version": "3.0.0"
-      },
-      "high",
-      [
-        "Read",
-        "Write",
-        "Edit",
-        "Bash",
-        "Grep",
-        "Glob"
       ],
       null,
       "conditional",
@@ -206,12 +122,7 @@
       ],
       "local",
       "skills/autoresearch/SKILL.md",
-      [
-        "claude",
-        "codex",
-        "cursor",
-        "opencode"
-      ],
+      null,
       "skill",
       [],
       "Research workspace CLI — claims, hypotheses, runs, logs, barrier escalation",
@@ -270,12 +181,7 @@
       ],
       "project",
       "skills/citation-management/SKILL.md",
-      [
-        "claude",
-        "codex",
-        "cursor",
-        "opencode"
-      ],
+      null,
       "skill",
       [],
       "Verify and format academic citations",
@@ -337,12 +243,7 @@
       ],
       "project",
       "skills/code-review-deep/SKILL.md",
-      [
-        "claude",
-        "codex",
-        "cursor",
-        "opencode"
-      ],
+      null,
       "skill",
       [
         "scoring:code_review_deep",
@@ -410,12 +311,7 @@
       ],
       "local",
       "skills/deep-research/SKILL.md",
-      [
-        "claude",
-        "codex",
-        "cursor",
-        "opencode"
-      ],
+      null,
       "skill",
       [],
       "Deep research harness — web-first multi-source fact-checked report",
@@ -469,12 +365,7 @@
       ],
       "runtime",
       "skills/deepinterview/SKILL.md",
-      [
-        "claude",
-        "codex",
-        "cursor",
-        "opencode"
-      ],
+      null,
       "framework_command",
       [
         "behavior:low_score_override:20.0"
@@ -534,12 +425,7 @@
       ],
       "project",
       "skills/design-md/SKILL.md",
-      [
-        "claude",
-        "codex",
-        "cursor",
-        "opencode"
-      ],
+      null,
       "skill",
       [
         "scoring:design_md",
@@ -578,72 +464,6 @@
       null
     ],
     [
-      "diagramming",
-      "L3",
-      "owner",
-      "none",
-      "P2",
-      "Create Mermaid or Graphviz/DOT diagrams for flowcharts, process diagrams, sequence diagrams, ERDs, dependency graphs, state machines, and publication-quality technical diagrams. Use when the user asks for a visual representation of processes, architecture, or data flow.",
-      "n/a",
-      [
-        "Mermaid or Graphviz/DOT",
-        "erd",
-        "flowchart",
-        "pipeline 图",
-        "readable markdown-ready text diagrams",
-        "research diagram",
-        "sequence diagram",
-        "technical roadmap",
-        "实验流程",
-        "技术路线图",
-        "方法图",
-        "时序图",
-        "流程图",
-        "研究流程图",
-        "diagramming"
-      ],
-      "project",
-      "skills/diagramming/SKILL.md",
-      [
-        "claude",
-        "codex",
-        "cursor",
-        "opencode"
-      ],
-      "skill",
-      [],
-      "Create Mermaid/Graphviz diagrams for processes and architecture",
-      null,
-      null,
-      null,
-      {
-        "platforms": [
-          "supported"
-        ],
-        "tags": [
-          "diagramming",
-          "flowchart",
-          "research-diagram",
-          "technical-roadmap",
-          "sequence-diagram",
-          "erd"
-        ],
-        "version": "2.0.0"
-      },
-      "low",
-      [
-        "Read",
-        "Write",
-        "Edit",
-        "Bash"
-      ],
-      null,
-      "local",
-      null,
-      "visual",
-      null
-    ],
-    [
       "doc",
       "L3",
       "gate",
@@ -664,12 +484,7 @@
       ],
       "project",
       "skills/doc/SKILL.md",
-      [
-        "claude",
-        "codex",
-        "cursor",
-        "opencode"
-      ],
+      null,
       "skill",
       [
         "behavior:hot_retry_eligible"
@@ -711,68 +526,6 @@
       null
     ],
     [
-      "email-template",
-      "L4",
-      "owner",
-      "none",
-      "P3",
-      "Produce cross-client HTML emails compatible with Outlook, Gmail, Apple Mail. Supports MJML/React Email.",
-      "n/a",
-      [
-        "HTML email compatibility",
-        "HTML 邮件",
-        "MJML",
-        "Outlook 兼容",
-        "React Email",
-        "email template",
-        "email 排版",
-        "html email",
-        "newsletter",
-        "newsletter markup",
-        "邮件模板",
-        "email-template"
-      ],
-      "local",
-      "skills/email-template/SKILL.md",
-      [
-        "claude",
-        "codex",
-        "cursor",
-        "opencode"
-      ],
-      "skill",
-      [],
-      "Produce cross-client HTML emails compatible with Outlook/Gmail/Apple Mail",
-      null,
-      null,
-      null,
-      {
-        "platforms": [
-          "supported"
-        ],
-        "tags": [
-          "email",
-          "html-email",
-          "mjml",
-          "react-email",
-          "newsletter"
-        ],
-        "version": "1.0.0"
-      },
-      "low",
-      [
-        "Read",
-        "Write",
-        "Edit",
-        "Bash"
-      ],
-      null,
-      "local",
-      null,
-      "general",
-      null
-    ],
-    [
       "experiment-reproducibility",
       "L3",
       "owner",
@@ -799,12 +552,7 @@
       ],
       "project",
       "skills/experiment-reproducibility/SKILL.md",
-      [
-        "claude",
-        "codex",
-        "cursor",
-        "opencode"
-      ],
+      null,
       "skill",
       [],
       "Manage research experiment reproducibility end-to-end",
@@ -859,12 +607,7 @@
       ],
       "local",
       "skills/formal-verification/SKILL.md",
-      [
-        "claude",
-        "codex",
-        "cursor",
-        "opencode"
-      ],
+      null,
       "skill",
       [],
       "CAS identity, SMT consistency, witness validation, dimensional analysis",
@@ -923,12 +666,7 @@
       ],
       "project",
       "skills/gh-address-comments/SKILL.md",
-      [
-        "claude",
-        "codex",
-        "cursor",
-        "opencode"
-      ],
+      null,
       "skill",
       [
         "behavior:ci_gate_fuzzy_rescue_excluded"
@@ -1002,12 +740,7 @@
       ],
       "project",
       "skills/gh-fix-ci/SKILL.md",
-      [
-        "claude",
-        "codex",
-        "cursor",
-        "opencode"
-      ],
+      null,
       "skill",
       [
         "behavior:nl_exempt_framework_alias"
@@ -1072,12 +805,7 @@
       ],
       "runtime",
       "skills/gitx/SKILL.md",
-      [
-        "claude",
-        "codex",
-        "cursor",
-        "opencode"
-      ],
+      null,
       "framework_command",
       [],
       "Run the Git closeout workflow with deep review on the substantive diff before commit/merge (no default push).",
@@ -1113,64 +841,6 @@
       null
     ],
     [
-      "infographic",
-      "L3",
-      "owner",
-      "none",
-      "P3",
-      "Generate HTML/CSS/JS infographics: knowledge cards, data summary posters, single-page long-form visuals.",
-      "n/a",
-      [
-        "data visualization",
-        "infographic",
-        "summary poster",
-        "一图读懂",
-        "信息图",
-        "单页长图",
-        "数据长图",
-        "知识卡片"
-      ],
-      "local",
-      "skills/infographic/SKILL.md",
-      [
-        "claude",
-        "codex",
-        "cursor",
-        "opencode"
-      ],
-      "skill",
-      [],
-      "Generate HTML/CSS/JS infographics and knowledge cards",
-      null,
-      null,
-      null,
-      {
-        "platforms": [
-          "supported"
-        ],
-        "tags": [
-          "infographic",
-          "html",
-          "data-visualization",
-          "knowledge-card",
-          "visual-summary"
-        ],
-        "version": "1.0.1"
-      },
-      "low",
-      [
-        "Read",
-        "Write",
-        "Edit",
-        "Bash"
-      ],
-      null,
-      "local",
-      null,
-      "slides",
-      null
-    ],
-    [
       "literature-verification",
       "L4",
       "owner",
@@ -1189,12 +859,7 @@
       ],
       "local",
       "skills/literature-verification/SKILL.md",
-      [
-        "claude",
-        "codex",
-        "cursor",
-        "opencode"
-      ],
+      null,
       "skill",
       [],
       "Verify DOI reachability, citation-claim alignment, contradiction sweep",
@@ -1250,12 +915,7 @@
       ],
       "project",
       "skills/math-derivation/SKILL.md",
-      [
-        "claude",
-        "codex",
-        "cursor",
-        "opencode"
-      ],
+      null,
       "skill",
       [],
       "Rigorous mathematical derivations and theorem proofs",
@@ -1313,12 +973,7 @@
       ],
       "project",
       "skills/mcp-server-management/SKILL.md",
-      [
-        "claude",
-        "codex",
-        "cursor",
-        "opencode"
-      ],
+      null,
       "skill",
       [],
       "创建、配置、调试和注册 MCP server",
@@ -1403,12 +1058,7 @@
       ],
       "project",
       "skills/paper-workbench/SKILL.md",
-      [
-        "claude",
-        "codex",
-        "cursor",
-        "opencode"
-      ],
+      null,
       "skill",
       [
         "scoring:paper_workbench",
@@ -1472,12 +1122,7 @@
       ],
       "project",
       "skills/pdf/SKILL.md",
-      [
-        "claude",
-        "codex",
-        "cursor",
-        "opencode"
-      ],
+      null,
       "skill",
       [
         "behavior:hot_retry_eligible"
@@ -1537,12 +1182,7 @@
       ],
       "project",
       "skills/plan-mode/SKILL.md",
-      [
-        "claude",
-        "codex",
-        "cursor",
-        "opencode"
-      ],
+      null,
       "skill",
       [],
       "Plan 门控：证据先行、可验收 todo、计划 vs 实际收口",
@@ -1593,12 +1233,7 @@
       ],
       "local",
       "skills/prose-verification/SKILL.md",
-      [
-        "claude",
-        "codex",
-        "cursor",
-        "opencode"
-      ],
+      null,
       "skill",
       [],
       "Verify terminology, style guide, claim drift, and language register",
@@ -1655,12 +1290,7 @@
       ],
       "project",
       "skills/python-env-management/SKILL.md",
-      [
-        "claude",
-        "codex",
-        "cursor",
-        "opencode"
-      ],
+      null,
       "skill",
       [],
       "macOS Python governance with uv-only packaging",
@@ -1712,12 +1342,7 @@
       ],
       "local",
       "skills/reproducibility-verification/SKILL.md",
-      [
-        "claude",
-        "codex",
-        "cursor",
-        "opencode"
-      ],
+      null,
       "skill",
       [],
       "Verify experiment reproducibility: seed, determinism, environment",
@@ -1783,12 +1408,7 @@
       ],
       "local",
       "skills/research-discovery/SKILL.md",
-      [
-        "claude",
-        "codex",
-        "cursor",
-        "opencode"
-      ],
+      null,
       "skill",
       [],
       "Research discovery, literature survey, and theory-background router",
@@ -1853,12 +1473,7 @@
       ],
       "local",
       "skills/research-execution/SKILL.md",
-      [
-        "claude",
-        "codex",
-        "cursor",
-        "opencode"
-      ],
+      null,
       "skill",
       [],
       "Research execution lanes — experiment design, math, code, reproducibility",
@@ -1925,12 +1540,7 @@
       ],
       "local",
       "skills/research-knowledge-graph/SKILL.md",
-      [
-        "claude",
-        "codex",
-        "cursor",
-        "opencode"
-      ],
+      null,
       "skill",
       [],
       "Research Knowledge Graph — navigate, visualize, trace connections",
@@ -1963,76 +1573,6 @@
       null
     ],
     [
-      "scientific-figure-plotting",
-      "L4",
-      "owner",
-      "none",
-      "P2",
-      "Create, refactor, and review code-generated scientific figures for papers using matplotlib, seaborn, plotnine, or related Python plotting tools. Use for 科研出图, publication charts, journal style figures.",
-      "preferred",
-      [
-        "CJK font",
-        "charts",
-        "colorblind-safe palettes",
-        "matplotlib",
-        "plotting",
-        "publication",
-        "scientific figures",
-        "seaborn",
-        "statistical annotations",
-        "科研出图",
-        "scientific-figure-plotting"
-      ],
-      "project",
-      "skills/scientific-figure-plotting/SKILL.md",
-      [
-        "claude",
-        "codex",
-        "cursor",
-        "opencode"
-      ],
-      "skill",
-      [],
-      "Create publication-quality scientific figures with Python",
-      null,
-      null,
-      null,
-      {
-        "platforms": [
-          "supported"
-        ],
-        "tags": [
-          "scientific-figures",
-          "plotting",
-          "matplotlib",
-          "seaborn",
-          "publication",
-          "charts"
-        ],
-        "version": "1.2.0"
-      },
-      "medium",
-      [
-        "Read",
-        "Write",
-        "Edit",
-        "Bash",
-        "Grep",
-        "Glob"
-      ],
-      {
-        "python": [
-          "matplotlib",
-          "numpy",
-          "scienceplots"
-        ]
-      },
-      "conditional",
-      null,
-      "visual",
-      null
-    ],
-    [
       "sentry",
       "L0",
       "gate",
@@ -2055,12 +1595,7 @@
       ],
       "project",
       "skills/sentry/SKILL.md",
-      [
-        "claude",
-        "codex",
-        "cursor",
-        "opencode"
-      ],
+      null,
       "skill",
       [
         "behavior:hot_retry_eligible"
@@ -2123,12 +1658,7 @@
       ],
       "project",
       "skills/simplify/SKILL.md",
-      [
-        "claude",
-        "codex",
-        "cursor",
-        "opencode"
-      ],
+      null,
       "skill",
       [],
       "Three-dimension parallel code simplification (reuse/quality/efficiency)",
@@ -2192,12 +1722,7 @@
       ],
       "project",
       "skills/skill-framework-developer/SKILL.md",
-      [
-        "claude",
-        "codex",
-        "cursor",
-        "opencode"
-      ],
+      null,
       "skill",
       [
         "behavior:framework_review_overlay",
@@ -2262,12 +1787,7 @@
       ],
       "local",
       "skills/systematic-debugging/SKILL.md",
-      [
-        "claude",
-        "codex",
-        "cursor",
-        "opencode"
-      ],
+      null,
       "skill",
       [
         "behavior:systematic_debugging_high_threshold"
@@ -2323,12 +1843,7 @@
       ],
       "project",
       "skills/slides/SKILL.md",
-      [
-        "claude",
-        "codex",
-        "cursor",
-        "opencode"
-      ],
+      null,
       "skill",
       [
         "artifact_exception:slides_design_contract",
@@ -2392,12 +1907,7 @@
       ],
       "project",
       "skills/primary-runtime/spreadsheets/SKILL.md",
-      [
-        "claude",
-        "codex",
-        "cursor",
-        "opencode"
-      ],
+      null,
       "skill",
       [],
       "Route workbook-native spreadsheet work to the right implementation lane",
@@ -2455,12 +1965,7 @@
       ],
       "project",
       "skills/statistical-analysis/SKILL.md",
-      [
-        "claude",
-        "codex",
-        "cursor",
-        "opencode"
-      ],
+      null,
       "skill",
       [],
       "Guide research statistics: test choice, effect sizes, interpretation",
@@ -2514,12 +2019,7 @@
       ],
       "local",
       "skills/statistical-verification/SKILL.md",
-      [
-        "claude",
-        "codex",
-        "cursor",
-        "opencode"
-      ],
+      null,
       "skill",
       [],
       "Verify statistical results: p-values, GRIM, effect sizes",
@@ -2569,12 +2069,7 @@
       ],
       "local",
       "skills/structure-verification/SKILL.md",
-      [
-        "claude",
-        "codex",
-        "cursor",
-        "opencode"
-      ],
+      null,
       "skill",
       [],
       "Verify LaTeX compilation, cross-references, and format compliance",
@@ -2636,12 +2131,7 @@
       ],
       "project",
       "skills/tikz-paper-figure/SKILL.md",
-      [
-        "claude",
-        "codex",
-        "cursor",
-        "opencode"
-      ],
+      null,
       "skill",
       [],
       "Convert AI/raster drafts into paper-ready TikZ standalone figures",
@@ -2698,12 +2188,7 @@
       ],
       "runtime",
       "skills/update/SKILL.md",
-      [
-        "claude",
-        "codex",
-        "cursor",
-        "opencode"
-      ],
+      null,
       "framework_command",
       [],
       "Refresh key docs, git tracking, and stale/dead repo surfaces; framework checks when applicable.",
@@ -2762,12 +2247,7 @@
       ],
       "project",
       "skills/visual-review/SKILL.md",
-      [
-        "claude",
-        "codex",
-        "cursor",
-        "opencode"
-      ],
+      null,
       "skill",
       [
         "scoring:visual_review",
@@ -2828,12 +2308,7 @@
       ],
       "runtime",
       "skills/goalx/SKILL.md",
-      [
-        "claude",
-        "codex",
-        "cursor",
-        "opencode"
-      ],
+      null,
       "framework_command",
       [],
       "Guaranteed entry point for Goal management lifecycle",
@@ -2874,12 +2349,7 @@
       [],
       "framework",
       "skills/primary-runtime/SKILL.md",
-      [
-        "claude",
-        "codex",
-        "cursor",
-        "opencode"
-      ],
+      null,
       "runtime",
       [],
       "Framework lifecycle orchestration: goal drive, quality gate, session supervision",
@@ -2927,12 +2397,7 @@
       [],
       "framework",
       "skills/shared-references/SKILL.md",
-      [
-        "claude",
-        "codex",
-        "cursor",
-        "opencode"
-      ],
+      null,
       "reference",
       [],
       "Cross-skill reference data: lookup tables, glossary, domain constants",

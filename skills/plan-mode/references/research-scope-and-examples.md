@@ -81,4 +81,3 @@
 
 - `skills/plan-mode/SKILL.md` — 跨宿主通用 plan-mode 规范（主文件）。
 - [references/research-profile-guide.md](research-profile-guide.md) — 调研与执行 profile 详细指南。
-- [references/cursor-createplan-contract.md](cursor-createplan-contract.md) — Cursor 宿主专属契约。

@@ -476,15 +476,68 @@ fn dispatch_framework_stdio_request(op: &str, payload: Value) -> Result<Value, F
                 tracing::warn!("framework_rfv_loop: goal is missing, defaulting to empty string");
             }
             let round = payload.get("round").and_then(|v| v.as_u64()).unwrap_or(1);
+            let scene = payload
+                .get("scene")
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+                .unwrap_or(quality_gate::scene::GENERAL);
+            let sub_scene = payload
+                .get("sub_scene")
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty());
+            let output_data = payload.get("output_data").cloned();
             let verdict = crate::qg_entry::trigger(
                 repo_root,
                 task_id,
-                quality_gate::scene::GENERAL,
+                scene,
                 goal,
-                None,
+                sub_scene,
                 round,
                 None,
+                output_data,
+            );
+            Ok(serde_json::to_value(&verdict)?)
+        }
+        "framework_quality_gate" => {
+            // First-class entry point for the two-stage quality gate.
+            // Accepts the same payload as framework_rfv_loop:
+            //   { repo_root, task_id, goal, scene (default GENERAL),
+            //     sub_scene (optional), round (default 1), output_data (optional) }
+            let repo_root_str = payload
+                .get("repo_root")
+                .and_then(|v| v.as_str())
+                .unwrap_or(".");
+            let repo_root = std::path::Path::new(repo_root_str);
+            let task_id = payload
+                .get("task_id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            if task_id.is_empty() {
+                return Err(FrameworkError::validation(
+                    "framework_quality_gate: task_id is required".to_string(),
+                ));
+            }
+            let goal = payload.get("goal").and_then(|v| v.as_str()).unwrap_or("");
+            let scene = payload
+                .get("scene")
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+                .unwrap_or(quality_gate::scene::GENERAL);
+            let sub_scene = payload
+                .get("sub_scene")
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty());
+            let round = payload.get("round").and_then(|v| v.as_u64()).unwrap_or(1);
+            let output_data = payload.get("output_data").cloned();
+            let verdict = crate::qg_entry::trigger(
+                repo_root,
+                task_id,
+                scene,
+                goal,
+                sub_scene,
+                round,
                 None,
+                output_data,
             );
             Ok(serde_json::to_value(&verdict)?)
         }
