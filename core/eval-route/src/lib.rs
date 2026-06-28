@@ -16,8 +16,6 @@ pub const EVAL_ROUTE_AUTHORITY: &str = "rust-eval-route";
 pub struct EvalCasePayload {
     #[serde(default)]
     pub id: String,
-    #[serde(default)]
-    pub _category: String,
     pub task: String,
     #[serde(default)]
     pub expected_owner: Option<String>,
@@ -27,8 +25,6 @@ pub struct EvalCasePayload {
     pub expected_layer: Option<String>,
     #[serde(default)]
     pub forbidden_owners: Vec<String>,
-    #[serde(default)]
-    pub _notes: Option<String>,
     #[serde(default)]
     pub host_id: Option<String>,
     /// Override first_turn for this case (defaults to true for backward compat).
@@ -45,8 +41,6 @@ fn default_true() -> bool {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct EvalCasesPayload {
-    #[serde(default)]
-    pub _schema_version: String,
     #[serde(default)]
     pub cases: Vec<EvalCasePayload>,
 }
@@ -344,7 +338,6 @@ mod tests {
         let cases = vec![
             EvalCasePayload {
                 id: "c1".to_string(),
-                _category: "should-trigger".to_string(),
                 task: "帮我做一个演示文稿".to_string(),
                 expected_owner: Some("slides".to_string()),
                 expected_layer: Some("L3".to_string()),
@@ -352,7 +345,6 @@ mod tests {
             },
             EvalCasePayload {
                 id: "c2".to_string(),
-                _category: "should-trigger".to_string(),
                 task: "提交代码".to_string(),
                 expected_owner: Some("gitx".to_string()),
                 expected_layer: Some("L0".to_string()),
@@ -378,7 +370,6 @@ mod tests {
         )];
         let cases = vec![EvalCasePayload {
             id: "c1".to_string(),
-            _category: "should-trigger".to_string(),
             task: "xyzzynomatch_12345_nonexistent".to_string(),
             expected_owner: Some("slides".to_string()),
             ..Default::default()
@@ -405,7 +396,6 @@ mod tests {
         ];
         let cases = vec![EvalCasePayload {
             id: "c1".to_string(),
-            _category: "should-not-trigger".to_string(),
             task: "提交代码".to_string(),
             expected_owner: Some("gitx".to_string()),
             forbidden_owners: vec!["gitx".to_string()],
@@ -427,7 +417,6 @@ mod tests {
         )];
         let cases = vec![EvalCasePayload {
             id: "empty".to_string(),
-            _category: "should-trigger".to_string(),
             task: "   ".to_string(),
             expected_owner: Some("slides".to_string()),
             ..Default::default()
@@ -499,7 +488,6 @@ mod tests {
         )];
         let cases = vec![EvalCasePayload {
             id: "overlay-fail".to_string(),
-            _category: "wrong-overlay".to_string(),
             task: "xyzzynomatch_12345_nonexistent".to_string(),
             expected_overlay: Some("overlay_skill".to_string()),
             ..Default::default()
@@ -521,7 +509,6 @@ mod tests {
         )];
         let cases = vec![EvalCasePayload {
             id: "layer-fail".to_string(),
-            _category: "wrong-layer".to_string(),
             task: "提交代码".to_string(),
             expected_owner: Some("gitx".to_string()),
             expected_layer: Some("WRONG_LAYER".to_string()),

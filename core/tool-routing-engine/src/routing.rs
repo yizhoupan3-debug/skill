@@ -25,12 +25,11 @@ const DECISION_SCHEMA_VERSION: &str = "1.0.0";
 
 /// Route a natural language query to the best-matching tool.
 ///
-/// `host_id` is optional — when provided, records with non-empty `host_platforms`
-/// are filtered to only those matching the host.
+/// `_host_id` is retained for API compatibility (host_platforms removed from McpToolRecord).
 pub fn route_tool(
     query: &str,
     registry_path: &std::path::Path,
-    host_id: Option<&str>,
+    _host_id: Option<&str>,
 ) -> Result<Option<McpToolDecision>, FrameworkError> {
     if query.len() > crate::MAX_QUERY_LEN {
         return Err(FrameworkError::validation(format!(
@@ -40,14 +39,14 @@ pub fn route_tool(
         )));
     }
     let records = mcp_tool_registry::load_tool_records_cached(registry_path)?;
-    Ok(route_tool_from_records(query, &records, host_id))
+    Ok(route_tool_from_records(query, &records))
 }
 
-/// Route a query against a pre-loaded set of records, with optional host filtering.
+/// Route a query against a pre-loaded set of records, no host filtering
+/// (host_platforms has been removed — always all records).
 pub fn route_tool_from_records(
     query: &str,
     records: &[McpToolRecord],
-    host_id: Option<&str>,
 ) -> Option<McpToolDecision> {
     if records.is_empty() || query.trim().is_empty() || query.len() > crate::MAX_QUERY_LEN {
         return None;
@@ -78,25 +77,8 @@ pub fn route_tool_from_records(
         })
         .collect();
 
-    // Step 6: host filtering — exclude host-mismatched records
-    let filtered: Vec<ToolCandidate> = if let Some(hid) = host_id {
-        let hid_lower = hid.to_lowercase();
-        candidates
-            .into_iter()
-            .filter(|c| {
-                c.record.host_platforms.is_empty()
-                    || c.record
-                        .host_platforms
-                        .iter()
-                        .any(|p| p.to_lowercase() == hid_lower)
-            })
-            .collect()
-    } else {
-        candidates
-    };
-
-    // Pick best among scored candidates above zero
-    let best = filtered.iter().max_by(|a, b| {
+    // Step 6: pick best among scored candidates above zero
+    let best = candidates.iter().max_by(|a, b| {
         a.score
             .partial_cmp(&b.score)
             .unwrap_or(std::cmp::Ordering::Equal)
@@ -118,21 +100,9 @@ pub fn route_tool_from_records(
     }
 
     // Step 8: fuzzy rescue — try trigram matching against trigger hints
-    // Respect host filtering + exclusion flags (same logic as Step 1-6) to prevent bypass
+    // Respect exclusion flags (same logic as Step 1-6) to prevent bypass
     let mut fuzzy_candidates: Vec<(f64, &McpToolRecord)> = Vec::new();
     for record in records {
-        // Skip records excluded by host filter
-        if let Some(hid) = host_id {
-            let hid_lower = hid.to_lowercase();
-            if !record.host_platforms.is_empty()
-                && !record
-                    .host_platforms
-                    .iter()
-                    .any(|p| p.to_lowercase() == hid_lower)
-            {
-                continue;
-            }
-        }
         // Skip deprecated tools and no_routing tools in fuzzy rescue
         if record
             .tool_flags
@@ -333,7 +303,6 @@ mod tests {
             dispatch_domain: DispatchDomain::DomainFramework,
             owner: ToolOwner::Framework,
             trigger_hints: keywords.iter().map(|s| s.to_string()).collect(),
-            host_platforms: vec!["claude".to_string()],
             mcp_server: "router-rs".to_string(),
             tool_flags: vec![],
             input_schema_json: None,
@@ -346,7 +315,7 @@ mod tests {
             test_tool_record("pdf_read", &["pdf", "PDF"]),
             test_tool_record("browser_screenshot", &["截图", "浏览器"]),
         ];
-        let decision = route_tool_from_records("pdf_read", &records, None);
+        let decision = route_tool_from_records("pdf_read", &records);
         assert!(decision.is_some());
         assert_eq!(decision.unwrap().selected_tool, "pdf_read");
     }
@@ -357,7 +326,7 @@ mod tests {
             test_tool_record("pdf_read", &["pdf", "文档"]),
             test_tool_record("browser_screenshot", &["截图", "浏览器"]),
         ];
-        let decision = route_tool_from_records("帮我处理 PDF 文档", &records, None);
+        let decision = route_tool_from_records("帮我处理 PDF 文档", &records);
         assert!(decision.is_some());
         let d = decision.unwrap();
         assert_eq!(d.selected_tool, "pdf_read");
@@ -366,13 +335,13 @@ mod tests {
     #[test]
     fn empty_query_returns_none() {
         let records = vec![test_tool_record("pdf_read", &["pdf"])];
-        assert!(route_tool_from_records("", &records, None).is_none());
+        assert!(route_tool_from_records("", &records).is_none());
     }
 
     #[test]
     fn no_match_returns_none() {
         let records = vec![test_tool_record("pdf_read", &["pdf"])];
-        assert!(route_tool_from_records("hello world", &records, None).is_none());
+        assert!(route_tool_from_records("hello world", &records).is_none());
     }
 
     #[test]
@@ -406,7 +375,7 @@ mod tests {
             &["截图", "screenshot"],
         )];
         // "screeenshot" is a typo of the trigger hint "screenshot"
-        let decision = route_tool_from_records("screeenshot", &records, None);
+        let decision = route_tool_from_records("screeenshot", &records);
         assert!(decision.is_some(), "typo should fuzzy-match");
         let d = decision.unwrap();
         assert!(d.fuzzy_match, "should be flagged as fuzzy match");
@@ -419,7 +388,7 @@ mod tests {
         r.display_name = "PDF 文本提取".to_string();
         let records = vec![r];
         // Query matches the Chinese display name
-        let decision = route_tool_from_records("文本提取", &records, None);
+        let decision = route_tool_from_records("文本提取", &records);
         assert!(decision.is_some(), "display name should match");
         if let Some(d) = decision {
             assert!(

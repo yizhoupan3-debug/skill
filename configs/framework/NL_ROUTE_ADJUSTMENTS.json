@@ -192,6 +192,32 @@
         "type": "suppress",
         "reason": "Suppressed: user query contains MCP tool name or tool invocation intent, not a skill request."
       }
+    },
+    {
+      "when": {
+        "signal": "has_scientific_figure_plotting_context"
+      },
+      "action": {
+        "type": "boost",
+        "delta": 30.0,
+        "reason": "Scientific-figure boost applied: tikz/pgfplots/gnuplot/figure-wording detected."
+      },
+      "record": {
+        "slug": "tikz-paper-figure"
+      }
+    },
+    {
+      "when": {
+        "signal": "has_diagramming_context"
+      },
+      "action": {
+        "type": "boost",
+        "delta": 20.0,
+        "reason": "Diagramming context boost applied: flowchart/diagram/wiring wording detected."
+      },
+      "record": {
+        "slug": "design-md"
+      }
     }
   ],
   "post_framework_alias_rules": [

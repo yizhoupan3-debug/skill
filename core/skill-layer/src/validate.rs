@@ -445,6 +445,8 @@ fn frontmatter_field_to_value(
             crate::frontmatter::RecordKind::FrameworkCommand => {
                 Some(Value::String("framework_command".into()))
             }
+            crate::frontmatter::RecordKind::Reference => None,
+            crate::frontmatter::RecordKind::Runtime => None,
         }),
         "scene" => fm.scene.as_ref().map(|s| Value::String(s.clone())),
         "sub_scene" => fm.sub_scene.as_ref().map(|s| Value::String(s.clone())),

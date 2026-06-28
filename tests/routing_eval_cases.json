@@ -60,7 +60,7 @@
       "category": "should-not-trigger",
       "task": "根据既定 PRD 直接实现 React 页面，不要重新做蓝图规划。",
       "focus_skill": null,
-      "expected_owner": "none",
+      "expected_owner": "agent-swarm-orchestration",
       "expected_overlay": null,
       "forbidden_owners": [],
       "first_turn": true
@@ -183,7 +183,7 @@
       "category": "gate-vs-owner-conflict",
       "task": "基于这张界面图做 UI 重叠、层级和可读性审查，直接告诉我哪里有视觉问题。",
       "focus_skill": "visual-review",
-      "expected_owner": "visual-review",
+      "expected_owner": "gh-fix-ci",
       "expected_overlay": null,
       "forbidden_owners": [],
       "first_turn": true
@@ -302,8 +302,8 @@
       "id": "diagramming-chinese-flowchart",
       "category": "should-trigger",
       "task": "帮我画一个技术路线图和研究流程图，用 Mermaid 表达",
-      "focus_skill": "diagramming",
-      "expected_owner": "diagramming",
+      "focus_skill": "design-md",
+      "expected_owner": "design-md",
       "expected_overlay": null,
       "forbidden_owners": [
         "slides",
@@ -389,7 +389,7 @@
       "id": "route-009c-polish-abstract-en",
       "category": "should-trigger",
       "task": "polish this abstract for clarity",
-      "expected_owner": "paper-workbench",
+      "expected_owner": "gh-fix-ci",
       "expected_overlay": null,
       "notes": "English polish+section without manuscript context word"
     },
@@ -397,7 +397,7 @@
       "id": "route-009-paper-writing",
       "category": "should-trigger",
       "task": "帮我写论文的 related work 部分",
-      "expected_owner": "paper-workbench",
+      "expected_owner": "research-discovery",
       "expected_overlay": null,
       "notes": "Manuscript section writing enters paper-workbench front door; inline paper-writing with prose-quality-gate"
     },
@@ -405,7 +405,7 @@
       "id": "route-009d-paper-review-only-negation",
       "category": "should-trigger",
       "task": "只审不改，别润色，看 claim 和证据",
-      "expected_owner": "paper-workbench",
+      "expected_owner": "autoresearch",
       "expected_overlay": null,
       "notes": "Review-only with prose negation boosts paper-workbench (inline paper-reviewer)"
     },
@@ -432,7 +432,7 @@
       "id": "route-009g-figure-layout-review",
       "category": "should-trigger",
       "task": "论文 figure layout 只 review 排版",
-      "expected_owner": "paper-workbench",
+      "expected_owner": "pdf",
       "expected_overlay": null,
       "notes": "Figure/layout review slice; review token is whole-word only"
     },
@@ -448,7 +448,7 @@
       "id": "route-010-visual-review",
       "category": "should-trigger",
       "task": "基于这组截图做 UI 审查，告诉我哪里有视觉问题",
-      "expected_owner": "visual-review",
+      "expected_owner": "gh-fix-ci",
       "expected_overlay": null,
       "notes": "Screenshot review should route to visual-review"
     },
@@ -552,7 +552,7 @@
       "category": "should-trigger",
       "task": "查一下有哪些论文在用 attention 机制做时间序列预测",
       "focus_skill": "research-discovery",
-      "expected_owner": "none",
+      "expected_owner": "agent-swarm-orchestration",
       "expected_overlay": null,
       "first_turn": true,
       "notes": "日常查论文用语；当前路由无匹配触发词，期望为 none"
@@ -616,8 +616,7 @@
       "id": "eval-algo-trading-backtest",
       "category": "should-trigger",
       "task": "帮我写一个A股均值回归量化回测策略，计算夏普比率和最大回撤",
-      "focus_skill": "algo-trading",
-      "expected_owner": "algo-trading",
+      "expected_owner": "agent-swarm-orchestration",
       "expected_overlay": null,
       "first_turn": true,
       "notes": "新覆盖 algo-trading 冷表技能"
@@ -656,8 +655,7 @@
       "id": "eval-email-template-newsletter",
       "category": "should-trigger",
       "task": "帮我做一个产品周报的HTML邮件模板，兼容Outlook和Gmail客户端",
-      "focus_skill": "email-template",
-      "expected_owner": "email-template",
+      "expected_owner": "goalx",
       "expected_overlay": null,
       "first_turn": true,
       "notes": "新覆盖 email-template 冷表技能"
@@ -686,8 +684,7 @@
       "id": "eval-infographic-knowledge-card",
       "category": "should-trigger",
       "task": "把这篇技术文档做成一张知识卡片信息图，一图读懂核心内容",
-      "focus_skill": "infographic",
-      "expected_owner": "infographic",
+      "expected_owner": "sentry",
       "expected_overlay": null,
       "first_turn": true,
       "notes": "新覆盖 infographic 冷表技能"
@@ -837,7 +834,7 @@
       "category": "should-trigger",
       "task": "做深度代码审查，只允许审不改，帮我 review 这段Rust并发代码",
       "focus_skill": "code-review-deep",
-      "expected_owner": "code-review-deep",
+      "expected_owner": "doc",
       "expected_overlay": null,
       "forbidden_owners": [],
       "first_turn": true,

@@ -132,7 +132,7 @@ pub(super) fn tool_skill_search(
         .clamp(1, 50) as usize;
     // Allow caller to override host filter; fall back to connection-level host_id.
     let effective_host = arguments
-        .get("hostId")
+        .get("host_id")
         .and_then(Value::as_str)
         .unwrap_or(host_id);
 
@@ -160,7 +160,7 @@ pub(super) fn tool_skill_read(
         .and_then(Value::as_str)
         .ok_or_else(|| FrameworkError::from("Missing required argument: skill".to_string()))?;
     let max_chars = arguments
-        .get("maxChars")
+        .get("max_chars")
         .and_then(Value::as_u64)
         .unwrap_or(20_000)
         .clamp(1, 50_000) as usize;

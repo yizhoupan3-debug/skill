@@ -349,7 +349,7 @@
       "id": "codegraph-callers",
       "category": "should-trigger",
       "task": "看看validate_config这个函数被哪些模块调用了",
-      "expected_tool": "codegraph_callees",
+      "expected_tool": "codegraph_callers",
       "forbidden_tools": [],
       "notes": "代码调用者分析：找出所有引用位置"
     },

@@ -95,6 +95,8 @@ fn frontmatter_field_to_value(
         "kind" => fm.kind.and_then(|k| match k {
             RecordKind::Skill => None,
             RecordKind::FrameworkCommand => Some(Value::String("framework_command".into())),
+            RecordKind::Reference => None,
+            RecordKind::Runtime => None,
         }),
         _ => None,
     }

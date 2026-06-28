@@ -33,7 +33,7 @@
             "type": "string",
             "description": "技能名称或路径"
           },
-          "maxChars": {
+          "max_chars": {
             "type": "integer",
             "minimum": 1,
             "maximum": 50000,
@@ -93,7 +93,7 @@
             "type": "string",
             "description": "搜索查询文本"
           },
-          "hostId": {
+          "host_id": {
             "type": "string",
             "description": "宿主平台 ID（claude/cursor/opencode/codex）"
           },

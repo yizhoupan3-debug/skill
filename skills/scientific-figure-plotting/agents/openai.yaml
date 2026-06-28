@@ -1,0 +1,4 @@
+interface:
+  display_name: "Scientific Figure Plotting"
+  short_description: "Code-generated scientific figure design"
+  default_prompt: "Use $scientific-figure-plotting to redesign these code-generated figures for top-tier paper quality, high information density, English-first labeling, and visual-review-backed overlap checks."

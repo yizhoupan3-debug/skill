@@ -17,6 +17,7 @@ pub enum RoutingOwner {
     Owner,
     Gate,
     User,
+    None,
 }
 
 /// Valid values for `routing_layer`.
@@ -67,6 +68,8 @@ pub enum SessionStart {
 pub enum RecordKind {
     Skill,
     FrameworkCommand,
+    Reference,
+    Runtime,
 }
 
 impl RecordKind {
@@ -75,6 +78,8 @@ impl RecordKind {
         match self {
             RecordKind::Skill => "skill",
             RecordKind::FrameworkCommand => "framework_command",
+            RecordKind::Reference => "reference",
+            RecordKind::Runtime => "runtime",
         }
     }
 }

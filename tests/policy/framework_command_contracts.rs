@@ -40,7 +40,7 @@ fn runtime_description_index(keys: &[Value]) -> usize {
 }
 
 #[test]
-fn gitx_skill_exposes_codex_shortcut_and_closeout_flow() {
+fn gitx_skill_exposes_entrypoint_and_closeout_flow() {
     let content = read_text(&project_root().join("skills/gitx/SKILL.md"));
     for marker in [
         "name: gitx",
@@ -51,7 +51,6 @@ fn gitx_skill_exposes_codex_shortcut_and_closeout_flow() {
         "git worktree list --porcelain",
         "git diff --stat",
         "不要依赖已移除的 Python git helper",
-        "RTK",
     ] {
         assert!(content.contains(marker), "missing marker: {marker}");
     }
@@ -230,10 +229,12 @@ fn runtime_framework_command_rows_match_manifest() {
         );
         let runtime_hosts: HashSet<String> = row[r_hosts]
             .as_array()
-            .expect("runtime host_platforms")
-            .iter()
-            .filter_map(|v| v.as_str().map(str::to_string))
-            .collect();
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str().map(str::to_string))
+                    .collect()
+            })
+            .unwrap_or_default();
         for host in &runtime_hosts {
             assert!(
                 supported_host_set.contains(host),

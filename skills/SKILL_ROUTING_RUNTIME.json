@@ -2681,6 +2681,61 @@
       null,
       "general",
       null
+    ],
+    [
+      "scientific-figure-plotting",
+      "L4",
+      "owner",
+      "none",
+      "P2",
+      "Create/edit scientific figures for papers (routing alias to tikz-paper-figure).",
+      "n/a",
+      [
+        "scientific figure",
+        "data plot",
+        "科研绘图",
+        "chart",
+        "graph plot",
+        "pgfplots",
+        "gnuplot"
+      ],
+      "project",
+      "skills/tikz-paper-figure/SKILL.md",
+      null,
+      "runtime",
+      [],
+      "Scientific figure plotting (alias to tikz-paper-figure)",
+      [
+        "scientific-figure",
+        "tikz",
+        "data-viz",
+        "plotting"
+      ],
+      null,
+      null,
+      {
+        "platforms": [
+          "supported"
+        ],
+        "tags": [
+          "tikz",
+          "latex",
+          "standalone",
+          "paper-figure",
+          "figure-conversion"
+        ],
+        "version": "1.0.0"
+      },
+      "low",
+      [
+        "shell",
+        "browser"
+      ],
+      null,
+      "local",
+      null,
+      "slides",
+      null
     ]
   ]
 }

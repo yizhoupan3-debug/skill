@@ -103,6 +103,12 @@
       "verify": "cargo test --manifest-path core/router-rs/Cargo.toml trace"
     },
     {
+      "id": "lane_contract_requires_digest_and_verification",
+      "failure_class": "subagent_misuse",
+      "fixture": "review_gate subagent lane contract: digest + verification required",
+      "verify": "cargo test --manifest-path core/router-rs/Cargo.toml subagent_lane_contract_requires_digest_and_verification"
+    },
+    {
       "id": "skill_contract_lint_high_impact",
       "failure_class": "tool_contract_bad",
       "fixture": "router-rs eval skill-contract-lint",

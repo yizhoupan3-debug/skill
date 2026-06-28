@@ -40,7 +40,6 @@ fn test_mcp_tool_record_serde_roundtrip() {
         dispatch_domain: DispatchDomain::DomainGoal,
         owner: ToolOwner::Framework,
         trigger_hints: vec!["hint1".into(), "hint2".into()],
-        host_platforms: vec!["macos".into()],
         mcp_server: "test-server".into(),
         tool_flags: vec!["experimental".into()],
         input_schema_json: Some(McpToolInputSchema {
@@ -60,7 +59,6 @@ fn test_mcp_tool_record_serde_roundtrip() {
     assert_eq!(json["display_name"], "Test Tool");
     assert_eq!(json["layer"], "builtin");
     assert_eq!(json["trigger_hints"], serde_json::json!(["hint1", "hint2"]));
-    assert_eq!(json["host_platforms"], serde_json::json!(["macos"]));
     assert_eq!(json["tool_flags"], serde_json::json!(["experimental"]));
 
     // input_schema_json should serialize under the renamed key "input_schema"
@@ -75,7 +73,6 @@ fn test_mcp_tool_record_serde_roundtrip() {
     assert_eq!(deserialized.dispatch_domain, DispatchDomain::DomainGoal);
     assert_eq!(deserialized.owner, ToolOwner::Framework);
     assert_eq!(deserialized.trigger_hints, vec!["hint1", "hint2"]);
-    assert_eq!(deserialized.host_platforms, vec!["macos"]);
     assert_eq!(deserialized.tool_flags, vec!["experimental"]);
 
     let schema = deserialized.input_schema_json.unwrap();
@@ -139,15 +136,14 @@ fn test_minimal_record_deserialization() {
     let record: McpToolRecord = serde_json::from_value(json).unwrap();
     assert_eq!(record.slug, "minimal");
     assert!(record.trigger_hints.is_empty());
-    assert!(record.host_platforms.is_empty());
     assert!(record.tool_flags.is_empty());
     assert!(record.input_schema_json.is_none());
     assert_eq!(record.layer, ToolLayer::Builtin);
 }
 
 #[test]
-fn test_serde_default_for_trigger_hints_and_host_platforms() {
-    // JSON without trigger_hints and host_platforms — should default to empty
+fn test_serde_default_for_trigger_hints() {
+    // JSON without trigger_hints — should default to empty
     let json = serde_json::json!({
         "slug": "no_hints",
         "display_name": "No Hints",
@@ -160,7 +156,6 @@ fn test_serde_default_for_trigger_hints_and_host_platforms() {
 
     let record: McpToolRecord = serde_json::from_value(json).unwrap();
     assert!(record.trigger_hints.is_empty());
-    assert!(record.host_platforms.is_empty());
 }
 
 #[test]
@@ -255,7 +250,6 @@ fn test_load_v2_with_full_fields() {
     assert_eq!(r.dispatch_domain, DispatchDomain::Research);
     assert_eq!(r.owner, ToolOwner::Paperplain);
     assert_eq!(r.trigger_hints, vec!["hint_a", "hint_b"]);
-    assert_eq!(r.host_platforms, vec!["linux", "macos"]);
     assert_eq!(r.tool_flags, vec!["deprecated"]);
     assert!(r.input_schema_json.is_some());
 

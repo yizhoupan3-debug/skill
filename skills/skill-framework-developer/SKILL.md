@@ -154,8 +154,6 @@ cd "<repo-root>"
 cargo run --manifest-path core/router-rs/Cargo.toml -- framework skills refresh --framework-root "$PWD" --write
 ```
 
-For local high-output runs, prefer the raw command (no RTK wrapper).
-
 If validation tools fail, report the failing command, the affected generated or
 runtime surface, and the smallest next repair step. Do not claim sync health
 from prose-only inspection when a compiler, registry, or contract check was

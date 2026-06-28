@@ -37,7 +37,7 @@
         "type": "boolean",
         "required": false,
         "default": true,
-        "description": "传给 route_task 的首轮标记；仅 route.rs 的 routing eval 测试路径读取。eval route CLI 内部固定 first_turn=true，且 EvalCasePayload 无此字段，故 CLI 路径下 JSON 中的 first_turn 会被 serde 忽略。"
+        "description": "传给 route_task 的首轮标记；仅 route.rs 的 routing eval 测试路径读取。eval route CLI 内部固定 first_turn=true。"
       },
       "expected_owner": {
         "type": "string|null",
@@ -67,7 +67,7 @@
       "notes": {
         "type": "string",
         "required": false,
-        "description": "人类注释；eval route 反序列化保留但不参与评分；routing eval 忽略。"
+        "description": "人类注释；eval route 忽略（EvalCasePayload 已移除该字段）；routing eval 忽略。"
       },
       "host_id": {
         "type": "string",
@@ -79,11 +79,11 @@
       "router_rs_eval_route": {
         "binary": "router-rs-cli",
         "subcommand": "eval route",
-        "rust_type": "core/router-rs/src/eval_route.rs::EvalCasePayload",
+        "rust_type": "core/eval-route/src/lib.rs::EvalCasePayload",
         "behavior": "route_task_with_manifest_fallback；先 filter_records_for_host（当 host_id 非空）；first_turn 固定为 true；校验 expected_owner、expected_overlay、expected_layer、forbidden_owners。"
       },
       "router_rs_routing_eval_tests": {
-        "rust_type": "core/router-rs/src/route.rs::RoutingEvalCasePayload（cfg(test)）",
+        "rust_type": "core/routing-engine/src/types.rs::RoutingEvalCasePayload（cfg(test)）",
         "behavior": "route_task；读取 first_turn；按 category 计算 trigger_hit/overtrigger；不校验 expected_layer。"
       }
     },
@@ -92,7 +92,7 @@
   "routing_eval_report_v1": {
     "schema_version": "routing-eval-report-v1",
     "authority": "rust-eval-route",
-    "rust_const": "core/router-rs/src/eval_route.rs::EVAL_ROUTE_REPORT_SCHEMA_VERSION",
+    "rust_const": "core/eval-route/src/lib.rs::EVAL_ROUTE_REPORT_SCHEMA_VERSION",
     "fields": {
       "schema_version": "routing-eval-report-v1",
       "authority": "rust-eval-route",

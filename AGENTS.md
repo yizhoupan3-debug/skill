@@ -17,3 +17,10 @@
 
 - 未经用户明确要求不得创建分支/worktree；只读检查现有状态。
 - **Worktree 隔离（硬约束）**：未经用户当轮显式批准，禁止在 git worktree 中运行或修改任何文件。
+
+## Review
+
+- **Review findings-only by default**: review 产出仅为 findings（P0→P1→P2→Caveat），不默认改代码、不执行。参见 `skills/code-review-deep/SKILL.md`。
+- Closeout: 完成时使用 `goal_state_manage(operation=complete)` 记录 closeout evidence。
+- Skill Routing: 使用 `skill_route` / `skill_search` MCP 工具进行路由。
+- Goal state: 通过 `goal_state_read` / `goal_state_manage` 管理目标状态。

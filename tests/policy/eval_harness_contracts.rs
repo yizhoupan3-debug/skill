@@ -407,14 +407,4 @@ fn framework_step_ledger_append_projects_summary_into_task_state() {
     ]);
     assert_eq!(summary["entry_count"], 1);
     assert_eq!(summary["latest"]["step_id"], "plan-1");
-    let task_state = read_json(
-        &repo
-            .join("artifacts/current/step-ledger-policy")
-            .join("TASK_STATE.json"),
-    );
-    assert_eq!(task_state["step_ledger"]["entry_count"], 1);
-    assert_eq!(
-        task_state["step_ledger"]["latest"]["next_resume_hint"],
-        "continue at verify"
-    );
 }

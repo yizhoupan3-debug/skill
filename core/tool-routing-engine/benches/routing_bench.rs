@@ -77,7 +77,6 @@ fn make_tool_records(count: usize) -> Vec<McpToolRecord> {
                 dispatch_domain: DD[cat].clone(),
                 owner: ToolOwner::Framework,
                 trigger_hints: hints[cat].iter().map(|s| s.to_string()).collect(),
-                host_platforms: vec![],
                 mcp_server: format!("server-{}", DD[cat]),
                 tool_flags: vec![],
                 input_schema_json: None,
@@ -147,7 +146,6 @@ fn bench_route_tool(c: &mut Criterion) {
                 black_box(route_tool_from_records(
                     black_box(q),
                     black_box(&records_20),
-                    None,
                 ))
             });
         });
@@ -156,7 +154,6 @@ fn bench_route_tool(c: &mut Criterion) {
                 black_box(route_tool_from_records(
                     black_box(q),
                     black_box(&records_50),
-                    None,
                 ))
             });
         });
@@ -165,7 +162,6 @@ fn bench_route_tool(c: &mut Criterion) {
                 black_box(route_tool_from_records(
                     black_box(q),
                     black_box(&records_100),
-                    None,
                 ))
             });
         });
@@ -177,7 +173,7 @@ fn bench_route_tool(c: &mut Criterion) {
     let mut samples = Vec::new();
     for _ in 0..200 {
         let start = Instant::now();
-        let _ = route_tool_from_records("capture browser screenshot", &records, None);
+        let _ = route_tool_from_records("capture browser screenshot", &records);
         samples.push(start.elapsed());
     }
     report_latency("route_tool/50_tools/medium", &mut samples);

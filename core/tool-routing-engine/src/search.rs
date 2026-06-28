@@ -26,7 +26,7 @@ pub fn search_tools(
     query: &str,
     records: &[McpToolRecord],
     top_k: usize,
-    host_id: Option<&str>,
+    _host_id: Option<&str>,
 ) -> Vec<McpToolDecision> {
     if records.is_empty() || query.trim().is_empty() || top_k == 0 {
         return Vec::new();
@@ -55,16 +55,6 @@ pub fn search_tools(
             {
                 return None;
             }
-            // Apply host filtering: exclude host-mismatched records
-            if let Some(ref hid) = hid_lower
-                && !record.host_platforms.is_empty()
-                && !record
-                    .host_platforms
-                    .iter()
-                    .any(|p| p.to_lowercase() == *hid)
-            {
-                return None;
-            }
 
             let (score, reasons, matched_token_count) =
                 score_tool(record, &query_lower, &query_tokens, &weights);
@@ -86,19 +76,9 @@ pub fn search_tools(
         })
         .collect();
 
-    // Fallback: fuzzy rescue (trigram Jaccard on trigger hints), respecting host filter
+    // Fallback: fuzzy rescue (trigram Jaccard on trigger hints)
     if results.is_empty() {
         for record in records {
-            // Apply host filtering in fuzzy rescue too
-            if let Some(ref hid) = hid_lower
-                && !record.host_platforms.is_empty()
-                && !record
-                    .host_platforms
-                    .iter()
-                    .any(|p| p.to_lowercase() == *hid)
-            {
-                continue;
-            }
             // Skip deprecated and no_routing tools in fuzzy rescue
             if record
                 .tool_flags
@@ -147,7 +127,6 @@ mod tests {
             dispatch_domain: DispatchDomain::DomainFramework,
             owner: ToolOwner::Framework,
             trigger_hints: keywords.iter().map(|s| s.to_string()).collect(),
-            host_platforms: vec!["claude".to_string()],
             mcp_server: "router-rs".to_string(),
             tool_flags: vec![],
             input_schema_json: None,

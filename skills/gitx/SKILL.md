@@ -147,7 +147,7 @@ trigger_hints:
 - 不要默认使用破坏性 Git 命令
 - 不要把“整理”理解成偷偷删东西
 - 不要在分叉、冲突、落后上游这些高风险情况下假装可以全自动
-- 如果 worktree / stash / hooksPath 很可疑，先处理这些面，再谈“为什么改动被吞”
+- 如果 worktree / stash / hooksPath 很可疑，先处理这些面，再谈”为什么改动被吞”
 
 ## Usage
 
