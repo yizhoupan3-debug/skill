@@ -64,7 +64,7 @@ pub fn skills_install_tool_for_host_id(
     Ok(tool.to_string())
 }
 
-pub fn projection_status_for_host_id(
+pub(crate) fn projection_status_for_host_id(
     registry: &Value,
     host_id: &str,
 ) -> Result<String, FrameworkError> {
@@ -140,7 +140,7 @@ pub fn host_id_and_skills_install_tool_pairs(
     host_id_and_skills_install_tool_pairs_from_registry(&reg)
 }
 
-pub fn host_id_and_skills_install_tool_pairs_from_registry(
+pub(crate) fn host_id_and_skills_install_tool_pairs_from_registry(
     registry: &Value,
 ) -> Result<Vec<(String, String)>, FrameworkError> {
     let ids = host_targets_supported_host_ids(registry)?;
@@ -205,7 +205,7 @@ pub fn validate_host_providers_against_registry(registry: &Value) -> Result<(), 
 }
 
 /// Ensure each `host_providers` row matches `hosts/mod.rs` `#[cfg(feature)]` provider mods and optional hooks mods.
-pub fn validate_host_provider_mod_declarations(
+pub(crate) fn validate_host_provider_mod_declarations(
     registry: &Value,
     _hosts_mod_rs: &str,
     cargo_toml: &str,

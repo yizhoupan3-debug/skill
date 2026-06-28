@@ -15,7 +15,7 @@ fn value_array(items: Vec<Value>) -> Value {
     Value::Array(items)
 }
 
-pub fn build_runtime_surface(shared_contract: &Map<String, Value>) -> Map<String, Value> {
+pub(crate) fn build_runtime_surface(shared_contract: &Map<String, Value>) -> Map<String, Value> {
     let mut runtime_surface = Map::new();
     for field in RUNTIME_SURFACE_FIELDS {
         if let Some(value) = shared_contract.get(field) {
@@ -25,7 +25,7 @@ pub fn build_runtime_surface(shared_contract: &Map<String, Value>) -> Map<String
     runtime_surface
 }
 
-pub fn build_capability_surface(shared_contract: &Map<String, Value>) -> Map<String, Value> {
+pub(crate) fn build_capability_surface(shared_contract: &Map<String, Value>) -> Map<String, Value> {
     let mut capability_surface = Map::new();
     for field in CAPABILITY_SURFACE_FIELDS {
         if let Some(value) = shared_contract.get(field) {
@@ -35,7 +35,7 @@ pub fn build_capability_surface(shared_contract: &Map<String, Value>) -> Map<Str
     capability_surface
 }
 
-pub fn complete_host_payload(
+pub(crate) fn complete_host_payload(
     host_cli: &str,
     host_fields: Map<String, Value>,
 ) -> Map<String, Value> {
@@ -64,7 +64,7 @@ pub fn complete_host_payload(
     completed
 }
 
-pub fn build_host_alias_entrypoints(host_key: &str) -> Value {
+pub(crate) fn build_host_alias_entrypoints(host_key: &str) -> Value {
     let registry_path = repo_scan_root()
         .join("configs")
         .join("framework")
@@ -95,7 +95,7 @@ pub fn build_host_alias_entrypoints(host_key: &str) -> Value {
     Value::Object(entrypoints)
 }
 
-pub fn build_execution_protocol_contract() -> Map<String, Value> {
+pub(crate) fn build_execution_protocol_contract() -> Map<String, Value> {
     let mut contract = Map::new();
     contract.insert(
         "schema_version".to_string(),
@@ -164,7 +164,7 @@ pub fn build_execution_protocol_contract() -> Map<String, Value> {
     contract
 }
 
-pub fn build_execution_controller_contract() -> Map<String, Value> {
+pub(crate) fn build_execution_controller_contract() -> Map<String, Value> {
     let mut contract = Map::new();
     contract.insert(
         "schema_version".to_string(),
@@ -214,7 +214,7 @@ pub fn build_execution_controller_contract() -> Map<String, Value> {
     contract
 }
 
-pub fn build_delegation_contract() -> Map<String, Value> {
+pub(crate) fn build_delegation_contract() -> Map<String, Value> {
     let mut contract = Map::new();
     contract.insert(
         "schema_version".to_string(),
@@ -274,7 +274,7 @@ pub fn build_delegation_contract() -> Map<String, Value> {
     contract
 }
 
-pub fn build_supervisor_state_contract() -> Map<String, Value> {
+pub(crate) fn build_supervisor_state_contract() -> Map<String, Value> {
     let mut schema_expectations = Map::new();
     schema_expectations.insert(
         "top_level_fields".to_string(),

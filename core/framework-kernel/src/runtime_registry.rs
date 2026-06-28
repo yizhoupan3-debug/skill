@@ -192,7 +192,7 @@ pub fn harness_capability_exception_rationale(
 }
 
 /// Resolve a bare MCP tool name (e.g. `codegraph_search`) to a managed server id.
-pub fn managed_mcp_server_for_tool(registry: &Value, tool_name: &str) -> Option<String> {
+pub(crate) fn managed_mcp_server_for_tool(registry: &Value, tool_name: &str) -> Option<String> {
     let normalized = tool_name.trim();
     if normalized.is_empty() {
         return None;
@@ -217,7 +217,7 @@ pub fn managed_mcp_server_ids(registry: &Value) -> Vec<String> {
 }
 
 /// Parse Cursor-style MCP tool FQN: `mcp__{server_id}__{tool_name}`.
-pub fn parse_host_mcp_tool_fqn(fqn: &str) -> Option<(String, String)> {
+pub(crate) fn parse_host_mcp_tool_fqn(fqn: &str) -> Option<(String, String)> {
     let rest = fqn.strip_prefix("mcp__")?;
     let (server_id, tool_name) = rest.rsplit_once("__")?;
     if server_id.is_empty() || tool_name.is_empty() {

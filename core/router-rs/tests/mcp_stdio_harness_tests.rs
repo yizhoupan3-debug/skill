@@ -873,7 +873,7 @@ mod claude_desktop_hard_blocking_tests {
         std::fs::create_dir_all(&task_dir).unwrap();
         std::fs::write(
             task_dir.join("GOAL_STATE.json"),
-            r#"{"schema_version":"router-rs-goal-v1","status":"running","lifecycle_profile":"task","goal":"x"}"#,
+            r#"{"schema_version":"router-rs-goal-v1","status":"running","goal":"x"}"#,
         )
         .unwrap();
         let req = json!({
@@ -946,7 +946,6 @@ mod claude_desktop_hard_blocking_tests {
             r#"{
                 "schema_version": "router-rs-goal-v1",
                 "status": "running",
-                "lifecycle_profile": "strict",
                 "goal": "深度 review 这个 PR",
                 "non_goals": [],
                 "done_when": [],

@@ -98,7 +98,7 @@ fn validate_source_list_traceable(
     Ok(())
 }
 
-/// Stricter checks when `RFV_LOOP_STATE.external_research_strict` is true; run only after
+/// Stricter checks when `external_research_strict` is true; run only after
 /// [`validate_external_research_structured`] succeeds.
 pub fn validate_external_research_strict(v: &Value) -> Result<(), FrameworkError> {
     let obj = v.as_object().ok_or_else(|| {

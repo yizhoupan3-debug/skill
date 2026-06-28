@@ -226,11 +226,6 @@ pub struct LoopRegistryEntry {
     pub research_enabled: bool,
     #[serde(default)]
     pub research: Option<ResearchConfig>,
-    /// When true, the runner verifies RFV convergence state after a "pass" aggregate.
-    /// If RFV hasn't converged, the aggregate is downgraded to "fail".
-    /// Only meaningful for loops that use the RFV loop protocol.
-    #[serde(default)]
-    pub verify_rfv_convergence: Option<bool>,
     /// When true, the runner fires the two-stage quality gate (anti-fraud + checker chain)
     /// during the Verifying phase. If the QG gate blocks, the aggregate is downgraded to "fail".
     #[serde(default)]

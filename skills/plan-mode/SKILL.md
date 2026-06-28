@@ -15,6 +15,7 @@ routing_gate: none
 routing_layer: L1
 routing_owner: owner
 routing_priority: P2
+session_start: preferred
 source: project
 trigger_hints:
 - Plan 模式

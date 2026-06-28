@@ -348,16 +348,16 @@ fn stdio_framework_goal_drive_roundtrip() {
 
 use runtime_core::qg_route::init_qg_route;
 #[test]
-fn stdio_framework_rfv_loop_roundtrip() {
+fn stdio_framework_quality_gate_roundtrip() {
     init_qg_route();
-    let repo_root = temp_dir_path("stdio-rfv-loop");
+    let repo_root = temp_dir_path("stdio-qg");
     let _ = fs::remove_dir_all(&repo_root);
     let output_dir = repo_root.join("artifacts").join("current");
     write_framework_session_artifacts(json!({
         "repo_root": repo_root,
         "output_dir": output_dir,
-        "task_id": "rfv-stdio-task",
-        "task": "rfv stdio",
+        "task_id": "qg-stdio-task",
+        "task": "qg stdio",
         "phase": "implementation",
         "status": "in_progress",
         "summary": "seed",
@@ -368,13 +368,13 @@ fn stdio_framework_rfv_loop_roundtrip() {
 
     let rr = repo_root.display().to_string();
     let start = json!({
-        "id": "rfv-1",
-        "op": "framework_rfv_loop",
+        "id": "qg-1",
+        "op": "framework_quality_gate",
         "payload": {
             "repo_root": rr,
             "operation": "start",
-            "task_id": "rfv-stdio-task",
-            "goal": "deepen RFV",
+            "task_id": "qg-stdio-task",
+            "goal": "test quality gate",
         }
     });
     let line = serde_json::to_string(&start).expect("serialize");

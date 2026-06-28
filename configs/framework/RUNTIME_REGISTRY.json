@@ -628,36 +628,8 @@
       "binary": "router-rs-cli",
       "crate": "router-rs",
       "tools": [
-        "closeout_gate",
-        "closeout_record_write",
-        "goal_state_manage",
-        "goal_state_read",
-        "orchestrator_agent_list_running",
-        "orchestrator_agent_register",
-        "orchestrator_agent_unregister",
-        "orchestrator_team_add_member",
-        "orchestrator_team_alive_members",
-        "orchestrator_team_complete",
-        "orchestrator_team_create",
-        "orchestrator_team_list",
-        "orchestrator_team_read_messages",
-        "orchestrator_team_remove_member",
-        "orchestrator_team_send_message",
-        "orchestrator_worker_launch",
-        "orchestrator_worker_list",
-        "orchestrator_worker_terminate",
-        "record_evidence",
-        "research_aigc_check",
         "route_tool",
         "search_tools",
-        "session_checkpoint",
-        "session_classify_block",
-        "session_inspect",
-        "session_launch",
-        "session_list",
-        "session_mark_blocked",
-        "session_resume_due",
-        "session_terminate",
         "skill_read",
         "skill_route",
         "skill_route_status",
@@ -724,73 +696,6 @@
       },
       "env_var_override": "ROUTER_RS_BIN",
       "repo_root": "framework_root"
-    },
-    "research-harness": {
-      "server_id": "research-harness",
-      "process": "independent",
-      "binary": "research-harness",
-      "crate": "research-harness",
-      "tools": [
-        "math_asymptotic_chain",
-        "math_asymptotic_estimate",
-        "math_backend_available",
-        "math_lean_verify",
-        "math_proof_dag_decompose",
-        "math_proof_dag_init",
-        "math_proof_dag_status",
-        "math_proof_dag_verify",
-        "math_prove_inequality",
-        "math_sympy_simplify",
-        "math_sympy_verify",
-        "research_claim_drift",
-        "research_review_dimensions",
-        "research_review_loop",
-        "research_verification_literature",
-        "research_verification_prose",
-        "research_verification_reproducibility",
-        "research_verification_statistical",
-        "research_verification_structure"
-      ],
-      "host_config_keys": {
-        "cursor": "mcp_servers.research-harness",
-        "opencode": "mcpServers.research-harness",
-        "codex": "mcp_servers.research-harness",
-        "claude": "mcpServers.research-harness"
-      },
-      "install_surfaces": {
-        "cursor": "user mcp.json",
-        "opencode": "opencode.json mcpServers",
-        "codex": "project .codex/config.toml",
-        "claude": "project .mcp.json"
-      }
-    },
-    "mcp-codegraph": {
-      "server_id": "mcp-codegraph",
-      "process": "independent",
-      "binary": "mcp-codegraph",
-      "crate": "codegraph-rs",
-      "tools": [
-        "codegraph_search",
-        "codegraph_callers",
-        "codegraph_callees",
-        "codegraph_impact",
-        "codegraph_node",
-        "codegraph_status",
-        "codegraph_dead_code",
-        "codegraph_goto_definition"
-      ],
-      "host_config_keys": {
-        "cursor": "mcp_servers.mcp-codegraph",
-        "opencode": "mcpServers.mcp-codegraph",
-        "codex": "mcp_servers.mcp-codegraph",
-        "claude": "mcpServers.mcp-codegraph"
-      },
-      "install_surfaces": {
-        "cursor": "user mcp.json",
-        "opencode": "opencode.json mcpServers",
-        "codex": "project .codex/config.toml",
-        "claude": "project .mcp.json"
-      }
     },
     "paperplain": {
       "server_id": "paperplain",
@@ -1000,15 +905,13 @@
       "managed_mcp_server_ids": [
         "router-rs-framework",
         "browser-mcp",
-        "mcp-codegraph",
         "paperplain",
         "mcp-pdf",
         "mcp-ooxml",
         "mcp-pptx",
         "mcp-financial-data",
         "mcp-citation",
-        "mcp-gh-source-gate",
-        "research-harness"
+        "mcp-gh-source-gate"
       ]
     },
     "opencode": {
@@ -1061,15 +964,13 @@
       "managed_mcp_server_ids": [
         "router-rs-framework",
         "browser-mcp",
-        "mcp-codegraph",
         "paperplain",
         "mcp-pdf",
         "mcp-ooxml",
         "mcp-pptx",
         "mcp-financial-data",
         "mcp-citation",
-        "mcp-gh-source-gate",
-        "research-harness"
+        "mcp-gh-source-gate"
       ]
     },
     "codex": {
@@ -1124,15 +1025,13 @@
       "managed_mcp_server_ids": [
         "router-rs-framework",
         "browser-mcp",
-        "mcp-codegraph",
         "paperplain",
         "mcp-pdf",
         "mcp-ooxml",
         "mcp-pptx",
         "mcp-financial-data",
         "mcp-citation",
-        "mcp-gh-source-gate",
-        "research-harness"
+        "mcp-gh-source-gate"
       ]
     },
     "claude": {
@@ -1184,15 +1083,13 @@
       "managed_mcp_server_ids": [
         "router-rs-framework",
         "browser-mcp",
-        "mcp-codegraph",
         "paperplain",
         "mcp-pdf",
         "mcp-ooxml",
         "mcp-pptx",
         "mcp-financial-data",
         "mcp-citation",
-        "mcp-gh-source-gate",
-        "research-harness"
+        "mcp-gh-source-gate"
       ]
     }
   },

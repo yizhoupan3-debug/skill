@@ -195,7 +195,7 @@ fn sha256_hex_lines(lines: &[String]) -> String {
     hex::encode(hasher.finalize())
 }
 
-pub fn snapshot_task_artifacts(repo_root: &Path, task_id: &str) -> TaskArtifactsDriftSnapshot {
+pub(crate) fn snapshot_task_artifacts(repo_root: &Path, task_id: &str) -> TaskArtifactsDriftSnapshot {
     let task_dir = repo_root.join("artifacts/current").join(task_id);
     let req_path = task_dir.join("REQUIREMENTS.md");
     let road_path = task_dir.join("ROADMAP.md");
@@ -232,7 +232,7 @@ pub fn snapshot_task_artifacts(repo_root: &Path, task_id: &str) -> TaskArtifacts
 
 // ── Baseline I/O ──
 
-pub fn build_baseline(repo_root: &Path, task_id: &str) -> Result<SchemaDriftBaseline> {
+pub(crate) fn build_baseline(repo_root: &Path, task_id: &str) -> Result<SchemaDriftBaseline> {
     Ok(SchemaDriftBaseline {
         task_id: task_id.to_string(),
         host_hooks: snapshot_all_host_hooks(repo_root),

@@ -14,6 +14,7 @@ pub fn unique_temp_repo(prefix: &str) -> PathBuf {
 }
 
 /// Copy hot routing index into a temp repo for MCP routing tests.
+#[cfg(any(test, feature = "test-support"))]
 pub fn seed_skill_routing_runtime(repo: &Path) {
     let skills = repo.join("skills");
     let _ = std::fs::create_dir_all(&skills);
@@ -36,6 +37,7 @@ pub fn seed_runtime_registry(repo: &Path) {
 }
 
 /// Minimal continuity layout used by MCP integration tests.
+#[cfg(any(test, feature = "test-support"))]
 pub fn seed_minimal_current_task_layout(repo: &Path) {
     seed_runtime_registry(repo);
     let _ = std::fs::create_dir_all(repo.join("artifacts/current"));

@@ -12,7 +12,7 @@ use std::time::Duration;
 pub const TASK_LEDGER_FILENAME: &str = "TASK_LEDGER.jsonl";
 
 /// Transaction type for a state checkpoint written after compaction.
-/// The payload contains `goal_state`, `rfv_loop_state`, and `evidence`
+/// The payload contains `goal_state` and `evidence`
 /// sub-objects captured from physical files at compaction time.
 /// Readers can start replay from the last checkpoint instead of
 /// replaying the full ledger from scratch.
@@ -47,15 +47,11 @@ pub fn write_state_checkpoint(
     let goal_state = crate::state_manager::read_goal_state(repo_root, Some(task_id))
         .ok()
         .flatten();
-    let rfv_loop_state = crate::state_manager::read_rfv_loop_state(repo_root, Some(task_id))
-        .ok()
-        .flatten();
     let (evidence_rows_non_empty, has_successful_verification) =
         crate::state_manager::task_evidence_artifacts_summary_for_task(repo_root, task_id);
 
     let payload = serde_json::json!({
         "goal_state": goal_state,
-        "rfv_loop_state": rfv_loop_state,
         "evidence": {
             "evidence_rows_non_empty": evidence_rows_non_empty,
             "has_successful_verification": has_successful_verification,

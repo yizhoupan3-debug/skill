@@ -11,5 +11,5 @@
 pub mod closeout_handler;
 pub mod goal_handler;
 
-pub use closeout_handler::{closeout_gate_evaluate, closeout_record_write_dispatch};
-pub use goal_handler::goal_state_manage_dispatch;
+pub(crate) use closeout_handler::{closeout_gate_evaluate, closeout_record_write_dispatch};
+pub(crate) use goal_handler::goal_state_manage_dispatch;

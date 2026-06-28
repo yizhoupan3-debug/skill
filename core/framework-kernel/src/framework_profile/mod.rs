@@ -7,13 +7,13 @@ mod contracts;
 mod profile_validate;
 mod types;
 
-pub use contracts::{
-    build_capability_surface, build_control_plane_contract_descriptors, build_delegation_contract,
+pub(crate) use contracts::{
+    build_capability_surface, build_delegation_contract,
     build_execution_controller_contract, build_execution_protocol_contract,
     build_host_alias_entrypoints, build_runtime_surface, build_supervisor_state_contract,
-    complete_host_payload,
 };
-pub use profile_validate::validate_framework_profile;
+pub use contracts::build_control_plane_contract_descriptors;
+pub(crate) use profile_validate::validate_framework_profile;
 pub use types::{
     CapabilityBundle, DELEGATION_CONTRACT_ARTIFACT_ID, EXECUTION_CONTROLLER_CONTRACT_ARTIFACT_ID,
     EXECUTION_PROTOCOL_CONTRACT_ARTIFACT_ID, FrameworkProfileContract, HostProfileBuildContext,

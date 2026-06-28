@@ -29,6 +29,7 @@ pub mod citation;
 pub mod claims;
 pub mod hooks;
 pub mod log;
+pub mod mcp;
 pub mod mcp_tools;
 pub mod proof_dag;
 pub mod proof_dag_serialize;

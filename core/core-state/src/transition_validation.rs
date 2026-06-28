@@ -81,6 +81,19 @@ fn validate_complete_transition(repo_root: &Path, task_id: &str) -> TransitionVe
         return TransitionVerdict::blocked("task_id is empty");
     }
 
+    // D5: Empty task list = no fraud possible → auto-pass.
+    // Check if task_id exists in TASK_POINTERS; if not, no tasks were created
+    // and there's nothing to validate.
+    let task_pointers_path = repo_root
+        .join("artifacts/current")
+        .join(tid)
+        .join("TASK_POINTERS.json");
+    if !task_pointers_path.is_file() {
+        return TransitionVerdict::allowed(
+            "no task created for this goal round — empty task list, D5 auto-pass",
+        );
+    }
+
     let (has_evidence, evidence_ok) =
         crate::state_manager::task_evidence_artifacts_summary_for_task(repo_root, tid);
 
@@ -135,6 +148,17 @@ mod tests {
         fs::write(&path, serde_json::to_string_pretty(&index).unwrap()).expect("write evidence");
     }
 
+    /// Write a minimal TASK_POINTERS.json to simulate task creation.
+    fn write_task_pointers(dir: &Path) {
+        let pointers = serde_json::json!({
+            "schema_version": "task-pointers-v1",
+            "task_id": "test-task",
+            "entries": []
+        });
+        let path = dir.join("artifacts/current/test-task/TASK_POINTERS.json");
+        fs::write(&path, serde_json::to_string_pretty(&pointers).unwrap()).expect("write task pointers");
+    }
+
     #[test]
     fn start_transition_always_allowed() {
         let dir = test_dir("start");
@@ -150,8 +174,18 @@ mod tests {
     }
 
     #[test]
-    fn complete_transition_no_evidence_blocked() {
-        let dir = test_dir("no-evidence");
+    fn complete_transition_no_task_list_d5_auto_pass() {
+        // D5: no TASK_POINTERS.json = no tasks created = empty task list = auto-pass.
+        let dir = test_dir("d5-empty-task-list");
+        let v = validate_transition(&dir, "test-task", TaskTransition::Complete);
+        assert!(v.passed, "D5: empty task list should auto-pass");
+        assert!(v.reason.contains("D5"), "reason should mention D5");
+    }
+
+    #[test]
+    fn complete_transition_has_task_but_no_evidence_blocked() {
+        let dir = test_dir("has-task-no-evidence");
+        write_task_pointers(&dir);
         let v = validate_transition(&dir, "test-task", TaskTransition::Complete);
         assert!(!v.passed);
         assert!(v.reason.contains("no evidence"));
@@ -167,6 +201,7 @@ mod tests {
     #[test]
     fn complete_transition_with_successful_evidence_allowed() {
         let dir = test_dir("success-evidence");
+        write_task_pointers(&dir);
         write_evidence(&dir, &[("artifact-1", true)]);
         let v = validate_transition(&dir, "test-task", TaskTransition::Complete);
         assert!(v.passed);
@@ -175,6 +210,7 @@ mod tests {
     #[test]
     fn complete_transition_all_failed_blocked() {
         let dir = test_dir("all-failed");
+        write_task_pointers(&dir);
         write_evidence(&dir, &[("artifact-1", false), ("artifact-2", false)]);
         let v = validate_transition(&dir, "test-task", TaskTransition::Complete);
         assert!(!v.passed);

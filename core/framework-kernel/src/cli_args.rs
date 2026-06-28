@@ -426,6 +426,9 @@ pub struct LoopRunCommand {
     /// Action timeout in seconds (default: 600)
     #[arg(long, default_value_t = 600)]
     pub timeout: u64,
+    /// Host identifier for harness capability lookups (default: goal-engine)
+    #[arg(long, default_value = "goal-engine")]
+    pub host_id: String,
 }
 
 #[derive(Args, Debug, Clone)]
@@ -1059,6 +1062,7 @@ mod tests {
                 assert_eq!(cmd.loop_id, "my-loop");
                 assert!(!cmd.dry_run);
                 assert_eq!(cmd.timeout, 600);
+                assert_eq!(cmd.host_id, "goal-engine", "default host_id should be goal-engine");
             }
             other => panic!("expected Loop::Run, got {:?}", other),
         }

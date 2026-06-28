@@ -21,8 +21,8 @@ use std::time::SystemTime;
 /// - **Enabled** in CI / GitHub Actions by default.
 /// - **Disabled** locally when `ROUTER_RS_CLOSEOUT_ENFORCEMENT` is unset.
 /// - Explicitly disable with `ROUTER_RS_CLOSEOUT_ENFORCEMENT=0|false|off|no`.
-pub fn closeout_programmatic_enforcement_enabled() -> bool {
-    !closeout_enforcement_disabled_by_env()
+pub(crate) fn closeout_programmatic_enforcement_enabled() -> bool {
+    !closeout_disabled_by_env()
 }
 
 /// Default location for a task's closeout record.
@@ -218,7 +218,7 @@ fn is_false_ci_value(s: &str) -> bool {
     s == "0" || s == "false" || s == "off" || s == "no"
 }
 
-fn closeout_enforcement_disabled_by_env() -> bool {
+fn closeout_disabled_by_env() -> bool {
     match std::env::var("ROUTER_RS_CLOSEOUT_ENFORCEMENT") {
         Ok(v) => {
             let t = v.trim().to_ascii_lowercase();

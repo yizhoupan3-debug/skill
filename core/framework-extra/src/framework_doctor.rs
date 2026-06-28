@@ -696,7 +696,7 @@ pub fn run_continuity_audit(repo_root: &Path) -> Result<Value, FrameworkError> {
 }
 
 /// Report broken symlinks without removing them (diagnostic-only).
-pub fn report_broken_symlinks(repo_root: &Path) -> Result<usize, FrameworkError> {
+pub(crate) fn report_broken_symlinks(repo_root: &Path) -> Result<usize, FrameworkError> {
     let mut targets: Vec<&str> = framework_kernel::runtime_registry::ALL_KNOWN_HOST_DIRS.to_vec();
     targets.push("artifacts");
     let mut broken_count = 0;

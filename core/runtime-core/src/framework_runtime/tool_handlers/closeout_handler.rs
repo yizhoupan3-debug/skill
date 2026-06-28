@@ -6,7 +6,7 @@ use serde_json::{Map, Value, json};
 use std::path::Path;
 
 /// closeout_record_write: payload construction + file I/O + evaluation.
-pub fn closeout_record_write_dispatch(
+pub(crate) fn closeout_record_write_dispatch(
     arguments: &Value,
     repo_root: &Path,
 ) -> Result<String, FrameworkError> {
@@ -124,7 +124,7 @@ pub fn closeout_record_write_dispatch(
 }
 
 /// closeout_gate_evaluate: multi-source closeout readiness evaluation.
-pub fn closeout_gate_evaluate(
+pub(crate) fn closeout_gate_evaluate(
     arguments: &Value,
     repo_root: &Path,
     host_id: &str,
@@ -251,7 +251,7 @@ pub fn closeout_gate_evaluate(
 ///
 /// Payload: { repo_root: String, task_id: String, host_id: String }
 /// Returns: { passed: bool, findings: Vec<String>, result: String }
-pub fn evaluate_closeout_gate_hook(
+pub(crate) fn evaluate_closeout_gate_hook(
     payload: serde_json::Value,
 ) -> Result<serde_json::Value, core_errors::FrameworkError> {
     use std::path::Path;

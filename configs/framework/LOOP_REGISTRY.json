@@ -72,10 +72,9 @@
                         "paper_ref/"
                     ],
                     "safety": "L2",
-                    "description": "顶刊标准 paper revision 循环。内部流程：(1) 初始化 RFV (min_rounds=5, consecutive_stable_required=2); (2) 每轮 spawn 1 个 reviewer subagent 做强对抗审稿（渐进披露维度）; (3) 主会话执行 surgical 修复; (4) 收敛条件：连续 2 轮无新 A/B findings 且 round >= 5; (5) 写 closeout record。"
+                    "description": "顶刊标准 paper revision 循环。内部流程：(1) 初始化 QG (min_rounds=5, consecutive_stable_required=2); (2) 每轮 spawn 1 个 reviewer subagent 做强对抗审稿（渐进披露维度）; (3) 主会话执行 surgical 修复; (4) 收敛条件：连续 2 轮无新 A/B findings 且 round >= 5; (5) 写 closeout record。"
                 }
-            ],
-            "verify_rfv_convergence": true
+            ]
         }
     ]
 }

@@ -106,7 +106,7 @@ pub fn trigger(
 ///
 /// Payload: { repo_root, task_id, scene (default GENERAL), goal,
 ///           sub_scene (optional), round (default 1), output_data (optional) }
-pub fn evaluate_quality_gate_hook(payload: serde_json::Value) -> Result<serde_json::Value, core_errors::FrameworkError> {
+pub(crate) fn evaluate_quality_gate_hook(payload: serde_json::Value) -> Result<serde_json::Value, core_errors::FrameworkError> {
     use std::path::Path;
 
     let repo_root_str = payload

@@ -11,9 +11,9 @@ use serde_json::{Value, json};
 type Result<T> = std::result::Result<T, FrameworkError>;
 
 pub const CLOSEOUT_RECORD_SCHEMA_VERSION: &str = "closeout-record-v1";
-const CLOSEOUT_ENFORCEMENT_RESPONSE_SCHEMA_VERSION: &str =
-    "router-rs-closeout-enforcement-response-v1";
-const CLOSEOUT_ENFORCEMENT_AUTHORITY: &str = "core-state-closeout-validation";
+const CLOSEOUT_RESPONSE_SCHEMA_VERSION: &str =
+    "router-rs-closeout-response-v1";
+const CLOSEOUT_AUTHORITY: &str = "core-state-closeout-validation";
 
 const ALLOWED_VERIFICATION_STATUSES: &[&str] = &["passed", "failed", "partial", "not_run"];
 
@@ -119,10 +119,10 @@ pub fn evaluate_closeout_record_value_with_context(
 }
 
 /// Return the closeout enforcement contract as JSON (schema + rule enumeration).
-pub fn closeout_enforcement_contract() -> Value {
+pub fn closeout_contract() -> Value {
     json!({
-        "schema_version": CLOSEOUT_ENFORCEMENT_RESPONSE_SCHEMA_VERSION,
-        "authority": CLOSEOUT_ENFORCEMENT_AUTHORITY,
+        "schema_version": CLOSEOUT_RESPONSE_SCHEMA_VERSION,
+        "authority": CLOSEOUT_AUTHORITY,
         "record_schema_version": CLOSEOUT_RECORD_SCHEMA_VERSION,
         "allowed_verification_statuses": ALLOWED_VERIFICATION_STATUSES,
         "rules": [
@@ -388,8 +388,8 @@ fn evaluate_record(record: &CloseoutRecord) -> CloseoutResponse {
     let blocking = violations.iter().any(|v| v.severity == "block");
     let has_hard = violations.iter().any(|v| v.category == "hard");
     CloseoutResponse {
-        schema_version: CLOSEOUT_ENFORCEMENT_RESPONSE_SCHEMA_VERSION.into(),
-        authority: CLOSEOUT_ENFORCEMENT_AUTHORITY.into(),
+        schema_version: CLOSEOUT_RESPONSE_SCHEMA_VERSION.into(),
+        authority: CLOSEOUT_AUTHORITY.into(),
         task_id: record.task_id.clone(),
         closeout_allowed: !blocking,
         can_proceed: !has_hard,
@@ -478,8 +478,8 @@ fn parse_error_response(
 
 fn base_response(tid: &str) -> CloseoutResponse {
     CloseoutResponse {
-        schema_version: CLOSEOUT_ENFORCEMENT_RESPONSE_SCHEMA_VERSION.into(),
-        authority: CLOSEOUT_ENFORCEMENT_AUTHORITY.into(),
+        schema_version: CLOSEOUT_RESPONSE_SCHEMA_VERSION.into(),
+        authority: CLOSEOUT_AUTHORITY.into(),
         task_id: tid.into(),
         closeout_allowed: false,
         can_proceed: false,

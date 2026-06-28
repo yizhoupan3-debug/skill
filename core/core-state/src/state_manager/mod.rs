@@ -5,7 +5,6 @@
 
 pub(crate) mod goal_ops;
 mod pointer_ops;
-mod quality_gate_ops;
 mod scrub_ops;
 mod validation;
 
@@ -19,7 +18,6 @@ use std::time::SystemTime;
 pub const GOAL_STATE_FILENAME: &str = "GOAL_STATE.json";
 pub const GOAL_STATE_SCHEMA_VERSION: &str = "router-rs-goal-v1";
 pub const EVIDENCE_INDEX_FILENAME: &str = "EVIDENCE_INDEX.json";
-pub const RFV_LOOP_STATE_FILENAME: &str = "RFV_LOOP_STATE.json";
 pub const REQUIRES_COMPLETION_EVIDENCE_KEY: &str = "requires_completion_evidence";
 // LEGACY_GOAL_DRIVE_PARAGRAPH_PREFIX removed — no callers, legacy prefix from retired goal-drive paragraph format.
 pub const CONTINUITY_SESSION_CHECKPOINT_TASK_ID: &str = "continuity-session";
@@ -38,8 +36,6 @@ pub use pointer_ops::{
     sync_task_pointers_after_goal_drive, write_active_task_pointer,
 };
 
-// Re-export from quality_gate_ops (primary names)
-pub use quality_gate_ops::{read_rfv_loop_state, rfv_loop_state_path};
 // Re-export from goal_ops
 pub use goal_ops::{
     framework_goal_drive, task_evidence_artifacts_summary_for_task,
@@ -347,6 +343,21 @@ mod tests {
 
     /// Lock for tests that mutate env vars (*_SESSION_ID etc.) to avoid race conditions.
     static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    /// Write a minimal TASK_POINTERS.json for test fixtures that need a task to exist.
+    fn write_task_pointers(repo: &Path, task_id: &str) {
+        let ptrs = serde_json::json!({
+            "schema_version": "task-pointers-v1",
+            "task_id": task_id,
+            "entries": []
+        });
+        let path = repo
+            .join("artifacts/current")
+            .join(task_id)
+            .join("TASK_POINTERS.json");
+        fs::write(&path, serde_json::to_string_pretty(&ptrs).expect("serialize task pointers"))
+            .expect("write TASK_POINTERS.json");
+    }
 
     #[test]
     fn goal_start_without_drive_defaults_to_false() {
@@ -672,6 +683,7 @@ mod tests {
         let repo = std::env::temp_dir().join(format!("router-rs-goal-complete-noev-{suffix}"));
         let _ = fs::remove_dir_all(&repo);
         fs::create_dir_all(repo.join("artifacts/current/noev")).expect("mkdir");
+        write_task_pointers(&repo, "noev");
         fs::write(
             repo.join("artifacts/current/active_task.json"),
             r#"{"task_id":"noev"}"#,
@@ -715,6 +727,7 @@ mod tests {
         let repo = std::env::temp_dir().join(format!("router-rs-goal-complete-paused-{suffix}"));
         let _ = fs::remove_dir_all(&repo);
         fs::create_dir_all(repo.join("artifacts/current/paused")).expect("mkdir");
+        write_task_pointers(&repo, "paused");
         fs::write(
             repo.join("artifacts/current/active_task.json"),
             r#"{"task_id":"paused"}"#,
@@ -765,6 +778,7 @@ mod tests {
         let repo = std::env::temp_dir().join(format!("router-rs-goal-complete-legacy-{suffix}"));
         let _ = fs::remove_dir_all(&repo);
         fs::create_dir_all(repo.join("artifacts/current/legacy")).expect("mkdir");
+        write_task_pointers(&repo, "legacy");
         fs::write(
             repo.join("artifacts/current/active_task.json"),
             r#"{"task_id":"legacy"}"#,
@@ -858,7 +872,7 @@ mod tests {
         let rr = repo.display().to_string();
 
         // Write old-format RFV state file (remnant of removed QG state machine).
-        let rfv_path = rfv_loop_state_path(&repo, "mx-task").expect("rfv path");
+        let rfv_path = repo.join("artifacts/current/mx-task/RFV_LOOP_STATE.json");
         if let Some(parent) = rfv_path.parent() {
             fs::create_dir_all(parent).expect("mkdir rfv dir");
         }
@@ -987,7 +1001,7 @@ mod tests {
         )
         .expect("evidence");
         fs::write(
-            repo.join("artifacts/current/gok").join(RFV_LOOP_STATE_FILENAME),
+            repo.join("artifacts/current/gok").join("RFV_LOOP_STATE.json"),
             r#"{"schema_version":"router-rs-quality-gate-v1","loop_status":"active","goal":"g","max_rounds":3,"current_round":1,"rounds":[{"round":1,"verify_result":"PASS"}]}"#,
         )
         .expect("rfv");
@@ -1017,46 +1031,6 @@ mod tests {
             result.get("archived").is_none(),
             "goal must NOT be archived after iteration complete"
         );
-        let _ = fs::remove_dir_all(&repo);
-    }
-
-    #[test]
-    fn read_rfv_loop_state_honors_override_and_active_pointer() {
-        let suffix = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("time")
-            .as_nanos();
-        let repo = std::env::temp_dir().join(format!("core-state-rfv-read-{suffix}"));
-        let _ = fs::remove_dir_all(&repo);
-        fs::create_dir_all(repo.join("artifacts/current/rfv-task")).expect("mkdir");
-
-        let path = rfv_loop_state_path(&repo, "rfv-task").expect("path");
-        let state = json!({
-            "schema_version": "router-rs-quality-gate-v1",
-            "loop_status": "active",
-            "goal": "g",
-        });
-        crate::utils::atomic_write::write_atomic_json(&path, &state).expect("write rfv");
-
-        let read = read_rfv_loop_state(&repo, Some("rfv-task"))
-            .expect("read")
-            .expect("some");
-        assert_eq!(read["loop_status"], json!("active"));
-
-        let via_active = read_rfv_loop_state(&repo, Some("rfv-task"))
-            .expect("read active")
-            .expect("some");
-        assert_eq!(via_active["goal"], json!("g"));
-
-        assert!(
-            read_rfv_loop_state(&repo, Some("missing-task"))
-                .expect("read missing")
-                .is_none()
-        );
-
-        let err = read_rfv_loop_state(&repo, Some("   ")).expect_err("empty override");
-        assert!(err.to_string().contains("empty"));
-
         let _ = fs::remove_dir_all(&repo);
     }
 

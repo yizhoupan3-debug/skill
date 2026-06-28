@@ -54,7 +54,7 @@ Task 是框架的**底层执行引擎**，不是可选组件。用户层表现�
 ### 真源路径
 
 - 真源：`artifacts/current/<task_id>/`；**无** hook 自动 digest / Stop checkpoint 默认路径。
-- Goal 磁盘：`GOAL_STATE.json` / `RFV_LOOP_STATE.json`（旧名，读兼容保留）；显式 stdio：`framework_goal_drive` / `framework_rfv_loop`。
+- Goal 磁盘：`GOAL_STATE.json` / `RFV_LOOP_STATE.json`（旧名，只读兼容保留，不再写入）；显式 stdio：`framework_goal_drive` / `framework_quality_gate`。
 - 闭集宿主由 `RUNTIME_REGISTRY.json` 驱动。
 
 ## Task Intake

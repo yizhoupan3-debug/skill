@@ -217,18 +217,7 @@ static DISPATCH_TABLE: OnceLock<ToolDispatchTable> = OnceLock::new();
 static REGISTRY: OnceLock<CompositeRegistry> = OnceLock::new();
 
 /// Known CLI-routed tools used as fallback when MCP_TOOL_REGISTRY.json is unavailable.
-const KNOWN_CLI_TOOLS: &[&str] = &[
-    "web_fetch",
-    "research_aigc_check",
-    "research_smoke",
-    "research_verification_literature",
-    "research_verification_structure",
-    "research_verification_reproducibility",
-    "math_prove_inequality",
-    "math_backend_available",
-    "math_asymptotic_chain",
-    "math_lean_verify",
-];
+const KNOWN_CLI_TOOLS: &[&str] = &[];
 
 /// Dispatch a tool call through the global CompositeRegistry,
 /// falling through to the external research-tool handler when
@@ -246,8 +235,7 @@ pub(super) fn dispatch_tool(
     connection_session_id: &str,
 ) -> Result<String, FrameworkError> {
     // CLI-routed tools: spawn as subprocess (process isolation for blocking I/O).
-    // MUST be checked before CompositeRegistry — some CLI tools (e.g. web_fetch)
-    // have legacy ToolHandler entries that would otherwise consume the call.
+    // Mapped via mcp_server="router-rs-cli" in MCP_TOOL_REGISTRY.
     if DISPATCH_TABLE
         .get_or_init(ToolDispatchTable::from_registry)
         .is_cli_tool(tool_name)
@@ -299,20 +287,6 @@ pub(super) fn dispatch_tool(
 
     // Not found in built-in registry → try externally-registered dispatch
     // (research-harness tools registered via hooks.rs at runtime-core startup)
-    //
-    // NOTE: 3 tools (research_aigc_check, research_smoke, web_fetch) previously had
-    // mcp_server "router-rs" with no CompositeRegistry handler, which caused them to
-    // fall through to research-harness fallback (web_fetch was broken, others worked
-    // because research-harness had handlers for research_aigc_check/research_smoke).
-    // This has been fixed:
-    //   - web_fetch:  mcp_server changed to "router-rs-cli" → CLI subprocess dispatch
-    //   - research_aigc_check, research_smoke: mcp_server changed to "research-harness"
-    //
-    // The remaining 7 tools listed below have mcp_server "research-harness" in the
-    // registry and their research-harness handlers are the intended dispatch path:
-    //   math_prove_inequality, math_backend_available, math_asymptotic_chain,
-    //   math_lean_verify, research_verification_literature,
-    //   research_verification_structure, research_verification_reproducibility
     if let Some(dispatch) = crate::hooks::get_research_tool_dispatch() {
         dispatch(tool_name, args).map_err(|e| FrameworkError::validation(e.to_string()))
     } else {

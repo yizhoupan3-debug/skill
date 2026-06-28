@@ -27,7 +27,7 @@ use std::path::{Path, PathBuf};
 #[cfg(feature = "l5-state")]
 use crate::background_state::handle_background_state_operation;
 use crate::closeout_validation::{
-    CloseoutEvidenceContext, closeout_enforcement_contract, evaluate_closeout_record_value,
+    CloseoutEvidenceContext, closeout_contract, evaluate_closeout_record_value,
     evaluate_closeout_record_value_with_context,
 };
 use crate::eval_route::{eval_route_contract, run_eval_route};
@@ -267,7 +267,7 @@ fn dispatch_routing_stdio_request(op: &str, payload: Value) -> Result<Value, Fra
         "compile_profile_bundle" => dispatch_stdio_compile_profile_bundle(payload),
         "compile_profile_artifacts" => dispatch_stdio_compile_profile_artifacts(payload),
         "closeout_evaluate" => dispatch_stdio_closeout_evaluate(payload),
-        "closeout_contract" => Ok(closeout_enforcement_contract()),
+        "closeout_contract" => Ok(closeout_contract()),
         "hook_event_routing_contract" => Ok(hook_event_routing_contract()),
         "eval_route" => dispatch_stdio_eval_route(payload),
         "eval_route_contract" => Ok(eval_route_contract()),
@@ -453,54 +453,9 @@ fn dispatch_framework_stdio_request(op: &str, payload: Value) -> Result<Value, F
             framework_hook_evidence_append(payload)
         }
         "framework_goal_drive" => runtime_infra::kernel_utils::framework_goal_drive(payload),
-        "framework_rfv_loop" => {
-            let repo_root_str = payload
-                .get("repo_root")
-                .and_then(|v| v.as_str())
-                .unwrap_or(".");
-            if repo_root_str == "." {
-                tracing::warn!("framework_rfv_loop: repo_root is missing, defaulting to \".\"");
-            }
-            let repo_root = std::path::Path::new(repo_root_str);
-            let task_id = payload
-                .get("task_id")
-                .and_then(|v| v.as_str())
-                .unwrap_or("");
-            if task_id.is_empty() {
-                return Err(FrameworkError::validation(
-                    "framework_rfv_loop: task_id is required".to_string(),
-                ));
-            }
-            let goal = payload.get("goal").and_then(|v| v.as_str()).unwrap_or("");
-            if goal.is_empty() {
-                tracing::warn!("framework_rfv_loop: goal is missing, defaulting to empty string");
-            }
-            let round = payload.get("round").and_then(|v| v.as_u64()).unwrap_or(1);
-            let scene = payload
-                .get("scene")
-                .and_then(|v| v.as_str())
-                .filter(|s| !s.is_empty())
-                .unwrap_or(quality_gate::scene::GENERAL);
-            let sub_scene = payload
-                .get("sub_scene")
-                .and_then(|v| v.as_str())
-                .filter(|s| !s.is_empty());
-            let output_data = payload.get("output_data").cloned();
-            let verdict = crate::qg_entry::trigger(
-                repo_root,
-                task_id,
-                scene,
-                goal,
-                sub_scene,
-                round,
-                None,
-                output_data,
-            );
-            Ok(serde_json::to_value(&verdict)?)
-        }
         "framework_quality_gate" => {
             // First-class entry point for the two-stage quality gate.
-            // Accepts the same payload as framework_rfv_loop:
+            // Accepts the same payload structure as the quality gate entry point:
             //   { repo_root, task_id, goal, scene (default GENERAL),
             //     sub_scene (optional), round (default 1), output_data (optional) }
             let repo_root_str = payload

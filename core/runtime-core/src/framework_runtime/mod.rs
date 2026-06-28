@@ -26,7 +26,7 @@ pub fn workspace_name_from_root(repo_root: &Path) -> String {
 ///
 /// `repointer_focus`: when true, rewrite active/focus/supervisor (explicit user checkpoint).
 /// `update_registry_only_if_known`: when true, never append a new registry row for unknown ids.
-pub fn build_automatic_continuity_checkpoint_payload_with_task_id(
+pub(crate) fn build_automatic_continuity_checkpoint_payload_with_task_id(
     repo_root: &Path,
     task_line: &str,
     summary_text: &str,

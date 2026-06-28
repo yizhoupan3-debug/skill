@@ -57,7 +57,7 @@ pub fn dispatch(command: RouterSelfCommands) -> Result<(), FrameworkError> {
     }
 }
 
-pub fn default_router_rs_install_dir() -> PathBuf {
+pub(crate) fn default_router_rs_install_dir() -> PathBuf {
     let home = std::env::var("HOME").unwrap_or_else(|_| String::from("/tmp"));
     PathBuf::from(home).join(".local/bin")
 }
@@ -66,7 +66,7 @@ pub fn default_router_rs_install_path() -> PathBuf {
     default_router_rs_install_dir().join("router-rs-cli")
 }
 
-pub fn router_rs_desktop_mcp_dir_for_home(home: &Path) -> PathBuf {
+pub(crate) fn router_rs_desktop_mcp_dir_for_home(home: &Path) -> PathBuf {
     home.join(".local/share/skill-framework/bin")
 }
 

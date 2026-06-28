@@ -31,6 +31,7 @@ runtime_requirements:
   - git
 session_start: required
 source: project
+risk: low
 trigger_hints:
 - /gh-fix-ci
 - CI 修复

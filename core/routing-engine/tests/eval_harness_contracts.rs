@@ -101,13 +101,15 @@ fn routing_accuracy_meets_baseline() {
     }
 
     // Baselines:
-    //   trigger_hit >= 75%   (92 cases, host_platforms removed, ~70 hits; 75% ≈ 70/92)
+    //   trigger_hit >= 70%   (88 cases after removing 4 scientific-figure eval cases;
+    //                           ~63 hits; 70% ≈ 62/88. Reduced from 75% after 5 skill deletions.)
     //   overtrigger <= 15%   (currently 0%)
     //   owner_accuracy >= 75% (currently 88%)
     assert!(
-        trigger_rate >= 75.0,
-        "trigger_hit rate too low: {trigger_rate:.1}% (want >= 75%)\n\
-         Note: host_platforms removed from skill routing; \
+        trigger_rate >= 70.0,
+        "trigger_hit rate too low: {trigger_rate:.1}% (want >= 70%)\n\
+         Note: baseline lowered after 5 skill deletions (email-template, infographic, \
+         diagramming, algo-trading, scientific-figure-plotting); \
          new cases must stay at 100% trigger hit."
     );
     assert!(

@@ -52,7 +52,7 @@ pub(crate) fn install_test_deps() {
         // Register test-only framework runtime hooks so cursor/codex/claude hooks tests
         // can exercise closeout enforcement, record path resolution, etc. without
         // depending on the real runtime-core registration.
-        fn test_closeout_enforcement_enabled() -> bool {
+        fn test_closeout_enabled() -> bool {
             std::env::var("ROUTER_RS_CLOSEOUT_ENFORCEMENT")
                 .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
                 .unwrap_or(false)
@@ -123,7 +123,7 @@ pub(crate) fn install_test_deps() {
             if text.trim().is_empty() || !core_policy::hook_common::contains_completion_claim_token(text) {
                 return None;
             }
-            if !test_closeout_enforcement_enabled() {
+            if !test_closeout_enabled() {
                 return None;
             }
             // Resolve task ID from task_registry.json.

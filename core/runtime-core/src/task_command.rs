@@ -22,7 +22,7 @@ pub enum TaskLedgerCommand {
 }
 
 /// Parse `{ schema_version?, kind, payload }` → [`TaskLedgerCommand`].
-pub fn parse_task_ledger_command_envelope(
+pub(crate) fn parse_task_ledger_command_envelope(
     envelope: &Value,
 ) -> Result<TaskLedgerCommand, FrameworkError> {
     let schema = envelope
@@ -49,7 +49,7 @@ pub fn parse_task_ledger_command_envelope(
 
     match kind.to_ascii_lowercase().as_str() {
         "goal_drive" => Ok(TaskLedgerCommand::GoalDrive(payload)),
-        "rfv_loop" | "quality_gate" => Ok(TaskLedgerCommand::QualityGate(payload)),
+        "quality_gate" => Ok(TaskLedgerCommand::QualityGate(payload)),
         "session_artifacts" => Ok(TaskLedgerCommand::SessionArtifacts(payload)),
         "hook_evidence_append" => Ok(TaskLedgerCommand::HookEvidenceAppend(payload)),
         _ => Err(FrameworkError::validation(format!(

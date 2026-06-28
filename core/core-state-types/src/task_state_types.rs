@@ -59,8 +59,6 @@ pub struct ResolvedTaskView {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub goal_state: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub rfv_loop_state: Option<Value>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub evidence: Option<EvidenceRollup>,
     /// Aggregate depth-compliance view (P1-A); always present alongside `evidence` for tasks
     /// with a resolved id. `None` when no task id resolves.

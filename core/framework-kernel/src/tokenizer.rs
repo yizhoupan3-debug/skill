@@ -33,7 +33,7 @@ pub fn install_tokenizer_provider(provider: Box<dyn TokenizerProvider>) {
 }
 
 /// Replace provider (tests / late binding).
-pub fn set_tokenizer_provider(provider: Box<dyn TokenizerProvider>) {
+pub(crate) fn set_tokenizer_provider(provider: Box<dyn TokenizerProvider>) {
     *provider_cell().write().unwrap_or_else(|e| e.into_inner()) = Some(provider);
 }
 

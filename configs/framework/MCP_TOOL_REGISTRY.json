@@ -1,284 +1,27 @@
 {
   "schema_version": "mcp-tool-registry-v2",
   "scope": {
-    "total_count": 95,
-    "builtin_count": 33,
-    "research_count": 21,
-    "independent_count": 30,
+    "total_count": 40,
+    "builtin_count": 13,
+    "research_count": 1,
+    "independent_count": 15,
     "external_count": 11,
     "_comment": "scope counts are auto-generated — update this when adding/removing scopes"
   },
   "tools": [
     {
-      "slug": "goal_state_manage",
-      "display_name": "目标状态管理",
-      "description": "管理 Goal 状态（start/checkpoint/pause/resume/complete/clear/block/amend",
-      "layer": "builtin",
-      "dispatch_domain": "domain:goal",
-      "owner": "framework",
-      "trigger_hints": [
-        "目标",
-        "goal",
-        "状态",
-        "管理",
-        "暂停",
-        "完成",
-        "恢复",
-        "进度追踪",
-        "任务状态管理",
-        "overview"
-      ],
-      "mcp_server": "router-rs",
-      "tool_flags": [],
-      "input_schema": {
-        "type": "object",
-        "required": [
-          "operation"
-        ],
-        "properties": {
-          "operation": {
-            "type": "string",
-            "description": "操作类型：start/checkpoint/pause/resume/complete/clear/block/amend"
-          },
-          "goal": {
-            "type": "string",
-            "description": "目标文本内容"
-          },
-          "task_id": {
-            "type": "string",
-            "description": "任务 ID"
-          }
-        }
-      }
-    },
-    {
-      "slug": "goal_state_read",
-      "display_name": "目标状态读取",
-      "description": "读取当前 task 的 GOAL_STATE.json 内容",
-      "layer": "builtin",
-      "dispatch_domain": "domain:goal",
-      "owner": "framework",
-      "trigger_hints": [
-        "目标",
-        "goal",
-        "读取",
-        "状态",
-        "查看"
-      ],
-      "mcp_server": "router-rs",
-      "tool_flags": [],
-      "input_schema": {
-        "type": "object",
-        "properties": {
-          "task_id": {
-            "type": "string",
-            "description": "任务 ID"
-          }
-        }
-      }
-    },
-    {
-      "slug": "record_evidence",
-      "display_name": "记录证据",
-      "description": "追加 evidence 到 EVIDENCE_INDEX",
-      "layer": "builtin",
-      "dispatch_domain": "domain:framework",
-      "owner": "framework",
-      "trigger_hints": [
-        "证据",
-        "evidence",
-        "记录",
-        "追加"
-      ],
-      "mcp_server": "router-rs",
-      "tool_flags": [],
-      "input_schema": {
-        "type": "object",
-        "required": [
-          "tool_name",
-          "command"
-        ],
-        "properties": {
-          "tool_name": {
-            "type": "string",
-            "description": "触发证据记录的工具名称"
-          },
-          "command": {
-            "type": "string",
-            "description": "执行的命令预览"
-          },
-          "exit_code": {
-            "type": "integer",
-            "description": "命令退出码"
-          },
-          "output": {
-            "type": "string",
-            "description": "命令输出摘要"
-          }
-        }
-      }
-    },
-    {
-      "slug": "session_checkpoint",
-      "display_name": "会话检查点",
-      "description": "写入 SESSION_SUMMARY + NEXT_ACTIONS checkpoint",
-      "layer": "builtin",
-      "dispatch_domain": "domain:framework",
-      "owner": "framework",
-      "trigger_hints": [
-        "检查点",
-        "checkpoint",
-        "会话",
-        "保存",
-        "摘要",
-        "保存进度",
-        "中间存档",
-        "snapshot"
-      ],
-      "mcp_server": "router-rs",
-      "tool_flags": [],
-      "input_schema": {
-        "type": "object",
-        "required": [
-          "summary"
-        ],
-        "properties": {
-          "summary": {
-            "type": "string",
-            "description": "会话摘要文本"
-          },
-          "next_actions": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "description": "下一步行动列表"
-          },
-          "task_id": {
-            "type": "string",
-            "description": "任务 ID"
-          }
-        }
-      }
-    },
-    {
-      "slug": "closeout_gate",
-      "display_name": "收尾门禁",
-      "description": "检查 closeout 就绪状态并返回缺失项清单，含 goal/evidence/checkpoint 评估",
-      "layer": "builtin",
-      "dispatch_domain": "domain:closeout",
-      "owner": "framework",
-      "trigger_hints": [
-        "收尾",
-        "closeout",
-        "完成",
-        "就绪",
-        "缺失"
-      ],
-      "mcp_server": "router-rs",
-      "tool_flags": [],
-      "input_schema": {
-        "type": "object",
-        "properties": {
-          "task_id": {
-            "type": "string",
-            "description": "任务 ID"
-          },
-          "reviewer_lane": {
-            "type": "string",
-            "description": "审稿通道（如 light/deep）"
-          }
-        }
-      }
-    },
-    {
-      "slug": "closeout_record_write",
-      "display_name": "收尾记录写入",
-      "description": "写入并验证 closeout record",
-      "layer": "builtin",
-      "dispatch_domain": "domain:closeout",
-      "owner": "framework",
-      "trigger_hints": [
-        "收尾",
-        "closeout",
-        "记录",
-        "写入",
-        "归档记录",
-        "完成汇报",
-        "end task"
-      ],
-      "mcp_server": "router-rs",
-      "tool_flags": [],
-      "input_schema": {
-        "type": "object",
-        "required": [
-          "task_id",
-          "summary",
-          "verification_status"
-        ],
-        "properties": {
-          "task_id": {
-            "type": "string",
-            "description": "任务 ID"
-          },
-          "summary": {
-            "type": "string",
-            "description": "收尾摘要"
-          },
-          "verification_status": {
-            "type": "string",
-            "description": "验证状态：passed/failed/partial/not_run"
-          },
-          "changed_files": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "description": "变更文件列表"
-          },
-          "blockers": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "description": "阻塞项列表"
-          },
-          "risks": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "description": "风险项列表"
-          },
-          "commands_run": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "description": "已执行命令列表（可选）"
-          },
-          "notes": {
-            "type": "string",
-            "description": "附加说明（可选）"
-          }
-        }
-      }
-    },
-    {
       "slug": "skill_read",
       "display_name": "技能读取",
-      "description": "读取 skill 的 SKILL.md 内容",
+      "description": "读取 skill 的 SKILL.md",
       "layer": "builtin",
       "dispatch_domain": "domain:framework",
       "owner": "framework",
       "trigger_hints": [
-        "技能",
         "skill",
-        "读取",
-        "查看",
-        "文档"
+        "技能",
+        "读取"
       ],
-      "mcp_server": "router-rs",
+      "mcp_server": "router-rs-framework",
       "tool_flags": [],
       "input_schema": {
         "type": "object",
@@ -302,18 +45,16 @@
     {
       "slug": "skill_route",
       "display_name": "技能路由",
-      "description": "自然语言查询匹配 skill 路由结果",
+      "description": "自然语言查询 → skill 路由",
       "layer": "builtin",
       "dispatch_domain": "domain:framework",
       "owner": "framework",
       "trigger_hints": [
         "路由",
         "route",
-        "skill",
-        "匹配",
-        "查询"
+        "skill"
       ],
-      "mcp_server": "router-rs",
+      "mcp_server": "router-rs-framework",
       "tool_flags": [],
       "input_schema": {
         "type": "object",
@@ -331,18 +72,16 @@
     {
       "slug": "skill_search",
       "display_name": "技能搜索",
-      "description": "搜索 skill 目录，返回最佳匹配",
+      "description": "搜索 skill 目录",
       "layer": "builtin",
       "dispatch_domain": "domain:framework",
       "owner": "framework",
       "trigger_hints": [
         "搜索",
         "search",
-        "skill",
-        "技能",
-        "查找"
+        "skill"
       ],
-      "mcp_server": "router-rs",
+      "mcp_server": "router-rs-framework",
       "tool_flags": [],
       "input_schema": {
         "type": "object",
@@ -368,20 +107,16 @@
     {
       "slug": "skill_route_status",
       "display_name": "技能路由状态",
-      "description": "检查路由索引文件和缓存是否已生成，验证路由系统就绪状态",
+      "description": "检查路由系统就绪状态",
       "layer": "builtin",
       "dispatch_domain": "domain:framework",
       "owner": "framework",
       "trigger_hints": [
-        "路由",
+        "路由状态",
         "route",
-        "状态",
-        "检查",
-        "路由就绪",
-        "索引状态",
-        "routing health"
+        "技能路由"
       ],
-      "mcp_server": "router-rs",
+      "mcp_server": "router-rs-framework",
       "tool_flags": [],
       "input_schema": {
         "type": "object",
@@ -391,17 +126,14 @@
     {
       "slug": "web_fetch",
       "display_name": "网页抓取",
-      "description": "只读 HTTP GET 抓取外部 URL",
+      "description": "只读 HTTP GET 抓取 URL",
       "layer": "builtin",
       "dispatch_domain": "domain:framework",
       "owner": "framework",
       "trigger_hints": [
-        "网页",
         "fetch",
-        "url",
-        "抓取",
-        "HTTP",
-        "链接"
+        "网页",
+        "HTTP"
       ],
       "mcp_server": "router-rs-cli",
       "tool_flags": [
@@ -428,18 +160,16 @@
     {
       "slug": "task_create",
       "display_name": "任务创建",
-      "description": "创建新 task（定义 todo）。幂等：已存在则跳过",
+      "description": "创建新 task（幂等）",
       "layer": "builtin",
       "dispatch_domain": "domain:framework",
       "owner": "framework",
       "trigger_hints": [
         "task",
         "任务",
-        "创建",
-        "todo",
-        "待办"
+        "创建"
       ],
-      "mcp_server": "router-rs",
+      "mcp_server": "router-rs-framework",
       "tool_flags": [
         "no_routing"
       ],
@@ -463,18 +193,16 @@
     {
       "slug": "task_list",
       "display_name": "任务列表",
-      "description": "列出所有已知 task 及其状态",
+      "description": "列出所有 task 及状态",
       "layer": "builtin",
       "dispatch_domain": "domain:framework",
       "owner": "framework",
       "trigger_hints": [
         "task",
         "任务",
-        "列表",
-        "查看",
-        "所有"
+        "列表"
       ],
-      "mcp_server": "router-rs",
+      "mcp_server": "router-rs-framework",
       "tool_flags": [
         "no_routing"
       ],
@@ -486,18 +214,16 @@
     {
       "slug": "task_complete",
       "display_name": "任务完成",
-      "description": "完成一个 task。有 GOAL_STATE 时委托 goal_state_manage(complete",
+      "description": "完成指定 task",
       "layer": "builtin",
       "dispatch_domain": "domain:framework",
       "owner": "framework",
       "trigger_hints": [
         "task",
-        "任务",
         "完成",
-        "结束",
-        "完工"
+        "complete"
       ],
-      "mcp_server": "router-rs",
+      "mcp_server": "router-rs-framework",
       "tool_flags": [
         "no_routing"
       ],
@@ -523,13 +249,10 @@
       "owner": "framework",
       "trigger_hints": [
         "task",
-        "任务",
         "焦点",
-        "切换",
-        "fokus",
-        "active"
+        "focus"
       ],
-      "mcp_server": "router-rs",
+      "mcp_server": "router-rs-framework",
       "tool_flags": [
         "no_routing"
       ],
@@ -549,18 +272,16 @@
     {
       "slug": "task_chain_advance",
       "display_name": "任务链推进",
-      "description": "将 task chain 推进到下一个 task：标记当前为 completed、切换 focus 到下一项",
+      "description": "推进 task chain 到下一项",
       "layer": "builtin",
       "dispatch_domain": "domain:framework",
       "owner": "framework",
       "trigger_hints": [
         "task chain",
         "任务链",
-        "推进",
-        "chain",
-        "下一个"
+        "推进"
       ],
-      "mcp_server": "router-rs",
+      "mcp_server": "router-rs-framework",
       "tool_flags": [
         "no_routing"
       ],
@@ -572,18 +293,16 @@
     {
       "slug": "route_tool",
       "display_name": "工具路由",
-      "description": "将自然语言查询路由到最佳匹配的 MCP 工具 Self-routing excluded: route_tool cannot route itself",
+      "description": "自然语言查询 → 最佳匹配工具",
       "layer": "builtin",
       "dispatch_domain": "domain:framework",
       "owner": "framework",
       "trigger_hints": [
         "路由",
-        "工具",
         "route",
-        "查询",
-        "匹配"
+        "工具"
       ],
-      "mcp_server": "router-rs",
+      "mcp_server": "router-rs-framework",
       "tool_flags": [
         "no_routing",
         "readonly"
@@ -608,17 +327,16 @@
     {
       "slug": "search_tools",
       "display_name": "工具搜索",
-      "description": "搜索 MCP 工具注册表并返回 top-k 结果",
+      "description": "搜索工具注册表",
       "layer": "builtin",
       "dispatch_domain": "domain:framework",
       "owner": "framework",
       "trigger_hints": [
         "搜索",
-        "查找",
         "search",
         "工具"
       ],
-      "mcp_server": "router-rs",
+      "mcp_server": "router-rs-framework",
       "tool_flags": [
         "no_routing"
       ],
@@ -646,18 +364,16 @@
     {
       "slug": "tool_registry_status",
       "display_name": "工具注册表状态",
-      "description": "报告工具注册表元数据（计数、schema 版本、层级分布",
+      "description": "报告工具注册表统计",
       "layer": "builtin",
       "dispatch_domain": "domain:framework",
       "owner": "framework",
       "trigger_hints": [
         "注册表",
-        "状态",
-        "tools",
-        "统计",
-        "registry"
+        "registry",
+        "工具"
       ],
-      "mcp_server": "router-rs",
+      "mcp_server": "router-rs-framework",
       "tool_flags": [
         "no_routing"
       ],
@@ -667,492 +383,18 @@
       }
     },
     {
-      "slug": "orchestrator_team_create",
-      "display_name": "创建团队",
-      "description": "创建一个新的子代理团队",
-      "layer": "builtin",
-      "dispatch_domain": "domain:orchestrator",
-      "owner": "framework",
-      "trigger_hints": [
-        "create",
-        "team",
-        "group",
-        "squad",
-        "assign",
-        "团队",
-        "创建团队"
-      ],
-      "mcp_server": "router-rs",
-      "tool_flags": [],
-      "input_schema": {
-        "type": "object",
-        "required": [
-          "team_id"
-        ],
-        "properties": {
-          "team_id": {
-            "type": "string",
-            "description": "团队标识符"
-          },
-          "members": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "description": "初始成员列表(可选)"
-          }
-        }
-      }
-    },
-    {
-      "slug": "orchestrator_team_add_member",
-      "display_name": "添加团队成员",
-      "description": "向已有团队添加成员",
-      "layer": "builtin",
-      "dispatch_domain": "domain:orchestrator",
-      "owner": "framework",
-      "trigger_hints": [
-        "add",
-        "member",
-        "team",
-        "join",
-        "include",
-        "添加成员",
-        "加入团队"
-      ],
-      "mcp_server": "router-rs",
-      "tool_flags": [],
-      "input_schema": {
-        "type": "object",
-        "required": [
-          "team_id",
-          "member"
-        ],
-        "properties": {
-          "team_id": {
-            "type": "string",
-            "description": "团队标识符"
-          },
-          "member": {
-            "type": "string",
-            "description": "成员 ID"
-          }
-        }
-      }
-    },
-    {
-      "slug": "orchestrator_team_remove_member",
-      "display_name": "移除团队成员",
-      "description": "从团队中移除成员",
-      "layer": "builtin",
-      "dispatch_domain": "domain:orchestrator",
-      "owner": "framework",
-      "trigger_hints": [
-        "remove",
-        "member",
-        "team",
-        "kick",
-        "exclude",
-        "移除成员",
-        "剔除成员"
-      ],
-      "mcp_server": "router-rs",
-      "tool_flags": [],
-      "input_schema": {
-        "type": "object",
-        "required": [
-          "team_id",
-          "member"
-        ],
-        "properties": {
-          "team_id": {
-            "type": "string",
-            "description": "团队标识符"
-          },
-          "member": {
-            "type": "string",
-            "description": "成员 ID"
-          }
-        }
-      }
-    },
-    {
-      "slug": "orchestrator_team_complete",
-      "display_name": "完成团队任务",
-      "description": "标记团队任务为完成状态",
-      "layer": "builtin",
-      "dispatch_domain": "domain:orchestrator",
-      "owner": "framework",
-      "trigger_hints": [
-        "complete",
-        "finish",
-        "team",
-        "done",
-        "close",
-        "完成团队",
-        "团队完毕",
-        "team complete"
-      ],
-      "mcp_server": "router-rs",
-      "tool_flags": [],
-      "input_schema": {
-        "type": "object",
-        "required": [
-          "team_id"
-        ],
-        "properties": {
-          "team_id": {
-            "type": "string",
-            "description": "团队标识符"
-          }
-        }
-      }
-    },
-    {
-      "slug": "orchestrator_team_send_message",
-      "display_name": "发送团队消息",
-      "description": "向团队成员发送消息",
-      "layer": "builtin",
-      "dispatch_domain": "domain:orchestrator",
-      "owner": "framework",
-      "trigger_hints": [
-        "message",
-        "send",
-        "team",
-        "notify",
-        "broadcast",
-        "发送消息",
-        "通知团队"
-      ],
-      "mcp_server": "router-rs",
-      "tool_flags": [],
-      "input_schema": {
-        "type": "object",
-        "required": [
-          "team_id",
-          "message"
-        ],
-        "properties": {
-          "team_id": {
-            "type": "string",
-            "description": "团队标识符"
-          },
-          "message": {
-            "type": "string",
-            "description": "消息内容"
-          }
-        }
-      }
-    },
-    {
-      "slug": "orchestrator_team_read_messages",
-      "display_name": "读取团队消息",
-      "description": "读取团队的消息历史",
-      "layer": "builtin",
-      "dispatch_domain": "domain:orchestrator",
-      "owner": "framework",
-      "trigger_hints": [
-        "read",
-        "message",
-        "team",
-        "history",
-        "log",
-        "读取消息",
-        "查看消息"
-      ],
-      "mcp_server": "router-rs",
-      "tool_flags": [],
-      "input_schema": {
-        "type": "object",
-        "required": [
-          "team_id"
-        ],
-        "properties": {
-          "team_id": {
-            "type": "string",
-            "description": "团队标识符"
-          },
-          "since": {
-            "type": "string",
-            "description": "开始时间(ISO8601, 可选)"
-          }
-        }
-      }
-    },
-    {
-      "slug": "orchestrator_team_alive_members",
-      "display_name": "活跃成员列表",
-      "description": "查询团队中当前活跃的成员",
-      "layer": "builtin",
-      "dispatch_domain": "domain:orchestrator",
-      "owner": "framework",
-      "trigger_hints": [
-        "alive",
-        "member",
-        "team",
-        "active",
-        "status",
-        "health",
-        "活跃成员",
-        "在线成员"
-      ],
-      "mcp_server": "router-rs",
-      "tool_flags": [],
-      "input_schema": {
-        "type": "object",
-        "required": [
-          "team_id"
-        ],
-        "properties": {
-          "team_id": {
-            "type": "string",
-            "description": "团队标识符"
-          }
-        }
-      }
-    },
-    {
-      "slug": "orchestrator_team_list",
-      "display_name": "团队列表",
-      "description": "列出所有已知团队",
-      "layer": "builtin",
-      "dispatch_domain": "domain:orchestrator",
-      "owner": "framework",
-      "trigger_hints": [
-        "list",
-        "team",
-        "all",
-        "groups",
-        "overview",
-        "团队列表",
-        "所有团队"
-      ],
-      "mcp_server": "router-rs",
-      "tool_flags": [],
-      "input_schema": {
-        "type": "object",
-        "required": [],
-        "properties": {}
-      }
-    },
-    {
-      "slug": "orchestrator_agent_register",
-      "display_name": "注册代理",
-      "description": "注册一个新的子代理",
-      "layer": "builtin",
-      "dispatch_domain": "domain:orchestrator",
-      "owner": "framework",
-      "trigger_hints": [
-        "agent",
-        "register",
-        "tool",
-        "worker",
-        "capability",
-        "注册代理",
-        "注册 agent"
-      ],
-      "mcp_server": "router-rs",
-      "tool_flags": [],
-      "input_schema": {
-        "type": "object",
-        "required": [
-          "agent_id"
-        ],
-        "properties": {
-          "agent_id": {
-            "type": "string",
-            "description": "代理标识符"
-          },
-          "capabilities": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "description": "能力列表(可选)"
-          }
-        }
-      }
-    },
-    {
-      "slug": "orchestrator_agent_unregister",
-      "display_name": "注销代理",
-      "description": "注销一个已注册的子代理",
-      "layer": "builtin",
-      "dispatch_domain": "domain:orchestrator",
-      "owner": "framework",
-      "trigger_hints": [
-        "agent",
-        "unregister",
-        "remove",
-        "deregister",
-        "注销代理",
-        "删除代理"
-      ],
-      "mcp_server": "router-rs",
-      "tool_flags": [],
-      "input_schema": {
-        "type": "object",
-        "required": [
-          "agent_id"
-        ],
-        "properties": {
-          "agent_id": {
-            "type": "string",
-            "description": "代理标识符"
-          }
-        }
-      }
-    },
-    {
-      "slug": "orchestrator_agent_list_running",
-      "display_name": "运行中代理列表",
-      "description": "列出当前所有运行的子代理",
-      "layer": "builtin",
-      "dispatch_domain": "domain:orchestrator",
-      "owner": "framework",
-      "trigger_hints": [
-        "list",
-        "agent",
-        "worker",
-        "running",
-        "active",
-        "status",
-        "运行中代理",
-        "运行中 agent",
-        "running agents"
-      ],
-      "mcp_server": "router-rs",
-      "tool_flags": [],
-      "input_schema": {
-        "type": "object",
-        "required": [],
-        "properties": {}
-      }
-    },
-    {
-      "slug": "orchestrator_worker_launch",
-      "display_name": "启动工作进程",
-      "description": "启动一个新的工作进程",
-      "layer": "builtin",
-      "dispatch_domain": "domain:orchestrator",
-      "owner": "framework",
-      "trigger_hints": [
-        "launch",
-        "worker",
-        "spawn",
-        "task",
-        "start",
-        "启动工作",
-        "launch worker"
-      ],
-      "mcp_server": "router-rs",
-      "tool_flags": [],
-      "input_schema": {
-        "type": "object",
-        "required": [
-          "task"
-        ],
-        "properties": {
-          "task": {
-            "type": "string",
-            "description": "工作任务描述"
-          },
-          "team_id": {
-            "type": "string",
-            "description": "所属团队(可选)"
-          }
-        }
-      }
-    },
-    {
-      "slug": "orchestrator_worker_list",
-      "display_name": "工作进程列表",
-      "description": "列出所有工作进程",
-      "layer": "builtin",
-      "dispatch_domain": "domain:orchestrator",
-      "owner": "framework",
-      "trigger_hints": [
-        "list",
-        "worker",
-        "task",
-        "running",
-        "jobs",
-        "工作进程",
-        "worker list"
-      ],
-      "mcp_server": "router-rs",
-      "tool_flags": [],
-      "input_schema": {
-        "type": "object",
-        "required": [],
-        "properties": {
-          "team_id": {
-            "type": "string",
-            "description": "团队过滤(可选)"
-          }
-        }
-      }
-    },
-    {
-      "slug": "orchestrator_worker_terminate",
-      "display_name": "终止工作进程",
-      "description": "终止一个运行中的工作进程",
-      "layer": "builtin",
-      "dispatch_domain": "domain:orchestrator",
-      "owner": "framework",
-      "trigger_hints": [
-        "terminate",
-        "kill",
-        "worker",
-        "stop",
-        "abort",
-        "终止工作",
-        "停止 worker"
-      ],
-      "mcp_server": "router-rs",
-      "tool_flags": [],
-      "input_schema": {
-        "type": "object",
-        "required": [
-          "worker_id"
-        ],
-        "properties": {
-          "worker_id": {
-            "type": "string",
-            "description": "工作进程 ID"
-          },
-          "team_id": {
-            "type": "string",
-            "description": "所属团队(可选)"
-          }
-        }
-      }
-    },
-    {
       "slug": "research_aigc_check",
       "display_name": "AIGC 检测",
-      "description": "检测文本是否由 AI 生成，返回概率评分和逐段分析",
+      "description": "检测文本是否 AI 生成",
       "layer": "research",
       "dispatch_domain": "domain:research",
       "owner": "research",
       "trigger_hints": [
-        "AIGC",
-        "检测",
         "AI",
-        "生成",
-        "论文",
-        "AI写作检测",
-        "GPT检测",
-        "ChatGPT",
-        "机器生成",
-        "ai detection",
-        "文本分析",
-        "原创性检测",
-        "AI概率",
-        "抄袭风险",
-        "AI文本"
+        "AIGC",
+        "检测"
       ],
-      "mcp_server": "research-harness",
+      "mcp_server": "mcp-research-harness",
       "tool_flags": [
         "readonly"
       ],
@@ -1178,985 +420,16 @@
       }
     },
     {
-      "slug": "research_review_dimensions",
-      "display_name": "审稿维度",
-      "description": "获取多轮对抗审稿的维度 prompt",
-      "layer": "research",
-      "dispatch_domain": "domain:research",
-      "owner": "research",
-      "trigger_hints": [
-        "审稿",
-        "维度",
-        "review",
-        "对抗",
-        "论文",
-        "审稿维度",
-        "审稿角度",
-        "reviewer prompt",
-        "审稿模板",
-        "论文审查",
-        "审稿清单",
-        "审稿要点",
-        "审稿方向",
-        "多维度审稿"
-      ],
-      "mcp_server": "research-harness",
-      "tool_flags": [
-        "readonly"
-      ],
-      "input_schema": {
-        "type": "object",
-        "required": [
-          "round"
-        ],
-        "properties": {
-          "round": {
-            "type": "integer",
-            "description": "审稿轮次"
-          },
-          "manuscript_summary": {
-            "type": "string",
-            "description": "论文摘要（可选）"
-          }
-        }
-      }
-    },
-    {
-      "slug": "research_claim_drift",
-      "display_name": "Claim 漂移检测",
-      "description": "检测原始 vs 当前声明的相似度和证据变化",
-      "layer": "research",
-      "dispatch_domain": "domain:research",
-      "owner": "research",
-      "trigger_hints": [
-        "claim",
-        "漂移",
-        "drift",
-        "检测",
-        "声明",
-        "声明变化",
-        "声明差异",
-        "对比",
-        "不一致",
-        "版本对比",
-        "声明演变",
-        "证据变化",
-        "claim change",
-        "原始声明",
-        "当前声明"
-      ],
-      "mcp_server": "research-harness",
-      "tool_flags": [
-        "readonly"
-      ],
-      "input_schema": {
-        "type": "object",
-        "required": [
-          "original_claims",
-          "current_claims"
-        ],
-        "properties": {
-          "original_claims": {
-            "type": "array",
-            "items": {
-              "type": "object"
-            },
-            "description": "原始声明列表（含 id/text/ceiling/evidence）"
-          },
-          "current_claims": {
-            "type": "array",
-            "items": {
-              "type": "object"
-            },
-            "description": "当前声明列表"
-          }
-        }
-      }
-    },
-    {
-      "slug": "research_review_loop",
-      "display_name": "对抗审稿循环",
-      "description": "对抗审稿循环——适配器工具，提供审稿维度/prompt/checklist。循环状态由 GoalEngine QGEntry 管理",
-      "layer": "research",
-      "dispatch_domain": "domain:research",
-      "owner": "research",
-      "trigger_hints": [
-        "审稿",
-        "循环",
-        "review",
-        "loop",
-        "对抗",
-        "论文",
-        "多轮审稿",
-        "审稿管理",
-        "对抗审稿",
-        "review cycle",
-        "重复审稿",
-        "自动审稿",
-        "审稿流程",
-        "审稿进度",
-        "持续审稿"
-      ],
-      "mcp_server": "research-harness",
-      "tool_flags": [
-        "readonly"
-      ],
-      "input_schema": {
-        "type": "object",
-        "properties": {
-          "operation": {
-            "type": "string",
-            "description": "操作：start（默认）/submit_round/status"
-          },
-          "max_rounds": {
-            "type": "integer",
-            "description": "最大轮次（默认 10；start 操作设定上限，submit_round 操作可传以触发 ceiling 检测）"
-          },
-          "min_rounds": {
-            "type": "integer",
-            "description": "最小轮次（默认 5；仅 start 操作）"
-          },
-          "consecutive_stable_required": {
-            "type": "integer",
-            "description": "连续稳定轮次要求（默认 2；仅 start 操作）"
-          },
-          "round": {
-            "type": "integer",
-            "description": "当前轮次号（submit_round/status 操作必填）"
-          },
-          "findings": {
-            "type": "array",
-            "items": {
-              "type": "object"
-            },
-            "description": "本轮审稿发现数组（submit_round 操作）"
-          }
-        }
-      }
-    },
-    {
-      "slug": "research_smoke",
-      "display_name": "学术数据源新鲜度烟雾测试",
-      "description": "对学术数据源（arXiv/Semantic Scholar）执行新鲜度烟雾测试，检测源端数据是否滞后或不可用 (Deprecated. Use search_research/fetch_paper instead.)",
-      "layer": "research",
-      "dispatch_domain": "domain:research",
-      "owner": "research",
-      "trigger_hints": [
-        "烟雾测试",
-        "数据源",
-        "freshness",
-        "学术搜索",
-        "arXiv",
-        "Semantic Scholar",
-        "数据源检查",
-        "学术搜索检测",
-        "API可用性",
-        "源端数据",
-        "新鲜度检查",
-        "搜索是否正常",
-        "数据源状态",
-        "连接测试",
-        "学术数据"
-      ],
-      "mcp_server": "research-harness",
-      "tool_flags": [
-        "deprecated",
-        "readonly"
-      ],
-      "input_schema": {
-        "type": "object",
-        "properties": {
-          "source": {
-            "type": "string",
-            "description": "过滤源：arxiv/semantic-scholar（可选）"
-          },
-          "barrier_id": {
-            "type": "string",
-            "description": "按 barrier_id 过滤（可选）"
-          },
-          "repo_root": {
-            "type": "string",
-            "description": "仓库根路径（可选，默认当前目录）"
-          }
-        }
-      }
-    },
-    {
-      "slug": "math_prove_inequality",
-      "display_name": "不等式证明",
-      "description": "使用 Z3/SMT 求解器验证线性不等式 (Deprecated. Use math_sympy_verify instead.)",
-      "layer": "research",
-      "dispatch_domain": "domain:research",
-      "owner": "research",
-      "trigger_hints": [
-        "不等式",
-        "证明",
-        "inequality",
-        "Z3",
-        "数学证明",
-        "线性不等式",
-        "不等式验证",
-        "不等式求解",
-        "约束验证",
-        "数学约束",
-        "可行性检查",
-        "contradiction check",
-        "矛盾检测",
-        "数学检验",
-        "SMT"
-      ],
-      "mcp_server": "research-harness",
-      "tool_flags": [
-        "deprecated",
-        "readonly"
-      ],
-      "input_schema": {
-        "type": "object",
-        "required": [
-          "expression"
-        ],
-        "properties": {
-          "expression": {
-            "type": "string",
-            "description": "不等式表达式"
-          },
-          "timeout_ms": {
-            "type": "integer",
-            "description": "超时毫秒（可选）"
-          }
-        }
-      }
-    },
-    {
-      "slug": "math_backend_available",
-      "display_name": "数学后端可用性检查",
-      "description": "检查数学验证后端（Z3/SymPy/Lean）是否可用 (Deprecated. Backend availability is automatically checked.)",
-      "layer": "research",
-      "dispatch_domain": "domain:research",
-      "owner": "research",
-      "trigger_hints": [
-        "后端",
-        "available",
-        "数学检查",
-        "工具可用性",
-        "Z3",
-        "SymPy",
-        "Lean",
-        "检查环境",
-        "验证环境",
-        "数学后端",
-        "环境检查",
-        "工具状态",
-        "安装状态",
-        "检查安装",
-        "backend check",
-        "环境就绪"
-      ],
-      "mcp_server": "research-harness",
-      "tool_flags": [
-        "deprecated",
-        "readonly"
-      ],
-      "input_schema": {
-        "type": "object",
-        "properties": {}
-      }
-    },
-    {
-      "slug": "math_asymptotic_estimate",
-      "display_name": "渐近估计",
-      "description": "估计数学表达式的渐近量级",
-      "layer": "research",
-      "dispatch_domain": "domain:research",
-      "owner": "research",
-      "trigger_hints": [
-        "渐近",
-        "asymptotic",
-        "量级",
-        "O",
-        "估计",
-        "数学分析",
-        "复杂度估计",
-        "big O",
-        "时间复杂度",
-        "渐近分析",
-        "量级分析",
-        "主导项",
-        "极限行为",
-        "增长率",
-        "复杂度分析"
-      ],
-      "mcp_server": "research-harness",
-      "tool_flags": [],
-      "input_schema": {
-        "type": "object",
-        "required": [
-          "expression"
-        ],
-        "properties": {
-          "expression": {
-            "type": "string",
-            "description": "数学表达式"
-          },
-          "variable": {
-            "type": "string",
-            "description": "变量名（默认 x）"
-          },
-          "regime": {
-            "type": "string",
-            "description": "极限 regime: oo=无穷大, 0=趋于零（默认 oo）"
-          }
-        }
-      }
-    },
-    {
-      "slug": "math_asymptotic_chain",
-      "display_name": "渐近链验证",
-      "description": "验证渐近推理链（多步逐步推导 (Deprecated. Use math_asymptotic_estimate instead.)",
-      "layer": "research",
-      "dispatch_domain": "domain:research",
-      "owner": "research",
-      "trigger_hints": [
-        "渐近链",
-        "asymptotic chain",
-        "推导验证",
-        "O链",
-        "数学推理",
-        "渐近关系",
-        "链验证",
-        "传递性",
-        "量级比较",
-        "不等式链",
-        "渐近排序",
-        "关系链",
-        "渐近传递",
-        "big O链"
-      ],
-      "mcp_server": "research-harness",
-      "tool_flags": [
-        "deprecated",
-        "readonly"
-      ],
-      "input_schema": {
-        "type": "object",
-        "required": [
-          "steps"
-        ],
-        "properties": {
-          "steps": {
-            "type": "array",
-            "items": {
-              "type": "object"
-            },
-            "description": "渐近推理步骤列表"
-          },
-          "variable": {
-            "type": "string",
-            "description": "变量名（默认 x）"
-          },
-          "regime": {
-            "type": "string",
-            "description": "极限 regime（默认 oo）"
-          },
-          "sympy_check": {
-            "type": "boolean",
-            "description": "是否用 SymPy 验证（默认 true）"
-          }
-        }
-      }
-    },
-    {
-      "slug": "math_proof_dag_init",
-      "display_name": "证明 DAG 初始化",
-      "description": "初始化一个证明有向无环图（Proof DAG",
-      "layer": "research",
-      "dispatch_domain": "domain:research",
-      "owner": "research",
-      "trigger_hints": [
-        "证明DAG",
-        "proof DAG",
-        "证明分解",
-        "数学证明",
-        "proof decomposition",
-        "蓝图",
-        "证明规划",
-        "证明策略",
-        "证明流程",
-        "proof planning",
-        "证明结构",
-        "蓝图规划",
-        "证明框架",
-        "证明入口",
-        "DAG初始化"
-      ],
-      "mcp_server": "research-harness",
-      "tool_flags": [],
-      "input_schema": {
-        "type": "object",
-        "required": [
-          "goal"
-        ],
-        "properties": {
-          "goal": {
-            "type": "string",
-            "description": "证明目标陈述"
-          },
-          "name": {
-            "type": "string",
-            "description": "证明名称（可选，默认 proof）"
-          }
-        }
-      }
-    },
-    {
-      "slug": "math_proof_dag_decompose",
-      "display_name": "证明 DAG 分解",
-      "description": "将证明节点分解为子目标",
-      "layer": "research",
-      "dispatch_domain": "domain:research",
-      "owner": "research",
-      "trigger_hints": [
-        "分解",
-        "证明分解",
-        "子目标",
-        "proof decompose",
-        "DAG分解",
-        "AND/OR分解",
-        "子问题",
-        "证明拆分",
-        "目标分解",
-        "子证明",
-        "递归分解",
-        "证明细化",
-        "拆解证明",
-        "子目标生成"
-      ],
-      "mcp_server": "research-harness",
-      "tool_flags": [],
-      "input_schema": {
-        "type": "object",
-        "required": [
-          "parent_id",
-          "children"
-        ],
-        "properties": {
-          "parent_id": {
-            "type": "string",
-            "description": "父节点 ID"
-          },
-          "children": {
-            "type": "array",
-            "items": {
-              "type": "object"
-            },
-            "description": "子目标节点列表"
-          },
-          "and": {
-            "type": "boolean",
-            "description": "AND 分解（全部成立）或 OR 分解（任一成立）（默认 false=OR）"
-          }
-        }
-      }
-    },
-    {
-      "slug": "math_proof_dag_verify",
-      "display_name": "证明 DAG 验证",
-      "description": "验证当前证明 DAG 的结构完备性",
-      "layer": "research",
-      "dispatch_domain": "domain:research",
-      "owner": "research",
-      "trigger_hints": [
-        "DAG验证",
-        "证明验证",
-        "proof verify",
-        "完整性检查",
-        "论证审查",
-        "证明检查",
-        "验证DAG",
-        "结构验证",
-        "证明完整性",
-        "DAG完整性",
-        "proof check",
-        "验证结构",
-        "DAG检查",
-        "证明结构验证"
-      ],
-      "mcp_server": "research-harness",
-      "tool_flags": [],
-      "input_schema": {
-        "type": "object",
-        "properties": {}
-      }
-    },
-    {
-      "slug": "math_proof_dag_status",
-      "display_name": "证明 DAG 状态",
-      "description": "查看当前证明 DAG 的进度摘要",
-      "layer": "research",
-      "dispatch_domain": "domain:research",
-      "owner": "research",
-      "trigger_hints": [
-        "DAG状态",
-        "证明进度",
-        "proof status",
-        "摘要",
-        "当前进度",
-        "证明摘要",
-        "进度查询",
-        "DAG进度",
-        "状态摘要",
-        "证明概览",
-        "检查进度",
-        "查看状态",
-        "进度摘要",
-        "DAG概览"
-      ],
-      "mcp_server": "research-harness",
-      "tool_flags": [],
-      "input_schema": {
-        "type": "object",
-        "properties": {}
-      }
-    },
-    {
-      "slug": "math_sympy_verify",
-      "display_name": "SymPy 等式验证",
-      "description": "使用 SymPy 验证代数等式恒成立",
-      "layer": "research",
-      "dispatch_domain": "domain:research",
-      "owner": "research",
-      "trigger_hints": [
-        "SymPy",
-        "等式验证",
-        "恒等式",
-        "sympy verify",
-        "代数化简",
-        "数学验证",
-        "代数验证",
-        "恒等式验证",
-        "identity check",
-        "等式检测",
-        "代数恒等式",
-        "公式验证",
-        "符号验证",
-        "恒等检查"
-      ],
-      "mcp_server": "research-harness",
-      "tool_flags": [],
-      "input_schema": {
-        "type": "object",
-        "required": [
-          "lhs",
-          "rhs"
-        ],
-        "properties": {
-          "lhs": {
-            "type": "string",
-            "description": "等式左侧表达式"
-          },
-          "rhs": {
-            "type": "string",
-            "description": "等式右侧表达式"
-          },
-          "assumptions": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "description": "前提条件列表（可选）"
-          }
-        }
-      }
-    },
-    {
-      "slug": "math_sympy_simplify",
-      "display_name": "SymPy 表达式化简",
-      "description": "使用 SymPy 化简数学表达式",
-      "layer": "research",
-      "dispatch_domain": "domain:research",
-      "owner": "research",
-      "trigger_hints": [
-        "化简",
-        "simplify",
-        "SymPy",
-        "表达式化简",
-        "代数化简",
-        "公式化简",
-        "表达式简化",
-        "代数简化",
-        "符号化简",
-        "简化表达式",
-        "合并同类项",
-        "因式分解",
-        "代数简化",
-        "符号计算"
-      ],
-      "mcp_server": "research-harness",
-      "tool_flags": [],
-      "input_schema": {
-        "type": "object",
-        "required": [
-          "expression"
-        ],
-        "properties": {
-          "expression": {
-            "type": "string",
-            "description": "待化简的数学表达式"
-          }
-        }
-      }
-    },
-    {
-      "slug": "math_lean_verify",
-      "display_name": "Lean 定理证明",
-      "description": "使用 Lean 4 定理证明器验证数学命题 (Deprecated. Use math_sympy_verify for algebraic verification instead.)",
-      "layer": "research",
-      "dispatch_domain": "domain:research",
-      "owner": "research",
-      "trigger_hints": [
-        "Lean",
-        "定理证明",
-        "命题验证",
-        "formal proof",
-        "lean verify",
-        "形式化证明",
-        "形式验证",
-        "定理验证",
-        "Lean4",
-        "证明检查",
-        "命题证明",
-        "逻辑验证",
-        "定理检查",
-        "形式证明",
-        "lean4"
-      ],
-      "mcp_server": "research-harness",
-      "tool_flags": [
-        "deprecated",
-        "readonly"
-      ],
-      "input_schema": {
-        "type": "object",
-        "required": [
-          "script"
-        ],
-        "properties": {
-          "script": {
-            "type": "string",
-            "description": "Lean 4 脚本内容"
-          }
-        }
-      }
-    },
-    {
-      "slug": "research_verification_literature",
-      "display_name": "文献验证",
-      "description": "验证学术文献的 DOI 可达性和声明覆盖率 (Deprecated. Use research_verification_prose instead.)",
-      "layer": "research",
-      "dispatch_domain": "domain:research",
-      "owner": "research",
-      "trigger_hints": [
-        "文献验证",
-        "DOI",
-        "可达性",
-        "声明覆盖率",
-        "引用检查",
-        "论文引用",
-        "引用验证",
-        "文献核实",
-        "DOI检查",
-        "claim coverage",
-        "引用可达性"
-      ],
-      "mcp_server": "research-harness",
-      "tool_flags": [
-        "deprecated",
-        "readonly"
-      ],
-      "input_schema": {
-        "type": "object",
-        "required": [
-          "check"
-        ],
-        "properties": {
-          "check": {
-            "type": "string",
-            "enum": [
-              "doi",
-              "claim_coverage"
-            ],
-            "description": "验证类型：doi=DOI可达性检查, claim_coverage=声明覆盖率计算"
-          },
-          "doi": {
-            "type": "string",
-            "description": "DOI 标识符（check=doi 时必填）"
-          },
-          "claims": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "description": "声明列表（check=claim_coverage 时必填）"
-          },
-          "references": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "description": "引用列表（check=claim_coverage 时必填）"
-          }
-        }
-      }
-    },
-    {
-      "slug": "research_verification_prose",
-      "display_name": "文本质控",
-      "description": "验证论文文本质素：术语一致性、AI slop 检测和 hedging 分析",
-      "layer": "research",
-      "dispatch_domain": "domain:research",
-      "owner": "research",
-      "trigger_hints": [
-        "文本质控",
-        "术语一致性",
-        "slop检测",
-        "hedging分析",
-        "AI套话",
-        "学术写作",
-        "写作检查",
-        "prose QC",
-        "术语检查",
-        "中文套话",
-        "AI slop",
-        "防御性语气",
-        "prose quality",
-        "文字检查"
-      ],
-      "mcp_server": "research-harness",
-      "tool_flags": [
-        "readonly"
-      ],
-      "input_schema": {
-        "type": "object",
-        "required": [
-          "check"
-        ],
-        "properties": {
-          "check": {
-            "type": "string",
-            "enum": [
-              "terminology",
-              "slop",
-              "hedging"
-            ],
-            "description": "检查类型：terminology=术语一致性, slop=AI套话检测, hedging=防御性语气"
-          },
-          "text": {
-            "type": "string",
-            "description": "待检查文本"
-          },
-          "glossary": {
-            "type": "object",
-            "description": "术语表（check=terminology 时可用）"
-          },
-          "language": {
-            "type": "string",
-            "enum": [
-              "en",
-              "zh"
-            ],
-            "description": "语言（check=slop 时，默认为 en）"
-          }
-        }
-      }
-    },
-    {
-      "slug": "research_verification_reproducibility",
-      "display_name": "可复现性审计",
-      "description": "审计实验的可复现性（README/环境/脚本/数据/种子/Docker (Deprecated. Use research_verification_statistical instead.)",
-      "layer": "research",
-      "dispatch_domain": "domain:research",
-      "owner": "research",
-      "trigger_hints": [
-        "可复现性",
-        "复现审计",
-        "reproducibility",
-        "实验验证",
-        "实验环境",
-        "脚本检查",
-        "Docker",
-        "种子",
-        "数据文件",
-        "README检查",
-        "实验审计",
-        "复现检查",
-        "实验完整性",
-        "reproducibility audit"
-      ],
-      "mcp_server": "research-harness",
-      "tool_flags": [
-        "deprecated",
-        "readonly"
-      ],
-      "input_schema": {
-        "type": "object",
-        "required": [
-          "experiment_dir"
-        ],
-        "properties": {
-          "experiment_dir": {
-            "type": "string",
-            "description": "实验目录路径"
-          },
-          "run_paths": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "description": "运行脚本路径列表（可选，为空则自动扫描）"
-          }
-        }
-      }
-    },
-    {
-      "slug": "research_verification_statistical",
-      "display_name": "统计验证",
-      "description": "验证统计声明的正确性：GRIM 测试、p值验证、多重比较校正检查",
-      "layer": "research",
-      "dispatch_domain": "domain:research",
-      "owner": "research",
-      "trigger_hints": [
-        "统计验证",
-        "GRIM测试",
-        "p值验证",
-        "多重比较",
-        "统计检查",
-        "数据验证",
-        "统计正确性",
-        "方法验证",
-        "统计错误",
-        "GRIM test",
-        "p value",
-        "multiple comparison",
-        "统计显著性",
-        "校正检查"
-      ],
-      "mcp_server": "research-harness",
-      "tool_flags": [
-        "readonly"
-      ],
-      "input_schema": {
-        "type": "object",
-        "required": [
-          "check"
-        ],
-        "properties": {
-          "check": {
-            "type": "string",
-            "enum": [
-              "grim",
-              "p_value",
-              "multiple_comparison"
-            ],
-            "description": "检查类型：grim=GRIM测试, p_value=p值验证, multiple_comparison=多重比较校正"
-          },
-          "mean": {
-            "type": "number",
-            "description": "均值（check=grim 时必填）"
-          },
-          "n": {
-            "type": "integer",
-            "description": "样本量（check=grim 时必填）"
-          },
-          "decimals": {
-            "type": "integer",
-            "description": "小数位数（check=grim 时可选，默认 2）"
-          },
-          "observed": {
-            "type": "number",
-            "description": "观测 p 值（check=p_value 时必填）"
-          },
-          "expected": {
-            "type": "number",
-            "description": "期望 p 值（check=p_value 时必填）"
-          },
-          "tolerance": {
-            "type": "number",
-            "description": "容忍度（check=p_value 时可选，默认 0.01）"
-          },
-          "num_tests": {
-            "type": "integer",
-            "description": "检验次数（check=multiple_comparison 时必填）"
-          },
-          "correction_applied": {
-            "type": "boolean",
-            "description": "是否已校正（check=multiple_comparison 时可选）"
-          }
-        }
-      }
-    },
-    {
-      "slug": "research_verification_structure",
-      "display_name": "结构验证",
-      "description": "验证论文结构完整性：LaTeX 可编译性检查和图表引用检查 (Deprecated. Use research_verification_prose instead.)",
-      "layer": "research",
-      "dispatch_domain": "domain:research",
-      "owner": "research",
-      "trigger_hints": [
-        "结构验证",
-        "LaTeX检查",
-        "图表引用",
-        "LaTeX编译",
-        "论文结构",
-        "编译检查",
-        "引用检查",
-        "结构完整性",
-        "公式检查",
-        "表格引用",
-        "latex compilable",
-        "figure reference",
-        "论文格式检查"
-      ],
-      "mcp_server": "research-harness",
-      "tool_flags": [
-        "deprecated",
-        "readonly"
-      ],
-      "input_schema": {
-        "type": "object",
-        "required": [
-          "check"
-        ],
-        "properties": {
-          "check": {
-            "type": "string",
-            "enum": [
-              "latex",
-              "figures"
-            ],
-            "description": "检查类型：latex=LaTeX可编译性检查, figures=图表引用检查"
-          },
-          "path": {
-            "type": "string",
-            "description": ".tex 文件路径"
-          }
-        }
-      }
-    },
-    {
       "slug": "browser_tabs",
       "display_name": "浏览器标签页",
-      "description": "管理浏览器标签页（列出/切换",
+      "description": "管理标签页（列出/切换）",
       "layer": "independent",
       "dispatch_domain": "domain:browser",
       "owner": "browser",
       "trigger_hints": [
-        "标签页",
-        "tabs",
         "浏览器",
-        "切换",
-        "列表",
-        "标签列表",
-        "窗口管理"
+        "tabs",
+        "标签页"
       ],
       "mcp_server": "browser-mcp",
       "tool_flags": []
@@ -2164,16 +437,14 @@
     {
       "slug": "browser_open",
       "display_name": "浏览器打开",
-      "description": "在当前浏览器会话中打开页面",
+      "description": "在当前会话打开页面",
       "layer": "independent",
       "dispatch_domain": "domain:browser",
       "owner": "browser",
       "trigger_hints": [
-        "打开",
-        "open",
-        "页面",
         "浏览器",
-        "URL"
+        "open",
+        "打开"
       ],
       "mcp_server": "browser-mcp",
       "tool_flags": []
@@ -2181,16 +452,14 @@
     {
       "slug": "browser_close",
       "display_name": "浏览器关闭",
-      "description": "关闭单个标签页或整个会话",
+      "description": "关闭标签页或会话",
       "layer": "independent",
       "dispatch_domain": "domain:browser",
       "owner": "browser",
       "trigger_hints": [
-        "关闭",
-        "close",
-        "标签页",
         "浏览器",
-        "会话"
+        "close",
+        "关闭"
       ],
       "mcp_server": "browser-mcp",
       "tool_flags": []
@@ -2198,19 +467,14 @@
     {
       "slug": "browser_click",
       "display_name": "浏览器点击",
-      "description": "点击索引元素并返回增量页面 delta",
+      "description": "点击索引元素",
       "layer": "independent",
       "dispatch_domain": "domain:browser",
       "owner": "browser",
       "trigger_hints": [
-        "点击",
-        "click",
         "浏览器",
-        "按钮",
-        "元素",
-        "选取元素",
-        "模拟点击",
-        "鼠标操作"
+        "click",
+        "点击"
       ],
       "mcp_server": "browser-mcp",
       "tool_flags": []
@@ -2218,18 +482,14 @@
     {
       "slug": "browser_fill",
       "display_name": "浏览器填充",
-      "description": "填充输入框，可选提交，返回增量页面 delta",
+      "description": "填充输入框",
       "layer": "independent",
       "dispatch_domain": "domain:browser",
       "owner": "browser",
       "trigger_hints": [
-        "填充",
-        "fill",
-        "输入",
-        "表单",
         "浏览器",
-        "表单填写",
-        "输入文字"
+        "fill",
+        "输入"
       ],
       "mcp_server": "browser-mcp",
       "tool_flags": []
@@ -2237,16 +497,14 @@
     {
       "slug": "browser_press",
       "display_name": "浏览器按键",
-      "description": "在当前页面按下键盘键",
+      "description": "按下键盘键",
       "layer": "independent",
       "dispatch_domain": "domain:browser",
       "owner": "browser",
       "trigger_hints": [
-        "按键",
-        "press",
-        "键盘",
         "浏览器",
-        "快捷键"
+        "press",
+        "按键"
       ],
       "mcp_server": "browser-mcp",
       "tool_flags": []
@@ -2254,18 +512,14 @@
     {
       "slug": "browser_screenshot",
       "display_name": "浏览器截图",
-      "description": "截取页面截图并作为内联图像返回",
+      "description": "截取页面截图",
       "layer": "independent",
       "dispatch_domain": "domain:browser",
       "owner": "browser",
       "trigger_hints": [
         "截图",
         "screenshot",
-        "浏览器",
-        "页面",
-        "图像",
-        "页面截图",
-        "视觉验证"
+        "浏览器"
       ],
       "mcp_server": "browser-mcp",
       "tool_flags": []
@@ -2273,16 +527,14 @@
     {
       "slug": "browser_get_text",
       "display_name": "浏览器获取文本",
-      "description": "获取页面或特定元素范围的可见文本",
+      "description": "获取页面可见文本",
       "layer": "independent",
       "dispatch_domain": "domain:browser",
       "owner": "browser",
       "trigger_hints": [
-        "文本",
-        "text",
         "浏览器",
-        "获取",
-        "内容"
+        "text",
+        "文本"
       ],
       "mcp_server": "browser-mcp",
       "tool_flags": []
@@ -2290,16 +542,14 @@
     {
       "slug": "browser_get_state",
       "display_name": "浏览器获取状态",
-      "description": "返回压缩页面摘要、交互元素和可选 diff",
+      "description": "获取页面状态摘要",
       "layer": "independent",
       "dispatch_domain": "domain:browser",
       "owner": "browser",
       "trigger_hints": [
-        "状态",
-        "state",
         "浏览器",
-        "摘要",
-        "页面"
+        "state",
+        "状态"
       ],
       "mcp_server": "browser-mcp",
       "tool_flags": []
@@ -2307,16 +557,14 @@
     {
       "slug": "browser_get_elements",
       "display_name": "浏览器获取元素",
-      "description": "返回按角色和文本查询过滤的交互元素",
+      "description": "按角色/文本查询交互元素",
       "layer": "independent",
       "dispatch_domain": "domain:browser",
       "owner": "browser",
       "trigger_hints": [
-        "元素",
-        "elements",
         "浏览器",
-        "交互",
-        "查询"
+        "elements",
+        "元素"
       ],
       "mcp_server": "browser-mcp",
       "tool_flags": []
@@ -2324,16 +572,14 @@
     {
       "slug": "browser_wait_for",
       "display_name": "浏览器等待",
-      "description": "等待一个显式页面条件而不重新读取整个页面",
+      "description": "等待页面条件满足",
       "layer": "independent",
       "dispatch_domain": "domain:browser",
       "owner": "browser",
       "trigger_hints": [
-        "等待",
-        "wait",
         "浏览器",
-        "条件",
-        "加载"
+        "wait",
+        "等待"
       ],
       "mcp_server": "browser-mcp",
       "tool_flags": []
@@ -2341,16 +587,14 @@
     {
       "slug": "browser_get_network",
       "display_name": "浏览器网络",
-      "description": "返回最近的网络请求，包括状态、时序和可选 body",
+      "description": "查看网络请求",
       "layer": "independent",
       "dispatch_domain": "domain:browser",
       "owner": "browser",
       "trigger_hints": [
-        "网络",
-        "network",
         "浏览器",
-        "请求",
-        "API"
+        "network",
+        "网络"
       ],
       "mcp_server": "browser-mcp",
       "tool_flags": []
@@ -2358,16 +602,14 @@
     {
       "slug": "browser_diagnostics",
       "display_name": "浏览器诊断",
-      "description": "返回运行时健康信息，包括仓库技能路由工具是否暴露",
+      "description": "检查浏览器运行时状态",
       "layer": "independent",
       "dispatch_domain": "domain:browser",
       "owner": "browser",
       "trigger_hints": [
-        "诊断",
-        "diagnostics",
         "浏览器",
-        "健康",
-        "运行时"
+        "diagnostics",
+        "诊断"
       ],
       "mcp_server": "browser-mcp",
       "tool_flags": []
@@ -2375,16 +617,14 @@
     {
       "slug": "browser_save_session",
       "display_name": "浏览器保存会话",
-      "description": "将当前浏览器上下文存储状态保存到磁盘",
+      "description": "保存浏览器会话到磁盘",
       "layer": "independent",
       "dispatch_domain": "domain:browser",
       "owner": "browser",
       "trigger_hints": [
-        "保存",
-        "save",
-        "会话",
         "浏览器",
-        "状态"
+        "save",
+        "保存"
       ],
       "mcp_server": "browser-mcp",
       "tool_flags": []
@@ -2392,16 +632,14 @@
     {
       "slug": "browser_restore_session",
       "display_name": "浏览器恢复会话",
-      "description": "从磁盘恢复之前保存的浏览器会话",
+      "description": "从磁盘恢复浏览器会话",
       "layer": "independent",
       "dispatch_domain": "domain:browser",
       "owner": "browser",
       "trigger_hints": [
-        "恢复",
-        "restore",
-        "会话",
         "浏览器",
-        "加载"
+        "restore",
+        "恢复"
       ],
       "mcp_server": "browser-mcp",
       "tool_flags": []
@@ -2409,17 +647,14 @@
     {
       "slug": "pdf_read",
       "display_name": "PDF 文本提取",
-      "description": "从 PDF 文件中提取文本内容，支持分页和全量提取",
+      "description": "提取 PDF 文本内容",
       "layer": "external",
       "dispatch_domain": "domain:stdio-binary",
       "owner": "rust-tools",
       "trigger_hints": [
         "PDF",
-        "pdf",
-        "文本",
         "提取",
-        "文档",
-        "论文"
+        "文本"
       ],
       "mcp_server": "mcp-pdf",
       "tool_flags": []
@@ -2427,16 +662,14 @@
     {
       "slug": "pdf_info",
       "display_name": "PDF 元数据",
-      "description": "获取 PDF 文件的元数据信息（页数、标题、作者等",
+      "description": "读取 PDF 元数据（页数/标题/作者）",
       "layer": "external",
       "dispatch_domain": "domain:stdio-binary",
       "owner": "rust-tools",
       "trigger_hints": [
         "PDF",
-        "pdf",
         "元数据",
-        "信息",
-        "页数"
+        "info"
       ],
       "mcp_server": "mcp-pdf",
       "tool_flags": []
@@ -2444,17 +677,14 @@
     {
       "slug": "ooxml_parse",
       "display_name": "OOXML 解析",
-      "description": "解析 Office Open XML 格式文件（docx/xlsx/pptx",
+      "description": "解析 Office Open XML（docx/xlsx）",
       "layer": "external",
       "dispatch_domain": "domain:stdio-binary",
       "owner": "rust-tools",
       "trigger_hints": [
-        "OOXML",
-        "Office",
         "docx",
         "xlsx",
-        "解析",
-        "文档"
+        "Office"
       ],
       "mcp_server": "mcp-ooxml",
       "tool_flags": []
@@ -2462,16 +692,14 @@
     {
       "slug": "pptx_parse",
       "display_name": "PPTX 解析",
-      "description": "解析 PowerPoint 文件，提取幻灯片文本和结构",
+      "description": "解析 PPTX 文件内容",
       "layer": "external",
       "dispatch_domain": "domain:stdio-binary",
       "owner": "rust-tools",
       "trigger_hints": [
         "PPTX",
-        "pptx",
-        "PowerPoint",
-        "幻灯片",
-        "解析"
+        "PPT",
+        "幻灯片"
       ],
       "mcp_server": "mcp-pptx",
       "tool_flags": []
@@ -2479,17 +707,14 @@
     {
       "slug": "financial_data",
       "display_name": "金融数据",
-      "description": "获取和分析金融数据（股票、基金、指数等",
+      "description": "获取和分析金融数据（股票/基金/指数）",
       "layer": "external",
       "dispatch_domain": "domain:stdio-binary",
       "owner": "rust-tools",
       "trigger_hints": [
-        "金融",
         "股票",
         "基金",
-        "数据",
-        "分析",
-        "financial"
+        "金融"
       ],
       "mcp_server": "mcp-financial-data",
       "tool_flags": []
@@ -2497,16 +722,14 @@
     {
       "slug": "citation_audit",
       "display_name": "引用审计",
-      "description": "审计学术论文引用的准确性和完整性",
+      "description": "审计论文引用准确性和完整性",
       "layer": "external",
       "dispatch_domain": "domain:stdio-binary",
       "owner": "rust-tools",
       "trigger_hints": [
         "引用",
         "citation",
-        "审计",
-        "论文",
-        "学术"
+        "审计"
       ],
       "mcp_server": "mcp-citation",
       "tool_flags": []
@@ -2514,15 +737,13 @@
     {
       "slug": "citation_lint",
       "display_name": "引用检查",
-      "description": "检查引用格式是否符合规范",
+      "description": "检查引用格式规范",
       "layer": "external",
       "dispatch_domain": "domain:stdio-binary",
       "owner": "rust-tools",
       "trigger_hints": [
         "引用",
         "citation",
-        "检查",
-        "lint",
         "格式"
       ],
       "mcp_server": "mcp-citation",
@@ -2531,17 +752,14 @@
     {
       "slug": "gh_source_gate",
       "display_name": "GitHub 源码门禁",
-      "description": "对 GitHub 仓库源码进行安全和质量门禁检查",
+      "description": "GitHub 源码访问控制门禁",
       "layer": "external",
       "dispatch_domain": "domain:stdio-binary",
       "owner": "rust-tools",
       "trigger_hints": [
         "GitHub",
         "源码",
-        "门禁",
-        "安全",
-        "质量",
-        "检查"
+        "gate"
       ],
       "mcp_server": "mcp-gh-source-gate",
       "tool_flags": []
@@ -2549,284 +767,47 @@
     {
       "slug": "search_research",
       "display_name": "研究论文搜索",
-      "description": "搜索学术论文，支持多源并行查询",
+      "description": "多源搜索学术论文",
       "layer": "external",
       "dispatch_domain": "domain:stdio-binary",
       "owner": "paperplain",
       "trigger_hints": [
-        "搜索",
-        "search",
         "论文",
-        "研究",
-        "学术",
-        "PubMed",
-        "ArXiv"
+        "paper",
+        "学术"
       ],
-      "mcp_server": "paperplain-mcp",
+      "mcp_server": "paperplain",
       "tool_flags": []
     },
     {
       "slug": "fetch_paper",
       "display_name": "论文获取",
-      "description": "获取论文的完整摘要和元数据",
+      "description": "获取论文摘要和元数据",
       "layer": "external",
       "dispatch_domain": "domain:stdio-binary",
       "owner": "paperplain",
       "trigger_hints": [
-        "获取",
-        "fetch",
         "论文",
-        "摘要",
-        "元数据"
+        "paper",
+        "摘要"
       ],
-      "mcp_server": "paperplain-mcp",
+      "mcp_server": "paperplain",
       "tool_flags": []
     },
     {
       "slug": "find_paper_by_title",
       "display_name": "论文标题查找",
-      "description": "通过标题或部分标题查找论文",
+      "description": "按标题查找论文",
       "layer": "external",
       "dispatch_domain": "domain:stdio-binary",
       "owner": "paperplain",
       "trigger_hints": [
-        "查找",
-        "find",
-        "标题",
         "论文",
-        "论文标题"
+        "paper",
+        "标题"
       ],
-      "mcp_server": "paperplain-mcp",
+      "mcp_server": "paperplain",
       "tool_flags": []
-    },
-    {
-      "slug": "session_launch",
-      "display_name": "会话启动",
-      "description": "启动新浏览器会话",
-      "layer": "independent",
-      "dispatch_domain": "browser",
-      "owner": "browser",
-      "trigger_hints": [
-        "启动",
-        "launch",
-        "会话",
-        "session"
-      ],
-      "host_platforms": [],
-      "mcp_server": "router-rs-framework",
-      "tool_flags": [],
-      "input_schema": {
-        "type": "object",
-        "required": [
-          "host",
-          "cwd"
-        ],
-        "properties": {
-          "host": {
-            "type": "string",
-            "description": "启动宿主标识（claude/cursor/opencode/codex）"
-          },
-          "cwd": {
-            "type": "string",
-            "description": "工作目录"
-          },
-          "prompt": {
-            "type": "string",
-            "description": "启动提示文本（可选）"
-          },
-          "worker_id": {
-            "type": "string",
-            "description": "指定 worker ID（可选，自动生成）"
-          },
-          "worktree_name": {
-            "type": "string",
-            "description": "worktree 名称（可选）"
-          }
-        }
-      }
-    },
-    {
-      "slug": "session_list",
-      "display_name": "会话列表",
-      "description": "列出所有浏览器会话",
-      "layer": "independent",
-      "dispatch_domain": "browser",
-      "owner": "browser",
-      "trigger_hints": [
-        "列表",
-        "list",
-        "会话",
-        "session"
-      ],
-      "host_platforms": [],
-      "mcp_server": "router-rs-framework",
-      "tool_flags": [],
-      "input_schema": {
-        "type": "object",
-        "properties": {
-          "stale_after_secs": {
-            "type": "integer",
-            "description": "worker 过期秒数（可选，默认 3600）"
-          }
-        }
-      }
-    },
-    {
-      "slug": "session_inspect",
-      "display_name": "会话检查",
-      "description": "检查浏览器会话详情",
-      "layer": "independent",
-      "dispatch_domain": "browser",
-      "owner": "browser",
-      "trigger_hints": [
-        "检查",
-        "inspect",
-        "会话",
-        "session"
-      ],
-      "host_platforms": [],
-      "mcp_server": "router-rs-framework",
-      "tool_flags": [],
-      "input_schema": {
-        "type": "object",
-        "required": [
-          "worker_id"
-        ],
-        "properties": {
-          "worker_id": {
-            "type": "string",
-            "description": "要检查的 worker ID"
-          }
-        }
-      }
-    },
-    {
-      "slug": "session_terminate",
-      "display_name": "会话终止",
-      "description": "终止浏览器会话",
-      "layer": "independent",
-      "dispatch_domain": "browser",
-      "owner": "browser",
-      "trigger_hints": [
-        "终止",
-        "terminate",
-        "会话",
-        "session"
-      ],
-      "host_platforms": [],
-      "mcp_server": "router-rs-framework",
-      "tool_flags": [],
-      "input_schema": {
-        "type": "object",
-        "required": [
-          "worker_id"
-        ],
-        "properties": {
-          "worker_id": {
-            "type": "string",
-            "description": "要终止的 worker ID"
-          },
-          "dry_run": {
-            "type": "boolean",
-            "description": "仅模拟（可选）"
-          }
-        }
-      }
-    },
-    {
-      "slug": "session_mark_blocked",
-      "display_name": "会话标记阻塞",
-      "description": "标记浏览器会话为阻塞状态",
-      "layer": "independent",
-      "dispatch_domain": "browser",
-      "owner": "browser",
-      "trigger_hints": [
-        "阻塞",
-        "blocked",
-        "标记",
-        "会话"
-      ],
-      "host_platforms": [],
-      "mcp_server": "router-rs-framework",
-      "tool_flags": [],
-      "input_schema": {
-        "type": "object",
-        "required": [
-          "worker_id"
-        ],
-        "properties": {
-          "worker_id": {
-            "type": "string",
-            "description": "要标记阻塞的 worker ID"
-          }
-        }
-      }
-    },
-    {
-      "slug": "session_resume_due",
-      "display_name": "会话到期恢复",
-      "description": "恢复到期浏览器会话",
-      "layer": "independent",
-      "dispatch_domain": "browser",
-      "owner": "browser",
-      "trigger_hints": [
-        "恢复",
-        "resume",
-        "到期",
-        "due",
-        "会话"
-      ],
-      "host_platforms": [],
-      "mcp_server": "router-rs-framework",
-      "tool_flags": [],
-      "input_schema": {
-        "type": "object",
-        "properties": {
-          "dry_run": {
-            "type": "boolean",
-            "description": "仅模拟（可选）"
-          },
-          "stale_after_secs": {
-            "type": "integer",
-            "description": "worker 过期秒数（可选，默认 3600）"
-          }
-        }
-      }
-    },
-    {
-      "slug": "session_classify_block",
-      "display_name": "会话阻塞分类",
-      "description": "对浏览器会话阻塞原因进行分类",
-      "layer": "independent",
-      "dispatch_domain": "browser",
-      "owner": "browser",
-      "trigger_hints": [
-        "阻塞",
-        "block",
-        "分类",
-        "classify",
-        "会话"
-      ],
-      "host_platforms": [],
-      "mcp_server": "router-rs-framework",
-      "tool_flags": [],
-      "input_schema": {
-        "type": "object",
-        "required": [
-          "host",
-          "evidence_text"
-        ],
-        "properties": {
-          "host": {
-            "type": "string",
-            "description": "触发阻塞的宿主标识"
-          },
-          "evidence_text": {
-            "type": "string",
-            "description": "阻塞触发的证据文本"
-          }
-        }
-      }
     }
   ]
 }

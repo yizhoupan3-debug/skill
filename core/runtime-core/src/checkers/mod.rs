@@ -59,7 +59,7 @@ fn find_rust_files_recursive(dir: &Path, files: &mut Vec<std::path::PathBuf>) {
 
 /// Register all in-place checkers into the registry.
 /// Called once at startup from `runtime_core::init_quality_gate()`.
-pub fn register_checkers(registry: &mut quality_gate::CheckerRegistry) {
+pub(crate) fn register_checkers(registry: &mut quality_gate::CheckerRegistry) {
     // EvidenceChecker is registered under all scenes it declares via scenes()
     // (GENERAL, CODE_REVIEW, RESEARCH) so it runs for every scene evaluation.
     registry.register(scene::GENERAL, Box::new(evidence_checker::EvidenceChecker));

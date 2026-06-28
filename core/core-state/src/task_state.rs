@@ -8,7 +8,7 @@
 use core_errors::FrameworkError;
 use crate::state_manager::{read_goal_state, task_evidence_artifacts_summary_for_task};
 use crate::state_manager::{
-    read_rfv_loop_state, validate_external_research_strict, validate_external_research_structured,
+    validate_external_research_strict, validate_external_research_structured,
 };
 
 use serde_json::Value;
@@ -506,13 +506,11 @@ pub fn hydrate_task_state_hybrid(
     task_id: &str,
 ) -> (
     Option<Value>,
-    Option<Value>,
     Option<EvidenceRollup>,
     Vec<String>,
 ) {
     let mut resolution_notes = Vec::new();
     let mut goal_state: Option<Value> = None;
-    let mut rfv_loop_state: Option<Value> = None;
     // TASK_STATE.json aggregate was removed in Wave 2b.
     // Always read directly from physical files.
     match read_goal_state(repo_root, Some(task_id)) {
@@ -520,14 +518,6 @@ pub fn hydrate_task_state_hybrid(
         Err(e) => push_resolution_read_err(
             &mut resolution_notes,
             "goal_state_read_failed",
-            e.to_string(),
-        ),
-    }
-    match read_rfv_loop_state(repo_root, Some(task_id)) {
-        Ok(v) => rfv_loop_state = v,
-        Err(e) => push_resolution_read_err(
-            &mut resolution_notes,
-            "rfv_loop_state_read_failed",
             e.to_string(),
         ),
     }
@@ -549,9 +539,6 @@ pub fn hydrate_task_state_hybrid(
             if let Some(goal) = cp.payload.get("goal_state").filter(|v| !v.is_null()) {
                 goal_state = Some(goal.clone());
             }
-            if let Some(rfv) = cp.payload.get("rfv_loop_state").filter(|v| !v.is_null()) {
-                rfv_loop_state = Some(rfv.clone());
-            }
             if let Some(ev) = cp.payload.get("evidence").filter(|v| !v.is_null()) {
                 if let Some(ern) = ev.get("evidence_rows_non_empty").and_then(Value::as_bool) {
                     evidence_rows_non_empty = ern;
@@ -571,9 +558,7 @@ pub fn hydrate_task_state_hybrid(
             "goal_state" => {
                 goal_state = Some(tx.payload.clone()).filter(|v| !v.is_null());
             }
-            "rfv_loop_state" | "quality_gate_state" => {
-                rfv_loop_state = Some(tx.payload.clone()).filter(|v| !v.is_null());
-            }
+            "quality_gate_state" => {}
             "evidence" => {
                 evidence_rows_non_empty = true;
                 if crate::state_manager::evidence_index_entry_implies_success(&tx.payload) {
@@ -590,7 +575,7 @@ pub fn hydrate_task_state_hybrid(
         has_successful_verification,
     });
 
-    (goal_state, rfv_loop_state, evidence, resolution_notes)
+    (goal_state, evidence, resolution_notes)
 }
 
 /// Like [`resolve_task_view`], but uses a caller-supplied [`TaskPointers`] snapshot (e.g. paired
@@ -615,7 +600,6 @@ pub fn resolve_task_view_with_pointers(
             task_id: None,
             pointers,
             goal_state: None,
-            rfv_loop_state: None,
             evidence: None,
             depth_compliance: None,
             resolution_notes: vec![
@@ -624,7 +608,7 @@ pub fn resolve_task_view_with_pointers(
         };
     };
 
-    let (goal_state, rfv_loop_state, evidence, mut read_notes) =
+    let (goal_state, evidence, mut read_notes) =
         hydrate_task_state_hybrid(repo_root, task_id.as_str());
     resolution_notes.append(&mut read_notes);
 
@@ -635,7 +619,7 @@ pub fn resolve_task_view_with_pointers(
 
     let depth_compliance = Some(depth_compliance_aggregate(
         goal_state.as_ref(),
-        rfv_loop_state.as_ref(),
+        None,
         evidence_ok,
     ));
 
@@ -668,7 +652,6 @@ pub fn resolve_task_view_with_pointers(
         task_id: Some(task_id.clone()),
         pointers,
         goal_state,
-        rfv_loop_state,
         evidence,
         depth_compliance,
         resolution_notes,
@@ -1031,7 +1014,7 @@ mod tests {
         )
         .unwrap();
         fs::write(
-            task_dir.join(crate::state_manager::RFV_LOOP_STATE_FILENAME),
+            task_dir.join("RFV_LOOP_STATE.json"),
             serde_json::to_string_pretty(&json!({
                 "schema_version": "router-rs-quality-gate-v1",
                 "loop_status": "active",
@@ -1056,24 +1039,6 @@ mod tests {
         let task_dir = tmp.join("artifacts/current").join(tid);
         fs::create_dir_all(&task_dir).unwrap();
         fs::write(
-            task_dir.join(crate::state_manager::RFV_LOOP_STATE_FILENAME),
-            serde_json::to_string_pretty(&json!({
-                "schema_version": "router-rs-quality-gate-v1",
-                "loop_status": "active",
-                "goal": "g",
-                "max_rounds": 3,
-                "current_round": 1,
-                "rounds": [{
-                    "round": 1,
-                    "verify_result": "PASS",
-                    "adversarial_findings": [{"id":"A1"}],
-                    "falsification_tests": [{"id":"T1"},{"id":"T2"}]
-                }]
-            }))
-            .unwrap(),
-        )
-        .unwrap();
-        fs::write(
             task_dir.join("EVIDENCE_INDEX.json"),
             r#"{"schema_version":"evidence-index-v2","artifacts":[]}"#,
         )
@@ -1081,14 +1046,7 @@ mod tests {
 
         let v = resolve_task_view(&tmp, Some(tid));
         let dc = v.depth_compliance.expect("dc");
-        assert_eq!(dc.qg_pass_round_count, 1);
-        assert_eq!(dc.qg_adversarial_round_count, 1);
-        assert_eq!(dc.qg_falsification_test_count, 2);
-        assert_eq!(dc.goal_checkpoint_count, 0);
-        assert_eq!(
-            dc.depth_score, 2,
-            "PASS (1) + adversarial (1) = 2, no evidence"
-        );
+        assert_eq!(dc.depth_score, 0, "no RFV, no evidence, no checkpoints");
         let _ = fs::remove_dir_all(&tmp);
     }
 
@@ -1106,23 +1064,6 @@ mod tests {
         let task_dir = tmp.join("artifacts/current").join(tid);
         fs::create_dir_all(&task_dir).unwrap();
         fs::write(
-            task_dir.join(crate::state_manager::RFV_LOOP_STATE_FILENAME),
-            serde_json::to_string_pretty(&json!({
-                "schema_version": "router-rs-quality-gate-v1",
-                "loop_status": "active",
-                "goal": "g",
-                "max_rounds": 3,
-                "current_round": 1,
-                "rounds": [{
-                    "round": 1,
-                    "verify_result": "PASS",
-                    "falsification_tests": [{"id":"T1"}]
-                }]
-            }))
-            .unwrap(),
-        )
-        .unwrap();
-        fs::write(
             task_dir.join("EVIDENCE_INDEX.json"),
             r#"{"schema_version":"evidence-index-v2","artifacts":[{"command_preview":"x","exit_code":0}]}"#,
         )
@@ -1130,7 +1071,7 @@ mod tests {
 
         let v = resolve_task_view(&tmp, Some(tid));
         let dc = v.depth_compliance.expect("dc");
-        assert_eq!(dc.depth_score, 3, "strict third point via falsification");
+        assert_eq!(dc.depth_score, 1, "only evidence_ok, no RFV/checkpoints");
         match prior {
             Some(p) => {
                 // SAFETY: test-only; DEPTH_SCORE_MODE_ENV_TEST_MUTEX prevents concurrent env access from other tests.
@@ -1141,212 +1082,6 @@ mod tests {
                 unsafe { core_state_utils::env_sync::remove_env("ROUTER_RS_DEPTH_SCORE_MODE") }
             }
         }
-        let _ = fs::remove_dir_all(&tmp);
-    }
-
-    #[test]
-    fn depth_compliance_counts_structured_external_research_rounds() {
-        let _env_guard = DEPTH_SCORE_MODE_ENV_TEST_MUTEX
-            .lock()
-            .expect("depth score mode env mutex poisoned");
-        let prior_depth = std::env::var("ROUTER_RS_DEPTH_SCORE_MODE").ok();
-        let prior_hint = std::env::var("ROUTER_RS_DEPTH_COMPLIANCE_HINT").ok();
-        // SAFETY: test-only, env mutex held by caller or thread-local test serialization
-        unsafe { core_state_utils::env_sync::remove_env("ROUTER_RS_DEPTH_SCORE_MODE") };
-        // SAFETY: test-only, env mutex held by caller or thread-local test serialization
-        unsafe { core_state_utils::env_sync::set_env("ROUTER_RS_DEPTH_COMPLIANCE_HINT", "1") };
-        let tmp = unique_repo("ext-deep");
-        let tid = "t-ext";
-        write_active(&tmp, tid);
-        let task_dir = tmp.join("artifacts/current").join(tid);
-        fs::create_dir_all(&task_dir).unwrap();
-        fs::write(
-            task_dir.join(crate::state_manager::RFV_LOOP_STATE_FILENAME),
-            serde_json::to_string_pretty(&json!({
-                "schema_version": "router-rs-quality-gate-v1",
-                "loop_status": "active",
-                "goal": "g",
-                "max_rounds": 3,
-                "current_round": 2,
-                "rounds": [
-                    {"round": 1, "verify_result": "PASS", "external_research": {"claims": [{"x": 1}]}},
-                    {"round": 2, "verify_result": "FAIL"}
-                ]
-            }))
-            .unwrap(),
-        )
-        .unwrap();
-
-        let v = resolve_task_view(&tmp, Some(tid));
-        let dc = v.depth_compliance.as_ref().expect("dc");
-        assert_eq!(dc.qg_external_deep_structured_round_count, 1);
-
-        let _ = fs::remove_dir_all(&tmp);
-    }
-
-    #[test]
-    fn depth_refresh_hint_legacy_external_note_suppressed_when_strict_score_mode_env() {
-        let _env_guard = DEPTH_SCORE_MODE_ENV_TEST_MUTEX
-            .lock()
-            .expect("depth score mode env mutex poisoned");
-        let prior = std::env::var("ROUTER_RS_DEPTH_SCORE_MODE").ok();
-        let prior_hint = std::env::var("ROUTER_RS_DEPTH_COMPLIANCE_HINT").ok();
-        // SAFETY: test-only, env mutex held by caller or thread-local test serialization
-        unsafe { core_state_utils::env_sync::set_env("ROUTER_RS_DEPTH_SCORE_MODE", "strict") };
-        // SAFETY: test-only, env mutex held by caller or thread-local test serialization
-        unsafe { core_state_utils::env_sync::set_env("ROUTER_RS_DEPTH_COMPLIANCE_HINT", "1") };
-        let tmp = unique_repo("ext-deep-strict-note");
-        let tid = "t-ext-note";
-        write_active(&tmp, tid);
-        let task_dir = tmp.join("artifacts/current").join(tid);
-        fs::create_dir_all(&task_dir).unwrap();
-        fs::write(
-            task_dir.join(crate::state_manager::RFV_LOOP_STATE_FILENAME),
-            serde_json::to_string_pretty(&json!({
-                "schema_version": "router-rs-quality-gate-v1",
-                "loop_status": "active",
-                "goal": "g",
-                "max_rounds": 3,
-                "current_round": 2,
-                "rounds": [
-                    {"round": 1, "verify_result": "PASS", "external_research": {"claims": [{"x": 1}]}},
-                    {"round": 2, "verify_result": "FAIL"}
-                ]
-            }))
-            .unwrap(),
-        )
-        .unwrap();
-
-        let v = resolve_task_view(&tmp, Some(tid));
-        let _ = fs::remove_dir_all(&tmp);
-
-        match prior {
-            Some(p) => {
-                // SAFETY: test-only; DEPTH_SCORE_MODE_ENV_TEST_MUTEX prevents concurrent env access from other tests.
-                unsafe { core_state_utils::env_sync::set_env("ROUTER_RS_DEPTH_SCORE_MODE", &p) }
-            }
-            None => {
-                // SAFETY: test-only; DEPTH_SCORE_MODE_ENV_TEST_MUTEX prevents concurrent env access from other tests.
-                unsafe { core_state_utils::env_sync::remove_env("ROUTER_RS_DEPTH_SCORE_MODE") }
-            }
-        }
-        match prior_hint {
-            Some(p) => {
-                // SAFETY: test-only; DEPTH_SCORE_MODE_ENV_TEST_MUTEX prevents concurrent env access from other tests.
-                unsafe {
-                    core_state_utils::env_sync::set_env("ROUTER_RS_DEPTH_COMPLIANCE_HINT", &p)
-                }
-            }
-            None => {
-                // SAFETY: test-only; DEPTH_SCORE_MODE_ENV_TEST_MUTEX prevents concurrent env access from other tests.
-                unsafe { core_state_utils::env_sync::remove_env("ROUTER_RS_DEPTH_COMPLIANCE_HINT") }
-            }
-        }
-        let _ = fs::remove_dir_all(&tmp);
-    }
-
-    #[test]
-    fn depth_compliance_counts_external_strict_ok_when_flag_true() {
-        let _env_guard = DEPTH_SCORE_MODE_ENV_TEST_MUTEX
-            .lock()
-            .expect("depth score mode env mutex poisoned");
-        let prior_depth = std::env::var("ROUTER_RS_DEPTH_SCORE_MODE").ok();
-        let prior_hint = std::env::var("ROUTER_RS_DEPTH_COMPLIANCE_HINT").ok();
-        // SAFETY: test-only, env mutex held by caller or thread-local test serialization
-        unsafe { core_state_utils::env_sync::remove_env("ROUTER_RS_DEPTH_SCORE_MODE") };
-        // SAFETY: test-only, env mutex held by caller or thread-local test serialization
-        unsafe { core_state_utils::env_sync::set_env("ROUTER_RS_DEPTH_COMPLIANCE_HINT", "1") };
-        let tmp = unique_repo("ext-strict");
-        let tid = "t-ext-st";
-        write_active(&tmp, tid);
-        let task_dir = tmp.join("artifacts/current").join(tid);
-        fs::create_dir_all(&task_dir).unwrap();
-        let t40 = "0123456789012345678901234567890123456789";
-        fs::write(
-            task_dir.join(crate::state_manager::RFV_LOOP_STATE_FILENAME),
-            serde_json::to_string_pretty(&json!({
-                "schema_version": "router-rs-quality-gate-v1",
-                "external_research_strict": true,
-                "loop_status": "active",
-                "goal": "g",
-                "max_rounds": 3,
-                "current_round": 1,
-                "rounds": [{
-                    "round": 1,
-                    "verify_result": "PASS",
-                    "external_research": {
-                        "claims": [{"claim": "c1", "sources": ["https://a.example/foo", "doi:10.1000/182"]}],
-                        "contradiction_sweep": [
-                            {"related_claim_or_topic": "t1", "contradicting_or_limiting_evidence": "e1", "sources": ["https://c.example/x"]},
-                            {"related_claim_or_topic": "t2", "contradicting_or_limiting_evidence": "e2", "sources": ["https://d.example/y"]}
-                        ],
-                        "unknowns": [],
-                        "retrieval_trace": {
-                            "queries_used": ["q1 one two", "q2 three four", "q3 five six"],
-                            "inclusion_rules": t40,
-                            "exclusions": t40,
-                            "exclusion_rationale": t40
-                        }
-                    }
-                }]
-            }))
-            .unwrap(),
-        )
-        .unwrap();
-
-        let v = resolve_task_view(&tmp, Some(tid));
-        let dc = v.depth_compliance.as_ref().expect("dc");
-        assert_eq!(dc.qg_external_deep_structured_round_count, 1);
-        assert_eq!(dc.qg_external_strict_ok_round_count, 1);
-
-        let _ = fs::remove_dir_all(&tmp);
-    }
-
-    #[test]
-    fn depth_compliance_strict_ok_zero_when_strict_flag_false() {
-        let tmp = unique_repo("ext-strict-off");
-        let tid = "t-off";
-        write_active(&tmp, tid);
-        let task_dir = tmp.join("artifacts/current").join(tid);
-        fs::create_dir_all(&task_dir).unwrap();
-        let t40 = "0123456789012345678901234567890123456789";
-        fs::write(
-            task_dir.join(crate::state_manager::RFV_LOOP_STATE_FILENAME),
-            serde_json::to_string_pretty(&json!({
-                "schema_version": "router-rs-quality-gate-v1",
-                "external_research_strict": false,
-                "loop_status": "active",
-                "goal": "g",
-                "max_rounds": 3,
-                "current_round": 1,
-                "rounds": [{
-                    "round": 1,
-                    "verify_result": "PASS",
-                    "external_research": {
-                        "claims": [{"claim": "c1", "sources": ["https://a.example/foo", "doi:10.1000/182"]}],
-                        "contradiction_sweep": [
-                            {"related_claim_or_topic": "t1", "contradicting_or_limiting_evidence": "e1", "sources": ["https://c.example/x"]},
-                            {"related_claim_or_topic": "t2", "contradicting_or_limiting_evidence": "e2", "sources": ["https://d.example/y"]}
-                        ],
-                        "unknowns": [],
-                        "retrieval_trace": {
-                            "queries_used": ["q1 one two", "q2 three four", "q3 five six"],
-                            "inclusion_rules": t40,
-                            "exclusions": t40,
-                            "exclusion_rationale": t40
-                        }
-                    }
-                }]
-            }))
-            .unwrap(),
-        )
-        .unwrap();
-
-        let v = resolve_task_view(&tmp, Some(tid));
-        let dc = v.depth_compliance.as_ref().expect("dc");
-        assert_eq!(dc.qg_external_deep_structured_round_count, 1);
-        assert_eq!(dc.qg_external_strict_ok_round_count, 0);
-
         let _ = fs::remove_dir_all(&tmp);
     }
 
@@ -1373,7 +1108,7 @@ mod tests {
         let _ = fs::remove_dir_all(&tmp);
     }
 
-    /// P1-A: depth_compliance aggregates RFV PASS rounds + EVIDENCE successful rows + checkpoints.
+    /// P1-A: depth_compliance aggregates EVIDENCE successful rows + GOAL checkpoints.
     #[test]
     fn depth_compliance_rolls_up_pass_evidence_and_checkpoints() {
         let tmp = unique_repo("depth-compl");
@@ -1400,23 +1135,6 @@ mod tests {
             .unwrap(),
         )
         .unwrap();
-        // RFV with PASS round + UNKNOWN round + a no_evidence_window flag.
-        fs::write(
-            task_dir.join(crate::state_manager::RFV_LOOP_STATE_FILENAME),
-            serde_json::to_string_pretty(&json!({
-                "schema_version": "router-rs-quality-gate-v1",
-                "loop_status": "active",
-                "goal": "g",
-                "max_rounds": 5,
-                "current_round": 2,
-                "rounds": [
-                    {"round": 1, "verify_result": "PASS", "cross_check": "no_evidence_window"},
-                    {"round": 2, "verify_result": "UNKNOWN"}
-                ]
-            }))
-            .unwrap(),
-        )
-        .unwrap();
         // EVIDENCE with one successful row.
         fs::write(
             task_dir.join("EVIDENCE_INDEX.json"),
@@ -1426,12 +1144,9 @@ mod tests {
 
         let v = resolve_task_view(&tmp, Some(tid));
         let dc = v.depth_compliance.expect("depth_compliance present");
-        assert_eq!(dc.qg_pass_round_count, 1);
-        assert_eq!(dc.qg_unknown_round_count, 1);
-        assert_eq!(dc.qg_pass_without_evidence_count, 1);
         assert_eq!(dc.goal_checkpoint_count, 1);
-        // Score = 3 (pass + evidence_ok + checkpoint).
-        assert_eq!(dc.depth_score, 3);
+        // Score = 2 (evidence_ok + checkpoint).
+        assert_eq!(dc.depth_score, 2);
         let _ = fs::remove_dir_all(&tmp);
     }
 
@@ -1504,7 +1219,7 @@ mod tests {
             format!("{}\n", serde_json::to_string(&ledger_line).unwrap()),
         )
         .unwrap();
-        let (goal, _, _, _) = hydrate_task_state_hybrid(&tmp, tid);
+        let (goal, _, _) = hydrate_task_state_hybrid(&tmp, tid);
         let goal = goal.expect("goal");
         assert_eq!(goal["goal"], json!("from-ledger"));
         assert_eq!(goal["status"], json!("running"));
@@ -1522,7 +1237,7 @@ mod tests {
             r#"{"status":"running","goal":"physical-file"}"#,
         )
         .unwrap();
-        let (goal, _, _, _) = hydrate_task_state_hybrid(&tmp, tid);
+        let (goal, _, _) = hydrate_task_state_hybrid(&tmp, tid);
         let goal = goal.expect("goal");
         assert_eq!(goal["goal"], json!("physical-file"));
         let _ = fs::remove_dir_all(&tmp);
@@ -1548,7 +1263,7 @@ mod tests {
         .unwrap();
         let txs = read_task_ledger_transactions(&tmp, tid);
         assert_eq!(txs.len(), 1);
-        let (goal, _, _, _) = hydrate_task_state_hybrid(&tmp, tid);
+        let (goal, _, _) = hydrate_task_state_hybrid(&tmp, tid);
         assert_eq!(goal.expect("goal")["goal"], json!("good-line"));
         let _ = fs::remove_dir_all(&tmp);
     }

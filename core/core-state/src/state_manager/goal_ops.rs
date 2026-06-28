@@ -591,6 +591,83 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
                 crate::task_state::validate_goal_completion_gates(&view, &gates)?;
             }
 
+            // ── D4/D9: Auto-trigger QGEntry on goal complete ──
+            // Two-stage exit gate: Stage 1 anti-fraud + Stage 2 scene-dispatched checker chain.
+            // If the QG gate blocks, transition to review_pending instead of completing the iteration.
+            if let Some(hooks) = framework_kernel::runtime_hooks::try_hooks() {
+                let goal_text = state.get("goal").and_then(Value::as_str).unwrap_or("");
+                let round = state
+                    .get("iteration_count")
+                    .and_then(Value::as_u64)
+                    .unwrap_or(0);
+                let qg_payload = serde_json::json!({
+                    "repo_root": repo_root.to_string_lossy().to_string(),
+                    "task_id": task_id,
+                    "scene": "general",
+                    "goal": goal_text,
+                    "round": round + 1,
+                });
+                match hooks.evaluate_quality_gate(qg_payload) {
+                    Ok(verdict) => {
+                        let passed = verdict
+                            .get("passed")
+                            .and_then(Value::as_bool)
+                            .unwrap_or(false);
+                        if !passed {
+                            let goal_path = goal_state_path_for_task(&repo_root, &task_id)?;
+                            let blockers = verdict
+                                .get("blockers")
+                                .cloned()
+                                .unwrap_or(serde_json::Value::Array(vec![]));
+                            let mut qg_state = state;
+                            if let Some(obj) = qg_state.as_object_mut() {
+                                obj.insert("status".to_string(), json!("review_pending"));
+                                obj.insert(
+                                    "blockers".to_string(),
+                                    blockers.clone(),
+                                );
+                                obj.insert(
+                                    "updated_at".to_string(),
+                                    json!(framework_kernel::time::now_iso()),
+                                );
+                            }
+                            write_atomic_json(&goal_path, &qg_state)?;
+                            let tx = crate::task_ledger::LedgerTransaction {
+                                ts: framework_kernel::time::now_iso(),
+                                tx_type: "goal_state".to_string(),
+                                payload: qg_state,
+                                idempotency_key: None,
+                                seq: None,
+                                schema_version: Some(1),
+                            };
+                            crate::task_ledger::append_transaction_assuming_l1_held(
+                                &repo_root, &task_id, tx,
+                            )
+                            .map_err(|e| {
+                                FrameworkError::validation(format!(
+                                    "TASK_LEDGER append failed: {e}"
+                                ))
+                            })?;
+                            return Ok(json!({
+                                "ok": true,
+                                "operation": "quality_gate_blocked",
+                                "task_id": task_id,
+                                "status": "review_pending",
+                                "blockers": blockers,
+                                "reason": verdict.get("reason"),
+                            }));
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!(
+                            framework_goal_drive = "complete",
+                            qg_error = %e,
+                            "QGEntry auto-trigger failed — continuing without quality gate"
+                        );
+                    }
+                }
+            }
+
             // Complete = iteration complete, NOT goal termination.
             // Keep status=running, do NOT archive or neutralize pointers.
             let goal_path = goal_state_path_for_task(&repo_root, &task_id)?;
@@ -1450,6 +1527,12 @@ mod tests {
         let repo = unique_repo("complete-no-ev");
         fs::create_dir_all(repo.join("artifacts/current")).unwrap();
         start_drive_goal(&repo, "t-cne");
+        // Create TASK_POINTERS.json to satisfy D5 "task exists" check
+        fs::write(
+            repo.join("artifacts/current/t-cne/TASK_POINTERS.json"),
+            r#"{"schema_version":"task-pointers-v1","task_id":"t-cne","entries":[]}"#,
+        )
+        .unwrap();
 
         let err = framework_goal_drive(json!({
             "repo_root": repo.display().to_string(),
@@ -1918,6 +2001,13 @@ mod tests {
             "validation_commands": ["echo ok"],
         }))
         .expect("start loop drive");
+
+        // Create TASK_POINTERS.json to satisfy D5 "task exists" check
+        fs::write(
+            repo.join("artifacts/current/t-lev/TASK_POINTERS.json"),
+            r#"{"schema_version":"task-pointers-v1","task_id":"t-lev","entries":[]}"#,
+        )
+        .unwrap();
 
         // Without evidence, complete must be rejected
         let err = framework_goal_drive(json!({

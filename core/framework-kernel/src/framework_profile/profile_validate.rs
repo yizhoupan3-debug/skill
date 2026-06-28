@@ -5,7 +5,7 @@ use super::types::{
     FrameworkProfileContract, HOST_SPECIFIC_METADATA_KEYS, REQUIRED_CORE_CAPABILITIES,
 };
 
-pub fn validate_framework_profile(
+pub(crate) fn validate_framework_profile(
     profile: &FrameworkProfileContract,
 ) -> Result<(), FrameworkError> {
     if profile.profile_id.trim().is_empty() {

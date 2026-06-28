@@ -137,7 +137,7 @@ impl ContentStore {
 }
 
 /// Compute the SHA-256 hex digest of `input`.
-pub fn hex_hash(input: &str) -> String {
+pub(crate) fn hex_hash(input: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(input.as_bytes());
     hex::encode(hasher.finalize())

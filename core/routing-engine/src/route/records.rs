@@ -144,12 +144,26 @@ fn build_skill_record_from_indexed_row(row: &[Value], indexes: &RecordRowIndexes
             .and_then(|idx| row.get(idx))
             .map(value_to_string)
             .unwrap_or_default(),
-        tags: indexes
-            .tags
-            .and_then(|idx| row.get(idx))
-            .filter(|value| value.is_array())
-            .map(value_to_string_list)
-            .unwrap_or_default(),
+        tags: {
+            // Top-level `tags` column first, fallback to metadata.tags
+            let top: Vec<String> = indexes
+                .tags
+                .and_then(|idx| row.get(idx))
+                .filter(|value| value.is_array())
+                .map(value_to_string_list)
+                .unwrap_or_default();
+            if !top.is_empty() {
+                top
+            } else {
+                indexes
+                    .metadata
+                    .and_then(|idx| row.get(idx))
+                    .and_then(|meta| meta.get("tags"))
+                    .filter(|value| value.is_array())
+                    .map(value_to_string_list)
+                    .unwrap_or_default()
+            }
+        },
         trigger_hints: value_to_string_list(&row[indexes.trigger_hints]),
         host_platforms: indexes
             .host_platforms
@@ -449,6 +463,7 @@ pub fn load_records_from_runtime(path: &Path) -> Result<Vec<SkillRecord>, Framew
         skill_flags: index.get("skill_flags").copied(),
         short_description: index.get("short_description").copied(),
         tags: index.get("tags").copied(),
+        metadata: index.get("metadata").copied(),
         when_to_use: index.get("when_to_use").copied(),
         do_not_use: index.get("do_not_use").copied(),
         ..indexes

@@ -3226,6 +3226,7 @@ dependencies = [
  "fr-utils",
  "framework-kernel",
  "host-projection",
+ "mcp-stdio-common",
  "minilp",
  "quality-gate",
  "regex",

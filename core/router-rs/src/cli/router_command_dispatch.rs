@@ -11,7 +11,7 @@ use core_policy::hook_policy::{
     HookPolicyEvaluateRequest, evaluate_hook_policy, hook_policy_contract,
 };
 use core_state::closeout_validation::{
-    CloseoutEvidenceContext, closeout_enforcement_contract, evaluate_closeout_record_value,
+    CloseoutEvidenceContext, closeout_contract, evaluate_closeout_record_value,
     evaluate_closeout_record_value_with_context,
 };
 use fr_exec::trace_stream_io::{
@@ -790,7 +790,7 @@ pub fn dispatch_closeout_command(command: CloseoutCommand) -> Result<(), Framewo
             };
             print_json_value(&response)
         }
-        CloseoutCommand::Contract => print_json_value(&closeout_enforcement_contract()),
+        CloseoutCommand::Contract => print_json_value(&closeout_contract()),
     }
 }
 
@@ -868,6 +868,7 @@ pub fn dispatch_loop_command(command: LoopCommand) -> Result<(), FrameworkError>
                 dry_run: args.dry_run,
                 timeout: Some(timeout),
                 depth_remaining: goal_engine::runner::RunContext::default_max_depth(),
+                host_id: args.host_id,
             };
             let aggregate =
                 goal_engine::runner::run_loop(&ctx).map_err(|e| FrameworkError::hook(format!("loop run failed: {e}")))?;

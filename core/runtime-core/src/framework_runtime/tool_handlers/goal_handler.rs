@@ -6,7 +6,7 @@ use serde_json::{Value, json};
 use std::path::Path;
 
 /// goal_state_manage: payload construction + core_state state_manager call.
-pub fn goal_state_manage_dispatch(
+pub(crate) fn goal_state_manage_dispatch(
     arguments: &Value,
     repo_root: &Path,
     connection_session_id: &str,
@@ -96,12 +96,6 @@ pub fn goal_state_manage_dispatch(
                     )));
                 }
             }
-            // lifecycle_profile was removed in Wave 2a (v10). Runtime behavior is now
-            // determined by RUNTIME_REGISTRY.json lifecycle_profiles config.
-            // Accept the field for backward compat but log a deprecation notice.
-            if let Some(lp) = arguments.get("lifecycle_profile").and_then(Value::as_str) {
-                tracing::warn!(lifecycle_profile = %lp, "lifecycle_profile is deprecated in v10 — use RUNTIME_REGISTRY.json lifecycle_profiles instead");
-            }
             if let Some(ch) = arguments.get("current_horizon").and_then(Value::as_str) {
                 payload["current_horizon"] = json!(ch);
             }
@@ -136,8 +130,8 @@ pub fn goal_state_manage_dispatch(
         }
         "append_round" => {
             return Err(FrameworkError::validation(
-                "append_round is not a valid goal_state_manage operation. \
-                 Use framework_rfv_loop with operation=submit_round instead.",
+                "append_round is no longer supported. \
+                 Use framework_quality_gate (or task_ledger_dispatch with kind=quality_gate) instead.",
             ));
         }
         "pause" | "resume" | "complete" | "clear" => {}
@@ -208,22 +202,4 @@ mod tests {
         let _ = std::fs::remove_dir_all(&repo);
     }
 
-    /// lifecycle_profile is deprecated in v10 (accepted with warning, not written to GOAL_STATE)
-    #[test]
-    fn accepts_lifecycle_profile_with_warning() {
-        let repo = Path::new("/tmp"); // never hit the filesystem — validation is early
-        let result = goal_state_manage_dispatch(
-            &json!({
-                "operation": "start",
-                "goal": "loop task",
-                "task_id": "t-loop",
-                "goal_type": "loop",
-                "lifecycle_profile": "task",
-            }),
-            repo,
-            "test-session",
-        )
-        .expect("lifecycle_profile should be accepted with deprecation warning");
-        assert!(result.contains("\"ok\": true"), "result: {result}");
-    }
 }

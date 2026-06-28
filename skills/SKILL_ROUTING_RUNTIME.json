@@ -290,7 +290,7 @@
       "deep-research",
       "L2",
       "owner",
-      "none",
+      "approve",
       "P2",
       "Deep research harness — fan-out web searches, fetch sources, verify claims, synthesize cited report.",
       "preferred",
@@ -1678,7 +1678,7 @@
         ],
         "version": "1.0.0"
       },
-      "medium",
+      "low",
       [
         "Read",
         "Write",
@@ -1768,7 +1768,7 @@
       "evidence",
       "P2",
       "Root-cause investigation lane: hypothesis-driven debugging, reproduction capture, flake isolation, incident triage.",
-      "required",
+      "n/a",
       [
         "blind fix",
         "debug",
@@ -1905,7 +1905,7 @@
         "excel 表格",
         "工作簿"
       ],
-      "project",
+      "local",
       "skills/primary-runtime/spreadsheets/SKILL.md",
       null,
       "skill",
@@ -1971,7 +1971,11 @@
       "Guide research statistics: test choice, effect sizes, interpretation",
       null,
       null,
-      "write code software unit debug review",
+      [
+        "write code",
+        "unit testing",
+        "software debugging"
+      ],
       {
         "platforms": [
           "supported"

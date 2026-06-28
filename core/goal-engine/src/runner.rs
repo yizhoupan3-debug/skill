@@ -286,28 +286,6 @@ fn run_loop_inner(
     transition_phase(state, LoopPhase::Verifying);
     let mut aggregate = build_aggregate(run_id, &entry.loop_id, &actions, results);
 
-    // For loops with verify_rfv_convergence enabled, additionally verify RFV convergence state.
-    // If the aggregate passes but RFV hasn't converged, mark as fail.
-    if entry.verify_rfv_convergence.unwrap_or(false) && aggregate.overall_status == "pass" {
-        // Derive task_id from action_id (strip "-orchestrator" suffix)
-        let task_id = actions
-            .first()
-            .map(|a| {
-                a.action_id
-                    .strip_suffix("-orchestrator")
-                    .unwrap_or(&a.action_id)
-                    .to_string()
-            })
-            .unwrap_or_default();
-        if let Err(violations) = crate::closeout::verify_rfv_convergence(ctx.repo_root, &task_id) {
-            tracing::warn!(
-                "RFV convergence not met (verify_rfv_convergence=true): {}",
-                violations.join(", ")
-            );
-            aggregate.overall_status = "fail".to_string();
-        }
-    }
-
     // ── Quality Gate (verify_quality_gate) ──
     // Two-stage exit gate: Stage 1 anti-fraud evidence check + Stage 2 scene-dispatched checker evaluation.
     // If the QG gate blocks, the aggregate is downgraded to "fail".
@@ -950,7 +928,8 @@ mod tests {
             notification: None,
             research_enabled: false,
             research: None,
-            verify_rfv_convergence: None,
+            verify_quality_gate: None,
+            verify_closeout_gate: None,
             static_actions: None,
         }
     }

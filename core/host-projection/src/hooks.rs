@@ -122,10 +122,6 @@ pub struct RouteDecision {
 /// Mirror of `runtime_core::runtime_envelope_ids::MAX_CONCURRENT_SUBAGENTS_LIMIT`.
 pub const MAX_CONCURRENT_SUBAGENTS_LIMIT: usize = 24;
 
-/// Path to the external research RFV schema JSON (defined locally; rfv_loop.rs deleted in Wave 3c-i).
-pub const RFV_EXTERNAL_RESEARCH_SCHEMA_REL_PATH: &str =
-    "configs/framework/RFV_EXTERNAL_RESEARCH.schema.json";
-
 // ────────────────────────────────────────────────────────────────
 // Env readers with host-projection-specific logic (local impl, not pure proxy)
 // ────────────────────────────────────────────────────────────────
@@ -506,7 +502,6 @@ mod mirror_type_tests {
         // These mirrors of runtime-core constants should be reviewed
         // when the source crate changes versions.
         assert_eq!(MAX_CONCURRENT_SUBAGENTS_LIMIT, 24);
-        assert!(RFV_EXTERNAL_RESEARCH_SCHEMA_REL_PATH.ends_with(".json"));
     }
 
     /// Regression: host type aliases compile correctly as &'static str.

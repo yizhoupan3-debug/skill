@@ -27,6 +27,7 @@ routing_owner: gate
 routing_priority: P1
 session_start: required
 source: project
+risk: low
 trigger_hints:
 - UI review
 - chart export
