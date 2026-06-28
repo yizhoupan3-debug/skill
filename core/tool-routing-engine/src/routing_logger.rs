@@ -49,9 +49,7 @@ impl ToolRoutingLogger {
                 .truncate(true)
                 .write(true)
                 .open(&self.path)
-                .map_err(|e| {
-                    format!("rotate tool routing log {path:?}: {e}", path = self.path)
-                })?;
+                .map_err(|e| format!("rotate tool routing log {path:?}: {e}", path = self.path))?;
             self.writer = BufWriter::new(rotated);
         }
         Ok(())
@@ -74,7 +72,9 @@ impl ToolRoutingLogger {
 ///
 /// Should be called during runtime-core bootstrap with the repo root's log path.
 pub fn init_tool_routing_logger(log_dir: &str) -> Result<(), String> {
-    let mut guard = LOGGER.lock().map_err(|_| "routing logger mutex poisoned".to_string())?;
+    let mut guard = LOGGER
+        .lock()
+        .map_err(|_| "routing logger mutex poisoned".to_string())?;
     if guard.is_some() {
         return Ok(()); // Already initialized — idempotent
     }
@@ -107,7 +107,9 @@ pub fn log_tool_decision(decision: &McpToolDecision, query: &str) {
         if guard.is_none() {
             // Auto-init with default path on first use
             match ToolRoutingLogger::new(LOG_DIR) {
-                Ok(logger) => { *guard = Some(logger); }
+                Ok(logger) => {
+                    *guard = Some(logger);
+                }
                 Err(e) => {
                     tracing::warn!("failed to auto-init tool routing logger: {e}");
                     return;
@@ -155,6 +157,7 @@ fn days_to_date(days: i64) -> (i64, i64, i64) {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     #[test]

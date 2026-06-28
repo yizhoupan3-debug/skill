@@ -13,7 +13,6 @@ pub(crate) fn str_field<'a>(value: &'a Value, key: &str) -> &'a str {
     value.get(key).and_then(Value::as_str).unwrap_or("")
 }
 
-
 /// Extract a string field with a custom default.
 pub(crate) fn str_field_default<'a>(value: &'a Value, key: &str, default: &'a str) -> &'a str {
     value
@@ -51,7 +50,9 @@ pub(crate) fn obj_mut(value: &mut Value) -> &mut serde_json::Map<String, Value> 
     }
     #[allow(clippy::expect_used)]
     // safety: obj_mut just coerced this to `{}` above; as_object_mut() always succeeds.
-    value.as_object_mut().expect("obj_mut: value must be object after coercion")
+    value
+        .as_object_mut()
+        .expect("obj_mut: value must be object after coercion")
 }
 
 /// Insert a key-value pair into a mutable object.

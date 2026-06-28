@@ -144,7 +144,7 @@ Sidecar 模式的压缩契约仍见下文 **Main-thread compression contract**�
 - 用户要设计 agent supervisor、coordinator、manager-worker 架构
 - 用户显式要求 **team** / **多 agent 团队**，或任务自带多阶段审计/审查管道
 - 用户明确要求多 worker 生命周期、协作拆分或 supervisor 集成时，本 gate 负责判断 bounded sidecars 或 team 是否足够
-- 用户要固定 **review → fix → verify** 多轮闭环（可外加与 review **并行**的 **external research** lane，且大 `max_rounds` 时用 `framework_quality_gate` 写 `QUALITY_GATE_STATE.json`）：契约与模板通过 `framework_quality_gate` 运行时管理；用户侧入口优先 My 执行区（`GOAL_STATE.json`、`framework_goal_drive`）；本 gate 仍负责 spawn admission 与 reject reason
+- 用户要固定 **review → fix → verify** 多轮闭环（可外加与 review **并行**的 **external research** lane，且大 `max_rounds` 时用 `framework_quality_gate` 写 `RFV_LOOP_STATE.json`）：契约与模板通过 `framework_quality_gate` 运行时管理；用户侧入口优先 My 执行区（`GOAL_STATE.json`、`framework_goal_drive`）；本 gate 仍负责 spawn admission 与 reject reason
 
 常见表达：
 - “做一个多 agent 协作框架”

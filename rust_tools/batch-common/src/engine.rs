@@ -5,7 +5,7 @@
 
 use crate::schema::ProcessStatus;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use rayon::prelude::*;
 use serde_json::Value;
 use std::fs::{self, File};
@@ -18,7 +18,9 @@ use std::thread;
 // BatchResult trait
 // ---------------------------------------------------------------------------
 
-pub trait BatchResult: serde::Serialize + for<'de> serde::Deserialize<'de> + Send + Sync + 'static {
+pub trait BatchResult:
+    serde::Serialize + for<'de> serde::Deserialize<'de> + Send + Sync + 'static
+{
     fn path(&self) -> &str;
     fn status(&self) -> ProcessStatus;
     fn write_index_row(&self, writer: &mut dyn Write) -> std::io::Result<()>;
@@ -48,9 +50,10 @@ pub const JOBS_AUTO: &str = "auto";
 pub fn resolve_jobs(env_prefix: &str, jobs_arg: &str, hint_paths: &[PathBuf]) -> usize {
     let env_key = format!("{env_prefix}_BATCH_JOBS");
     if let Ok(raw) = std::env::var(&env_key)
-        && let Ok(n) = raw.parse::<usize>() {
-            return n.max(1);
-        }
+        && let Ok(n) = raw.parse::<usize>()
+    {
+        return n.max(1);
+    }
 
     if !jobs_arg.eq_ignore_ascii_case(JOBS_AUTO) {
         if let Ok(n) = jobs_arg.parse::<usize>() {
@@ -284,9 +287,18 @@ where
         }
     }
 
-    let processed = all_entries.iter().filter(|e| e.status() == ProcessStatus::Ok).count();
-    let failed = all_entries.iter().filter(|e| e.status() == ProcessStatus::Error).count();
-    let skipped = all_entries.iter().filter(|e| e.status() == ProcessStatus::Skipped).count();
+    let processed = all_entries
+        .iter()
+        .filter(|e| e.status() == ProcessStatus::Ok)
+        .count();
+    let failed = all_entries
+        .iter()
+        .filter(|e| e.status() == ProcessStatus::Error)
+        .count();
+    let skipped = all_entries
+        .iter()
+        .filter(|e| e.status() == ProcessStatus::Skipped)
+        .count();
 
     // Write catalog.json
     let catalog = serde_json::json!({
@@ -342,7 +354,11 @@ fn spawn_jsonl_writer<R: BatchResult>(
             jsonl.write_all(b"\n")?;
             checkpoint.mark(&key, result.status());
             results.push(result);
-            if fail_fast && results.last().is_some_and(|r| r.status() == ProcessStatus::Error) {
+            if fail_fast
+                && results
+                    .last()
+                    .is_some_and(|r| r.status() == ProcessStatus::Error)
+            {
                 stop = true;
             }
         }

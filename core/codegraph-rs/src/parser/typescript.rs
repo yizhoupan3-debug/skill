@@ -43,48 +43,50 @@ fn collect_all(
         | "interface_declaration"
         | "type_alias_declaration" => {
             if let Some(name) = node.child_by_field_name("name")
-                && let Ok(text) = name.utf8_text(source) {
-                    symbols.push(ParsedSymbol {
-                        symbol: text.to_string(),
-                        kind: node
-                            .kind()
-                            .replace("_declaration", "")
-                            .replace("_definition", ""),
-                        line: node.start_position().row as u32 + 1,
-                        start_col: node.start_position().column as u32 + 1,
-                        end_line: node.end_position().row as u32 + 1,
-                        end_col: node.end_position().column as u32 + 1,
-                    });
-                }
+                && let Ok(text) = name.utf8_text(source)
+            {
+                symbols.push(ParsedSymbol {
+                    symbol: text.to_string(),
+                    kind: node
+                        .kind()
+                        .replace("_declaration", "")
+                        .replace("_definition", ""),
+                    line: node.start_position().row as u32 + 1,
+                    start_col: node.start_position().column as u32 + 1,
+                    end_line: node.end_position().row as u32 + 1,
+                    end_col: node.end_position().column as u32 + 1,
+                });
+            }
         }
         "lexical_declaration" | "variable_declarator" => {
             if let Some(name) = node.child_by_field_name("name")
                 && name.kind() == "identifier"
-                    && let Ok(text) = name.utf8_text(source) {
-                        symbols.push(ParsedSymbol {
-                            symbol: text.to_string(),
-                            kind: "const".to_string(),
-                            line: node.start_position().row as u32 + 1,
-                            start_col: node.start_position().column as u32 + 1,
-                            end_line: node.end_position().row as u32 + 1,
-                            end_col: node.end_position().column as u32 + 1,
-                        });
-                    }
+                && let Ok(text) = name.utf8_text(source)
+            {
+                symbols.push(ParsedSymbol {
+                    symbol: text.to_string(),
+                    kind: "const".to_string(),
+                    line: node.start_position().row as u32 + 1,
+                    start_col: node.start_position().column as u32 + 1,
+                    end_line: node.end_position().row as u32 + 1,
+                    end_col: node.end_position().column as u32 + 1,
+                });
+            }
         }
         _ => {}
     }
     // Collect call edges at this node
     if node.kind() == "call_expression"
         && let Some(func) = node.child_by_field_name("function")
-            && let (Some(caller), Some(callee)) =
-                (enclosing_symbol(node, source), callee_name(func, source))
-            {
-                edges.push(ParsedEdge {
-                    caller_symbol: caller,
-                    callee_symbol: callee,
-                    line: node.start_position().row as u32 + 1,
-                });
-            }
+        && let (Some(caller), Some(callee)) =
+            (enclosing_symbol(node, source), callee_name(func, source))
+    {
+        edges.push(ParsedEdge {
+            caller_symbol: caller,
+            callee_symbol: callee,
+            line: node.start_position().row as u32 + 1,
+        });
+    }
     // Recurse into children
     for i in 0..node.named_child_count() {
         if let Some(child) = node.named_child(i) {
@@ -111,9 +113,10 @@ fn enclosing_symbol(node: Node<'_>, source: &[u8]) -> Option<String> {
         match ancestor.kind() {
             "function_declaration" | "method_definition" | "class_declaration" => {
                 if let Some(name) = ancestor.child_by_field_name("name")
-                    && let Ok(text) = name.utf8_text(source) {
-                        return Some(text.to_string());
-                    }
+                    && let Ok(text) = name.utf8_text(source)
+                {
+                    return Some(text.to_string());
+                }
             }
             // Arrow functions: const foo = () => { ... }
             "lexical_declaration" => {
@@ -121,10 +124,11 @@ fn enclosing_symbol(node: Node<'_>, source: &[u8]) -> Option<String> {
                 for i in 0..ancestor.named_child_count() {
                     if let Some(child) = ancestor.named_child(i)
                         && child.kind() == "variable_declarator"
-                            && let Some(name) = child.child_by_field_name("name")
-                                && let Ok(text) = name.utf8_text(source) {
-                                    return Some(text.to_string());
-                                }
+                        && let Some(name) = child.child_by_field_name("name")
+                        && let Ok(text) = name.utf8_text(source)
+                    {
+                        return Some(text.to_string());
+                    }
                 }
             }
             _ => {}
@@ -136,6 +140,7 @@ fn enclosing_symbol(node: Node<'_>, source: &[u8]) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::parse;
 
     #[test]
@@ -144,8 +149,16 @@ mod tests {
 const greet = (name: string) => { console.log(name); };
 "#;
         let out = parse(src, false);
-        let symbols: Vec<_> = out.symbols.iter().map(|s| (s.symbol.as_str(), s.kind.as_str())).collect();
-        assert!(symbols.contains(&("greet", "const")), "arrow fn should be const: {:?}", symbols);
+        let symbols: Vec<_> = out
+            .symbols
+            .iter()
+            .map(|s| (s.symbol.as_str(), s.kind.as_str()))
+            .collect();
+        assert!(
+            symbols.contains(&("greet", "const")),
+            "arrow fn should be const: {:?}",
+            symbols
+        );
     }
 
     #[test]
@@ -157,7 +170,11 @@ function run() {
 }
 "#;
         let out = parse(src, false);
-        let edge = out.edges.iter().find(|e| e.callee_symbol == "compute").expect("compute edge");
+        let edge = out
+            .edges
+            .iter()
+            .find(|e| e.callee_symbol == "compute")
+            .expect("compute edge");
         assert_eq!(edge.caller_symbol, "run");
     }
 
@@ -170,8 +187,16 @@ interface Config {
 }
 "#;
         let out = parse(src, false);
-        let symbols: Vec<_> = out.symbols.iter().map(|s| (s.symbol.as_str(), s.kind.as_str())).collect();
-        assert!(symbols.contains(&("Config", "interface")), "should find interface: {:?}", symbols);
+        let symbols: Vec<_> = out
+            .symbols
+            .iter()
+            .map(|s| (s.symbol.as_str(), s.kind.as_str()))
+            .collect();
+        assert!(
+            symbols.contains(&("Config", "interface")),
+            "should find interface: {:?}",
+            symbols
+        );
     }
 
     #[test]
@@ -183,10 +208,16 @@ interface Logger {
 }
 "#;
         let out = parse(src, false);
-        let method_symbols: Vec<_> = out.symbols.iter()
+        let method_symbols: Vec<_> = out
+            .symbols
+            .iter()
             .filter(|s| s.kind == "method")
             .map(|s| s.symbol.as_str())
             .collect();
-        assert!(method_symbols.is_empty(), "interface methods should not be extracted as symbols: {:?}", method_symbols);
+        assert!(
+            method_symbols.is_empty(),
+            "interface methods should not be extracted as symbols: {:?}",
+            method_symbols
+        );
     }
 }

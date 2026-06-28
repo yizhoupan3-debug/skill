@@ -103,9 +103,6 @@ mod mcp_stdio_harness_tests;
 mod smoke_workflow_contract_tests;
 
 #[cfg(test)]
-#[path = "../tests/smoke_cross_host_closeout_tests.rs"]
-
-#[cfg(test)]
 #[path = "../tests/smoke_isolation_contract_tests.rs"]
 mod smoke_isolation_contract_tests;
 

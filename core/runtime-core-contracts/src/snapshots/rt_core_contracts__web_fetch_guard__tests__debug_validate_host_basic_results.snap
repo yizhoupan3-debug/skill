@@ -1,18 +1,23 @@
 ---
 source: core/runtime-core-contracts/src/web_fetch_guard.rs
+assertion_line: 386
 expression: results
 ---
 [
     (
         "localhost",
         Err(
-            "web_fetch blocked host: localhost",
+            Validation {
+                message: "web_fetch blocked host: localhost",
+            },
         ),
     ),
     (
         "foo.localhost",
         Err(
-            "web_fetch blocked host: foo.localhost",
+            Validation {
+                message: "web_fetch blocked host: foo.localhost",
+            },
         ),
     ),
     (
@@ -24,31 +29,41 @@ expression: results
     (
         "foo.local",
         Err(
-            "web_fetch blocked host suffix: foo.local",
+            Validation {
+                message: "web_fetch blocked host suffix: foo.local",
+            },
         ),
     ),
     (
         "bar.internal",
         Err(
-            "web_fetch blocked host suffix: bar.internal",
+            Validation {
+                message: "web_fetch blocked host suffix: bar.internal",
+            },
         ),
     ),
     (
         "127.0.0.1",
         Err(
-            "web_fetch blocked IP: 127.0.0.1",
+            Validation {
+                message: "web_fetch blocked IP: 127.0.0.1",
+            },
         ),
     ),
     (
         "10.0.0.1",
         Err(
-            "web_fetch blocked IP: 10.0.0.1",
+            Validation {
+                message: "web_fetch blocked IP: 10.0.0.1",
+            },
         ),
     ),
     (
         "192.168.1.1",
         Err(
-            "web_fetch blocked IP: 192.168.1.1",
+            Validation {
+                message: "web_fetch blocked IP: 192.168.1.1",
+            },
         ),
     ),
     (
@@ -60,19 +75,25 @@ expression: results
     (
         "169.254.169.254",
         Err(
-            "web_fetch blocked IP: 169.254.169.254",
+            Validation {
+                message: "web_fetch blocked IP: 169.254.169.254",
+            },
         ),
     ),
     (
         "LOCALHOST",
         Err(
-            "web_fetch blocked host: LOCALHOST",
+            Validation {
+                message: "web_fetch blocked host: LOCALHOST",
+            },
         ),
     ),
     (
         "Foo.Local",
         Err(
-            "web_fetch blocked host suffix: Foo.Local",
+            Validation {
+                message: "web_fetch blocked host suffix: Foo.Local",
+            },
         ),
     ),
 ]

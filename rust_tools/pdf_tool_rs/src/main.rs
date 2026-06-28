@@ -1,6 +1,6 @@
 use anyhow::Result;
-use pdf_tool_rs::{batch, info, read};
 use clap::{Parser, Subcommand};
+use pdf_tool_rs::{batch, info, read};
 use std::path::PathBuf;
 
 #[derive(Parser)]

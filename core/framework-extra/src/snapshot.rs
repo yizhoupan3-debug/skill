@@ -3,12 +3,14 @@
 //! Builds the runtime snapshot envelope via `build_framework_runtime_snapshot_envelope_with_level`
 //! and internal helpers.
 
+use core_errors::FrameworkError;
+use fr_exec::runtime_view;
 use fr_utils::constants::{
-    FRAMEWORK_RUNTIME_AUTHORITY, FRAMEWORK_RUNTIME_SNAPSHOT_SCHEMA_VERSION,
-    EVIDENCE_INDEX_FILENAME, SUPERVISOR_STATE_FILENAME, TASK_REGISTRY_SCHEMA_VERSION,
+    EVIDENCE_INDEX_FILENAME, FRAMEWORK_RUNTIME_AUTHORITY,
+    FRAMEWORK_RUNTIME_SNAPSHOT_SCHEMA_VERSION, SUPERVISOR_STATE_FILENAME,
+    TASK_REGISTRY_SCHEMA_VERSION,
 };
 use fr_utils::json_value::{nonempty_string, value_text};
-use fr_exec::runtime_view;
 use serde_json::{Value, json};
 use std::path::Path;
 use tracing::instrument;
@@ -22,10 +24,13 @@ pub fn build_framework_runtime_snapshot_envelope_with_level(
     artifact_root_override: Option<&Path>,
     task_id_override: Option<&str>,
     detail_level: &str,
-) -> Result<Value, String> {
+) -> Result<Value, FrameworkError> {
     let is_full = detail_level == "full";
-    let snapshot =
-        runtime_view::load_framework_runtime_view(repo_root, artifact_root_override, task_id_override);
+    let snapshot = runtime_view::load_framework_runtime_view(
+        repo_root,
+        artifact_root_override,
+        task_id_override,
+    );
     let continuity = runtime_view::classify_runtime_continuity(&snapshot);
     let primary_owner = {
         let direct = value_text(snapshot.supervisor_state.get("primary_owner"));
@@ -302,10 +307,7 @@ fn codegraph_index_snapshot(repo_root: &Path) -> Value {
                 }
             };
             // Dead code count — lightweight COUNT(*) query, no row data transfer
-            let dead_code_count = index
-                .count_dead_code_only(Some("rust"))
-                .ok()
-                .unwrap_or(0);
+            let dead_code_count = index.count_dead_code_only(Some("rust")).ok().unwrap_or(0);
             // Recent indexed files — agent gets a sense of what's covered
             let recent_files: Vec<Value> = match index.list_files() {
                 Ok(files) => files
@@ -329,18 +331,14 @@ fn codegraph_index_snapshot(repo_root: &Path) -> Value {
             let fresh_enough = stats
                 .as_ref()
                 .and_then(|s| s.indexed_at.as_deref())
-                .and_then(|t| {
-                    match chrono::DateTime::parse_from_rfc3339(t) {
-                        Ok(dt) => {
-                            let now = chrono::Utc::now();
-                            Some((now - dt.with_timezone(&chrono::Utc)).num_minutes() < 60)
-                        }
-                        Err(e) => {
-                            tracing::warn!(
-                                "[codegraph] failed to parse indexed_at ({t:?}): {e}",
-                            );
-                            None
-                        }
+                .and_then(|t| match chrono::DateTime::parse_from_rfc3339(t) {
+                    Ok(dt) => {
+                        let now = chrono::Utc::now();
+                        Some((now - dt.with_timezone(&chrono::Utc)).num_minutes() < 60)
+                    }
+                    Err(e) => {
+                        tracing::warn!("[codegraph] failed to parse indexed_at ({t:?}): {e}",);
+                        None
                     }
                 })
                 .unwrap_or(false);

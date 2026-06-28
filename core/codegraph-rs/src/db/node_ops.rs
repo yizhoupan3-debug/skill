@@ -126,9 +126,10 @@ pub fn find_dead_code(
     for row in rows {
         let node = row?;
         if let Some(min) = min_lines
-            && node.line < min {
-                continue;
-            }
+            && node.line < min
+        {
+            continue;
+        }
         result.push(node);
     }
     Ok(result)
@@ -136,10 +137,7 @@ pub fn find_dead_code(
 
 /// Lightweight dead code count — fetches only COUNT(*), no node data.
 /// Used by framework_snapshot hot path to avoid full row transfer.
-pub fn count_dead_code_only(
-    conn: &Connection,
-    language: Option<&str>,
-) -> rusqlite::Result<usize> {
+pub fn count_dead_code_only(conn: &Connection, language: Option<&str>) -> rusqlite::Result<usize> {
     let mut sql = String::from(
         "SELECT COUNT(*)
          FROM nodes n
@@ -266,14 +264,11 @@ fn parse_extra_position(extra: &str) -> (u32, u32, u32) {
 }
 
 /// Find all symbols defined in a specific file.
-pub fn find_symbols_by_file(
-    conn: &Connection,
-    file_path: &str,
-) -> rusqlite::Result<Vec<Node>> {
+pub fn find_symbols_by_file(conn: &Connection, file_path: &str) -> rusqlite::Result<Vec<Node>> {
     let mut stmt = conn.prepare(
         "SELECT id, symbol, kind, language, file_path, line
          FROM nodes WHERE file_path = ?1
-         ORDER BY line"
+         ORDER BY line",
     )?;
     let rows = stmt.query_map([file_path], |row| {
         Ok(Node {
@@ -290,10 +285,10 @@ pub fn find_symbols_by_file(
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::{
-        ResolveOutcome, SymbolFilter, count_dead_code_only, find_dead_code,
-        find_definition, find_symbols_by_file, get_node_by_id, resolve_symbol,
-        resolve_symbol_filtered,
+        ResolveOutcome, SymbolFilter, count_dead_code_only, find_dead_code, find_definition,
+        find_symbols_by_file, get_node_by_id, resolve_symbol, resolve_symbol_filtered,
     };
     use crate::db::schema::init_schema;
 
@@ -563,6 +558,10 @@ mod tests {
 
         let full = find_dead_code(&conn, None, None).expect("find dead code");
         let count = count_dead_code_only(&conn, None).expect("count dead code only");
-        assert_eq!(count, full.len(), "count should match find_dead_code result length");
+        assert_eq!(
+            count,
+            full.len(),
+            "count should match find_dead_code result length"
+        );
     }
 }

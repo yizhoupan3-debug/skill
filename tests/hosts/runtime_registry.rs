@@ -1,4 +1,3 @@
-
 use crate::common;
 use crate::common::{
     CANONICAL_HOST_IDS, RETIRED_HOST_IDS, assert_canonical_closed_set_host_ids,
@@ -155,14 +154,8 @@ fn runtime_registry_exposes_framework_commands_and_native_runtime_contract() {
     assert!(aliases.get("autopilot").is_none());
     assert!(aliases.get("gsd").is_none());
     assert_eq!(aliases["gitx"]["canonical_owner"], "gitx");
-    assert_eq!(
-        aliases["gitx"]["host_entrypoints"]["codex"],
-        "/gitx"
-    );
-    assert_eq!(
-        aliases["gitx"]["host_entrypoints"]["cursor"],
-        "/gitx"
-    );
+    assert_eq!(aliases["gitx"]["host_entrypoints"]["codex"], "/gitx");
+    assert_eq!(aliases["gitx"]["host_entrypoints"]["cursor"], "/gitx");
     assert_eq!(
         aliases["deepinterview"]["host_entrypoints"]["codex"],
         "/deepinterview"

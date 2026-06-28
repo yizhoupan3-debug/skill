@@ -1,7 +1,7 @@
 use super::common::*;
 use super::*;
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 #[test]
 fn framework_session_artifact_write_rejects_stale_focus_update() {
@@ -41,13 +41,15 @@ fn framework_session_artifact_write_rejects_stale_focus_update() {
         "next_actions": ["Continue"]
     }))
     .expect_err("stale focus update should fail");
-    assert!(err.contains("stale focus task pointer update rejected"));
+    assert!(
+        err.to_string()
+            .contains("stale focus task pointer update rejected")
+    );
 
     let focus = read_json(&focus_path).expect("read focus");
     assert_eq!(focus["task_id"], json!("other-task"));
     let _ = fs::remove_dir_all(&repo_root);
 }
-
 
 #[test]
 fn framework_session_artifact_write_preserves_existing_roundtrip() {
@@ -72,8 +74,7 @@ fn framework_session_artifact_write_preserves_existing_roundtrip() {
     let active_path = repo_root.join("artifacts/current/active_task.json");
     let focus_path = repo_root.join("artifacts/current/focus_task.json");
     let supervisor_path = repo_root.join(".supervisor_state.json");
-    let active_hash =
-        fr_utils::util::hash_file_for_test(&active_path).expect("active hash");
+    let active_hash = fr_utils::util::hash_file_for_test(&active_path).expect("active hash");
     let focus_hash = fr_utils::util::hash_file_for_test(&focus_path).expect("focus hash");
     let supervisor_hash =
         fr_utils::util::hash_file_for_test(&supervisor_path).expect("supervisor hash");
@@ -122,7 +123,6 @@ fn framework_session_artifact_write_preserves_existing_roundtrip() {
     );
     let _ = fs::remove_dir_all(&repo_root);
 }
-
 
 #[test]
 fn framework_session_artifact_write_omitted_evidence_preserves_existing_file() {
@@ -179,13 +179,15 @@ fn framework_session_artifact_write_omitted_evidence_preserves_existing_file() {
         "evidence": []
     }))
     .expect("explicit reset");
-    assert!(changed["changed_paths"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .any(|path| path
-            .as_str()
-            .is_some_and(|p| p.ends_with("EVIDENCE_INDEX.json"))));
+    assert!(
+        changed["changed_paths"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|path| path
+                .as_str()
+                .is_some_and(|p| p.ends_with("EVIDENCE_INDEX.json")))
+    );
     let reset: Value =
         serde_json::from_str(&fs::read_to_string(&evidence_path).expect("read reset"))
             .expect("parse reset");
@@ -193,7 +195,6 @@ fn framework_session_artifact_write_omitted_evidence_preserves_existing_file() {
 
     let _ = fs::remove_dir_all(&repo_root);
 }
-
 
 #[test]
 fn task_registry_normalization_dedupes_and_limits_old_tasks() {

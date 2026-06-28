@@ -19,11 +19,14 @@ const TOOL_ROUTING_EVAL_CASES_SCHEMA_VERSION: &str = "tool-routing-eval-cases-v1
 const TOOL_ROUTING_EVAL_REPORT_SCHEMA_VERSION: &str = "tool-routing-eval-v1";
 
 /// Load tool routing eval cases from a JSON file.
-pub fn load_tool_routing_eval_cases(path: &Path) -> Result<ToolRoutingEvalCasesPayload, FrameworkError> {
+pub fn load_tool_routing_eval_cases(
+    path: &Path,
+) -> Result<ToolRoutingEvalCasesPayload, FrameworkError> {
     let payload = read_json_strict(path)
         .map_err(|e| FrameworkError::registry(format!("failed reading {}: {e}", path.display())))?;
-    let cases = serde_json::from_value::<ToolRoutingEvalCasesPayload>(payload)
-        .map_err(|err| FrameworkError::validation(format!("failed parsing {}: {err}", path.display())))?;
+    let cases = serde_json::from_value::<ToolRoutingEvalCasesPayload>(payload).map_err(|err| {
+        FrameworkError::validation(format!("failed parsing {}: {err}", path.display()))
+    })?;
     if cases.schema_version != TOOL_ROUTING_EVAL_CASES_SCHEMA_VERSION {
         return Err(FrameworkError::validation(format!(
             "tool routing eval case file returned an unknown schema: {:?}",
@@ -76,14 +79,13 @@ pub fn evaluate_tool_routing_cases(
 
             // For should-not-trigger with no explicit expected_tool, correctness
             // means the query did not hit a forbidden tool.
-            let tool_correct = if !tool_correct_raw
-                && expected_tool.is_none()
-                && category == "should-not-trigger"
-            {
-                true
-            } else {
-                tool_correct_raw
-            };
+            let tool_correct =
+                if !tool_correct_raw && expected_tool.is_none() && category == "should-not-trigger"
+                {
+                    true
+                } else {
+                    tool_correct_raw
+                };
 
             match category.as_str() {
                 "should-trigger" | "fuzzy-rescue" => {

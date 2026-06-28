@@ -17,8 +17,7 @@ pub const PREFIX_LINE: &str = "**PAPER_ADVERSARIAL_HOOK**";
 
 /// 编译期嵌入的回落文案：与 `REL_PATH` **同源**（同一份磁盘 txt），仅在用户仓库内
 /// 文件缺失 / 空 / 仅标题时启用。
-const BUILTIN_TXT: &str =
-    include_str!("../../../../configs/framework/PAPER_ADVERSARIAL_HOOK.txt");
+const BUILTIN_TXT: &str = include_str!("../../../../configs/framework/PAPER_ADVERSARIAL_HOOK.txt");
 
 // ── Static state ──
 
@@ -178,6 +177,7 @@ pub fn maybe_append_adversarial_context(context: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use serde_json::json;
     use std::sync::{Mutex, OnceLock};
@@ -288,8 +288,8 @@ mod tests {
             .nth(2)
             .expect("repo root above core/research-harness/")
             .to_path_buf();
-        let on_disk =
-            std::fs::read_to_string(repo_root.join(REL_PATH)).expect("PAPER_ADVERSARIAL_HOOK.txt readable");
+        let on_disk = std::fs::read_to_string(repo_root.join(REL_PATH))
+            .expect("PAPER_ADVERSARIAL_HOOK.txt readable");
         assert_eq!(BUILTIN_BLOCK.clone(), on_disk.trim());
         assert!(BUILTIN_BLOCK.contains("强对抗审稿"));
         assert!(BUILTIN_BLOCK.contains("closest-work"));
@@ -398,9 +398,7 @@ mod tests {
     #[test]
     fn prompt_signals_manuscript_work_is_send() {
         let result = std::thread::spawn(move || {
-            prompt_signals_manuscript_work(
-                "请根据审稿意见逐条修改这篇论文的 Introduction",
-            )
+            prompt_signals_manuscript_work("请根据审稿意见逐条修改这篇论文的 Introduction")
         })
         .join()
         .expect("thread panicked");
@@ -410,9 +408,7 @@ mod tests {
     #[test]
     fn prompt_signals_negative_is_send() {
         let result = std::thread::spawn(move || {
-            prompt_signals_manuscript_work(
-                "run cargo fmt and clippy before pull request",
-            )
+            prompt_signals_manuscript_work("run cargo fmt and clippy before pull request")
         })
         .join()
         .expect("thread panicked");
@@ -435,8 +431,7 @@ mod tests {
 
     #[test]
     fn maybe_append_adversarial_returns_context() {
-        let result =
-            maybe_append_adversarial_context("请根据审稿意见修改论文");
+        let result = maybe_append_adversarial_context("请根据审稿意见修改论文");
         assert!(result.is_some());
         assert!(result.unwrap().contains(PREFIX_LINE));
     }

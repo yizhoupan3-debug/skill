@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used, clippy::expect_used)]
 //! W3 integration: incremental sync + watcher bootstrap + MCP dispatch roundtrip.
 
 use codegraph_rs::mcp::{dispatch_tool_call, prepare_index};

@@ -64,8 +64,7 @@ pub fn run_uv_module_with_timeout(
         match child.try_wait() {
             Ok(Some(status)) => {
                 // Process exited — collect remaining pipe data.
-                let output = child
-                    .wait_with_output()?;
+                let output = child.wait_with_output()?;
 
                 let stderr = String::from_utf8_lossy(&output.stderr).to_string();
 

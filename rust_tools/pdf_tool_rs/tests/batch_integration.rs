@@ -1,7 +1,7 @@
 mod fixtures;
 
 use fixtures::{blank_pages_pdf_in, hello_pdf_in, image_only_pdf_in};
-use pdf_tool_rs::batch::{load_paths, run_batch, BatchOptions};
+use pdf_tool_rs::batch::{BatchOptions, load_paths, run_batch};
 use pdf_tool_rs::read::shallow_scan_classify;
 use pdf_tool_rs::schema::{ContentClass, ProcessStatus};
 use serde_json::Value;
@@ -105,7 +105,10 @@ fn batch_resume_skips_completed() {
 
     let jsonl_after = fs::read_to_string(out.join("results.jsonl")).unwrap();
     let lines_after = jsonl_after.lines().count();
-    assert_eq!(lines_before, lines_after, "resume must not duplicate jsonl rows");
+    assert_eq!(
+        lines_before, lines_after,
+        "resume must not duplicate jsonl rows"
+    );
 }
 
 #[test]

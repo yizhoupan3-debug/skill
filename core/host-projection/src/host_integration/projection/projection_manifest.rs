@@ -36,9 +36,10 @@ pub fn make_mcp_server_payload_with_env(
         }),
     };
     if let Some(env) = env
-        && let Some(obj) = payload.as_object_mut() {
-            obj.insert("env".to_string(), env);
-        }
+        && let Some(obj) = payload.as_object_mut()
+    {
+        obj.insert("env".to_string(), env);
+    }
     payload
 }
 
@@ -108,13 +109,15 @@ pub fn projection_manifest_payload_is_managed(
         return false;
     }
     if let Some(expected) = host_projection
-        && manifest.get("host_projection").and_then(Value::as_str) != Some(expected) {
-            return false;
-        }
+        && manifest.get("host_projection").and_then(Value::as_str) != Some(expected)
+    {
+        return false;
+    }
     if let Some(expected) = scope
-        && manifest.get("scope").and_then(Value::as_str) != Some(expected) {
-            return false;
-        }
+        && manifest.get("scope").and_then(Value::as_str) != Some(expected)
+    {
+        return false;
+    }
     true
 }
 
@@ -192,7 +195,11 @@ pub fn entrypoint_target(
             .join(subdir)
             .join(filename))
     } else {
-        Ok(roots.project_root.join(config_dir).join(subdir).join(filename))
+        Ok(roots
+            .project_root
+            .join(config_dir)
+            .join(subdir)
+            .join(filename))
     }
 }
 
@@ -245,22 +252,26 @@ pub fn write_projection_manifest(
                 "managed_key_paths": managed_key_paths,
             }
         }),
-    ).map_err(|e| e.to_string())
+    )
+    .map_err(|e| e.to_string())
 }
 
-pub fn mcp_config_path(roots: &ResolvedProjectionRoots, host_id: &str, scope: &str) -> std::result::Result<PathBuf, String> {
+pub fn mcp_config_path(
+    roots: &ResolvedProjectionRoots,
+    host_id: &str,
+    scope: &str,
+) -> std::result::Result<PathBuf, String> {
     let rel = framework_kernel::runtime_registry::host_projection_mcp_relative(host_id, scope);
     if rel.is_empty() {
         return Err(format!("no mcp config path for {host_id} scope {scope}"));
     }
     if scope == "user" {
-        if framework_kernel::runtime_registry::host_projection_mcp_base_is_account(
-            host_id,
-            "user",
-        ) {
+        if framework_kernel::runtime_registry::host_projection_mcp_base_is_account(host_id, "user")
+        {
             Ok(roots.account_home_root.join(rel))
         } else {
-            roots.host_home_root(host_id)
+            roots
+                .host_home_root(host_id)
                 .map(|h| h.join(rel))
                 .ok_or_else(|| format!("{host_id} host not registered"))
         }
@@ -308,14 +319,18 @@ pub(super) fn mcp_servers_mut<'a>(
     if !payload.is_object() {
         *payload = json!({});
     }
-    let root = payload.as_object_mut().ok_or_else(|| {
-        format!("{host_id} MCP config must be a JSON object")
-    })?;
-    let container = root.entry(servers_key.to_string()).or_insert_with(|| json!({}));
+    let root = payload
+        .as_object_mut()
+        .ok_or_else(|| format!("{host_id} MCP config must be a JSON object"))?;
+    let container = root
+        .entry(servers_key.to_string())
+        .or_insert_with(|| json!({}));
     if !container.is_object() {
         *container = json!({});
     }
-    container.as_object_mut().ok_or_else(|| format!("{host_id} MCP servers must be an object"))
+    container
+        .as_object_mut()
+        .ok_or_else(|| format!("{host_id} MCP servers must be an object"))
 }
 
 fn install_mcp_impl_snake_case(
@@ -335,42 +350,40 @@ fn install_mcp_impl_snake_case(
             .get("mcp_servers")
             .and_then(Value::as_object)
             .and_then(|servers| servers.get("browser-mcp"))
-        {
-            if mcp_server_semantically_matches_framework(existing, roots) {
-                let mut payload = read_json_if_exists(path)?.unwrap_or_else(|| json!({}));
-                let servers = mcp_servers_mut(&mut payload, "mcp_servers", host_id)?;
-                let framework_changed =
-                    servers.get("router-rs-framework") != Some(&framework_server);
-                if framework_changed {
-                    servers.insert("router-rs-framework".to_string(), framework_server);
-                }
-                let paperplain_changed =
-                    merge_paperplain_into_mcp_servers_map(servers, "paperplain");
-                let codegraph_changed =
-                    merge_codegraph_into_mcp_servers_map(servers, roots, "mcp-codegraph");
-                let file_changed = write_json_if_changed(path, &payload)?;
-                let changed =
-                    framework_changed || paperplain_changed || codegraph_changed || file_changed;
-                return Ok(McpInstallOutcome {
-                    managed: true,
-                    changed,
-                    reason: if changed {
-                        "installed"
-                    } else {
-                        "already-managed-equivalent"
-                    },
-                    skipped_user_owned: false,
-                });
+    {
+        if mcp_server_semantically_matches_framework(existing, roots) {
+            let mut payload = read_json_if_exists(path)?.unwrap_or_else(|| json!({}));
+            let servers = mcp_servers_mut(&mut payload, "mcp_servers", host_id)?;
+            let framework_changed = servers.get("router-rs-framework") != Some(&framework_server);
+            if framework_changed {
+                servers.insert("router-rs-framework".to_string(), framework_server);
             }
-            if !mcp_entry_is_framework_owned_stale(existing, &roots.framework_root) {
-                return Ok(McpInstallOutcome {
-                    managed: false,
-                    changed: false,
-                    reason: "skipped_user_owned",
-                    skipped_user_owned: true,
-                });
-            }
+            let paperplain_changed = merge_paperplain_into_mcp_servers_map(servers, "paperplain");
+            let codegraph_changed =
+                merge_codegraph_into_mcp_servers_map(servers, roots, "mcp-codegraph");
+            let file_changed = write_json_if_changed(path, &payload)?;
+            let changed =
+                framework_changed || paperplain_changed || codegraph_changed || file_changed;
+            return Ok(McpInstallOutcome {
+                managed: true,
+                changed,
+                reason: if changed {
+                    "installed"
+                } else {
+                    "already-managed-equivalent"
+                },
+                skipped_user_owned: false,
+            });
         }
+        if !mcp_entry_is_framework_owned_stale(existing, &roots.framework_root) {
+            return Ok(McpInstallOutcome {
+                managed: false,
+                changed: false,
+                reason: "skipped_user_owned",
+                skipped_user_owned: true,
+            });
+        }
+    }
 
     let mut payload = read_json_if_exists(path)?.unwrap_or_else(|| json!({}));
     let servers = mcp_servers_mut(&mut payload, "mcp_servers", host_id)?;
@@ -426,12 +439,17 @@ pub fn mcp_entry_is_framework_owned_stale(existing: &Value, framework_root: &Pat
     is_repo_build_executable_path(cmd, framework_root)
 }
 
-pub fn remove_mcp_server(path: &Path, framework_root: &Path, host_id: &str) -> std::result::Result<bool, String> {
-    let format = if framework_kernel::runtime_registry::host_mcp_config_format(host_id) == "snake_case" {
-        McpConfigFormat::JSON_SNAKE_CASE
-    } else {
-        McpConfigFormat::JSON_CAMEL_CASE
-    };
+pub fn remove_mcp_server(
+    path: &Path,
+    framework_root: &Path,
+    host_id: &str,
+) -> std::result::Result<bool, String> {
+    let format =
+        if framework_kernel::runtime_registry::host_mcp_config_format(host_id) == "snake_case" {
+            McpConfigFormat::JSON_SNAKE_CASE
+        } else {
+            McpConfigFormat::JSON_CAMEL_CASE
+        };
     Ok(mcp_json_remove_servers(path, framework_root, format)?)
 }
 
@@ -465,13 +483,11 @@ pub fn browser_mcp_is_cargo_bootstrap_shaped(server: &Value) -> bool {
         return false;
     };
     let str_args: Vec<&str> = args.iter().filter_map(Value::as_str).collect();
-    str_args.contains(&"mcp-stdio")
-        && browser_mcp_repo_root_from_args(args).is_some()
+    str_args.contains(&"mcp-stdio") && browser_mcp_repo_root_from_args(args).is_some()
 }
 
 pub fn browser_mcp_is_managed_shape(server: &Value) -> bool {
-    browser_mcp_is_framework_shaped(server)
-        || browser_mcp_is_cargo_bootstrap_shaped(server)
+    browser_mcp_is_framework_shaped(server) || browser_mcp_is_cargo_bootstrap_shaped(server)
 }
 
 pub fn browser_mcp_is_framework_shaped(server: &Value) -> bool {
@@ -550,7 +566,10 @@ pub fn mcp_server_payload(roots: &ResolvedProjectionRoots) -> Value {
     }
 }
 
-pub fn projection_manifest_manages_key_path(path: &Path, key_path: &str) -> std::result::Result<bool, String> {
+pub fn projection_manifest_manages_key_path(
+    path: &Path,
+    key_path: &str,
+) -> std::result::Result<bool, String> {
     let Some(manifest) = read_json_if_exists(path)? else {
         return Ok(false);
     };
@@ -626,7 +645,11 @@ fn install_mcp_impl_camel_case(
     let codegraph_changed = merge_codegraph_into_mcp_servers_map(entries, roots, "mcp-codegraph");
 
     let file_changed = write_json_if_changed(path, &payload)?;
-    Ok(framework_changed || browser_changed || paperplain_changed || codegraph_changed || file_changed)
+    Ok(framework_changed
+        || browser_changed
+        || paperplain_changed
+        || codegraph_changed
+        || file_changed)
 }
 
 pub fn render_framework_entrypoint(
@@ -634,13 +657,16 @@ pub fn render_framework_entrypoint(
     scope: &str,
     host_id: &str,
 ) -> std::result::Result<String, String> {
-    let narrative = load_host_projection_narrative(&roots.framework_root)
-        .map_err(|_| format!("host projection narrative must load before rendering {host_id} entrypoint"))?;
+    let narrative = load_host_projection_narrative(&roots.framework_root).map_err(|_| {
+        format!("host projection narrative must load before rendering {host_id} entrypoint")
+    })?;
     let runtime_rel = skills_source_rel(&roots.framework_root)
         .map(|source_rel| format!("{source_rel}/SKILL_ROUTING_RUNTIME.json"))
         .unwrap_or_else(|_| "skills/SKILL_ROUTING_RUNTIME.json".to_string());
-    let frontmatter_extra = framework_kernel::runtime_registry::projection_entrypoint_frontmatter_extra(host_id);
-    let description = framework_kernel::runtime_registry::projection_entrypoint_description(host_id);
+    let frontmatter_extra =
+        framework_kernel::runtime_registry::projection_entrypoint_frontmatter_extra(host_id);
+    let description =
+        framework_kernel::runtime_registry::projection_entrypoint_description(host_id);
     let trailer = framework_kernel::runtime_registry::projection_entrypoint_trailer(host_id);
     Ok(format!(
         "---\ndescription: Route framework tasks through the Rust-owned shared core.\n{frontmatter_extra}---\n\n<!-- managed_by: skill-framework -->\n<!-- projection_id: framework-root-entrypoint -->\n<!-- host_projection: {host_id} -->\n<!-- logical_entrypoint: framework -->\n<!-- framework_schema_version: {FRAMEWORK_PROJECTION_SCHEMA_VERSION} -->\n<!-- install_scope: {scope} -->\n\n{description}\n\n{gsd}\n\n{review}\n\n1) Start from `AGENTS.md`。\n2) Route via `{runtime_rel}`.\n3) Read only the matched `skill_path`.\n\nFramework root: `${{FRAMEWORK_ROOT}}`.\nProject root: `${{PROJECT_ROOT}}`.\n{trailer}",
@@ -656,7 +682,10 @@ pub fn managed_projection_file_exists(path: &Path) -> std::result::Result<bool, 
     Ok(is_managed_projection_content(&content))
 }
 
-pub(super) fn projection_file_status(path: &Path, host_projection: &str) -> std::result::Result<Value, String> {
+pub(super) fn projection_file_status(
+    path: &Path,
+    host_projection: &str,
+) -> std::result::Result<Value, String> {
     let content = read_text_if_exists(path)?;
     let marker_managed = content
         .as_deref()
@@ -710,9 +739,16 @@ pub fn install_skills_projection_tools(
     }
 }
 
-pub fn canonical_tool_name(raw: &str, framework_root: &Path) -> std::result::Result<String, String> {
+pub fn canonical_tool_name(
+    raw: &str,
+    framework_root: &Path,
+) -> std::result::Result<String, String> {
     let normalized = raw.trim().to_lowercase();
-    if crate::host_integration::projection::projection_ops_trait::projection_ops_for_tool(&normalized).is_some() {
+    if crate::host_integration::projection::projection_ops_trait::projection_ops_for_tool(
+        &normalized,
+    )
+    .is_some()
+    {
         return Ok(normalized);
     }
     let known = projection_supported_tools_for_message(framework_root);

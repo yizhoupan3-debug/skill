@@ -65,11 +65,14 @@ pub fn cached_signal(
     SIGNAL_CACHE.with(|cache| {
         let mut guard = cache.borrow_mut();
         // Check if cache matches: fingerprint + exact text + tokens fingerprint.
-        let cache_matches = guard.as_ref().map(|state| {
-            state.query_key == key
-                && state.query_text == query_text
-                && state.tokens_key == tokens_key
-        }).unwrap_or(false);
+        let cache_matches = guard
+            .as_ref()
+            .map(|state| {
+                state.query_key == key
+                    && state.query_text == query_text
+                    && state.tokens_key == tokens_key
+            })
+            .unwrap_or(false);
         if !cache_matches {
             *guard = Some(SignalCacheState {
                 query_key: key,
@@ -100,6 +103,7 @@ fn tokens_fingerprint(query_token_list: &[String]) -> u64 {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::super::text::{normalize_text, tokenize_route_text};
     use super::*;
 

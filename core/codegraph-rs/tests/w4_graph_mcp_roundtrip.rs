@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used, clippy::expect_used)]
 //! W4 / B1 integration: MCP graph tools (callers, callees, impact) over parsed Rust sources.
 
 use codegraph_rs::mcp::{dispatch_tool_call, prepare_index};

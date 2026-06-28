@@ -190,13 +190,22 @@ mod tests {
                 let src = repo.join("src/main.rs");
                 fs::create_dir_all(repo.join("src")).unwrap();
                 fs::write(&src, "fn main() {}").unwrap();
-                assert!(should_dev_exempt(&src, &repo), "all_repo mode must exempt src/main.rs");
+                assert!(
+                    should_dev_exempt(&src, &repo),
+                    "all_repo mode must exempt src/main.rs"
+                );
                 let deep = repo.join("core/hooks/deep.rs");
                 fs::create_dir_all(repo.join("core/hooks")).unwrap();
                 fs::write(&deep, "// hook").unwrap();
-                assert!(should_dev_exempt(&deep, &repo), "all_repo mode must exempt core/hooks/deep.rs");
+                assert!(
+                    should_dev_exempt(&deep, &repo),
+                    "all_repo mode must exempt core/hooks/deep.rs"
+                );
                 let outside = PathBuf::from("/tmp/outside.txt");
-                assert!(!should_dev_exempt(&outside, &repo), "path outside repo must not be exempt");
+                assert!(
+                    !should_dev_exempt(&outside, &repo),
+                    "path outside repo must not be exempt"
+                );
             });
         });
         let _ = fs::remove_dir_all(&repo);
@@ -210,7 +219,10 @@ mod tests {
                 let path = repo.join("src/main.rs");
                 fs::create_dir_all(repo.join("src")).unwrap();
                 fs::write(&path, "fn main() {}").unwrap();
-                assert!(!should_dev_exempt(&path, &repo), "all_repo without DEV_EXEMPT=1 must not exempt");
+                assert!(
+                    !should_dev_exempt(&path, &repo),
+                    "all_repo without DEV_EXEMPT=1 must not exempt"
+                );
             });
         });
         let _ = fs::remove_dir_all(&repo);

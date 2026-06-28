@@ -44,6 +44,7 @@ impl GateChecker for Literature {
         let mut findings = Vec::new();
 
         let repo_root = Path::new(&ctx.repo_root);
+        #[allow(clippy::unwrap_used, clippy::expect_used)]
         let doi_re = Regex::new(r"10\.\d{4,}/[\w\.\-/:]+").unwrap();
         let paper_files = find_literature_files(repo_root);
 
@@ -99,9 +100,7 @@ impl GateChecker for Literature {
                 severity: Severity::C,
                 description: "no DOI references found in paper files".to_string(),
                 location: None,
-                suggestion: Some(
-                    "add DOI references to paper or bibliography files".to_string(),
-                ),
+                suggestion: Some("add DOI references to paper or bibliography files".to_string()),
             });
         } else {
             // Deduplicate.
@@ -198,8 +197,14 @@ fn find_literature_files(root: &Path) -> Vec<std::path::PathBuf> {
 
     // Check well-known paper file names in the root directory.
     let well_known = [
-        "paper.tex", "paper.md", "main.tex", "draft.tex", "draft.md",
-        "references.bib", "refs.bib", "bibliography.bib",
+        "paper.tex",
+        "paper.md",
+        "main.tex",
+        "draft.tex",
+        "draft.md",
+        "references.bib",
+        "refs.bib",
+        "bibliography.bib",
     ];
     for name in &well_known {
         let path = root.join(name);

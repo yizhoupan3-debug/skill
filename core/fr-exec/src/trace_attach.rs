@@ -4,14 +4,14 @@ use serde_json::{Map, Value, json};
 use std::path::{Path, PathBuf};
 
 use core_errors::FrameworkError;
+use framework_kernel::stdio_payload_types::TraceStreamReplayRequestPayload;
 use rt_storage::runtime_envelope_ids::ATTACHED_RUNTIME_EVENT_ATTACH_AUTHORITY;
 use rt_storage::runtime_storage::{
     ResolvedStorageBackend, resolve_storage_backend, storage_artifact_exists, storage_read_text,
 };
-use framework_kernel::stdio_payload_types::TraceStreamReplayRequestPayload;
 
-use fr_utils::json_value::{nested_non_empty_string, optional_bool, optional_non_empty_string};
 use super::trace_stream_io::replay_trace_stream;
+use fr_utils::json_value::{nested_non_empty_string, optional_bool, optional_non_empty_string};
 
 const ATTACH_DESCRIPTOR_SCHEMA_VERSION: &str = "runtime-event-attach-descriptor-v1";
 
@@ -102,18 +102,20 @@ fn normalize_attach_request(payload: &Value) -> Result<NormalizedAttachRequest, 
         .get("schema_version")
         .and_then(Value::as_str);
     if let Some(schema_version) = schema_version
-        && schema_version != ATTACH_DESCRIPTOR_SCHEMA_VERSION {
-            return Err(FrameworkError::validation(format!(
-                "Unsupported runtime event attach descriptor schema: {schema_version:?}"
-            )));
-        }
+        && schema_version != ATTACH_DESCRIPTOR_SCHEMA_VERSION
+    {
+        return Err(FrameworkError::validation(format!(
+            "Unsupported runtime event attach descriptor schema: {schema_version:?}"
+        )));
+    }
     let attach_mode = attach_descriptor.get("attach_mode").and_then(Value::as_str);
     if let Some(attach_mode) = attach_mode
-        && attach_mode != "process_external_artifact_replay" {
-            return Err(FrameworkError::validation(format!(
-                "Unsupported runtime event attach mode: {attach_mode:?}"
-            )));
-        }
+        && attach_mode != "process_external_artifact_replay"
+    {
+        return Err(FrameworkError::validation(format!(
+            "Unsupported runtime event attach mode: {attach_mode:?}"
+        )));
+    }
     let expected_scalars = [
         (
             "source_transport_method",
@@ -127,11 +129,12 @@ fn normalize_attach_request(payload: &Value) -> Result<NormalizedAttachRequest, 
     ];
     for (field_name, expected) in expected_scalars {
         if let Some(value) = attach_descriptor.get(field_name).and_then(Value::as_str)
-            && value != expected {
-                return Err(FrameworkError::validation(format!(
-                    "External runtime event attach descriptor must use {field_name}={expected:?}."
-                )));
-            }
+            && value != expected
+        {
+            return Err(FrameworkError::validation(format!(
+                "External runtime event attach descriptor must use {field_name}={expected:?}."
+            )));
+        }
     }
     if let Some(capabilities) = descriptor_mapping(attach_descriptor, "attach_capabilities")? {
         if capabilities.get("artifact_replay").and_then(Value::as_bool) != Some(true) {
@@ -173,14 +176,11 @@ fn normalize_attach_request(payload: &Value) -> Result<NormalizedAttachRequest, 
     let resolution_mapping = descriptor_mapping(attach_descriptor, "resolution")?;
     let resolved_mapping = match descriptor_mapping(attach_descriptor, "resolved_artifacts")? {
         Some(m) => m,
-        None => attach_descriptor
-            .as_object()
-            .ok_or_else(|| {
-                FrameworkError::validation(
-                    "attach descriptor: expected object when resolved_artifacts is absent"
-                        .to_string(),
-                )
-            })?,
+        None => attach_descriptor.as_object().ok_or_else(|| {
+            FrameworkError::validation(
+                "attach descriptor: expected object when resolved_artifacts is absent".to_string(),
+            )
+        })?,
     };
     let descriptor_binding = mapping_string(resolved_mapping, "binding_artifact_path")?;
     let descriptor_handoff = mapping_string(resolved_mapping, "handoff_path")?;
@@ -242,12 +242,13 @@ fn require_requested_artifact(
     field_name: &str,
 ) -> Result<(), FrameworkError> {
     if let Some(path) = path
-        && !storage_artifact_exists(path, storage_backend) {
-            return Err(FrameworkError::validation(format!(
-                "External runtime event attach requested {field_name:?} that does not exist: {}",
-                path.display()
-            )));
-        }
+        && !storage_artifact_exists(path, storage_backend)
+    {
+        return Err(FrameworkError::validation(format!(
+            "External runtime event attach requested {field_name:?} that does not exist: {}",
+            path.display()
+        )));
+    }
     Ok(())
 }
 
@@ -309,7 +310,9 @@ fn normalize_path_for_compare(path: &Path) -> PathBuf {
     if path.is_absolute() {
         return path.to_path_buf();
     }
-    std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")).join(path)
+    std::env::current_dir()
+        .unwrap_or_else(|_| PathBuf::from("."))
+        .join(path)
 }
 
 fn infer_resume_manifest_path(binding_artifact_path: &Path) -> PathBuf {
@@ -389,21 +392,22 @@ fn validate_attached_runtime_alignment(
         if let (Some(binding_artifact_path), Some(handoff_binding_path)) = (
             binding_artifact_path,
             nested_json_path(handoff, &["transport", "binding_artifact_path"])?,
-        )
-            && normalize_path_for_compare(&handoff_binding_path)
-                != normalize_path_for_compare(binding_artifact_path)
-            {
-                return Err(FrameworkError::validation("External runtime event attach rejected mismatched transport/handoff binding artifact paths.".to_string()));
-            }
+        ) && normalize_path_for_compare(&handoff_binding_path)
+            != normalize_path_for_compare(binding_artifact_path)
+        {
+            return Err(FrameworkError::validation("External runtime event attach rejected mismatched transport/handoff binding artifact paths.".to_string()));
+        }
         if let (Some(resume_manifest_path), Some(handoff_resume_manifest_path)) = (
             resume_manifest_path,
             json_path(handoff, "resume_manifest_path")?,
-        )
-            && normalize_path_for_compare(&handoff_resume_manifest_path)
-                != normalize_path_for_compare(resume_manifest_path)
-            {
-                return Err(FrameworkError::validation("External runtime event attach rejected mismatched handoff/resume manifest paths.".to_string()));
-            }
+        ) && normalize_path_for_compare(&handoff_resume_manifest_path)
+            != normalize_path_for_compare(resume_manifest_path)
+        {
+            return Err(FrameworkError::validation(
+                "External runtime event attach rejected mismatched handoff/resume manifest paths."
+                    .to_string(),
+            ));
+        }
     }
 
     if let Some(resume_manifest) = resume_manifest {
@@ -418,12 +422,11 @@ fn validate_attached_runtime_alignment(
         if let (Some(binding_artifact_path), Some(resume_binding_path)) = (
             binding_artifact_path,
             json_path(resume_manifest, "event_transport_path")?,
-        )
-            && normalize_path_for_compare(&resume_binding_path)
-                != normalize_path_for_compare(binding_artifact_path)
-            {
-                return Err(FrameworkError::validation("External runtime event attach rejected mismatched transport/resume binding artifact paths.".to_string()));
-            }
+        ) && normalize_path_for_compare(&resume_binding_path)
+            != normalize_path_for_compare(binding_artifact_path)
+        {
+            return Err(FrameworkError::validation("External runtime event attach rejected mismatched transport/resume binding artifact paths.".to_string()));
+        }
         if let (Some(_handoff), Some(handoff_trace_stream_path), Some(resume_trace_stream_path)) = (
             handoff,
             handoff
@@ -431,12 +434,11 @@ fn validate_attached_runtime_alignment(
                 .transpose()?
                 .flatten(),
             json_path(resume_manifest, "trace_stream_path")?,
-        )
-            && normalize_path_for_compare(&handoff_trace_stream_path)
-                != normalize_path_for_compare(&resume_trace_stream_path)
-            {
-                return Err(FrameworkError::validation("External runtime event attach rejected mismatched handoff/resume trace stream paths.".to_string()));
-            }
+        ) && normalize_path_for_compare(&handoff_trace_stream_path)
+            != normalize_path_for_compare(&resume_trace_stream_path)
+        {
+            return Err(FrameworkError::validation("External runtime event attach rejected mismatched handoff/resume trace stream paths.".to_string()));
+        }
     }
 
     let binding_trace_stream_path =
@@ -448,29 +450,29 @@ fn validate_attached_runtime_alignment(
             .map(|value| json_path(value, "trace_stream_path"))
             .transpose()?
             .flatten(),
-    )
-        && normalize_path_for_compare(&handoff_trace_stream_path)
-            != normalize_path_for_compare(binding_trace_stream_path)
-        {
-            return Err(FrameworkError::validation("External runtime event attach rejected mismatched binding/handoff trace stream paths.".to_string()));
-        }
-    if let (
-        Some(binding_trace_stream_path),
-        Some(_resume_manifest),
-        Some(resume_trace_stream_path),
-    ) = (
+    ) && normalize_path_for_compare(&handoff_trace_stream_path)
+        != normalize_path_for_compare(binding_trace_stream_path)
+    {
+        return Err(FrameworkError::validation(
+            "External runtime event attach rejected mismatched binding/handoff trace stream paths."
+                .to_string(),
+        ));
+    }
+    if let (Some(binding_trace_stream_path), Some(_resume_manifest), Some(resume_trace_stream_path)) = (
         binding_trace_stream_path.as_ref(),
         resume_manifest,
         resume_manifest
             .map(|value| json_path(value, "trace_stream_path"))
             .transpose()?
             .flatten(),
-    )
-        && normalize_path_for_compare(&resume_trace_stream_path)
-            != normalize_path_for_compare(binding_trace_stream_path)
-        {
-            return Err(FrameworkError::validation("External runtime event attach rejected mismatched binding/resume trace stream paths.".to_string()));
-        }
+    ) && normalize_path_for_compare(&resume_trace_stream_path)
+        != normalize_path_for_compare(binding_trace_stream_path)
+    {
+        return Err(FrameworkError::validation(
+            "External runtime event attach rejected mismatched binding/resume trace stream paths."
+                .to_string(),
+        ));
+    }
     Ok(())
 }
 
@@ -481,13 +483,15 @@ fn trace_stream_resolution(
     storage_backend: Option<&ResolvedStorageBackend>,
 ) -> Result<Option<(PathBuf, String)>, FrameworkError> {
     if let Some(handoff) = handoff
-        && let Some(path) = json_path(handoff, "trace_stream_path")? {
-            return Ok(Some((path, "handoff_manifest".to_string())));
-        }
+        && let Some(path) = json_path(handoff, "trace_stream_path")?
+    {
+        return Ok(Some((path, "handoff_manifest".to_string())));
+    }
     if let Some(resume_manifest) = resume_manifest
-        && let Some(path) = json_path(resume_manifest, "trace_stream_path")? {
-            return Ok(Some((path, "resume_manifest".to_string())));
-        }
+        && let Some(path) = json_path(resume_manifest, "trace_stream_path")?
+    {
+        return Ok(Some((path, "resume_manifest".to_string())));
+    }
     if let Some(path) =
         infer_trace_stream_from_binding_artifact(binding_artifact_path, storage_backend)
     {
@@ -553,12 +557,12 @@ pub fn attach_runtime_event_transport(payload: Value) -> Result<Value, Framework
             .map(|payload| json_path(payload, "resume_manifest_path"))
             .transpose()?
             .flatten()
-            && storage_artifact_exists(&handoff_resume_path, storage_backend.as_ref()) {
-                resolved_resume_file = Some(handoff_resume_path.clone());
-                resume_manifest =
-                    load_json_artifact(&Some(handoff_resume_path), storage_backend.as_ref())?;
-                resume_source = Some("handoff_manifest".to_string());
-            }
+        && storage_artifact_exists(&handoff_resume_path, storage_backend.as_ref())
+    {
+        resolved_resume_file = Some(handoff_resume_path.clone());
+        resume_manifest = load_json_artifact(&Some(handoff_resume_path), storage_backend.as_ref())?;
+        resume_source = Some("handoff_manifest".to_string());
+    }
 
     let mut transport_path = binding_path.clone();
     if transport_path.is_none()
@@ -567,20 +571,22 @@ pub fn attach_runtime_event_transport(payload: Value) -> Result<Value, Framework
             .map(|payload| json_path(payload, "event_transport_path"))
             .transpose()?
             .flatten()
-            && storage_artifact_exists(&resume_transport_path, storage_backend.as_ref()) {
-                transport_path = Some(resume_transport_path);
-                binding_source = Some("resume_manifest".to_string());
-            }
+        && storage_artifact_exists(&resume_transport_path, storage_backend.as_ref())
+    {
+        transport_path = Some(resume_transport_path);
+        binding_source = Some("resume_manifest".to_string());
+    }
     if transport_path.is_none()
         && let Some(handoff_transport_path) = handoff
             .as_ref()
             .map(|payload| nested_json_path(payload, &["transport", "binding_artifact_path"]))
             .transpose()?
             .flatten()
-            && storage_artifact_exists(&handoff_transport_path, storage_backend.as_ref()) {
-                transport_path = Some(handoff_transport_path);
-                binding_source = Some("handoff_transport".to_string());
-            }
+        && storage_artifact_exists(&handoff_transport_path, storage_backend.as_ref())
+    {
+        transport_path = Some(handoff_transport_path);
+        binding_source = Some("handoff_transport".to_string());
+    }
 
     if transport_path.is_none() && handoff.is_none() {
         return Err(FrameworkError::validation(
@@ -609,14 +615,15 @@ pub fn attach_runtime_event_transport(payload: Value) -> Result<Value, Framework
     };
 
     if resume_manifest.is_none()
-        && let Some(transport_path) = transport_path.as_ref() {
-            let inferred_resume_path = infer_resume_manifest_path(transport_path);
-            if storage_artifact_exists(&inferred_resume_path, storage_backend.as_ref()) {
-                resolved_resume_file = Some(inferred_resume_path.clone());
-                resume_manifest =
-                    load_json_artifact(&Some(inferred_resume_path), storage_backend.as_ref())?;
-            }
+        && let Some(transport_path) = transport_path.as_ref()
+    {
+        let inferred_resume_path = infer_resume_manifest_path(transport_path);
+        if storage_artifact_exists(&inferred_resume_path, storage_backend.as_ref()) {
+            resolved_resume_file = Some(inferred_resume_path.clone());
+            resume_manifest =
+                load_json_artifact(&Some(inferred_resume_path), storage_backend.as_ref())?;
         }
+    }
 
     validate_attached_runtime_alignment(
         &transport,
@@ -642,12 +649,12 @@ pub fn attach_runtime_event_transport(payload: Value) -> Result<Value, Framework
     if let Some(descriptor_trace_stream_path) = descriptor_trace_stream_path.as_ref()
         && normalize_path_for_compare(descriptor_trace_stream_path)
             != normalize_path_for_compare(&trace_stream_path)
-        {
-            return Err(FrameworkError::validation(
+    {
+        return Err(FrameworkError::validation(
                 "External runtime event attach descriptor must already match canonical 'resolved_artifacts.trace_stream_path'."
                     .to_string(),
             ));
-        }
+    }
     if !storage_artifact_exists(&trace_stream_path, storage_backend.as_ref()) {
         return Err(FrameworkError::validation(format!(
             "External runtime event replay trace stream not found: {}",
@@ -731,19 +738,16 @@ pub fn attach_runtime_event_transport(payload: Value) -> Result<Value, Framework
 /// `attach_runtime_event_transport` to consume the event stream.
 pub fn subscribe_attached_runtime_events(payload: Value) -> Result<Value, FrameworkError> {
     let attached = attach_runtime_event_transport(payload.clone())?;
-    let transport = attached
-        .get("transport")
-        .ok_or_else(|| {
-            FrameworkError::validation(
-                "attached runtime transport payload missing transport".to_string(),
-            )
-        })?;
-    let session_id = optional_non_empty_string(transport, "session_id")
-        .ok_or_else(|| {
-            FrameworkError::validation(
-                "attached runtime transport payload missing session_id".to_string(),
-            )
-        })?;
+    let transport = attached.get("transport").ok_or_else(|| {
+        FrameworkError::validation(
+            "attached runtime transport payload missing transport".to_string(),
+        )
+    })?;
+    let session_id = optional_non_empty_string(transport, "session_id").ok_or_else(|| {
+        FrameworkError::validation(
+            "attached runtime transport payload missing session_id".to_string(),
+        )
+    })?;
     let job_id = optional_non_empty_string(transport, "job_id");
     let trace_stream_path = attached
         .get("trace_stream_path")
@@ -779,11 +783,13 @@ pub fn subscribe_attached_runtime_events(payload: Value) -> Result<Value, Framew
     let heartbeat = optional_bool(&payload, "heartbeat").unwrap_or(false);
     let has_more = replay.has_more;
     let replay_events_empty = replay.events.is_empty();
-    let next_cursor = serde_json::to_value(&replay.next_cursor)
-        .map_err(|err| FrameworkError::validation(format!("serialize attached runtime cursor failed: {err}")))?;
+    let next_cursor = serde_json::to_value(&replay.next_cursor).map_err(|err| {
+        FrameworkError::validation(format!("serialize attached runtime cursor failed: {err}"))
+    })?;
     // Serialize events directly instead of cloning the entire Vec.
-    let events_value = serde_json::to_value(&replay.events)
-        .map_err(|err| FrameworkError::validation(format!("serialize attached runtime events failed: {err}")))?;
+    let events_value = serde_json::to_value(&replay.events).map_err(|err| {
+        FrameworkError::validation(format!("serialize attached runtime events failed: {err}"))
+    })?;
     let after_event_id = optional_non_empty_string(&payload, "after_event_id");
     Ok(json!({
         "schema_version": "runtime-event-stream-v1",

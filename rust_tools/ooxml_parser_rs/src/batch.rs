@@ -1,7 +1,10 @@
 //! OOXML batch processing — delegates to batch_common::engine for shared logic.
-use crate::schema::{classify_text, FileKind, FileResult, ProcessStatus};
-use crate::{detect_ooxml_kind, docx_read_text_string, OoxmlKind};
-use crate::{read_docx_content, read_xlsx_content, read_pptx_content, pptx_read_text_string, xlsx_read_text_string};
+use crate::schema::{FileKind, FileResult, ProcessStatus, classify_text};
+use crate::{OoxmlKind, detect_ooxml_kind, docx_read_text_string};
+use crate::{
+    pptx_read_text_string, read_docx_content, read_pptx_content, read_xlsx_content,
+    xlsx_read_text_string,
+};
 use batch_common::engine;
 pub use batch_common::engine::{BatchOptions, JOBS_AUTO};
 use std::fs;
@@ -20,7 +23,12 @@ pub fn load_paths(manifest: Option<&Path>, stdin_paths: bool) -> anyhow::Result<
     engine::load_paths(manifest, stdin_paths)
 }
 
-fn read_to_result(path: &Path, opts: &BatchOptions, max_rows: usize, text_out_dir: Option<&PathBuf>) -> FileResult {
+fn read_to_result(
+    path: &Path,
+    opts: &BatchOptions,
+    max_rows: usize,
+    text_out_dir: Option<&PathBuf>,
+) -> FileResult {
     let path_str = path.display().to_string();
     let kind = detect_ooxml_kind(path);
     let file_kind = match kind {
@@ -72,8 +80,11 @@ fn read_to_result(path: &Path, opts: &BatchOptions, max_rows: usize, text_out_di
     match extract_result {
         Ok((raw_text, unit_count, mut warnings)) => {
             let sha = mcp_stdio_common::util::file_sha256(path).unwrap_or_default();
-            let (text, truncated) = mcp_stdio_common::util::truncate_text(&raw_text, opts.max_chars);
-            if truncated { warnings.push("text_truncated".to_string()); }
+            let (text, truncated) =
+                mcp_stdio_common::util::truncate_text(&raw_text, opts.max_chars);
+            if truncated {
+                warnings.push("text_truncated".to_string());
+            }
             let char_count = text.chars().count();
             let content_class = classify_text(char_count);
 

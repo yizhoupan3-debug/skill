@@ -161,6 +161,7 @@ pub fn list_indexed_files(conn: &Connection) -> rusqlite::Result<Vec<IndexedFile
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::{IngestStmts, ingest_parsed_file};
     use crate::db::schema::init_schema;
     use crate::parser::{ParsedEdge, ParsedFile, ParsedSymbol};

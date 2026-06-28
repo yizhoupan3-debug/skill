@@ -13,7 +13,7 @@ use std::path::{Path, PathBuf};
 pub type Result<T> = std::result::Result<T, FrameworkError>;
 
 /// Scan `skills_root` recursively and return all slugs that have a SKILL.md.
-
+///
 /// Extracted from `runtime-infra::framework_skills::discover_skill_md_slugs`.
 pub fn discover_skill_md_slugs(skills_root: &Path) -> Result<BTreeSet<String>> {
     let mut slugs = BTreeSet::new();
@@ -28,14 +28,16 @@ fn walk_skill_md(dir: &Path, slugs: &mut BTreeSet<String>) -> Result<()> {
         if path.is_dir() {
             // Skip hidden directories
             if let Some(name) = path.file_name().and_then(|n| n.to_str())
-                && name.starts_with('.') {
-                    continue;
-                }
+                && name.starts_with('.')
+            {
+                continue;
+            }
             walk_skill_md(&path, slugs)?;
         } else if path.file_name().and_then(|s| s.to_str()) == Some("SKILL.md")
-            && let Some(name) = parse_skill_name_from_path(&path)? {
-                slugs.insert(name);
-            }
+            && let Some(name) = parse_skill_name_from_path(&path)?
+        {
+            slugs.insert(name);
+        }
     }
     Ok(())
 }
@@ -72,13 +74,12 @@ pub fn parse_skill_name_from_path(path: &Path) -> Result<Option<String>> {
 /// # Safety
 /// - Slug must not contain `..` or `/`
 /// - Path must resolve to a file under `skills_root`
-pub fn safe_skill_md_path(
-    skills_root: &Path,
-    slug: &str,
-) -> Result<PathBuf> {
+pub fn safe_skill_md_path(skills_root: &Path, slug: &str) -> Result<PathBuf> {
     // Validate slug characters
     if slug.contains("..") || slug.contains('/') || slug.contains('\\') {
-        return Err(FrameworkError::validation(format!("invalid skill slug: `{slug}`")));
+        return Err(FrameworkError::validation(format!(
+            "invalid skill slug: `{slug}`"
+        )));
     }
 
     let path = skills_root.join(slug).join("SKILL.md");
@@ -145,6 +146,8 @@ pub fn find_skill_repo_root(start: &Path) -> Option<PathBuf> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
+
     use super::*;
     use std::fs;
 
@@ -195,8 +198,8 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let path = tmp.path().join("SKILL.md");
         fs::write(&path, "---\nname: test\n---\n").unwrap();
-        let name = parse_skill_name_from_path(&path)
-            .expect("parse_skill_name_from_path should not error");
+        let name =
+            parse_skill_name_from_path(&path).expect("parse_skill_name_from_path should not error");
         assert_eq!(name.as_deref(), Some("test"));
     }
 }

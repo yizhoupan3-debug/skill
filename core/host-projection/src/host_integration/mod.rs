@@ -15,7 +15,6 @@ use std::thread;
 type Result<T> = std::result::Result<T, FrameworkError>;
 use std::time::{Duration, Instant};
 
-
 const DEFAULT_TUI_STATUS_ITEMS: [&str; 4] = [
     "model-with-reasoning",
     "fast-mode",
@@ -201,9 +200,13 @@ impl ProjectionCommand {
 
     /// Parse `--host-home` pairs into `(host_id, path)` tuples.
     pub fn parsed_host_homes(&self) -> Vec<(String, PathBuf)> {
-        self.host_homes.iter().filter_map(|s| {
-            s.split_once('=').map(|(id, path)| (id.to_string(), PathBuf::from(path)))
-        }).collect()
+        self.host_homes
+            .iter()
+            .filter_map(|s| {
+                s.split_once('=')
+                    .map(|(id, path)| (id.to_string(), PathBuf::from(path)))
+            })
+            .collect()
     }
 }
 
@@ -225,9 +228,13 @@ pub struct ProjectionStatusCommand {
 impl ProjectionStatusCommand {
     /// Parse `--host-home` pairs into `(host_id, path)` tuples.
     pub fn parsed_host_homes(&self) -> Vec<(String, PathBuf)> {
-        self.host_homes.iter().filter_map(|s| {
-            s.split_once('=').map(|(id, path)| (id.to_string(), PathBuf::from(path)))
-        }).collect()
+        self.host_homes
+            .iter()
+            .filter_map(|s| {
+                s.split_once('=')
+                    .map(|(id, path)| (id.to_string(), PathBuf::from(path)))
+            })
+            .collect()
     }
 }
 
@@ -267,14 +274,13 @@ mod roots;
 pub use artifacts::*;
 pub use projection::*;
 pub use roots::{
-    McpRouterRsCommand, McpCodegraphCommand, cargo_router_rs_executable,
+    McpCodegraphCommand, McpRouterRsCommand, cargo_router_rs_executable,
     codegraph_mcp_cargo_bootstrap_args, ensure_router_rs_installed_for_mcp_with_roots,
-    is_ephemeral_executable_path, is_repo_build_executable_path,
-    mcp_codegraph_command_value, mcp_router_rs_command_value, nearest_marker_root,
-    normalize_path, resolve_artifact_root, resolve_framework_root, resolve_host_home,
-    resolve_maint_roots, resolve_mcp_codegraph_command, resolve_mcp_router_rs_command,
-    resolve_projection_framework_root, resolve_projection_roots, resolve_project_root,
-    resolve_stable_router_rs_executable, router_rs_cargo_bootstrap_args,
+    is_ephemeral_executable_path, is_repo_build_executable_path, mcp_codegraph_command_value,
+    mcp_router_rs_command_value, nearest_marker_root, normalize_path, resolve_artifact_root,
+    resolve_framework_root, resolve_host_home, resolve_maint_roots, resolve_mcp_codegraph_command,
+    resolve_mcp_router_rs_command, resolve_project_root, resolve_projection_framework_root,
+    resolve_projection_roots, resolve_stable_router_rs_executable, router_rs_cargo_bootstrap_args,
     run_host_integration_payload, try_framework_root_from_current_exe,
     try_framework_root_from_workspace_env, validate_mcp_command_binary,
     workspace_mcp_codegraph_release_binary,
@@ -282,6 +288,7 @@ pub use roots::{
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use serial_test::serial;
 
@@ -345,7 +352,8 @@ mod tests {
             load_runtime_registry_payload(&root).expect_err("expected missing registry error");
         let expected_registry = root.join("configs/framework/RUNTIME_REGISTRY.json");
         assert!(
-            err.to_string().contains(expected_registry.to_string_lossy().as_ref()),
+            err.to_string()
+                .contains(expected_registry.to_string_lossy().as_ref()),
             "error should include expected repo-local registry path: {err}"
         );
         assert!(
@@ -570,8 +578,8 @@ mod tests {
         };
         // SAFETY: test-only; no other thread reads/writes env concurrently in this test context.
         unsafe { core_state_utils::env_sync::set_env("HOME", &home) };
-        let outcome =
-            install_mcp_server(&roots, &cursor_home.join("mcp.json"), "cursor", "user").expect("install");
+        let outcome = install_mcp_server(&roots, &cursor_home.join("mcp.json"), "cursor", "user")
+            .expect("install");
         assert!(
             outcome.changed,
             "expected stale browser-mcp entry to be rewritten"
@@ -638,14 +646,9 @@ mod tests {
         unsafe { core_state_utils::env_sync::set_env("CLAUDE_HOME", &custom_claude) };
 
         let host_homes = vec![("claude".to_string(), custom_claude.clone())];
-        let roots = resolve_projection_roots(
-            None,
-            Some(&root.join("project")),
-            None,
-            &host_homes,
-            None,
-        )
-        .expect("resolve roots");
+        let roots =
+            resolve_projection_roots(None, Some(&root.join("project")), None, &host_homes, None)
+                .expect("resolve roots");
         assert_eq!(roots.account_home_root, os_home);
         assert_eq!(
             roots.host_home_root("claude").unwrap().as_path(),
@@ -744,8 +747,8 @@ mod tests {
             .collect(),
         };
 
-        let changed =
-            super::projection::ensure_project_research_mcp_json(&roots, "claude").expect("project mcp json");
+        let changed = super::projection::ensure_project_research_mcp_json(&roots, "claude")
+            .expect("project mcp json");
         assert!(changed);
 
         let payload: Value =

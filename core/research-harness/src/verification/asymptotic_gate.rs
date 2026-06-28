@@ -18,8 +18,8 @@
 use quality_gate::checker::GateChecker;
 use quality_gate::types::{CheckContext, CheckResult, Finding, Severity};
 
-use crate::verification::asymptotic::{self, AsymptoticStep, OrderRelation};
 use crate::types::{VerificationResult, VerificationStatus};
+use crate::verification::asymptotic::{self, AsymptoticStep, OrderRelation};
 
 fn vr_to_finding(vr: &VerificationResult, id_prefix: &str) -> Finding {
     let severity = match vr.status {
@@ -34,8 +34,13 @@ fn vr_to_finding(vr: &VerificationResult, id_prefix: &str) -> Finding {
         description: vr.details.clone(),
         location: None,
         suggestion: if matches!(vr.status, VerificationStatus::Fail) {
-            Some("asymptotic claim failed verification — review expressions and relation".to_string())
-        } else { None },
+            Some(
+                "asymptotic claim failed verification — review expressions and relation"
+                    .to_string(),
+            )
+        } else {
+            None
+        },
     }
 }
 
@@ -72,9 +77,15 @@ impl GateChecker for Asymptotic {
                 severity: Severity::C,
                 description: "No output_data provided — asymptotic checks skipped".to_string(),
                 location: None,
-                suggestion: Some("pass output_data with asymptotic keys to enable checks".to_string()),
+                suggestion: Some(
+                    "pass output_data with asymptotic keys to enable checks".to_string(),
+                ),
             });
-            return CheckResult { checker_id: self.id().to_string(), passed: true, findings };
+            return CheckResult {
+                checker_id: self.id().to_string(),
+                passed: true,
+                findings,
+            };
         };
 
         // Magnitude estimate
@@ -88,22 +99,40 @@ impl GateChecker for Asymptotic {
 
         // Asymptotic chain verification
         if let Some(chain_data) = data.get("chain") {
-            let var = chain_data.get("var").and_then(|v| v.as_str()).unwrap_or("x");
-            let regime = chain_data.get("regime").and_then(|v| v.as_str()).unwrap_or("oo");
-            let sympy_check = chain_data.get("sympy_check").and_then(|v| v.as_bool()).unwrap_or(false);
+            let var = chain_data
+                .get("var")
+                .and_then(|v| v.as_str())
+                .unwrap_or("x");
+            let regime = chain_data
+                .get("regime")
+                .and_then(|v| v.as_str())
+                .unwrap_or("oo");
+            let sympy_check = chain_data
+                .get("sympy_check")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
             if let Some(steps_arr) = chain_data.get("steps").and_then(|v| v.as_array()) {
-                let steps: Vec<AsymptoticStep> = steps_arr.iter().filter_map(|s| {
-                    let premise = s.get("premise")?.as_str()?;
-                    let conclusion = s.get("conclusion")?.as_str()?;
-                    let rel = s.get("relation").map(|r| r.as_str().unwrap_or("asymp")).unwrap_or("asymp");
-                    let justification = s.get("justification").and_then(|v| v.as_str()).unwrap_or("");
-                    Some(AsymptoticStep {
-                        premise: premise.to_string(),
-                        relation: parse_order_relation(rel),
-                        conclusion: conclusion.to_string(),
-                        justification: justification.to_string(),
+                let steps: Vec<AsymptoticStep> = steps_arr
+                    .iter()
+                    .filter_map(|s| {
+                        let premise = s.get("premise")?.as_str()?;
+                        let conclusion = s.get("conclusion")?.as_str()?;
+                        let rel = s
+                            .get("relation")
+                            .map(|r| r.as_str().unwrap_or("asymp"))
+                            .unwrap_or("asymp");
+                        let justification = s
+                            .get("justification")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("");
+                        Some(AsymptoticStep {
+                            premise: premise.to_string(),
+                            relation: parse_order_relation(rel),
+                            conclusion: conclusion.to_string(),
+                            justification: justification.to_string(),
+                        })
                     })
-                }).collect();
+                    .collect();
                 if !steps.is_empty() {
                     let vr = asymptotic::verify_asymptotic_chain(&steps, var, regime, sympy_check);
                     findings.push(vr_to_finding(&vr, "asymptotic_chain"));
@@ -115,14 +144,29 @@ impl GateChecker for Asymptotic {
         if let Some(claim) = data.get("claim") {
             let f = claim.get("f").and_then(|v| v.as_str()).unwrap_or("");
             let g = claim.get("g").and_then(|v| v.as_str()).unwrap_or("");
-            let relation = claim.get("relation").and_then(|v| v.as_str()).unwrap_or("asymp");
+            let relation = claim
+                .get("relation")
+                .and_then(|v| v.as_str())
+                .unwrap_or("asymp");
             let var = claim.get("var").and_then(|v| v.as_str()).unwrap_or("x");
             let regime = claim.get("regime").and_then(|v| v.as_str()).unwrap_or("oo");
-            let vr = asymptotic::check_asymptotic_claim(f, g, &parse_order_relation(relation), var, regime);
+            let vr = asymptotic::check_asymptotic_claim(
+                f,
+                g,
+                &parse_order_relation(relation),
+                var,
+                regime,
+            );
             findings.push(vr_to_finding(&vr, "asymptotic_claim"));
         }
 
-        let passed = findings.iter().all(|f| matches!(f.severity, Severity::C | Severity::Warning));
-        CheckResult { checker_id: self.id().to_string(), passed, findings }
+        let passed = findings
+            .iter()
+            .all(|f| matches!(f.severity, Severity::C | Severity::Warning));
+        CheckResult {
+            checker_id: self.id().to_string(),
+            passed,
+            findings,
+        }
     }
 }

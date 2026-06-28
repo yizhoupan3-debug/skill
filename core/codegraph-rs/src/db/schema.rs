@@ -150,6 +150,7 @@ fn migrate_v3_to_v4(conn: &Connection) -> rusqlite::Result<()> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::{META_SCHEMA_VERSION_KEY, init_schema, migrate_schema};
     use crate::SCHEMA_VERSION;
     use crate::db::index_ops::get_meta;

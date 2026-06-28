@@ -8,8 +8,8 @@
 //! No env-var gate — runs unconditionally as a CI performance gate.
 //! All input data is generated in-memory.
 
-use criterion::{Criterion, black_box};
 use core_state_utils::jsonl_maintenance::compact_jsonl_with_content;
+use criterion::{Criterion, black_box};
 use std::time::{Duration, Instant};
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -135,7 +135,10 @@ fn bench_compact_jsonl(c: &mut Criterion) {
         samples.push(start.elapsed());
     }
     let _ = std::fs::remove_dir_all(&tmp_dir);
-    report_latency("compact_jsonl/over_threshold_with_dedup_105of100", &mut samples);
+    report_latency(
+        "compact_jsonl/over_threshold_with_dedup_105of100",
+        &mut samples,
+    );
 }
 
 fn main() {

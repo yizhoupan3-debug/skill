@@ -318,9 +318,7 @@ fn run_loop_inner(
             entry.loop_id,
         );
     }
-    if should_check
-        && let Some(current_goal_text) = current_goal
-    {
+    if should_check && let Some(current_goal_text) = current_goal {
         let result = crate::drift::perform_drift_check(&mut state.anti_drift, &current_goal_text);
         tracing::warn!(
             "[goal-engine] anti-drift check at cycle {}: drift_detected={}, score={:.2}",
@@ -350,12 +348,12 @@ fn run_loop_inner(
         if state.circuit_breaker.consecutive_failures >= threshold {
             if entry.research_enabled {
                 let escalation = barrier_escalation(
-                            entry,
-                            &entry.loop_id,
-                            run_id,
-                            state.circuit_breaker.consecutive_failures,
-                            ctx.repo_root,
-                        )?;
+                    entry,
+                    &entry.loop_id,
+                    run_id,
+                    state.circuit_breaker.consecutive_failures,
+                    ctx.repo_root,
+                )?;
                 if escalation.should_resume() {
                     return Err(LoopError::ResearchEscalation(format!(
                         "barrier={} candidates={}: research complete, auto-resume loop",
@@ -727,8 +725,7 @@ fn evaluate_subagent_output(
     output: &SubagentResult,
 ) -> AggregateActionResult {
     let record_path = closeout_path(repo_root, loop_id, run_id, &action.action_id);
-    if let Ok(Some(record)) = read_action_record(repo_root, loop_id, run_id, &action.action_id)
-    {
+    if let Ok(Some(record)) = read_action_record(repo_root, loop_id, run_id, &action.action_id) {
         let verification =
             verify_closeout_with_evidence(&record.closeout, repo_root, &action.action_id);
 

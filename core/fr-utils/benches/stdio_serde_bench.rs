@@ -21,7 +21,8 @@ use serde_json::Value;
 
 const ROUTE_REQUEST_JSON: &str = r#"{"id":1,"op":"route","payload":{"task":"find me a pdf summary tool","session_id":"sess_abc123","first_turn":true}}"#;
 
-const SEARCH_REQUEST_JSON: &str = r#"{"id":2,"op":"search_skills","payload":{"query":"code review automation","top_k":10}}"#;
+const SEARCH_REQUEST_JSON: &str =
+    r#"{"id":2,"op":"search_skills","payload":{"query":"code review automation","top_k":10}}"#;
 
 const EXECUTE_REQUEST_JSON: &str = r#"{"id":3,"op":"execute","payload":{"task_id":"task_001","skill":"code-review","args":{"mode":"deep","target":"src/main.rs"}}}"#;
 

@@ -33,8 +33,12 @@ pub fn compact_repo_relative_segments(rel_raw: &str) -> Option<PathBuf> {
 /// Check if a JSON key name suggests it contains a file path.
 pub fn is_path_key(key: &str) -> bool {
     let lower = key.to_ascii_lowercase();
-    lower.contains("path") || lower.contains("file") || lower.contains("dir")
-        || lower.contains("directory") || lower == "cwd" || lower == "command"
+    lower.contains("path")
+        || lower.contains("file")
+        || lower.contains("dir")
+        || lower.contains("directory")
+        || lower == "cwd"
+        || lower == "command"
 }
 
 /// Check if a path looks like framework source code.
@@ -49,16 +53,21 @@ pub fn is_generated_entrypoint(path: &str) -> bool {
 
 /// Check if a path is host-private state (data-driven via generated `host_home_dirs`).
 pub fn is_host_private_path(path: &str) -> bool {
-    if path.contains("/hook-state/") { return true; }
+    if path.contains("/hook-state/") {
+        return true;
+    }
     for dir in framework_kernel::runtime_registry::host_home_dirs() {
-        if path.contains(&format!("/{dir}/")) { return true; }
+        if path.contains(&format!("/{dir}/")) {
+            return true;
+        }
     }
     false
 }
 
 /// Check if a path is a settings/config file.
 pub fn is_settings_path(path: &str) -> bool {
-    path.ends_with("settings.json") || path.ends_with("settings.local.json")
-        || path.ends_with("hooks.json") || path.ends_with("config.json")
+    path.ends_with("settings.json")
+        || path.ends_with("settings.local.json")
+        || path.ends_with("hooks.json")
+        || path.ends_with("config.json")
 }
-

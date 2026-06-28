@@ -127,6 +127,7 @@ fn scrub_concat_evils() -> (String, String) {
 
 #[cfg(test)]
 mod spoof_scrub_tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     #[test]

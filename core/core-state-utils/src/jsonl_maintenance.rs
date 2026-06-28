@@ -39,8 +39,9 @@ pub fn compact_jsonl_if_needed(path: &Path, max_lines: usize) -> Result<bool, Fr
     if !path.is_file() {
         return Ok(false);
     }
-    let content = fs::read_to_string(path)
-        .map_err(|err| FrameworkError::validation(format!("compact_jsonl: read {}: {err}", path.display())))?;
+    let content = fs::read_to_string(path).map_err(|err| {
+        FrameworkError::validation(format!("compact_jsonl: read {}: {err}", path.display()))
+    })?;
     compact_jsonl_with_content(path, &content, max_lines)
 }
 
@@ -71,13 +72,19 @@ pub fn compact_jsonl_with_content(
         let parent = path.parent().ok_or_else(|| {
             FrameworkError::validation(format!("compact_jsonl: no parent for {}", path.display()))
         })?;
-        fs::create_dir_all(parent)
-            .map_err(|err| FrameworkError::validation(format!("compact_jsonl: mkdir {}: {err}", parent.display())))?;
+        fs::create_dir_all(parent).map_err(|err| {
+            FrameworkError::validation(format!("compact_jsonl: mkdir {}: {err}", parent.display()))
+        })?;
         fs::OpenOptions::new()
             .write(true)
             .open(path)
             .and_then(|f| f.set_len(0))
-            .map_err(|err| FrameworkError::validation(format!("compact_jsonl: truncate-all {}: {err}", path.display())))?;
+            .map_err(|err| {
+                FrameworkError::validation(format!(
+                    "compact_jsonl: truncate-all {}: {err}",
+                    path.display()
+                ))
+            })?;
         return Ok(true);
     }
 
@@ -129,8 +136,12 @@ pub fn truncate_corrupt_tail(path: &Path) -> Result<bool, FrameworkError> {
         return Ok(false);
     }
 
-    let content = fs::read_to_string(path)
-        .map_err(|err| FrameworkError::validation(format!("truncate_corrupt_tail: read {}: {err}", path.display())))?;
+    let content = fs::read_to_string(path).map_err(|err| {
+        FrameworkError::validation(format!(
+            "truncate_corrupt_tail: read {}: {err}",
+            path.display()
+        ))
+    })?;
 
     if content.is_empty() {
         return Ok(false);
@@ -163,7 +174,10 @@ pub fn truncate_corrupt_tail(path: &Path) -> Result<bool, FrameworkError> {
                     f.sync_all()
                 })
                 .map_err(|err| {
-                    FrameworkError::validation(format!("truncate_corrupt_tail: set_len {}: {err}", path.display()))
+                    FrameworkError::validation(format!(
+                        "truncate_corrupt_tail: set_len {}: {err}",
+                        path.display()
+                    ))
                 })?;
             Ok(true)
         }
@@ -182,8 +196,12 @@ pub fn truncate_and_compact(path: &Path, max_lines: usize) -> Result<bool, Frame
         return Ok(false);
     }
 
-    let content = fs::read_to_string(path)
-        .map_err(|err| FrameworkError::validation(format!("truncate_and_compact: read {}: {err}", path.display())))?;
+    let content = fs::read_to_string(path).map_err(|err| {
+        FrameworkError::validation(format!(
+            "truncate_and_compact: read {}: {err}",
+            path.display()
+        ))
+    })?;
 
     if content.is_empty() {
         return Ok(false);
@@ -297,7 +315,9 @@ fn compact_jsonl_core(content: &str, max_lines: usize) -> Result<Option<String>,
     let entry_count = entries.len(); // captured before the consuming into_iter below
 
     for (i, (mut obj, snap_type)) in entries.into_iter().enumerate() {
-        if let Some(tt) = snap_type && last_snapshot.get(tt.as_str()) != Some(&i) {
+        if let Some(tt) = snap_type
+            && last_snapshot.get(tt.as_str()) != Some(&i)
+        {
             continue; // Redundant — a newer snapshot of this type exists.
         }
 
@@ -306,8 +326,9 @@ fn compact_jsonl_core(content: &str, max_lines: usize) -> Result<Option<String>,
         // (which derive seq from line count) will always be > this max.
         obj.insert("seq".to_string(), Value::from(kept_count as u64));
 
-        let line = serde_json::to_string(&Value::Object(obj))
-            .map_err(|e| FrameworkError::validation(format!("compact_jsonl: serialize seq {kept_count}: {e}")))?;
+        let line = serde_json::to_string(&Value::Object(obj)).map_err(|e| {
+            FrameworkError::validation(format!("compact_jsonl: serialize seq {kept_count}: {e}"))
+        })?;
         compacted.push_str(&line);
         compacted.push('\n');
         kept_count += 1;
@@ -349,11 +370,12 @@ fn extract_snapshot_type_from_map(obj: &Map<String, Value>) -> Option<String> {
 /// Atomic write: temp file + fsync + rename.
 fn atomic_write_jsonl(path: &Path, payload: &str) -> Result<(), FrameworkError> {
     let tmp_path = derive_compact_tmp_path(path);
-    let parent = path
-        .parent()
-        .ok_or_else(|| FrameworkError::validation(format!("compact_jsonl: no parent for {}", path.display())))?;
-    fs::create_dir_all(parent)
-        .map_err(|err| FrameworkError::validation(format!("compact_jsonl: mkdir {}: {err}", parent.display())))?;
+    let parent = path.parent().ok_or_else(|| {
+        FrameworkError::validation(format!("compact_jsonl: no parent for {}", path.display()))
+    })?;
+    fs::create_dir_all(parent).map_err(|err| {
+        FrameworkError::validation(format!("compact_jsonl: mkdir {}: {err}", parent.display()))
+    })?;
 
     {
         let mut tmp_file = fs::OpenOptions::new()
@@ -361,12 +383,23 @@ fn atomic_write_jsonl(path: &Path, payload: &str) -> Result<(), FrameworkError> 
             .truncate(true)
             .write(true)
             .open(&tmp_path)
-            .map_err(|err| FrameworkError::validation(format!("compact_jsonl: open tmp {}: {err}", tmp_path.display())))?;
-        tmp_file
-            .write_all(payload.as_bytes())
-            .map_err(|err| FrameworkError::validation(format!("compact_jsonl: write tmp {}: {err}", tmp_path.display())))?;
+            .map_err(|err| {
+                FrameworkError::validation(format!(
+                    "compact_jsonl: open tmp {}: {err}",
+                    tmp_path.display()
+                ))
+            })?;
+        tmp_file.write_all(payload.as_bytes()).map_err(|err| {
+            FrameworkError::validation(format!(
+                "compact_jsonl: write tmp {}: {err}",
+                tmp_path.display()
+            ))
+        })?;
         tmp_file.sync_all().map_err(|err| {
-            FrameworkError::validation(format!("compact_jsonl: fsync tmp {}: {err}", tmp_path.display()))
+            FrameworkError::validation(format!(
+                "compact_jsonl: fsync tmp {}: {err}",
+                tmp_path.display()
+            ))
         })?;
     }
     fs::rename(&tmp_path, path).map_err(|err| {
@@ -402,7 +435,9 @@ fn atomic_write_jsonl(path: &Path, payload: &str) -> Result<(), FrameworkError> 
 fn cleanup_stale_compact_tmp_files(path: &Path) {
     let pid = std::process::id();
     let pattern = format!(".compact.tmp-{pid}-");
-    if let Some(parent) = path.parent() && let Ok(entries) = fs::read_dir(parent) {
+    if let Some(parent) = path.parent()
+        && let Ok(entries) = fs::read_dir(parent)
+    {
         for entry in entries.flatten() {
             let name = match entry.file_name().to_str() {
                 Some(n) => n.to_string(),
@@ -626,7 +661,10 @@ mod tests {
         }
         write_content(&path, &lines);
 
-        assert!(compact_jsonl_if_needed(&path, 100).unwrap(), "should compact");
+        assert!(
+            compact_jsonl_if_needed(&path, 100).unwrap(),
+            "should compact"
+        );
 
         let kept = read_lines(&path);
         // 55 steps + 1 goal_state = 56 lines
@@ -712,7 +750,10 @@ mod tests {
         }
 
         let goal = lines.iter().find(|v| v["tx_type"] == "goal_state").unwrap();
-        assert_eq!(goal["version"], 9, "last goal_state (version 9) must survive");
+        assert_eq!(
+            goal["version"], 9,
+            "last goal_state (version 9) must survive"
+        );
     }
 
     #[test]
@@ -768,7 +809,10 @@ mod tests {
         fs::create_dir_all(&tmp).unwrap();
         let path = tmp.join("test.jsonl");
         fs::write(&path, "{\"a\":1}\n").unwrap();
-        assert!(!truncate_and_compact(&path, 300).unwrap(), "under threshold");
+        assert!(
+            !truncate_and_compact(&path, 300).unwrap(),
+            "under threshold"
+        );
         let _ = fs::remove_dir_all(&tmp);
     }
 
@@ -787,7 +831,10 @@ mod tests {
         fs::create_dir_all(&tmp).unwrap();
         let path = tmp.join("test.jsonl");
         fs::write(&path, "garbage\nmore-garbage\n").unwrap();
-        assert!(truncate_and_compact(&path, 300).unwrap(), "should truncate all");
+        assert!(
+            truncate_and_compact(&path, 300).unwrap(),
+            "should truncate all"
+        );
         let content = fs::read_to_string(&path).unwrap();
         assert!(content.is_empty(), "all corrupt → empty file");
         let _ = fs::remove_dir_all(&tmp);
@@ -800,9 +847,7 @@ mod tests {
         // goal_state + 93 steps) + 3 non-object lines.
         let mut buf = String::new();
         for i in 0..93 {
-            buf.push_str(
-                &json!({"tx_type": "step", "seq": i, "i": i}).to_string(),
-            );
+            buf.push_str(&json!({"tx_type": "step", "seq": i, "i": i}).to_string());
             buf.push('\n');
         }
         for i in 0..5 {
@@ -817,7 +862,8 @@ mod tests {
         buf.push_str("42\n");
 
         let result = compact_jsonl_core(&buf, 100).unwrap();
-        let compacted = result.expect("should compact (93+5=98 objects + 3 non-objects = 101 lines)");
+        let compacted =
+            result.expect("should compact (93+5=98 objects + 3 non-objects = 101 lines)");
 
         let lines: Vec<Value> = compacted
             .lines()

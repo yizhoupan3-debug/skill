@@ -6,7 +6,7 @@
 use regex::Regex;
 use std::sync::OnceLock;
 
-use super::{strip_quoted_or_codeblock_or_url, compile_patterns};
+use super::{compile_patterns, strip_quoted_or_codeblock_or_url};
 
 fn review_patterns() -> &'static [Regex] {
     crate::review_routing_signals::review_gate_compiled_regexes()
@@ -65,7 +65,8 @@ fn review_override_patterns() -> &'static Vec<Regex> {
             r"(?i)不要.*子代理",
             r"(?i)不用.*子代理",
             r"(?i)(你|你自己).*(本地处理|直接处理|自己做)",
-        ]).unwrap_or_else(|e| panic!("compile review override patterns failed: {e}"))
+        ])
+        .unwrap_or_else(|e| panic!("compile review override patterns failed: {e}"))
     })
 }
 
@@ -75,7 +76,8 @@ fn delegation_override_patterns() -> &'static Vec<Regex> {
         compile_patterns(&[
             r"(?i)no (parallel|delegation|delegating|split)",
             r"(?i)(不要|不用).*(分工|并行|分路|分头)",
-        ]).unwrap_or_else(|e| panic!("compile delegation override patterns failed: {e}"))
+        ])
+        .unwrap_or_else(|e| panic!("compile delegation override patterns failed: {e}"))
     })
 }
 
@@ -210,8 +212,7 @@ pub fn should_inject_spawn_first_review_nudge(
     repo_root: Option<&std::path::Path>,
     prompt_text: &str,
 ) -> bool {
-    if crate::hook_common::is_task_profile(repo_root, prompt_text)
-    {
+    if crate::hook_common::is_task_profile(repo_root, prompt_text) {
         // Task profiles suppress spawn-first nudge.
         // The "task" profile entry in RUNTIME_REGISTRY.json always
         // has disable_spawn_first_nudge: true.
@@ -549,8 +550,8 @@ mod tests {
     fn review_subagent_gate_mdc_lists_deep_lanes_consistent_with_hook() {
         use std::path::PathBuf;
 
-        let mdc_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../../.rules/review-subagent-gate.mdc");
+        let mdc_path =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../.rules/review-subagent-gate.mdc");
         let mdc = std::fs::read_to_string(&mdc_path)
             .unwrap_or_else(|e| panic!("read {}: {e}", mdc_path.display()));
         for needle in ["reviewer_lanes", "fork_context"] {
@@ -598,8 +599,8 @@ mod tests {
                 !parallel_marker_re().is_match("hello world"),
             )
         })
-            .await
-            .expect("spawn_blocking");
+        .await
+        .expect("spawn_blocking");
         assert!(result.0, "parallel_marker_re");
         assert!(result.1, "task_context_re");
         assert!(result.2, "capability_domain_re");

@@ -6,7 +6,6 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::SystemTime;
 
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SkillRecord {
     pub slug: String,
@@ -410,7 +409,10 @@ impl RecordRowIndexes {
         session_start: Option<usize>,
     ) -> Self {
         let [slug, layer, owner, gate, summary, trigger_hints] = required;
-        let required_max = *required.iter().max().expect("required columns");
+        let required_max = *required
+            .iter()
+            .max()
+            .unwrap_or_else(|| panic!("required columns: [usize; 6] is non-empty by type"));
         Self {
             slug,
             skill_path: None,

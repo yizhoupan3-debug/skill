@@ -165,6 +165,7 @@ pub fn weighted_ngram_similarity(a: &str, b: &str) -> f64 {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     #[test]
@@ -199,15 +200,27 @@ mod tests {
 
     #[test]
     fn jaccard_identical() {
-        let a = ["hel", "ell", "llo"].iter().map(|s| s.to_string()).collect();
-        let b = ["hel", "ell", "llo"].iter().map(|s| s.to_string()).collect();
+        let a = ["hel", "ell", "llo"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        let b = ["hel", "ell", "llo"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
         assert!((jaccard_similarity(&a, &b) - 1.0).abs() < f64::EPSILON);
     }
 
     #[test]
     fn jaccard_disjoint() {
-        let a = ["hel", "ell", "llo"].iter().map(|s| s.to_string()).collect();
-        let b = ["wor", "orl", "rld"].iter().map(|s| s.to_string()).collect();
+        let a = ["hel", "ell", "llo"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        let b = ["wor", "orl", "rld"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
         assert!((jaccard_similarity(&a, &b) - 0.0).abs() < f64::EPSILON);
     }
 
@@ -220,8 +233,14 @@ mod tests {
 
     #[test]
     fn jaccard_partial_overlap() {
-        let a = ["abc", "bcd", "cde"].iter().map(|s| s.to_string()).collect();
-        let b = ["bcd", "cde", "def"].iter().map(|s| s.to_string()).collect();
+        let a = ["abc", "bcd", "cde"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        let b = ["bcd", "cde", "def"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
         assert!((jaccard_similarity(&a, &b) - 0.5).abs() < f64::EPSILON);
     }
 
@@ -300,19 +319,28 @@ mod tests {
     fn weighted_ngram_cjk_rewording() {
         // CJK reordering (code review → review code) should share most characters
         let sim = weighted_ngram_similarity("代码审查", "审查代码");
-        assert!(sim > 0.5, "expected high similarity for CJK reordering, got {sim}");
+        assert!(
+            sim > 0.5,
+            "expected high similarity for CJK reordering, got {sim}"
+        );
     }
 
     #[test]
     fn weighted_ngram_mixed_language() {
         // Mixed language: shares "提交" character and ASCII letters
         let sim = weighted_ngram_similarity("git 提交", "gitx 提交");
-        assert!(sim > 0.3, "expected moderate similarity for mixed language, got {sim}");
+        assert!(
+            sim > 0.3,
+            "expected moderate similarity for mixed language, got {sim}"
+        );
     }
 
     #[test]
     fn weighted_ngram_no_relation() {
         let sim = weighted_ngram_similarity("量子物理", "pizza delivery");
-        assert!(sim < 0.3, "expected low similarity for unrelated text, got {sim}");
+        assert!(
+            sim < 0.3,
+            "expected low similarity for unrelated text, got {sim}"
+        );
     }
 }

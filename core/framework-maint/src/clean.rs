@@ -10,7 +10,10 @@ use std::path::Path;
 use framework_kernel::runtime_registry::ALL_KNOWN_HOST_DIRS;
 use tracing;
 
-pub(super) fn clean_rust_target_dirs(repo_root: &Path, dry_run: bool) -> Result<(), FrameworkError> {
+pub(super) fn clean_rust_target_dirs(
+    repo_root: &Path,
+    dry_run: bool,
+) -> Result<(), FrameworkError> {
     clean_targets_walk(repo_root, dry_run)?;
     Ok(())
 }
@@ -168,10 +171,11 @@ pub(super) fn clean_orphan_directories(
         // Check if the host dir itself is older than TTL.
         if let Ok(meta) = fs::metadata(&dir)
             && let Ok(modified) = meta.modified()
-                && let Ok(duration) = modified.duration_since(std::time::UNIX_EPOCH)
-                    && duration.as_secs() < cutoff {
-                        continue; // Too new to clean.
-                    }
+            && let Ok(duration) = modified.duration_since(std::time::UNIX_EPOCH)
+            && duration.as_secs() < cutoff
+        {
+            continue; // Too new to clean.
+        }
 
         // Walk entries under the host dir, looking for empty dirs or known patterns.
         let entries = match fs::read_dir(&dir) {
@@ -221,7 +225,10 @@ pub(super) fn clean_orphan_directories(
             }
 
             if dry_run {
-                println!("  DRY-RUN: would remove empty or stale dir {}", path.display());
+                println!(
+                    "  DRY-RUN: would remove empty or stale dir {}",
+                    path.display()
+                );
             } else {
                 fs::remove_dir(&path)?;
                 println!("  removed empty/stale dir {}", path.display());
@@ -230,9 +237,7 @@ pub(super) fn clean_orphan_directories(
         }
     }
 
-    let summary = format!(
-        "orphans: removed {total_removed} dirs, skipped {total_skipped} dirs"
-    );
+    let summary = format!("orphans: removed {total_removed} dirs, skipped {total_skipped} dirs");
     if dry_run {
         println!("  DRY-RUN: {summary}");
     } else {

@@ -121,8 +121,7 @@ pub fn has_explicit_entrypoint_term(query_text: &str, entrypoint: &str) -> bool 
 /// When a framework command is deprecated, add its name here so that it
 /// reliably fails closed to the native runtime instead of matching a skill.
 /// New framework command constants should be registered in `super::constants`.
-const RETIRED_FRAMEWORK_SLASH_COMMANDS: &[&str] =
-    &["/team"];
+const RETIRED_FRAMEWORK_SLASH_COMMANDS: &[&str] = &["/team"];
 
 pub fn query_invokes_retired_framework_slash_command(query_text: &str) -> bool {
     let normalized = normalize_text(query_text);
@@ -206,6 +205,7 @@ pub fn qg_checker_id_for_slug(slug: &str) -> Option<&'static str> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     #[test]

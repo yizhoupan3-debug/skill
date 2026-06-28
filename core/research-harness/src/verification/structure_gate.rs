@@ -67,7 +67,9 @@ impl GateChecker for Structure {
                                 tex_path.display()
                             ),
                             location: Some(tex_path.display().to_string()),
-                            suggestion: Some("fix LaTeX syntax errors before submission".to_string()),
+                            suggestion: Some(
+                                "fix LaTeX syntax errors before submission".to_string(),
+                            ),
                         });
                     }
                     Err(e) => {
@@ -97,7 +99,9 @@ impl GateChecker for Structure {
                                     tex_path.display()
                                 ),
                                 location: Some(tex_path.display().to_string()),
-                                suggestion: Some(format!("add \\label{{{label}}} to the referenced element")),
+                                suggestion: Some(format!(
+                                    "add \\label{{{label}}} to the referenced element"
+                                )),
                             });
                         }
                     }

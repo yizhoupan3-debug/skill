@@ -8,9 +8,9 @@ pub mod maint;
 // Re-export the main dispatch function
 pub use maint::dispatch;
 
-
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     #[test]
     fn smoke() {
         assert!(true);

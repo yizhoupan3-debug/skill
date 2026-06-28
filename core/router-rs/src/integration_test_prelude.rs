@@ -4,5 +4,3 @@
 //! (see `rg -c '\\b<symbol>\\b' src/main_tests.rs`). Drop the global `allow(unused_imports)`
 //! so a future drift (re-export of a truly dead symbol) surfaces as a compile warning
 //! rather than rotting silently behind the wildcard pull-in.
-
-

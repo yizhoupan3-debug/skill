@@ -1,23 +1,23 @@
 use super::*;
 
-pub(super) use serde_json::{json, Value};
+pub(super) use serde_json::{Value, json};
 
 pub(super) use std::collections::HashSet;
 pub(super) use std::fs;
-pub(super) use std::panic::{catch_unwind, AssertUnwindSafe};
+pub(super) use std::panic::{AssertUnwindSafe, catch_unwind};
 pub(super) use std::path::{Path, PathBuf};
 pub(super) use std::sync::{Arc, Mutex, OnceLock};
 pub(super) use std::thread::{sleep, spawn};
 pub(super) use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-
 // Re-exports from lib.rs test-only scope (these were available via `use super::*`
 // when this file lived at the crate-root test module level).
-pub(super) use crate::cli::route_task_with_manifest_fallback;
 pub(super) use crate::cli::args::{
     TraceStreamInspectRequestPayload, TraceStreamReplayRequestPayload,
 };
+pub(super) use crate::cli::route_task_with_manifest_fallback;
 pub(super) use crate::route::ROUTE_REPORT_SCHEMA_VERSION;
+pub(super) use framework_kernel::stdio_payload_types::BackgroundControlRequestPayload;
 
 pub(super) fn execution_kernel_contract_shape_fields(shape: &Value) -> Vec<String> {
     let object = shape.as_object().expect("contract shape object");
@@ -60,7 +60,7 @@ pub(super) fn routing_eval_case_path() -> PathBuf {
 
 pub(super) fn assert_routing_eval_cases_match<F>(label: &str, mut route_case: F)
 where
-    F: FnMut(&str, &str, bool, Option<&str>) -> Result<RouteDecision, String>,
+    F: FnMut(&str, &str, bool, Option<&str>) -> Result<RouteDecision, FrameworkError>,
 {
     let payload = read_json(&routing_eval_case_path()).expect("read routing eval fixture");
     let cases = payload
@@ -97,12 +97,13 @@ where
         .unwrap_or_else(|err| panic!("route eval {label}/{id} failed: {err}"));
 
         if let Some(expected_owner) = case.get("expected_owner").and_then(Value::as_str)
-            && decision.selected_skill != expected_owner {
-                failures.push(format!(
-                    "{id}: expected owner {expected_owner}, got {} (score {})",
-                    decision.selected_skill, decision.score
-                ));
-            }
+            && decision.selected_skill != expected_owner
+        {
+            failures.push(format!(
+                "{id}: expected owner {expected_owner}, got {} (score {})",
+                decision.selected_skill, decision.score
+            ));
+        }
 
         let expected_overlay = case
             .get("expected_overlay")
@@ -186,15 +187,23 @@ where
     let previous = std::env::var_os(EXECUTE_AGGREGATOR_HOST_ALLOWLIST_ENV);
 
     match value {
-        Some(raw) => unsafe { core_state_utils::env_sync::set_env(EXECUTE_AGGREGATOR_HOST_ALLOWLIST_ENV, raw) },
-        None => unsafe { core_state_utils::env_sync::remove_env(EXECUTE_AGGREGATOR_HOST_ALLOWLIST_ENV) },
+        Some(raw) => unsafe {
+            core_state_utils::env_sync::set_env(EXECUTE_AGGREGATOR_HOST_ALLOWLIST_ENV, raw)
+        },
+        None => unsafe {
+            core_state_utils::env_sync::remove_env(EXECUTE_AGGREGATOR_HOST_ALLOWLIST_ENV)
+        },
     }
 
     let outcome = catch_unwind(AssertUnwindSafe(test_fn));
 
     match previous {
-        Some(raw) => unsafe { core_state_utils::env_sync::set_env(EXECUTE_AGGREGATOR_HOST_ALLOWLIST_ENV, &raw) },
-        None => unsafe { core_state_utils::env_sync::remove_env(EXECUTE_AGGREGATOR_HOST_ALLOWLIST_ENV) },
+        Some(raw) => unsafe {
+            core_state_utils::env_sync::set_env(EXECUTE_AGGREGATOR_HOST_ALLOWLIST_ENV, &raw)
+        },
+        None => unsafe {
+            core_state_utils::env_sync::remove_env(EXECUTE_AGGREGATOR_HOST_ALLOWLIST_ENV)
+        },
     }
 
     if let Err(payload) = outcome {
@@ -222,8 +231,12 @@ impl Drop for CloseoutStrictEnvGuard {
     fn drop(&mut self) {
         // SAFETY: self._lock is alive until after drop() returns.
         match &self.prior {
-            Some(v) => unsafe { core_state_utils::env_sync::set_env("ROUTER_RS_CLOSEOUT_ENFORCEMENT", v) },
-            None => unsafe { core_state_utils::env_sync::remove_env("ROUTER_RS_CLOSEOUT_ENFORCEMENT") },
+            Some(v) => unsafe {
+                core_state_utils::env_sync::set_env("ROUTER_RS_CLOSEOUT_ENFORCEMENT", v)
+            },
+            None => unsafe {
+                core_state_utils::env_sync::remove_env("ROUTER_RS_CLOSEOUT_ENFORCEMENT")
+            },
         }
     }
 }
@@ -268,8 +281,12 @@ impl Drop for CiHardUnsetCloseoutEnvGuard {
             None => unsafe { core_state_utils::env_sync::remove_env("GITHUB_ACTIONS") },
         }
         match &self.prior_closeout {
-            Some(v) => unsafe { core_state_utils::env_sync::set_env("ROUTER_RS_CLOSEOUT_ENFORCEMENT", v) },
-            None => unsafe { core_state_utils::env_sync::remove_env("ROUTER_RS_CLOSEOUT_ENFORCEMENT") },
+            Some(v) => unsafe {
+                core_state_utils::env_sync::set_env("ROUTER_RS_CLOSEOUT_ENFORCEMENT", v)
+            },
+            None => unsafe {
+                core_state_utils::env_sync::remove_env("ROUTER_RS_CLOSEOUT_ENFORCEMENT")
+            },
         }
     }
 }
@@ -309,8 +326,12 @@ impl Drop for GithubActionsHardUnsetCloseoutEnvGuard {
             None => unsafe { core_state_utils::env_sync::remove_env("GITHUB_ACTIONS") },
         }
         match &self.prior_closeout {
-            Some(v) => unsafe { core_state_utils::env_sync::set_env("ROUTER_RS_CLOSEOUT_ENFORCEMENT", v) },
-            None => unsafe { core_state_utils::env_sync::remove_env("ROUTER_RS_CLOSEOUT_ENFORCEMENT") },
+            Some(v) => unsafe {
+                core_state_utils::env_sync::set_env("ROUTER_RS_CLOSEOUT_ENFORCEMENT", v)
+            },
+            None => unsafe {
+                core_state_utils::env_sync::remove_env("ROUTER_RS_CLOSEOUT_ENFORCEMENT")
+            },
         }
     }
 }
@@ -349,8 +370,12 @@ impl Drop for CiWithCloseoutDisabledEnvGuard {
             None => unsafe { core_state_utils::env_sync::remove_env("GITHUB_ACTIONS") },
         }
         match &self.prior_closeout {
-            Some(v) => unsafe { core_state_utils::env_sync::set_env("ROUTER_RS_CLOSEOUT_ENFORCEMENT", v) },
-            None => unsafe { core_state_utils::env_sync::remove_env("ROUTER_RS_CLOSEOUT_ENFORCEMENT") },
+            Some(v) => unsafe {
+                core_state_utils::env_sync::set_env("ROUTER_RS_CLOSEOUT_ENFORCEMENT", v)
+            },
+            None => unsafe {
+                core_state_utils::env_sync::remove_env("ROUTER_RS_CLOSEOUT_ENFORCEMENT")
+            },
         }
     }
 }
@@ -389,8 +414,12 @@ impl Drop for LocalNonCiEmptyCloseoutEnvGuard {
             None => unsafe { core_state_utils::env_sync::remove_env("GITHUB_ACTIONS") },
         }
         match &self.prior_closeout {
-            Some(v) => unsafe { core_state_utils::env_sync::set_env("ROUTER_RS_CLOSEOUT_ENFORCEMENT", v) },
-            None => unsafe { core_state_utils::env_sync::remove_env("ROUTER_RS_CLOSEOUT_ENFORCEMENT") },
+            Some(v) => unsafe {
+                core_state_utils::env_sync::set_env("ROUTER_RS_CLOSEOUT_ENFORCEMENT", v)
+            },
+            None => unsafe {
+                core_state_utils::env_sync::remove_env("ROUTER_RS_CLOSEOUT_ENFORCEMENT")
+            },
         }
     }
 }
@@ -443,4 +472,3 @@ pub(super) fn write_manifest_fixture(path: &Path, slug: &str, priority: &str) {
         )
         .expect("write manifest fixture");
 }
-

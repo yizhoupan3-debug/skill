@@ -242,6 +242,7 @@ pub enum VerificationStatus {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use serde_json;
 
@@ -256,31 +257,82 @@ mod tests {
 
     #[test]
     fn review_dimension_for_round() {
-        assert_eq!(ReviewDimension::for_round(0), ReviewDimension::FullRegression);
-        assert_eq!(ReviewDimension::for_round(1), ReviewDimension::LogicAndEvidence);
-        assert_eq!(ReviewDimension::for_round(2), ReviewDimension::NoveltyAndPositioning);
-        assert_eq!(ReviewDimension::for_round(3), ReviewDimension::MathAndNotation);
-        assert_eq!(ReviewDimension::for_round(4), ReviewDimension::FiguresAndReadability);
-        assert_eq!(ReviewDimension::for_round(5), ReviewDimension::LanguageAndTone);
-        assert_eq!(ReviewDimension::for_round(6), ReviewDimension::LengthAndAppendix);
-        assert_eq!(ReviewDimension::for_round(7), ReviewDimension::FullRegression);
-        assert_eq!(ReviewDimension::for_round(100), ReviewDimension::FullRegression);
+        assert_eq!(
+            ReviewDimension::for_round(0),
+            ReviewDimension::FullRegression
+        );
+        assert_eq!(
+            ReviewDimension::for_round(1),
+            ReviewDimension::LogicAndEvidence
+        );
+        assert_eq!(
+            ReviewDimension::for_round(2),
+            ReviewDimension::NoveltyAndPositioning
+        );
+        assert_eq!(
+            ReviewDimension::for_round(3),
+            ReviewDimension::MathAndNotation
+        );
+        assert_eq!(
+            ReviewDimension::for_round(4),
+            ReviewDimension::FiguresAndReadability
+        );
+        assert_eq!(
+            ReviewDimension::for_round(5),
+            ReviewDimension::LanguageAndTone
+        );
+        assert_eq!(
+            ReviewDimension::for_round(6),
+            ReviewDimension::LengthAndAppendix
+        );
+        assert_eq!(
+            ReviewDimension::for_round(7),
+            ReviewDimension::FullRegression
+        );
+        assert_eq!(
+            ReviewDimension::for_round(100),
+            ReviewDimension::FullRegression
+        );
     }
 
     #[test]
     fn review_dimension_display_name() {
-        assert_eq!(ReviewDimension::LogicAndEvidence.display_name(), "逻辑与证据");
-        assert_eq!(ReviewDimension::NoveltyAndPositioning.display_name(), "最近工作与新颖性");
-        assert_eq!(ReviewDimension::MathAndNotation.display_name(), "数学与符号");
-        assert_eq!(ReviewDimension::FiguresAndReadability.display_name(), "图表与可读性");
-        assert_eq!(ReviewDimension::LanguageAndTone.display_name(), "语言与防御性");
-        assert_eq!(ReviewDimension::LengthAndAppendix.display_name(), "长度与附录路由");
+        assert_eq!(
+            ReviewDimension::LogicAndEvidence.display_name(),
+            "逻辑与证据"
+        );
+        assert_eq!(
+            ReviewDimension::NoveltyAndPositioning.display_name(),
+            "最近工作与新颖性"
+        );
+        assert_eq!(
+            ReviewDimension::MathAndNotation.display_name(),
+            "数学与符号"
+        );
+        assert_eq!(
+            ReviewDimension::FiguresAndReadability.display_name(),
+            "图表与可读性"
+        );
+        assert_eq!(
+            ReviewDimension::LanguageAndTone.display_name(),
+            "语言与防御性"
+        );
+        assert_eq!(
+            ReviewDimension::LengthAndAppendix.display_name(),
+            "长度与附录路由"
+        );
         assert_eq!(ReviewDimension::FullRegression.display_name(), "全面重审");
     }
 
     #[test]
     fn severity_serde_roundtrip() {
-        for variant in &[Severity::P0, Severity::A, Severity::B, Severity::Warning, Severity::C] {
+        for variant in &[
+            Severity::P0,
+            Severity::A,
+            Severity::B,
+            Severity::Warning,
+            Severity::C,
+        ] {
             let json = serde_json::to_value(variant).unwrap();
             let back: Severity = serde_json::from_value(json).unwrap();
             assert_eq!(*variant, back);
@@ -289,7 +341,11 @@ mod tests {
 
     #[test]
     fn review_verdict_serde_roundtrip() {
-        for variant in &[ReviewVerdict::Accept, ReviewVerdict::Revise, ReviewVerdict::Reject] {
+        for variant in &[
+            ReviewVerdict::Accept,
+            ReviewVerdict::Revise,
+            ReviewVerdict::Reject,
+        ] {
             let json = serde_json::to_value(variant).unwrap();
             let back: ReviewVerdict = serde_json::from_value(json).unwrap();
             assert_eq!(*variant, back);
@@ -367,7 +423,12 @@ mod tests {
 
     #[test]
     fn verification_status_serde_roundtrip() {
-        for variant in &[VerificationStatus::Pass, VerificationStatus::Fail, VerificationStatus::Warn, VerificationStatus::Skip] {
+        for variant in &[
+            VerificationStatus::Pass,
+            VerificationStatus::Fail,
+            VerificationStatus::Warn,
+            VerificationStatus::Skip,
+        ] {
             let json = serde_json::to_value(variant).unwrap();
             let back: VerificationStatus = serde_json::from_value(json).unwrap();
             assert_eq!(*variant, back);

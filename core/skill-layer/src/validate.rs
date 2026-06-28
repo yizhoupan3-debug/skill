@@ -34,19 +34,29 @@ pub struct ValidationReport {
 /// Validate a skill name/slug: must be non-empty, no path traversal, no path separators, no control characters.
 pub fn validate_skill_name(name: &str) -> Result<(), FrameworkError> {
     if name.is_empty() {
-        return Err(FrameworkError::Validation { message: "skill name must not be empty".into() });
+        return Err(FrameworkError::Validation {
+            message: "skill name must not be empty".into(),
+        });
     }
     if name.chars().any(|c| c.is_control()) {
-        return Err(FrameworkError::Validation { message: format!("skill name `{name}` must not contain control characters") });
+        return Err(FrameworkError::Validation {
+            message: format!("skill name `{name}` must not contain control characters"),
+        });
     }
     if name.contains("..") {
-        return Err(FrameworkError::Validation { message: format!("skill name `{name}` must not contain '..' (path traversal)") });
+        return Err(FrameworkError::Validation {
+            message: format!("skill name `{name}` must not contain '..' (path traversal)"),
+        });
     }
     if name.contains('/') || name.contains('\\') {
-        return Err(FrameworkError::Validation { message: format!("skill name `{name}` must not contain path separators") });
+        return Err(FrameworkError::Validation {
+            message: format!("skill name `{name}` must not contain path separators"),
+        });
     }
     if name.starts_with('~') || name.starts_with('/') {
-        return Err(FrameworkError::Validation { message: format!("skill name `{name}` must not start with absolute path prefix") });
+        return Err(FrameworkError::Validation {
+            message: format!("skill name `{name}` must not start with absolute path prefix"),
+        });
     }
     Ok(())
 }
@@ -66,14 +76,15 @@ pub fn validate_all(repo_root: &Path) -> Result<ValidationReport, FrameworkError
 
     // 1. Check required files exist
     if !runtime_path.is_file() {
-        return Err(FrameworkError::Validation { message: format!(
-            "framework skills validate: missing {}",
-            runtime_path.display()
-        ) });
+        return Err(FrameworkError::Validation {
+            message: format!(
+                "framework skills validate: missing {}",
+                runtime_path.display()
+            ),
+        });
     }
 
-    let runtime: serde_json::Value =
-        serde_json::from_str(&fs::read_to_string(&runtime_path)?)?;
+    let runtime: serde_json::Value = serde_json::from_str(&fs::read_to_string(&runtime_path)?)?;
 
     let mut errors = Vec::new();
     let mut warnings = Vec::new();
@@ -180,14 +191,16 @@ fn collect_missing_skill_paths(
     };
     let keys: Vec<String> = doc["keys"]
         .as_array()
-        .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+        .map(|a| {
+            a.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect()
+        })
         .unwrap_or_default();
     let path_idx = crate::columnar::key_index(&keys, "skill_path");
 
     for row in rows {
-        let rel = path_idx
-            .and_then(|i| row.get(i))
-            .and_then(|v| v.as_str());
+        let rel = path_idx.and_then(|i| row.get(i)).and_then(|v| v.as_str());
         if let Some(rel) = rel {
             let full = repo_root.join(rel);
             if !full.is_file() {
@@ -216,12 +229,15 @@ fn check_frontmatter_vs_registry(
     warnings: &mut Vec<String>,
 ) -> Result<(), FrameworkError> {
     let runtime_path = paths::runtime_json(repo_root);
-    let doc: Value =
-        serde_json::from_str(&fs::read_to_string(&runtime_path)?)?;
+    let doc: Value = serde_json::from_str(&fs::read_to_string(&runtime_path)?)?;
 
     let keys: Vec<String> = doc["keys"]
         .as_array()
-        .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+        .map(|a| {
+            a.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect()
+        })
         .unwrap_or_default();
 
     let col_idx: HashMap<&str, usize> = keys
@@ -232,20 +248,29 @@ fn check_frontmatter_vs_registry(
 
     let slug_idx = match col_idx.get("slug") {
         Some(&i) => i,
-        None => return Err(FrameworkError::Validation { message: "runtime JSON missing slug column".into() }),
+        None => {
+            return Err(FrameworkError::Validation {
+                message: "runtime JSON missing slug column".into(),
+            });
+        }
     };
 
-    let known_yaml_keys: HashSet<&str> =
-        FRONTMATTER_KEYS.iter().map(|(_, y)| *y).collect();
+    let known_yaml_keys: HashSet<&str> = FRONTMATTER_KEYS.iter().map(|(_, y)| *y).collect();
 
     let Some(rows) = doc["skills"].as_array() else {
         return Ok(());
     };
 
     for row in rows {
-        let Some(row_arr) = row.as_array() else { continue; };
-        if slug_idx >= row_arr.len() { continue; }
-        let Some(slug) = row_arr[slug_idx].as_str() else { continue; };
+        let Some(row_arr) = row.as_array() else {
+            continue;
+        };
+        if slug_idx >= row_arr.len() {
+            continue;
+        }
+        let Some(slug) = row_arr[slug_idx].as_str() else {
+            continue;
+        };
 
         let skill_md_path = paths::skill_md(repo_root, slug);
         let text = match fs::read_to_string(&skill_md_path) {
@@ -263,7 +288,9 @@ fn check_frontmatter_vs_registry(
             Err(_) => continue,
         };
 
-        let Some(fm_map) = fm_value.as_object() else { continue; };
+        let Some(fm_map) = fm_value.as_object() else {
+            continue;
+        };
 
         // 1. Orphan detection — frontmatter field has no registry column
         for yaml_key in fm_map.keys() {
@@ -291,9 +318,7 @@ fn check_frontmatter_vs_registry(
                     ));
                 }
                 // Registry has non-null, non-empty value, frontmatter missing
-                (Some(reg), None)
-                    if !reg.is_null() && !is_empty_value(reg) =>
-                {
+                (Some(reg), None) if !reg.is_null() && !is_empty_value(reg) => {
                     errors.push(format!(
                         "{slug}: frontmatter missing `{yaml_key}` (registry has `{registry_col}`={reg})",
                     ));

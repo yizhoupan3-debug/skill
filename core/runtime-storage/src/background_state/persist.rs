@@ -1,8 +1,8 @@
-use core_errors::FrameworkError;
 use super::control_plane::normalized_backend_family;
 use super::types::BackgroundStateStore;
 use super::types::*;
 use crate::{SQLITE_TABLE_NAME, acquire_runtime_path_lock};
+use core_errors::FrameworkError;
 use rusqlite::{OptionalExtension, params};
 use serde_json::{Value, json};
 use std::fs;
@@ -34,7 +34,9 @@ pub(super) fn read_persisted_state(
         }
         "sqlite" | "sqlite3" => {
             let Some(db_path) = sqlite_db_path else {
-                return Err(FrameworkError::validation("SQLite background state request is missing sqlite_db_path."));
+                return Err(FrameworkError::validation(
+                    "SQLite background state request is missing sqlite_db_path.",
+                ));
             };
             if !db_path.exists() {
                 return Ok(None);
@@ -74,7 +76,10 @@ pub(super) fn read_persisted_state(
                 .map_err(|err| err.to_string())?;
             Ok(Some(persisted))
         }
-        other => Err(FrameworkError::unsupported(format!("Unsupported durable background-state backend family: {:?}", other))),
+        other => Err(FrameworkError::unsupported(format!(
+            "Unsupported durable background-state backend family: {:?}",
+            other
+        ))),
     }
 }
 
@@ -110,7 +115,9 @@ pub(super) fn write_persisted_state(
         }
         "sqlite" | "sqlite3" => {
             let Some(db_path) = sqlite_db_path else {
-                return Err(FrameworkError::validation("SQLite background state request is missing sqlite_db_path."));
+                return Err(FrameworkError::validation(
+                    "SQLite background state request is missing sqlite_db_path.",
+                ));
             };
             let storage_root = state_path.parent().ok_or_else(|| {
                 "Background state path is missing a parent directory.".to_string()
@@ -127,11 +134,17 @@ pub(super) fn write_persisted_state(
             .map_err(|err| err.to_string())?;
             Ok(())
         }
-        other => Err(FrameworkError::unsupported(format!("Unsupported durable background-state backend family: {:?}", other))),
+        other => Err(FrameworkError::unsupported(format!(
+            "Unsupported durable background-state backend family: {:?}",
+            other
+        ))),
     }
 }
 
-pub(super) fn sqlite_storage_key(storage_root: &Path, state_path: &Path) -> Result<String, FrameworkError> {
+pub(super) fn sqlite_storage_key(
+    storage_root: &Path,
+    state_path: &Path,
+) -> Result<String, FrameworkError> {
     let resolved_root = storage_root
         .canonicalize()
         .unwrap_or_else(|_| storage_root.to_path_buf());
@@ -169,8 +182,10 @@ pub(super) fn is_mutating_background_operation(op: &str) -> bool {
 
 #[tracing::instrument(level = "debug", skip_all)]
 pub fn handle_background_state_operation(payload: Value) -> Result<Value, String> {
-    let request = serde_json::from_value::<BackgroundStateRequestPayload>(payload)
-        .map_err(|err| FrameworkError::validation(format!("parse background state request failed: {err}")))?;
+    let request =
+        serde_json::from_value::<BackgroundStateRequestPayload>(payload).map_err(|err| {
+            FrameworkError::validation(format!("parse background state request failed: {err}"))
+        })?;
     if request.schema_version != BACKGROUND_STATE_REQUEST_SCHEMA_VERSION {
         return Err(format!(
             "unknown background state request schema_version: {}",

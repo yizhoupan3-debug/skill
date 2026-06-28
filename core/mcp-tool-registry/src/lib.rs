@@ -23,8 +23,10 @@ pub mod tool_types;
 
 use std::path::PathBuf;
 
+pub use tool_registry::{
+    EXPECTED_SCHEMA, invalidate_tool_cache, load_tool_records, load_tool_records_cached,
+};
 pub use tool_types::{McpToolInputSchema, McpToolRecord};
-pub use tool_registry::{load_tool_records, load_tool_records_cached, invalidate_tool_cache, EXPECTED_SCHEMA};
 
 /// Resolve the path to MCP_TOOL_REGISTRY.json.
 /// Uses the hooks-injected path if available, otherwise returns the default.

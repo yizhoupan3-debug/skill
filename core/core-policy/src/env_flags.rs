@@ -32,8 +32,7 @@ pub fn test_review_gate_disabled_override() -> Option<bool> {
 }
 
 const ROUTER_RS_REVIEW_SPAWN_FIRST_NUDGE_ENV: &str = "ROUTER_RS_REVIEW_SPAWN_FIRST_NUDGE";
-const ROUTER_RS_SUBAGENT_MODEL_INHERIT_NUDGE_ENV: &str =
-    "ROUTER_RS_SUBAGENT_MODEL_INHERIT_NUDGE";
+const ROUTER_RS_SUBAGENT_MODEL_INHERIT_NUDGE_ENV: &str = "ROUTER_RS_SUBAGENT_MODEL_INHERIT_NUDGE";
 const ROUTER_RS_CURSOR_SUBAGENT_MODEL_INHERIT_NUDGE_ENV: &str =
     "ROUTER_RS_CURSOR_SUBAGENT_MODEL_INHERIT_NUDGE";
 const ROUTER_RS_TASK_LEDGER_FLOCK_ENV: &str = "ROUTER_RS_TASK_LEDGER_FLOCK";
@@ -198,7 +197,9 @@ fn parse_review_gate_stop_max_nudges_cap(raw: Option<&str>) -> Option<u32> {
     if let Some(n) = t.parse::<u32>().ok().filter(|v| *v >= 1) {
         return Some(n);
     }
-    tracing::warn!("[core-policy] invalid review gate stop max nudges={raw:?}; using default cap 8");
+    tracing::warn!(
+        "[core-policy] invalid review gate stop max nudges={raw:?}; using default cap 8"
+    );
     Some(8)
 }
 
@@ -265,7 +266,9 @@ pub fn router_rs_hook_outbound_context_max_bytes() -> usize {
     parse_usize_clamped(
         "ROUTER_RS_HOOK_OUTBOUND_CONTEXT_MAX_CHARS",
         "ROUTER_RS_CURSOR_HOOK_OUTBOUND_CONTEXT_MAX_CHARS",
-        8192, 1024, 65536,
+        8192,
+        1024,
+        65536,
     )
 }
 
@@ -349,6 +352,7 @@ pub fn set_env(key: &str, val: &str) {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use crate::test_env_sync::process_env_lock;
 

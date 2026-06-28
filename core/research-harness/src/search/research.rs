@@ -6,7 +6,7 @@
 //! This module provides the **upper-layer orchestration** for the research
 //! loop: "what to search", "when to search", and "what to decide after search".
 
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use reqwest::blocking::Client;
 use serde_json::{Value, json};
 use std::collections::{HashMap, HashSet};
@@ -325,10 +325,7 @@ pub fn external_research_result_count(entry: &Value) -> usize {
 }
 
 /// Filter external research entries by claim ID.
-pub fn external_research_entries_for_claim<'a>(
-    state: &'a Value,
-    claim_id: &str,
-) -> Vec<&'a Value> {
+pub fn external_research_entries_for_claim<'a>(state: &'a Value, claim_id: &str) -> Vec<&'a Value> {
     arr(state, "external_research")
         .iter()
         .filter(|entry| entry.get("claim_id").and_then(Value::as_str) == Some(claim_id))
@@ -410,10 +407,7 @@ pub fn compared_claim_ids(state: &Value) -> HashSet<String> {
 // ── Novelty gate recommendation ──
 
 /// Generate a novelty gate recommendation based on external research status.
-pub fn novelty_gate_recommendation_from_research(
-    state: &Value,
-    min_results: usize,
-) -> Value {
+pub fn novelty_gate_recommendation_from_research(state: &Value, min_results: usize) -> Value {
     let min_results = min_results.max(1);
     let claim_ids = claim_ids_for_gate(state);
     let compared_ids = compared_claim_ids(state);
@@ -609,11 +603,10 @@ pub fn extract_question_parts(question: &str) -> (String, String, String) {
         effect = format!("{} {}", caps[2].trim(), caps[3].trim());
     } else {
         static USING_RE: OnceLock<regex::Regex> = OnceLock::new();
-        let using_re =
-            USING_RE.get_or_init(|| {
-                #[allow(clippy::expect_used)]
-                regex::Regex::new(r"using\s+(.+?)\s+for\s+(.+)").expect("invalid USING_RE regex")
-            });
+        let using_re = USING_RE.get_or_init(|| {
+            #[allow(clippy::expect_used)]
+            regex::Regex::new(r"using\s+(.+?)\s+for\s+(.+)").expect("invalid USING_RE regex")
+        });
         if let Some(caps) = using_re.captures(&lowered) {
             focus = caps[1].trim().to_string();
             target = caps[2].trim().to_string();
@@ -621,7 +614,12 @@ pub fn extract_question_parts(question: &str) -> (String, String, String) {
         } else {
             let keywords = compact_words(&cleaned, 8);
             if !keywords.is_empty() {
-                focus = keywords.iter().take(4).cloned().collect::<Vec<_>>().join(" ");
+                focus = keywords
+                    .iter()
+                    .take(4)
+                    .cloned()
+                    .collect::<Vec<_>>()
+                    .join(" ");
                 if keywords.len() >= 6 {
                     target = keywords
                         .iter()
@@ -676,9 +674,7 @@ pub fn propose_claims_from_question(question: &str, count: usize) -> Vec<Value> 
         (
             "task",
             "direction with concrete benchmark target",
-            format!(
-                "Applying {focus} to {target} is novel enough to justify a focused study."
-            ),
+            format!("Applying {focus} to {target} is novel enough to justify a focused study."),
         ),
         (
             "setting",
@@ -820,9 +816,7 @@ pub fn strongest_current_claim(state: &Value) -> String {
                 .unwrap_or(&1);
             va.cmp(vb)
                 .then_with(|| ca.cmp(cb))
-                .then_with(|| {
-                    str_field(a, "claim_id").cmp(&str_field(b, "claim_id"))
-                })
+                .then_with(|| str_field(a, "claim_id").cmp(&str_field(b, "claim_id")))
         });
         return str_field_default(&ranked[0], "claim", "_No strong claim recorded yet._");
     }
@@ -846,6 +840,7 @@ pub fn strongest_current_claim(state: &Value) -> String {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     #[test]

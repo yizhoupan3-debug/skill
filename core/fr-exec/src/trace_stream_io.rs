@@ -1,23 +1,24 @@
 //! Trace stream replay / inspect / metadata I/O.
 
-
 use serde_json::{Map, Value, json};
 use std::fs;
 use std::path::{Path, PathBuf};
 
 use fr_utils::io_utils::{append_text_with_process_lock, validate_write_path};
-use rt_storage::runtime_envelope_ids::{
-    TRACE_COMPACTION_DELTA_WRITE_SCHEMA_VERSION, TRACE_METADATA_WRITE_AUTHORITY,
-    TRACE_METADATA_WRITE_SCHEMA_VERSION, TRACE_STREAM_INSPECT_SCHEMA_VERSION,
-    TRACE_STREAM_IO_AUTHORITY, TRACE_STREAM_REPLAY_SCHEMA_VERSION,
-};
-use rt_storage::runtime_storage::{resolve_storage_backend, storage_artifact_exists, storage_read_text};
 use framework_kernel::stdio_payload_types::{
     TraceCompactionDeltaWriteRequestPayload, TraceCompactionDeltaWriteResponsePayload,
     TraceMetadataWriteRequestPayload, TraceMetadataWriteResponsePayload,
     TraceStreamInspectRequestPayload, TraceStreamInspectResponsePayload,
     TraceStreamReplayCursorPayload, TraceStreamReplayRequestPayload,
     TraceStreamReplayResponsePayload,
+};
+use rt_storage::runtime_envelope_ids::{
+    TRACE_COMPACTION_DELTA_WRITE_SCHEMA_VERSION, TRACE_METADATA_WRITE_AUTHORITY,
+    TRACE_METADATA_WRITE_SCHEMA_VERSION, TRACE_STREAM_INSPECT_SCHEMA_VERSION,
+    TRACE_STREAM_IO_AUTHORITY, TRACE_STREAM_REPLAY_SCHEMA_VERSION,
+};
+use rt_storage::runtime_storage::{
+    resolve_storage_backend, storage_artifact_exists, storage_read_text,
 };
 use trace_runtime::{
     build_trace_cursor, hydrate_trace_event, trace_event_object, trace_event_string_field,
@@ -52,18 +53,17 @@ fn trace_event_matches_scope(
         .unwrap_or(true);
     if session_scoped
         && let Some(expected_session_id) = session_id
-            && trace_event_string_field(payload, "session_id").as_deref()
-                != Some(expected_session_id)
-                && trace_event_string_field(payload, "run_id").as_deref()
-                    != Some(expected_session_id)
-            {
-                return false;
-            }
+        && trace_event_string_field(payload, "session_id").as_deref() != Some(expected_session_id)
+        && trace_event_string_field(payload, "run_id").as_deref() != Some(expected_session_id)
+    {
+        return false;
+    }
     if job_scoped
         && let Some(expected_job_id) = job_id
-            && trace_event_string_field(payload, "job_id").as_deref() != Some(expected_job_id) {
-                return false;
-            }
+        && trace_event_string_field(payload, "job_id").as_deref() != Some(expected_job_id)
+    {
+        return false;
+    }
     true
 }
 
@@ -108,7 +108,8 @@ fn load_trace_stream_events(
         let event_payload = hydrate_trace_event_object(
             trace_event_object(serde_json::from_str::<Value>(raw_line).map_err(|err| {
                 format!("parse trace stream line {} failed: {err}", line_number + 1)
-            })?).map_err(|e| e.to_string())?,
+            })?)
+            .map_err(|e| e.to_string())?,
             line_number + 1,
         );
         if trace_event_matches_request_scope(
@@ -999,7 +1000,8 @@ mod tests {
     fn inspect_filters_by_session_id() {
         let events = r#"{"kind": "run.started", "session_id": "s1", "seq": 1}
 {"kind": "run.started", "session_id": "s2", "seq": 2}
-"#.to_string();
+"#
+        .to_string();
         let payload = TraceStreamInspectRequestPayload {
             event_stream_text: Some(events),
             session_id: Some("s1".into()),

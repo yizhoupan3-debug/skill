@@ -33,7 +33,9 @@ pub fn register_stdio_dispatch(dispatch: DispatchFn, env_usize: EnvUsizeFn) {
     let _ = ENV_USIZE.set(env_usize);
 }
 
-fn dispatch_stdio_json_request_payload(request: StdioJsonRequestPayload) -> StdioJsonResponsePayload {
+fn dispatch_stdio_json_request_payload(
+    request: StdioJsonRequestPayload,
+) -> StdioJsonResponsePayload {
     if let Some(f) = DISPATCH_STDIO_JSON_REQUEST.get() {
         f(request)
     } else {
@@ -521,6 +523,7 @@ fn resolve_stdio_in_flight_timeout() -> Duration {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use serde_json::json;
     use std::sync::Mutex;
@@ -903,17 +906,13 @@ mod tests {
         let _env_lock = ENV_GUARD
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        let result =
-            std::thread::spawn(runtime_concurrency_defaults_payload)
-                .join()
-                .expect("thread panicked");
+        let result = std::thread::spawn(runtime_concurrency_defaults_payload)
+            .join()
+            .expect("thread panicked");
         assert_eq!(
             result.router_stdio.default_pool_size,
             DEFAULT_ROUTER_STDIO_POOL_SIZE
         );
-        assert_eq!(
-            result.compute.max_threads,
-            MAX_COMPUTE_THREADS
-        );
+        assert_eq!(result.compute.max_threads, MAX_COMPUTE_THREADS);
     }
 }

@@ -65,14 +65,11 @@ impl RoutingRuntimeWatch {
                         let Ok(event) = res else {
                             return;
                         };
-                        let reload = matches!(
-                            event.kind,
-                            EventKind::Modify(_) | EventKind::Create(_)
-                        );
-                        if reload
-                            && let Ok(snapshot) = load_snapshot(&wp) {
-                                let _ = tx_c.send(snapshot);
-                            }
+                        let reload =
+                            matches!(event.kind, EventKind::Modify(_) | EventKind::Create(_));
+                        if reload && let Ok(snapshot) = load_snapshot(&wp) {
+                            let _ = tx_c.send(snapshot);
+                        }
                     },
                     Config::default(),
                 ) else {
@@ -136,6 +133,7 @@ pub fn routing_runtime_watch() -> Arc<RoutingRuntimeWatch> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     #[test]

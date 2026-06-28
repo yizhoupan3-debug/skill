@@ -51,6 +51,7 @@ pub fn seed_minimal_current_task_layout(repo: &Path) {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     #[test]

@@ -118,18 +118,12 @@ mod tests {
 
     #[test]
     fn tokenize_cjk() {
-        assert_eq!(
-            tokenize_cjk_aware("帮我截图"),
-            vec!["帮", "我", "截", "图"]
-        );
+        assert_eq!(tokenize_cjk_aware("帮我截图"), vec!["帮", "我", "截", "图"]);
     }
 
     #[test]
     fn tokenize_mixed() {
-        assert_eq!(
-            tokenize_cjk_aware("PDF 文档"),
-            vec!["PDF", "文", "档"]
-        );
+        assert_eq!(tokenize_cjk_aware("PDF 文档"), vec!["PDF", "文", "档"]);
     }
 
     #[test]

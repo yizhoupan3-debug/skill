@@ -18,9 +18,15 @@ use quality_gate::types::{CheckContext, CheckResult, Finding, Severity};
 pub struct OverflowChecker;
 
 impl GateChecker for OverflowChecker {
-    fn id(&self) -> &'static str { "overflow" }
-    fn scenes(&self) -> Vec<&'static str> { vec![quality_gate::scene::SLIDES] }
-    fn description(&self) -> &'static str { "detect overflow conditions (token limits, context window, output length) in slide generation tasks" }
+    fn id(&self) -> &'static str {
+        "overflow"
+    }
+    fn scenes(&self) -> Vec<&'static str> {
+        vec![quality_gate::scene::SLIDES]
+    }
+    fn description(&self) -> &'static str {
+        "detect overflow conditions (token limits, context window, output length) in slide generation tasks"
+    }
     fn check(&self, ctx: &CheckContext) -> CheckResult {
         let mut findings = Vec::new();
         findings.push(Finding {
@@ -35,6 +41,10 @@ impl GateChecker for OverflowChecker {
                 "integrate tiktoken-rs + slide parser to enable token overflow detection".to_string()
             ),
         });
-        CheckResult { checker_id: "overflow".to_string(), passed: true, findings }
+        CheckResult {
+            checker_id: "overflow".to_string(),
+            passed: true,
+            findings,
+        }
     }
 }

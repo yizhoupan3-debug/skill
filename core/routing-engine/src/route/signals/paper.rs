@@ -24,15 +24,10 @@ pub fn has_standalone_academic_polish_context(
     // `explicit_prose_polish` SIGNAL_DEFS entry ("sci润色", "sci 润色" markers)
     // via `has_explicit_prose_polish_marker` below, which uses token-level
     // `text_matches_phrase` (order-independent, whitespace-tolerant).
-    if [
-        "学术润色",
-        "英文论文润色",
-    ]
-    .iter()
-    .any(|marker| {
-        query_text.contains(marker)
-            || text_matches_phrase(query_token_list, marker)
-    }) {
+    if ["学术润色", "英文论文润色"]
+        .iter()
+        .any(|marker| query_text.contains(marker) || text_matches_phrase(query_token_list, marker))
+    {
         return true;
     }
     let has_polish = has_explicit_prose_polish_marker(query_text, query_token_list)
@@ -83,10 +78,7 @@ pub fn has_paper_writing_context(query_text: &str, query_token_list: &[String]) 
         "academic writing",
     ]
     .iter()
-    .any(|marker| {
-        query_text.contains(*marker)
-            || text_matches_phrase(query_token_list, marker)
-    })
+    .any(|marker| query_text.contains(*marker) || text_matches_phrase(query_token_list, marker))
 }
 
 /// 比 `has_paper_writing_context` 更宽：口语改稿、粘贴段落、LaTeX 块——**无需**用户说「润色/language_register」。
@@ -203,10 +195,7 @@ pub fn has_paper_prose_edit_context(query_text: &str, query_token_list: &[String
         "wording",
     ]
     .iter()
-    .any(|marker| {
-        query_text.contains(*marker)
-            || text_matches_phrase(query_token_list, marker)
-    })
+    .any(|marker| query_text.contains(*marker) || text_matches_phrase(query_token_list, marker))
 }
 
 pub fn has_paper_context(query_text: &str, query_token_list: &[String]) -> bool {
@@ -244,10 +233,7 @@ pub fn has_paper_workbench_frontdoor_context(
         "整篇严审",
     ]
     .iter()
-    .any(|marker| {
-        query_text.contains(*marker)
-            || text_matches_phrase(query_token_list, marker)
-    })
+    .any(|marker| query_text.contains(*marker) || text_matches_phrase(query_token_list, marker))
 }
 
 pub fn has_paper_figure_layout_review_context(
@@ -312,10 +298,7 @@ pub fn has_paper_prose_negation_context(query_text: &str, query_token_list: &[St
         "review-only",
     ]
     .iter()
-    .any(|marker| {
-        query_text.contains(*marker)
-            || text_matches_phrase(query_token_list, marker)
-    })
+    .any(|marker| query_text.contains(*marker) || text_matches_phrase(query_token_list, marker))
 }
 
 pub fn paper_skill_requires_context(slug: &str) -> bool {
@@ -371,8 +354,7 @@ pub fn has_paper_review_revision_intent(query_text: &str, query_token_list: &[St
         .iter()
         .any(|marker| paper_route_marker_matches(query_text, query_token_list, marker))
         && revise_markers.iter().any(|marker| {
-        query_text.contains(*marker)
-            || text_matches_phrase(query_token_list, marker)
+            query_text.contains(*marker) || text_matches_phrase(query_token_list, marker)
         })
 }
 
@@ -388,10 +370,8 @@ pub fn has_paper_direct_revision_context(query_text: &str, query_token_list: &[S
         "根据 reviewer comments 改论文",
     ]
     .iter()
-    .any(|marker| {
-        query_text.contains(*marker)
-            || text_matches_phrase(query_token_list, marker)
-    }) {
+    .any(|marker| query_text.contains(*marker) || text_matches_phrase(query_token_list, marker))
+    {
         return false;
     }
     [
@@ -402,10 +382,7 @@ pub fn has_paper_direct_revision_context(query_text: &str, query_token_list: &[S
         "只进改稿",
     ]
     .iter()
-    .any(|marker| {
-        query_text.contains(*marker)
-            || text_matches_phrase(query_token_list, marker)
-    })
+    .any(|marker| query_text.contains(*marker) || text_matches_phrase(query_token_list, marker))
 }
 
 pub fn has_paper_review_judgment_context(query_text: &str, query_token_list: &[String]) -> bool {
@@ -438,10 +415,7 @@ pub fn has_paper_review_judgment_context(query_text: &str, query_token_list: &[S
         "review only",
     ]
     .iter()
-    .any(|marker| {
-        query_text.contains(*marker)
-            || text_matches_phrase(query_token_list, marker)
-    })
+    .any(|marker| query_text.contains(*marker) || text_matches_phrase(query_token_list, marker))
 }
 
 pub fn has_paper_ref_first_workflow_context(query_text: &str, query_token_list: &[String]) -> bool {
@@ -465,13 +439,12 @@ pub fn has_paper_ref_first_workflow_context(query_text: &str, query_token_list: 
         "再写",
         "再帮我重写",
     ];
-    ref_markers.iter().any(|marker| {
-        query_text.contains(*marker)
-            || text_matches_phrase(query_token_list, marker)
-    }) && story_or_write_markers.iter().any(|marker| {
-        query_text.contains(*marker)
-            || text_matches_phrase(query_token_list, marker)
-    })
+    ref_markers
+        .iter()
+        .any(|marker| query_text.contains(*marker) || text_matches_phrase(query_token_list, marker))
+        && story_or_write_markers.iter().any(|marker| {
+            query_text.contains(*marker) || text_matches_phrase(query_token_list, marker)
+        })
 }
 
 pub fn has_math_review_context(query_text: &str, query_token_list: &[String]) -> bool {
@@ -490,8 +463,7 @@ pub fn has_math_review_context(query_text: &str, query_token_list: &[String]) ->
         "证明审查",
     ];
     let has_math_review = math_review_markers.iter().any(|marker| {
-        query_text.contains(*marker)
-            || text_matches_phrase(query_token_list, marker)
+        query_text.contains(*marker) || text_matches_phrase(query_token_list, marker)
     });
     if !has_math_review {
         return false;

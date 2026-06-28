@@ -4,15 +4,11 @@
 //! including the SHA-256 digest, host harness fragment, and prompt-line helpers.
 
 use core_errors::FrameworkError;
-use fr_utils::constants::{
-    FRAMEWORK_CONTRACT_SUMMARY_SCHEMA_VERSION, FRAMEWORK_RUNTIME_AUTHORITY,
-};
-use fr_utils::json_io::read_json_strict;
-use fr_utils::json_value::{
-    nonempty_string, value_string_list, value_text,
-};
-use fr_utils::util::supervisor_contract;
 use fr_exec::runtime_view;
+use fr_utils::constants::{FRAMEWORK_CONTRACT_SUMMARY_SCHEMA_VERSION, FRAMEWORK_RUNTIME_AUTHORITY};
+use fr_utils::json_io::read_json_strict;
+use fr_utils::json_value::{nonempty_string, value_string_list, value_text};
+use fr_utils::util::supervisor_contract;
 use hex;
 use serde_json::{Map, Value, json};
 use sha2::{Digest, Sha256};
@@ -25,7 +21,9 @@ use tracing::instrument;
 use crate::util::{count_evidence_rows, parse_session_summary};
 
 #[instrument(level = "debug", skip_all)]
-pub fn build_framework_contract_summary_envelope(repo_root: &Path) -> Result<Value, FrameworkError> {
+pub fn build_framework_contract_summary_envelope(
+    repo_root: &Path,
+) -> Result<Value, FrameworkError> {
     let snapshot = runtime_view::load_framework_runtime_view(repo_root, None, None);
     let continuity = runtime_view::classify_runtime_continuity(&snapshot);
     let contract = supervisor_contract(&snapshot.supervisor_state);
@@ -173,8 +171,9 @@ pub fn build_framework_contract_summary_envelope(repo_root: &Path) -> Result<Val
 }
 
 fn stable_json_sha256(value: &Value) -> Result<String, FrameworkError> {
-    let bytes = serde_json::to_vec(value)
-        .map_err(|err| FrameworkError::validation(format!("serialize contract digest input failed: {err}")))?;
+    let bytes = serde_json::to_vec(value).map_err(|err| {
+        FrameworkError::validation(format!("serialize contract digest input failed: {err}"))
+    })?;
     let mut hasher = Sha256::new();
     hasher.update(bytes);
     Ok(hex::encode(hasher.finalize()))
@@ -196,23 +195,24 @@ fn build_host_harness_summary_fragment(repo_root: &Path) -> Result<Value, Framew
             path.display()
         )));
     }
-    let mtime = fs::metadata(&path)
-        .ok()
-        .and_then(|m| m.modified().ok());
+    let mtime = fs::metadata(&path).ok().and_then(|m| m.modified().ok());
     {
-        let guard = REGISTRY_CACHE
-            .lock()
-            .map_err(|e| FrameworkError::validation(format!("registry cache lock poisoned: {e}")))?;
+        let guard = REGISTRY_CACHE.lock().map_err(|e| {
+            FrameworkError::validation(format!("registry cache lock poisoned: {e}"))
+        })?;
         if let Some(ref cached) = *guard
-            && cached.mtime == mtime {
-                return Ok(cached.content.clone());
-            }
+            && cached.mtime == mtime
+        {
+            return Ok(cached.content.clone());
+        }
     }
     let v = read_json_strict(&path)?;
     let projections = v
         .get("host_projections")
         .and_then(Value::as_object)
-        .ok_or_else(|| FrameworkError::validation("RUNTIME_REGISTRY missing host_projections".to_string()))?;
+        .ok_or_else(|| {
+            FrameworkError::validation("RUNTIME_REGISTRY missing host_projections".to_string())
+        })?;
     let mut hosts: Vec<String> = projections.keys().cloned().collect();
     hosts.sort();
     let mut out = Map::new();
@@ -220,7 +220,9 @@ fn build_host_harness_summary_fragment(repo_root: &Path) -> Result<Value, Framew
         let proj = projections
             .get(&host)
             .and_then(Value::as_object)
-            .ok_or_else(|| FrameworkError::validation(format!("host_projections.{host} must be an object")))?;
+            .ok_or_else(|| {
+                FrameworkError::validation(format!("host_projections.{host} must be an object"))
+            })?;
         out.insert(
             host,
             json!({
@@ -231,10 +233,13 @@ fn build_host_harness_summary_fragment(repo_root: &Path) -> Result<Value, Framew
     }
     let result = Value::Object(out);
     {
-        let mut guard = REGISTRY_CACHE
-            .lock()
-            .map_err(|e| FrameworkError::validation(format!("registry cache lock poisoned: {e}")))?;
-        *guard = Some(CachedRegistry { content: result.clone(), mtime });
+        let mut guard = REGISTRY_CACHE.lock().map_err(|e| {
+            FrameworkError::validation(format!("registry cache lock poisoned: {e}"))
+        })?;
+        *guard = Some(CachedRegistry {
+            content: result.clone(),
+            mtime,
+        });
     }
     Ok(result)
 }

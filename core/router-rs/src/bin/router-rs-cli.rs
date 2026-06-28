@@ -36,9 +36,8 @@ fn init_browser_mcp_dispatch() {
     });
     // Adapter: browser-mcp returns anyhow::Error; dispatch hook expects String.
     host_projection::hooks::modify_runtime_hooks(|hooks| {
-        hooks.browser_dispatch = |cmd| {
-            Ok(browser_mcp::dispatch_browser_command(cmd).map_err(|e| e.to_string())?)
-        };
+        hooks.browser_dispatch =
+            |cmd| Ok(browser_mcp::dispatch_browser_command(cmd).map_err(|e| e.to_string())?);
     });
 }
 
@@ -73,35 +72,36 @@ fn main() -> Result<(), String> {
         .init();
     let mut args: Vec<std::ffi::OsString> = std::env::args_os().collect();
     if args.len() > 1
-        && let Some(cmd) = args[1].to_str() {
-            let cmd_lower = cmd.trim().to_ascii_lowercase();
-            let is_host_alias = runtime_core::hosts::host_provider_registry()
-                .iter()
-                .any(|p| {
-                    p.host_id() == cmd_lower
-                        || p.install_tool() == cmd_lower
-                        || p.aliases().iter().any(|a| *a == cmd_lower)
-                });
-            if is_host_alias {
-                // Map old-style `router-rs <host> <subcommand>` to registry-driven
-                // `router-rs host <action> <host-id> <subcommand>`.
-                // Determine action (hook/agent) from the subcommand or default.
-                // Consume the original subcommand word when it was "agent" to
-                // avoid duplicating it after the insertions below.
-                let action = match args.get(2).and_then(|s| s.to_str()) {
-                    Some(s) if s.to_ascii_lowercase() == "agent" => {
-                        args.remove(2);
-                        "agent"
-                    }
-                    _ => "hook",
-                };
-                // Replace the host alias with the expanded form
-                let host_id = args[1].clone();
-                args[1] = std::ffi::OsString::from("host");
-                args.insert(2, std::ffi::OsString::from(action));
-                args.insert(3, host_id);
-            }
+        && let Some(cmd) = args[1].to_str()
+    {
+        let cmd_lower = cmd.trim().to_ascii_lowercase();
+        let is_host_alias = runtime_core::hosts::host_provider_registry()
+            .iter()
+            .any(|p| {
+                p.host_id() == cmd_lower
+                    || p.install_tool() == cmd_lower
+                    || p.aliases().iter().any(|a| *a == cmd_lower)
+            });
+        if is_host_alias {
+            // Map old-style `router-rs <host> <subcommand>` to registry-driven
+            // `router-rs host <action> <host-id> <subcommand>`.
+            // Determine action (hook/agent) from the subcommand or default.
+            // Consume the original subcommand word when it was "agent" to
+            // avoid duplicating it after the insertions below.
+            let action = match args.get(2).and_then(|s| s.to_str()) {
+                Some(s) if s.to_ascii_lowercase() == "agent" => {
+                    args.remove(2);
+                    "agent"
+                }
+                _ => "hook",
+            };
+            // Replace the host alias with the expanded form
+            let host_id = args[1].clone();
+            args[1] = std::ffi::OsString::from("host");
+            args.insert(2, std::ffi::OsString::from(action));
+            args.insert(3, host_id);
         }
+    }
     let args = router_rs::cli::Cli::parse_from(args);
     init_browser_mcp_dispatch();
     router_rs::cli::run(&args).map_err(|e| e.to_string())

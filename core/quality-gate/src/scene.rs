@@ -28,7 +28,10 @@ pub(crate) fn normalize(s: &str) -> &str {
     if is_valid(s) {
         s
     } else {
-        tracing::warn!(invalid_scene = s, "QG scene: unknown scene normalized to GENERAL");
+        tracing::warn!(
+            invalid_scene = s,
+            "QG scene: unknown scene normalized to GENERAL"
+        );
         GENERAL
     }
 }

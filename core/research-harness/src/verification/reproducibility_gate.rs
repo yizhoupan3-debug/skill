@@ -52,7 +52,9 @@ impl GateChecker for Reproducibility {
                         reproducibility::CheckStatus::Pass => (Severity::C, true),
                         reproducibility::CheckStatus::Fail(_msg) => {
                             // Seed missing and checkpoint failure are P0 blockers
-                            let sev = if result.name == "seed_set" || result.name == "checkpoint_recoverable" {
+                            let sev = if result.name == "seed_set"
+                                || result.name == "checkpoint_recoverable"
+                            {
                                 Severity::P0
                             } else {
                                 Severity::B
@@ -68,10 +70,18 @@ impl GateChecker for Reproducibility {
                             id: format!("reproducibility_{}", result.name),
                             severity,
                             description: match &result.status {
-                                reproducibility::CheckStatus::Fail(msg) => format!("{}: FAIL — {}", result.name, msg),
-                                reproducibility::CheckStatus::Warn(msg) => format!("{}: WARN — {}", result.name, msg),
-                                reproducibility::CheckStatus::Skip(msg) => format!("{}: SKIP — {}", result.name, msg),
-                                reproducibility::CheckStatus::Pass => format!("{}: PASS", result.name),
+                                reproducibility::CheckStatus::Fail(msg) => {
+                                    format!("{}: FAIL — {}", result.name, msg)
+                                }
+                                reproducibility::CheckStatus::Warn(msg) => {
+                                    format!("{}: WARN — {}", result.name, msg)
+                                }
+                                reproducibility::CheckStatus::Skip(msg) => {
+                                    format!("{}: SKIP — {}", result.name, msg)
+                                }
+                                reproducibility::CheckStatus::Pass => {
+                                    format!("{}: PASS", result.name)
+                                }
                             },
                             location: None,
                             suggestion: None,
@@ -85,7 +95,9 @@ impl GateChecker for Reproducibility {
                     severity: Severity::B,
                     description: format!("Reproducibility audit failed to run: {e}"),
                     location: None,
-                    suggestion: Some("ensure experiment directory exists and is accessible".to_string()),
+                    suggestion: Some(
+                        "ensure experiment directory exists and is accessible".to_string(),
+                    ),
                 });
             }
         }

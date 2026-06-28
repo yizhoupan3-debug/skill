@@ -37,8 +37,18 @@ pub struct Inequality {
 }
 
 impl Inequality {
-    pub fn new(coefficients: Vec<f64>, vars: Vec<String>, sense: InequalitySense, rhs: f64) -> Self {
-        Self { coefficients, vars, sense, rhs }
+    pub fn new(
+        coefficients: Vec<f64>,
+        vars: Vec<String>,
+        sense: InequalitySense,
+        rhs: f64,
+    ) -> Self {
+        Self {
+            coefficients,
+            vars,
+            sense,
+            rhs,
+        }
     }
 }
 
@@ -49,9 +59,15 @@ pub struct InequalitySystem {
 }
 
 impl InequalitySystem {
-    pub fn new(constraints: Vec<Inequality>) -> Self { Self { constraints } }
-    pub fn is_empty(&self) -> bool { self.constraints.is_empty() }
-    pub fn len(&self) -> usize { self.constraints.len() }
+    pub fn new(constraints: Vec<Inequality>) -> Self {
+        Self { constraints }
+    }
+    pub fn is_empty(&self) -> bool {
+        self.constraints.is_empty()
+    }
+    pub fn len(&self) -> usize {
+        self.constraints.len()
+    }
 }
 
 /// Result of a feasibility check (serializable for Python bridge).
@@ -65,8 +81,12 @@ pub enum FeasibilityResult {
 }
 
 impl FeasibilityResult {
-    pub fn is_feasible(&self) -> bool { matches!(self, FeasibilityResult::Feasible { .. }) }
-    pub fn is_infeasible(&self) -> bool { matches!(self, FeasibilityResult::Infeasible { .. }) }
+    pub fn is_feasible(&self) -> bool {
+        matches!(self, FeasibilityResult::Feasible { .. })
+    }
+    pub fn is_infeasible(&self) -> bool {
+        matches!(self, FeasibilityResult::Infeasible { .. })
+    }
 }
 
 // ===========================================================================
@@ -79,24 +99,45 @@ pub fn parse_inequality_latex(expr: &str) -> Result<Inequality, FrameworkError> 
 
 fn parse_via_regex(expr: &str) -> Result<Inequality, FrameworkError> {
     let cleaned = expr
-        .replace("\\leq", "<=").replace("\\le", "<=")
-        .replace("\\geq", ">=").replace("\\ge", ">=")
-        .replace("\\lt", "<").replace("\\gt", ">")
-        .replace("\\cdot", "*").replace(' ', "");
+        .replace("\\leq", "<=")
+        .replace("\\le", "<=")
+        .replace("\\geq", ">=")
+        .replace("\\ge", ">=")
+        .replace("\\lt", "<")
+        .replace("\\gt", ">")
+        .replace("\\cdot", "*")
+        .replace(' ', "");
 
     let re = regex::Regex::new(r"^(.+?)\s*(<=|>=|==|=|<|>)\s*(.+)$")
         .map_err(|e| FrameworkError::validation(format!("regex: {e}")))?;
-    let caps = re.captures(&cleaned).ok_or_else(|| FrameworkError::validation(format!("cannot parse: {expr}")))?;
+    let caps = re
+        .captures(&cleaned)
+        .ok_or_else(|| FrameworkError::validation(format!("cannot parse: {expr}")))?;
 
-    let lhs_str = caps.get(1).ok_or_else(|| FrameworkError::validation("regex missing LHS group"))?.as_str();
-    let sense_str = caps.get(2).ok_or_else(|| FrameworkError::validation("regex missing sense group"))?.as_str();
-    let rhs_str = caps.get(3).ok_or_else(|| FrameworkError::validation("regex missing RHS group"))?.as_str();
+    let lhs_str = caps
+        .get(1)
+        .ok_or_else(|| FrameworkError::validation("regex missing LHS group"))?
+        .as_str();
+    let sense_str = caps
+        .get(2)
+        .ok_or_else(|| FrameworkError::validation("regex missing sense group"))?
+        .as_str();
+    let rhs_str = caps
+        .get(3)
+        .ok_or_else(|| FrameworkError::validation("regex missing RHS group"))?
+        .as_str();
 
     let sense = match sense_str {
-        "<" => InequalitySense::Lt,  "<=" => InequalitySense::Le,
+        "<" => InequalitySense::Lt,
+        "<=" => InequalitySense::Le,
         "==" | "=" => InequalitySense::Eq,
-        ">=" => InequalitySense::Ge, ">" => InequalitySense::Gt,
-        _ => return Err(FrameworkError::validation(format!("unknown sense: {sense_str}"))),
+        ">=" => InequalitySense::Ge,
+        ">" => InequalitySense::Gt,
+        _ => {
+            return Err(FrameworkError::validation(format!(
+                "unknown sense: {sense_str}"
+            )));
+        }
     };
 
     // Extract terms from both sides. Variables go to LHS, constants to RHS.
@@ -124,12 +165,19 @@ fn parse_via_regex(expr: &str) -> Result<Inequality, FrameworkError> {
 
 fn parse_number(s: &str) -> Result<f64, FrameworkError> {
     if let Some(pos) = s.find('/') {
-        let n: f64 = s[..pos].parse().map_err(|_| FrameworkError::validation(format!("bad num: {}", &s[..pos])))?;
-        let d: f64 = s[pos+1..].parse().map_err(|_| FrameworkError::validation(format!("bad den: {}", &s[pos+1..])))?;
-        if d == 0.0 { return Err(FrameworkError::validation("div by zero")); }
+        let n: f64 = s[..pos]
+            .parse()
+            .map_err(|_| FrameworkError::validation(format!("bad num: {}", &s[..pos])))?;
+        let d: f64 = s[pos + 1..]
+            .parse()
+            .map_err(|_| FrameworkError::validation(format!("bad den: {}", &s[pos + 1..])))?;
+        if d == 0.0 {
+            return Err(FrameworkError::validation("div by zero"));
+        }
         return Ok(n / d);
     }
-    s.parse::<f64>().map_err(|_| FrameworkError::validation(format!("bad number: {s}")))
+    s.parse::<f64>()
+        .map_err(|_| FrameworkError::validation(format!("bad number: {s}")))
 }
 
 fn extract_terms(lhs: &str) -> (Vec<f64>, Vec<String>, f64) {
@@ -141,18 +189,28 @@ fn extract_terms(lhs: &str) -> (Vec<f64>, Vec<String>, f64) {
 
     while i < src.len() {
         // Skip '+' separators (not consumed by the term body loop)
-        if src[i] == '+' { i += 1; continue; }
+        if src[i] == '+' {
+            i += 1;
+            continue;
+        }
 
         let mut term = String::new();
-        if src[i] == '-' { term.push('-'); i += 1; }
+        if src[i] == '-' {
+            term.push('-');
+            i += 1;
+        }
         while i < src.len() && src[i] != '+' && src[i] != '-' {
-            term.push(src[i]); i += 1;
+            term.push(src[i]);
+            i += 1;
         }
         if let Some((c, v_opt)) = parse_one_term(&term) {
             if let Some(v) = v_opt {
                 match vars.iter().position(|x: &String| x == &v) {
                     Some(idx) => coeffs[idx] += c,
-                    None => { vars.push(v); coeffs.push(c); }
+                    None => {
+                        vars.push(v);
+                        coeffs.push(c);
+                    }
                 }
             } else {
                 const_shift += c;
@@ -164,8 +222,12 @@ fn extract_terms(lhs: &str) -> (Vec<f64>, Vec<String>, f64) {
 
 fn parse_one_term(t: &str) -> Option<(f64, Option<String>)> {
     let t = t.trim();
-    if t.is_empty() { return None; }
-    if let Ok(n) = t.parse::<f64>() { return Some((n, None)); }
+    if t.is_empty() {
+        return None;
+    }
+    if let Ok(n) = t.parse::<f64>() {
+        return Some((n, None));
+    }
 
     let mut num = String::new();
     let mut var = String::new();
@@ -173,14 +235,26 @@ fn parse_one_term(t: &str) -> Option<(f64, Option<String>)> {
     for ch in t.chars() {
         if (ch.is_ascii_digit() || ch == '.' || ch == '-' || ch == '/') && !in_var {
             num.push(ch);
-        } else { in_var = true; var.push(ch); }
+        } else {
+            in_var = true;
+            var.push(ch);
+        }
     }
-    if var.is_empty() { return None; }
+    if var.is_empty() {
+        return None;
+    }
     // Strip leading '*' from coefficient-variable separator
     let var = var.trim_start_matches('*').to_string();
-    if var.is_empty() { return None; }
-    let c = if num.is_empty() || num == "+" { 1.0 }
-            else if num == "-" { -1.0 } else { parse_number(&num).ok()? };
+    if var.is_empty() {
+        return None;
+    }
+    let c = if num.is_empty() || num == "+" {
+        1.0
+    } else if num == "-" {
+        -1.0
+    } else {
+        parse_number(&num).ok()?
+    };
     Some((c, Some(var)))
 }
 
@@ -192,13 +266,17 @@ fn parse_one_term(t: &str) -> Option<(f64, Option<String>)> {
 pub fn solve_system(system: &InequalitySystem, timeout_ms: Option<u64>) -> FeasibilityResult {
     let _timeout = timeout_ms.unwrap_or(5000);
     if system.is_empty() {
-        return FeasibilityResult::Feasible { model: HashMap::new() };
+        return FeasibilityResult::Feasible {
+            model: HashMap::new(),
+        };
     }
 
     let result = solve_via_minilp(system);
     match result {
         Ok(model) => FeasibilityResult::Feasible { model },
-        Err(cert) => FeasibilityResult::Infeasible { proof_certificate: cert.to_string() },
+        Err(cert) => FeasibilityResult::Infeasible {
+            proof_certificate: cert.to_string(),
+        },
     }
 }
 
@@ -228,7 +306,10 @@ fn solve_via_minilp(system: &InequalitySystem) -> Result<HashMap<String, f64>, F
                 InequalitySense::Gt => 0.0 > c.rhs,
             };
             if !ok {
-                return Err(FrameworkError::validation(format!("constant constraint violated: {:?} {} {}", c.coefficients, c.rhs, c.rhs)));
+                return Err(FrameworkError::validation(format!(
+                    "constant constraint violated: {:?} {} {}",
+                    c.coefficients, c.rhs, c.rhs
+                )));
             }
         }
         return Ok(HashMap::new());
@@ -300,20 +381,26 @@ pub fn check_inequality(expr: &str, timeout_ms: Option<u64>) -> VerificationResu
 }
 
 /// Like `check_inequality` but with an explicit check name (for tool-layer reuse).
-pub fn check_inequality_with_name(expr: &str, timeout_ms: Option<u64>, check_name: &str) -> VerificationResult {
+pub fn check_inequality_with_name(
+    expr: &str,
+    timeout_ms: Option<u64>,
+    check_name: &str,
+) -> VerificationResult {
     let ineq = match parse_inequality_latex(expr) {
         Ok(i) => i,
-        Err(e) => return VerificationResult {
-            check_name: check_name.to_string(),
-            status: VerificationStatus::Fail,
-            details: format!("parse failed: {e}"),
-            evidence_path: None,
-        },
+        Err(e) => {
+            return VerificationResult {
+                check_name: check_name.to_string(),
+                status: VerificationStatus::Fail,
+                details: format!("parse failed: {e}"),
+                evidence_path: None,
+            };
+        }
     };
     let system = InequalitySystem::new(vec![ineq]);
     match solve_system(&system, timeout_ms) {
         FeasibilityResult::Feasible { model } => {
-            let ms: Vec<String> = model.iter().map(|(k,v)| format!("{k}={v}")).collect();
+            let ms: Vec<String> = model.iter().map(|(k, v)| format!("{k}={v}")).collect();
             VerificationResult {
                 check_name: check_name.to_string(),
                 status: VerificationStatus::Pass,
@@ -359,6 +446,7 @@ pub fn solver_available() -> bool {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     #[test]
@@ -425,7 +513,10 @@ mod tests {
         let ineq2 = Inequality::new(vec![1.0], vec!["x".into()], InequalitySense::Lt, 0.0);
         let system = InequalitySystem::new(vec![ineq1, ineq2]);
         let result = solve_system(&system, Some(1000));
-        assert!(result.is_infeasible(), "x > 5 AND x < 0 should be infeasible");
+        assert!(
+            result.is_infeasible(),
+            "x > 5 AND x < 0 should be infeasible"
+        );
     }
 
     #[test]

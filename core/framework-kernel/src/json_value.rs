@@ -117,10 +117,7 @@ pub fn required_non_empty_string(
 }
 
 pub fn optional_non_empty_string(payload: &Value, key: &str) -> Option<String> {
-    let text = payload
-        .get(key)
-        .and_then(Value::as_str)?
-        .trim();
+    let text = payload.get(key).and_then(Value::as_str)?.trim();
     if text.is_empty() {
         None
     } else {
@@ -265,10 +262,7 @@ mod tests {
 
     #[test]
     fn nonempty_string_some_nonempty() {
-        assert_eq!(
-            nonempty_string(Some(&json!("hello"))),
-            Some("hello".into())
-        );
+        assert_eq!(nonempty_string(Some(&json!("hello"))), Some("hello".into()));
     }
 
     #[test]
@@ -300,18 +294,12 @@ mod tests {
 
     #[test]
     fn value_bool_or_none_string_true() {
-        assert_eq!(
-            value_bool_or_none(Some(&json!("true"))),
-            Some(true)
-        );
+        assert_eq!(value_bool_or_none(Some(&json!("true"))), Some(true));
     }
 
     #[test]
     fn value_bool_or_none_string_yes() {
-        assert_eq!(
-            value_bool_or_none(Some(&json!("yes"))),
-            Some(true)
-        );
+        assert_eq!(value_bool_or_none(Some(&json!("yes"))), Some(true));
     }
 
     #[test]
@@ -321,26 +309,17 @@ mod tests {
 
     #[test]
     fn value_bool_or_none_string_false() {
-        assert_eq!(
-            value_bool_or_none(Some(&json!("false"))),
-            Some(false)
-        );
+        assert_eq!(value_bool_or_none(Some(&json!("false"))), Some(false));
     }
 
     #[test]
     fn value_bool_or_none_string_no() {
-        assert_eq!(
-            value_bool_or_none(Some(&json!("no"))),
-            Some(false)
-        );
+        assert_eq!(value_bool_or_none(Some(&json!("no"))), Some(false));
     }
 
     #[test]
     fn value_bool_or_none_string_garbage() {
-        assert_eq!(
-            value_bool_or_none(Some(&json!("maybe"))),
-            None
-        );
+        assert_eq!(value_bool_or_none(Some(&json!("maybe"))), None);
     }
 
     #[test]
@@ -458,8 +437,7 @@ mod tests {
     #[test]
     fn required_non_empty_string_ok() {
         let payload = json!({"name": "Alice"});
-        let result =
-            required_non_empty_string(&payload, "name", "test").unwrap();
+        let result = required_non_empty_string(&payload, "name", "test").unwrap();
         assert_eq!(result, "Alice");
     }
 
@@ -468,7 +446,12 @@ mod tests {
         let payload = json!({});
         let result = required_non_empty_string(&payload, "name", "test");
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("requires non-empty name"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("requires non-empty name")
+        );
     }
 
     #[test]
@@ -490,10 +473,7 @@ mod tests {
     #[test]
     fn optional_non_empty_string_some() {
         let payload = json!({"k": "val"});
-        assert_eq!(
-            optional_non_empty_string(&payload, "k"),
-            Some("val".into())
-        );
+        assert_eq!(optional_non_empty_string(&payload, "k"), Some("val".into()));
     }
 
     #[test]

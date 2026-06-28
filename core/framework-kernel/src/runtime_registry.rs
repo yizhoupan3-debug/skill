@@ -138,7 +138,8 @@ pub fn load_runtime_registry_payload(repo_root: &Path) -> Result<Value, Framewor
 
 pub fn load_runtime_registry(repo_root: &Path) -> Result<RuntimeRegistry, FrameworkError> {
     let payload = load_runtime_registry_payload(repo_root)?;
-    serde_json::from_value::<RuntimeRegistry>(payload).map_err(|err| FrameworkError::validation(err.to_string()))
+    serde_json::from_value::<RuntimeRegistry>(payload)
+        .map_err(|err| FrameworkError::validation(err.to_string()))
 }
 
 /// Map MCP stdio host spellings to `host_projections` keys (avoid `hosts` import cycle).
@@ -250,10 +251,7 @@ mod tests {
             registry_projection_host_key("claude-desktop"),
             "claude-desktop"
         );
-        assert_eq!(
-            registry_projection_host_key("claude"),
-            "claude"
-        );
+        assert_eq!(registry_projection_host_key("claude"), "claude");
     }
 
     #[test]

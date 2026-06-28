@@ -16,9 +16,7 @@ fn nested_value<'a>(payload: &'a Value, path: &[&str]) -> Option<&'a Value> {
 }
 
 pub fn nested_non_empty_string(payload: &Value, path: &[&str]) -> Option<String> {
-    let text = nested_value(payload, path)
-        .and_then(Value::as_str)?
-        .trim();
+    let text = nested_value(payload, path).and_then(Value::as_str)?.trim();
     if text.is_empty() {
         None
     } else {
@@ -51,7 +49,10 @@ mod tests {
     #[test]
     fn nested_non_empty_string_extracts_trimmed() {
         let v = json!({"key": "  hello  "});
-        assert_eq!(nested_non_empty_string(&v, &["key"]), Some("hello".to_string()));
+        assert_eq!(
+            nested_non_empty_string(&v, &["key"]),
+            Some("hello".to_string())
+        );
     }
 
     #[test]

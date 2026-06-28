@@ -46,8 +46,14 @@ pub fn extract_body(text: &str) -> Option<&str> {
     let end = rest.find("\n---").or_else(|| rest.find("\r\n---"))?;
     // Skip past the closing --- and the newline(s) after it
     let after_close = &rest[end + 4..]; // 4 = \n + ---
-    let after_close = after_close.trim_start_matches('\n').trim_start_matches('\r');
-    if after_close.is_empty() { None } else { Some(after_close) }
+    let after_close = after_close
+        .trim_start_matches('\n')
+        .trim_start_matches('\r');
+    if after_close.is_empty() {
+        None
+    } else {
+        Some(after_close)
+    }
 }
 
 /// Error type for frontmatter parsing failures.
@@ -131,14 +137,10 @@ fn parse_enum<T: std::str::FromStr + fmt::Debug>(
 where
     <T as std::str::FromStr>::Err: fmt::Display,
 {
-    let val = raw.ok_or_else(|| {
-        FrontmatterError::ParseError(format!("missing required field: {field}"))
-    })?;
+    let val = raw
+        .ok_or_else(|| FrontmatterError::ParseError(format!("missing required field: {field}")))?;
     val.parse::<T>().map_err(|e| {
-        FrontmatterError::ParseError(format!(
-            "invalid value `{}` for field `{field}`: {e}",
-            val,
-        ))
+        FrontmatterError::ParseError(format!("invalid value `{}` for field `{field}`: {e}", val,))
     })
 }
 
@@ -168,32 +170,28 @@ fn parse_trigger_hints(val: &Option<serde_json::Value>) -> Result<Vec<String>, F
 pub fn parse_frontmatter(
     text: &str,
 ) -> std::result::Result<crate::frontmatter::SkillFrontmatter, FrontmatterError> {
-    let block = extract_frontmatter_block(text)
-        .ok_or(FrontmatterError::ParseError("no YAML frontmatter block found".into()))?;
+    let block = extract_frontmatter_block(text).ok_or(FrontmatterError::ParseError(
+        "no YAML frontmatter block found".into(),
+    ))?;
 
-    let raw: RawFrontmatter = serde_yml::from_str(block)
-        .map_err(|e| FrontmatterError::ParseError(e.to_string()))?;
+    let raw: RawFrontmatter =
+        serde_yml::from_str(block).map_err(|e| FrontmatterError::ParseError(e.to_string()))?;
 
     // Validate required fields
     let _name = raw
         .name
         .as_deref()
         .ok_or_else(|| FrontmatterError::ParseError("missing required field: name".into()))?;
-    let _description = raw
-        .description
-        .as_deref()
-        .ok_or_else(|| FrontmatterError::ParseError("missing required field: description".into()))?;
+    let _description = raw.description.as_deref().ok_or_else(|| {
+        FrontmatterError::ParseError("missing required field: description".into())
+    })?;
 
-    let routing_layer: RoutingLayer =
-        parse_enum("routing_layer", raw.routing_layer.as_deref())?;
-    let routing_owner: RoutingOwner =
-        parse_enum("routing_owner", raw.routing_owner.as_deref())?;
-    let routing_gate: RoutingGate =
-        parse_enum("routing_gate", raw.routing_gate.as_deref())?;
+    let routing_layer: RoutingLayer = parse_enum("routing_layer", raw.routing_layer.as_deref())?;
+    let routing_owner: RoutingOwner = parse_enum("routing_owner", raw.routing_owner.as_deref())?;
+    let routing_gate: RoutingGate = parse_enum("routing_gate", raw.routing_gate.as_deref())?;
     let routing_priority: RoutingPriority =
         parse_enum("routing_priority", raw.routing_priority.as_deref())?;
-    let session_start: SessionStart =
-        parse_enum("session_start", raw.session_start.as_deref())?;
+    let session_start: SessionStart = parse_enum("session_start", raw.session_start.as_deref())?;
     let trigger_hints = parse_trigger_hints(&raw.trigger_hints)?;
 
     Ok(crate::frontmatter::SkillFrontmatter {
@@ -227,9 +225,7 @@ pub fn parse_frontmatter(
 /// Hard constraints (missing required fields, invalid enum values) are caught
 /// by [`parse_frontmatter`].  This function returns warnings for best-practice
 /// violations that don't prevent routing.
-pub fn validate_frontmatter(
-    fm: &crate::frontmatter::SkillFrontmatter,
-) -> Vec<FrontmatterWarning> {
+pub fn validate_frontmatter(fm: &crate::frontmatter::SkillFrontmatter) -> Vec<FrontmatterWarning> {
     let mut warnings = Vec::new();
     if fm.trigger_hints.is_empty() {
         warnings.push(FrontmatterWarning::EmptyTriggerHints);
@@ -244,10 +240,13 @@ pub fn validate_frontmatter(
 /// soft-constraint warnings.
 pub fn parse_and_validate(
     text: &str,
-) -> std::result::Result<(
-    crate::frontmatter::SkillFrontmatter,
-    Vec<FrontmatterWarning>,
-), FrontmatterError> {
+) -> std::result::Result<
+    (
+        crate::frontmatter::SkillFrontmatter,
+        Vec<FrontmatterWarning>,
+    ),
+    FrontmatterError,
+> {
     let fm = parse_frontmatter(text)?;
     let warnings = validate_frontmatter(&fm);
     Ok((fm, warnings))
@@ -493,6 +492,8 @@ pub fn contains_heading(text: &str, heading: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
+
     use super::*;
 
     const SAMPLE_SKILL_MD: &str = r#"---

@@ -6,9 +6,9 @@ pub mod trace_attach;
 pub mod trace_stream_io;
 pub mod trace_transport;
 
-
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     #[test]
     fn smoke() {
         assert!(true);

@@ -12,10 +12,10 @@ mod four_host_install_projection {
     use crate::framework_host_targets::{
         host_targets_supported_host_ids, skills_install_tool_for_host_id,
     };
-    use crate::host_integration::{
+    use crate::runtime_registry::load_runtime_registry_json;
+    use runtime_core::host_integration::{
         ResolvedProjectionRoots, install_projection_tool, projection_scope_for_tool,
     };
-    use crate::runtime_registry::load_runtime_registry_json;
 
     fn framework_repo_root() -> PathBuf {
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -101,7 +101,8 @@ mod four_host_install_projection {
     fn assert_host_projected_codegraph(roots: &ResolvedProjectionRoots, host_id: &str) {
         match host_id {
             "cursor" => {
-                let cursor_home = roots.host_home_root("cursor")
+                let cursor_home = roots
+                    .host_home_root("cursor")
                     .unwrap_or_else(|| panic!("cursor host home not found"));
                 let path = cursor_home.join("mcp.json");
                 assert!(path.is_file(), "cursor user mcp.json must exist");

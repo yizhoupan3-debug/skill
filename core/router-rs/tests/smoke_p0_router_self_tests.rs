@@ -117,7 +117,7 @@ fn router_self_validate_rejects_missing_binary_smoke() {
     let missing = temp_home("missing-bin");
     let err = validate_router_rs_binary_runnable(&missing).unwrap_err();
     assert!(
-        err.contains("missing"),
+        err.to_string().contains("missing"),
         "expected missing-file error, got: {err}"
     );
 }

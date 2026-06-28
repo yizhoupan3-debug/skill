@@ -11,8 +11,7 @@ pub enum ReviewGateMode {
 
 /// `ROUTER_RS_REVIEW_GATE_MODE=lite` enables lite; unset or `strict` → strict.
 pub fn review_gate_mode() -> ReviewGateMode {
-    match std::env::var("ROUTER_RS_REVIEW_GATE_MODE")
-    {
+    match std::env::var("ROUTER_RS_REVIEW_GATE_MODE") {
         Ok(v) if v.trim().eq_ignore_ascii_case("lite") => ReviewGateMode::Lite,
         _ => ReviewGateMode::Strict,
     }
@@ -169,6 +168,7 @@ pub fn maybe_bump_review_phase_for_compact_findings(
 
 #[cfg(test)]
 mod fork_context_parse_tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use crate::hook_common::install_review_prompt_test_deps;
     use serde_json::json;
@@ -176,25 +176,18 @@ mod fork_context_parse_tests {
     #[test]
     fn review_gate_mode_respects_lite_env() {
         let _lock = crate::test_env_sync::process_env_lock();
-        crate::test_env_sync::with_env_var(
-            "ROUTER_RS_REVIEW_GATE_MODE",
-            "lite",
-            || assert_eq!(review_gate_mode(), ReviewGateMode::Lite),
-        );
-        crate::test_env_sync::with_env_var(
-            "ROUTER_RS_REVIEW_GATE_MODE",
-            "LITE",
-            || assert_eq!(review_gate_mode(), ReviewGateMode::Lite),
-        );
-        crate::test_env_sync::with_env_var_removed(
-            "ROUTER_RS_REVIEW_GATE_MODE",
-            || assert_eq!(review_gate_mode(), ReviewGateMode::Strict),
-        );
-        crate::test_env_sync::with_env_var(
-            "ROUTER_RS_REVIEW_GATE_MODE",
-            "strict",
-            || assert_eq!(review_gate_mode(), ReviewGateMode::Strict),
-        );
+        crate::test_env_sync::with_env_var("ROUTER_RS_REVIEW_GATE_MODE", "lite", || {
+            assert_eq!(review_gate_mode(), ReviewGateMode::Lite)
+        });
+        crate::test_env_sync::with_env_var("ROUTER_RS_REVIEW_GATE_MODE", "LITE", || {
+            assert_eq!(review_gate_mode(), ReviewGateMode::Lite)
+        });
+        crate::test_env_sync::with_env_var_removed("ROUTER_RS_REVIEW_GATE_MODE", || {
+            assert_eq!(review_gate_mode(), ReviewGateMode::Strict)
+        });
+        crate::test_env_sync::with_env_var("ROUTER_RS_REVIEW_GATE_MODE", "strict", || {
+            assert_eq!(review_gate_mode(), ReviewGateMode::Strict)
+        });
     }
 
     #[test]
@@ -328,16 +321,48 @@ mod fork_context_parse_tests {
     #[test]
     fn review_gate_blocks_stop_matrix_snapshot() {
         let scenarios = vec![
-            ("armed-no-evidence", ReviewGateFacts { review_required: true, review_override: false, independent_reviewer_seen: false }),
-            ("cleared-by-evidence", ReviewGateFacts { review_required: true, review_override: false, independent_reviewer_seen: true }),
-            ("cleared-by-override", ReviewGateFacts { review_required: true, review_override: true, independent_reviewer_seen: false }),
-            ("not-required", ReviewGateFacts { review_required: false, review_override: false, independent_reviewer_seen: false }),
+            (
+                "armed-no-evidence",
+                ReviewGateFacts {
+                    review_required: true,
+                    review_override: false,
+                    independent_reviewer_seen: false,
+                },
+            ),
+            (
+                "cleared-by-evidence",
+                ReviewGateFacts {
+                    review_required: true,
+                    review_override: false,
+                    independent_reviewer_seen: true,
+                },
+            ),
+            (
+                "cleared-by-override",
+                ReviewGateFacts {
+                    review_required: true,
+                    review_override: true,
+                    independent_reviewer_seen: false,
+                },
+            ),
+            (
+                "not-required",
+                ReviewGateFacts {
+                    review_required: false,
+                    review_override: false,
+                    independent_reviewer_seen: false,
+                },
+            ),
         ];
         let results: Vec<(&str, bool, bool)> = scenarios
             .into_iter()
             .map(|(label, facts)| {
                 let blocks_stop = review_gate_blocks_stop(facts);
-                let satisfied = review_gate_satisfied(facts.review_required, facts.review_override, facts.independent_reviewer_seen);
+                let satisfied = review_gate_satisfied(
+                    facts.review_required,
+                    facts.review_override,
+                    facts.independent_reviewer_seen,
+                );
                 (label, blocks_stop, satisfied)
             })
             .collect();
@@ -352,11 +377,26 @@ mod fork_context_parse_tests {
             "1",
             || {
                 let matrix: Vec<(&str, bool)> = vec![
-                    ("None, reviewer_lane=true", review_independent_fork(None, true)),
-                    ("Some(true), reviewer_lane=true", review_independent_fork(Some(true), true)),
-                    ("Some(false), reviewer_lane=true", review_independent_fork(Some(false), true)),
-                    ("Some(false), reviewer_lane=false", review_independent_fork(Some(false), false)),
-                    ("None, reviewer_lane=false", review_independent_fork(None, false)),
+                    (
+                        "None, reviewer_lane=true",
+                        review_independent_fork(None, true),
+                    ),
+                    (
+                        "Some(true), reviewer_lane=true",
+                        review_independent_fork(Some(true), true),
+                    ),
+                    (
+                        "Some(false), reviewer_lane=true",
+                        review_independent_fork(Some(false), true),
+                    ),
+                    (
+                        "Some(false), reviewer_lane=false",
+                        review_independent_fork(Some(false), false),
+                    ),
+                    (
+                        "None, reviewer_lane=false",
+                        review_independent_fork(None, false),
+                    ),
                 ];
                 insta::assert_debug_snapshot!(matrix);
             },

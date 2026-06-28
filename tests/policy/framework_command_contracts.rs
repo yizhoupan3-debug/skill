@@ -4,11 +4,7 @@ use crate::common::{project_root, read_json, read_text};
 use serde_json::Value;
 use std::collections::HashSet;
 
-const FRAMEWORK_COMMAND_IDS: &[&str] = &[
-    "deepinterview",
-    "gitx",
-    "update",
-];
+const FRAMEWORK_COMMAND_IDS: &[&str] = &["deepinterview", "gitx", "update"];
 
 fn manifest_or_runtime_lane_contains(runtime_slugs: &HashSet<&str>, slug: &str) -> bool {
     slug == "none"
@@ -73,11 +69,8 @@ fn plan_mode_keeps_review_optional_and_review_only() {
             "plan-mode must not make review a default plan step: {forbidden}"
         );
     }
-    for marker in [
-        "仅当用户明确要求 review plan / 审计划",
-    ] {
-        assert!(plan_mode.contains(marker), "missing marker: {marker}");
-    }
+    let marker = "仅当用户明确要求 review plan / 审计划";
+    assert!(plan_mode.contains(marker), "missing marker: {marker}");
 
     let review_gate = read_text(&project_root().join(".rules/review-subagent-gate.mdc"));
     for marker in [

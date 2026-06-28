@@ -2,12 +2,12 @@
 
 pub mod mcp;
 
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{Context, Result, anyhow, bail};
 use chrono::{DateTime, TimeZone, Utc};
 use futures::stream::{FuturesUnordered, StreamExt};
 use reqwest::Client;
 use serde::Serialize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::time::Duration;
 use tokio::time::sleep;
 
@@ -264,9 +264,7 @@ async fn fetch_us_ohlcv(
 
     for src in attempts {
         let attempt = match src {
-            "yahoo" => {
-                fetch_yahoo_ohlcv(http, symbol, interval, period, adjusted).await
-            }
+            "yahoo" => fetch_yahoo_ohlcv(http, symbol, interval, period, adjusted).await,
             "stooq" => fetch_stooq_ohlcv(http, symbol).await,
             _ => unreachable!(),
         };
@@ -1270,6 +1268,7 @@ struct StooqRow {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::approx_constant)]
     use super::*;
 
     // ------------------------------------------------------------------
@@ -1300,8 +1299,15 @@ mod tests {
     fn test_ohlcv_timestamp_utc_valid() {
         let record = OhlcvRecord {
             timestamp: "2024-06-15T10:30:00Z".to_string(),
-            open: 1.0, high: 2.0, low: 1.0, close: 1.5, volume: 100.0,
-            adj_close: None, symbol: "T".to_string(), market: "us".to_string(), source: "test".to_string(),
+            open: 1.0,
+            high: 2.0,
+            low: 1.0,
+            close: 1.5,
+            volume: 100.0,
+            adj_close: None,
+            symbol: "T".to_string(),
+            market: "us".to_string(),
+            source: "test".to_string(),
         };
         let dt = record.timestamp_utc();
         assert!(dt.is_some());
@@ -1312,8 +1318,15 @@ mod tests {
     fn test_ohlcv_timestamp_utc_invalid() {
         let record = OhlcvRecord {
             timestamp: "not-a-date".to_string(),
-            open: 1.0, high: 2.0, low: 1.0, close: 1.5, volume: 100.0,
-            adj_close: None, symbol: "T".to_string(), market: "us".to_string(), source: "test".to_string(),
+            open: 1.0,
+            high: 2.0,
+            low: 1.0,
+            close: 1.5,
+            volume: 100.0,
+            adj_close: None,
+            symbol: "T".to_string(),
+            market: "us".to_string(),
+            source: "test".to_string(),
         };
         assert!(record.timestamp_utc().is_none());
     }
@@ -1326,13 +1339,27 @@ mod tests {
         vec![
             OhlcvRecord {
                 timestamp: "2024-01-01T00:00:00Z".to_string(),
-                open: 100.0, high: 105.0, low: 99.0, close: 103.0, volume: 1_000.0,
-                adj_close: None, symbol: "AAPL".to_string(), market: "us".to_string(), source: "yahoo".to_string(),
+                open: 100.0,
+                high: 105.0,
+                low: 99.0,
+                close: 103.0,
+                volume: 1_000.0,
+                adj_close: None,
+                symbol: "AAPL".to_string(),
+                market: "us".to_string(),
+                source: "yahoo".to_string(),
             },
             OhlcvRecord {
                 timestamp: "2024-01-02T00:00:00Z".to_string(),
-                open: 104.0, high: 106.0, low: 102.0, close: 105.0, volume: 1_200.0,
-                adj_close: Some(105.0), symbol: "AAPL".to_string(), market: "us".to_string(), source: "yahoo".to_string(),
+                open: 104.0,
+                high: 106.0,
+                low: 102.0,
+                close: 105.0,
+                volume: 1_200.0,
+                adj_close: Some(105.0),
+                symbol: "AAPL".to_string(),
+                market: "us".to_string(),
+                source: "yahoo".to_string(),
             },
         ]
     }
@@ -1360,10 +1387,15 @@ mod tests {
         let records = sample_records();
         let result = FetchResult {
             dataset: "ohlcv".to_string(),
-            source: "yahoo".to_string(), market: "us".to_string(), symbol: "AAPL".to_string(),
-            interval: None, timezone: None, adjusted: None,
+            source: "yahoo".to_string(),
+            market: "us".to_string(),
+            symbol: "AAPL".to_string(),
+            interval: None,
+            timezone: None,
+            adjusted: None,
             fetched_at_utc: "2024-01-15T00:00:00Z".to_string(),
-            records, notes: vec![],
+            records,
+            notes: vec![],
         };
         let cols = result.columns();
         assert!(cols.contains(&"timestamp"));
@@ -1376,10 +1408,15 @@ mod tests {
         let records = sample_records();
         let result = FetchResult {
             dataset: "ohlcv".to_string(),
-            source: "yahoo".to_string(), market: "us".to_string(), symbol: "AAPL".to_string(),
-            interval: Some("1d".to_string()), timezone: None, adjusted: Some(false),
+            source: "yahoo".to_string(),
+            market: "us".to_string(),
+            symbol: "AAPL".to_string(),
+            interval: Some("1d".to_string()),
+            timezone: None,
+            adjusted: Some(false),
             fetched_at_utc: "2024-01-15T00:00:00Z".to_string(),
-            records, notes: vec!["public endpoint".to_string()],
+            records,
+            notes: vec!["public endpoint".to_string()],
         };
         let meta = result.metadata();
         assert_eq!(meta["row_count"], 2);
@@ -1394,11 +1431,16 @@ mod tests {
     #[test]
     fn test_generic_result_columns_empty() {
         let result = GenericResult {
-            dataset: "test".to_string(), source: "test".to_string(),
-            market: "us".to_string(), symbol: "X".to_string(),
-            interval: None, timezone: None, adjusted: None,
+            dataset: "test".to_string(),
+            source: "test".to_string(),
+            market: "us".to_string(),
+            symbol: "X".to_string(),
+            interval: None,
+            timezone: None,
+            adjusted: None,
             fetched_at_utc: "now".to_string(),
-            records: vec![], notes: vec![],
+            records: vec![],
+            notes: vec![],
         };
         assert!(result.columns().is_empty());
     }
@@ -1406,9 +1448,13 @@ mod tests {
     #[test]
     fn test_generic_result_columns_from_records() {
         let result = GenericResult {
-            dataset: "test".to_string(), source: "test".to_string(),
-            market: "us".to_string(), symbol: "X".to_string(),
-            interval: None, timezone: None, adjusted: None,
+            dataset: "test".to_string(),
+            source: "test".to_string(),
+            market: "us".to_string(),
+            symbol: "X".to_string(),
+            interval: None,
+            timezone: None,
+            adjusted: None,
             fetched_at_utc: "now".to_string(),
             records: vec![serde_json::json!({"a": 1, "b": 2, "c": 3})],
             notes: vec![],
@@ -1419,16 +1465,23 @@ mod tests {
     #[test]
     fn test_generic_result_metadata() {
         let result = GenericResult {
-            dataset: "capital".to_string(), source: "eastmoney".to_string(),
-            market: "cn".to_string(), symbol: "600519".to_string(),
-            interval: None, timezone: Some("Asia/Shanghai".to_string()), adjusted: None,
+            dataset: "capital".to_string(),
+            source: "eastmoney".to_string(),
+            market: "cn".to_string(),
+            symbol: "600519".to_string(),
+            interval: None,
+            timezone: Some("Asia/Shanghai".to_string()),
+            adjusted: None,
             fetched_at_utc: "2024-01-01T00:00:00Z".to_string(),
             records: vec![serde_json::json!({"price": 1500.0})],
             notes: vec![],
         };
         let meta = result.metadata();
         assert_eq!(meta["row_count"], 1);
-        assert_eq!(meta["columns"].as_array().unwrap(), &[serde_json::json!("price")]);
+        assert_eq!(
+            meta["columns"].as_array().unwrap(),
+            &[serde_json::json!("price")]
+        );
     }
 
     // ------------------------------------------------------------------
@@ -1467,8 +1520,14 @@ mod tests {
     #[test]
     fn test_opt_value_to_f64() {
         assert_eq!(opt_value_to_f64(None).unwrap(), None);
-        assert_eq!(opt_value_to_f64(Some(&serde_json::Value::Null)).unwrap(), None);
-        assert_eq!(opt_value_to_f64(Some(&serde_json::json!(42.5))).unwrap(), Some(42.5));
+        assert_eq!(
+            opt_value_to_f64(Some(&serde_json::Value::Null)).unwrap(),
+            None
+        );
+        assert_eq!(
+            opt_value_to_f64(Some(&serde_json::json!(42.5))).unwrap(),
+            Some(42.5)
+        );
     }
 
     #[test]
@@ -1557,7 +1616,10 @@ mod tests {
 
     #[test]
     fn test_date_to_utc_iso() {
-        assert_eq!(date_to_utc_iso("2024-01-15").unwrap(), "2024-01-15T00:00:00+00:00");
+        assert_eq!(
+            date_to_utc_iso("2024-01-15").unwrap(),
+            "2024-01-15T00:00:00+00:00"
+        );
     }
 
     #[test]
@@ -1581,13 +1643,18 @@ mod tests {
 
     #[test]
     fn test_records_to_csv_basic() {
-        let records = vec![
-            OhlcvRecord {
-                timestamp: "2024-01-01T00:00:00Z".to_string(),
-                open: 100.0, high: 105.0, low: 99.0, close: 103.5, volume: 1_000.0,
-                adj_close: None, symbol: "AAPL".to_string(), market: "us".to_string(), source: "yahoo".to_string(),
-            },
-        ];
+        let records = vec![OhlcvRecord {
+            timestamp: "2024-01-01T00:00:00Z".to_string(),
+            open: 100.0,
+            high: 105.0,
+            low: 99.0,
+            close: 103.5,
+            volume: 1_000.0,
+            adj_close: None,
+            symbol: "AAPL".to_string(),
+            market: "us".to_string(),
+            source: "yahoo".to_string(),
+        }];
         let csv = records_to_csv(&records).unwrap();
         assert!(csv.contains("timestamp"));
         assert!(csv.contains("AAPL"));
@@ -1598,13 +1665,18 @@ mod tests {
 
     #[test]
     fn test_records_to_csv_with_adj_close() {
-        let records = vec![
-            OhlcvRecord {
-                timestamp: "2024-01-01T00:00:00Z".to_string(),
-                open: 100.0, high: 105.0, low: 99.0, close: 103.5, volume: 1_000.0,
-                adj_close: Some(103.5), symbol: "AAPL".to_string(), market: "us".to_string(), source: "yahoo".to_string(),
-            },
-        ];
+        let records = vec![OhlcvRecord {
+            timestamp: "2024-01-01T00:00:00Z".to_string(),
+            open: 100.0,
+            high: 105.0,
+            low: 99.0,
+            close: 103.5,
+            volume: 1_000.0,
+            adj_close: Some(103.5),
+            symbol: "AAPL".to_string(),
+            market: "us".to_string(),
+            source: "yahoo".to_string(),
+        }];
         let csv = records_to_csv(&records).unwrap();
         assert!(csv.contains("adj_close"));
         assert!(csv.contains("103.5"));
@@ -1612,9 +1684,7 @@ mod tests {
 
     #[test]
     fn test_generic_records_to_csv() {
-        let records = vec![
-            serde_json::json!({"symbol": "AAPL", "price": 150.0}),
-        ];
+        let records = vec![serde_json::json!({"symbol": "AAPL", "price": 150.0})];
         let csv = generic_records_to_csv(&records).unwrap();
         assert!(csv.contains("symbol"));
         assert!(csv.contains("AAPL"));
@@ -1633,10 +1703,15 @@ mod tests {
     fn test_finalize_result_empty_records_fails() {
         let result = FetchResult {
             dataset: "ohlcv".to_string(),
-            source: "test".to_string(), market: "us".to_string(), symbol: "X".to_string(),
-            interval: None, timezone: None, adjusted: None,
+            source: "test".to_string(),
+            market: "us".to_string(),
+            symbol: "X".to_string(),
+            interval: None,
+            timezone: None,
+            adjusted: None,
             fetched_at_utc: "now".to_string(),
-            records: vec![], notes: vec![],
+            records: vec![],
+            notes: vec![],
         };
         assert!(finalize_result(result).is_err());
     }
@@ -1646,23 +1721,43 @@ mod tests {
         let records = vec![
             OhlcvRecord {
                 timestamp: "2024-01-02T00:00:00Z".to_string(),
-                open: 101.0, high: 106.0, low: 100.0, close: 105.0, volume: 1_000.0,
-                adj_close: None, symbol: "AAPL".to_string(), market: "us".to_string(), source: "yahoo".to_string(),
+                open: 101.0,
+                high: 106.0,
+                low: 100.0,
+                close: 105.0,
+                volume: 1_000.0,
+                adj_close: None,
+                symbol: "AAPL".to_string(),
+                market: "us".to_string(),
+                source: "yahoo".to_string(),
             },
             OhlcvRecord {
                 timestamp: "2024-01-01T00:00:00Z".to_string(),
-                open: 100.0, high: 105.0, low: 99.0, close: 103.0, volume: 1_000.0,
-                adj_close: None, symbol: "AAPL".to_string(), market: "us".to_string(), source: "yahoo".to_string(),
+                open: 100.0,
+                high: 105.0,
+                low: 99.0,
+                close: 103.0,
+                volume: 1_000.0,
+                adj_close: None,
+                symbol: "AAPL".to_string(),
+                market: "us".to_string(),
+                source: "yahoo".to_string(),
             },
         ];
         // Should sort and dedup
         let result = finalize_result(FetchResult {
             dataset: "ohlcv".to_string(),
-            source: "test".to_string(), market: "us".to_string(), symbol: "AAPL".to_string(),
-            interval: None, timezone: None, adjusted: None,
+            source: "test".to_string(),
+            market: "us".to_string(),
+            symbol: "AAPL".to_string(),
+            interval: None,
+            timezone: None,
+            adjusted: None,
             fetched_at_utc: "now".to_string(),
-            records, notes: vec![],
-        }).unwrap();
+            records,
+            notes: vec![],
+        })
+        .unwrap();
         assert_eq!(result.records.len(), 2);
         // After sorting, first record should be 2024-01-01
         assert_eq!(result.records[0].timestamp, "2024-01-01T00:00:00Z");
@@ -1670,21 +1765,34 @@ mod tests {
 
     #[test]
     fn test_finalize_result_invalid_ohlcv_fails() {
-        let records = vec![
-            OhlcvRecord {
-                timestamp: "2024-01-01T00:00:00Z".to_string(),
-                open: 100.0, high: 99.0, low: 101.0, close: 100.0, volume: 1_000.0,
-                adj_close: None, symbol: "X".to_string(), market: "us".to_string(), source: "test".to_string(),
-            },
-        ];
+        let records = vec![OhlcvRecord {
+            timestamp: "2024-01-01T00:00:00Z".to_string(),
+            open: 100.0,
+            high: 99.0,
+            low: 101.0,
+            close: 100.0,
+            volume: 1_000.0,
+            adj_close: None,
+            symbol: "X".to_string(),
+            market: "us".to_string(),
+            source: "test".to_string(),
+        }];
         // low > high should fail
-        assert!(finalize_result(FetchResult {
-            dataset: "ohlcv".to_string(),
-            source: "test".to_string(), market: "us".to_string(), symbol: "X".to_string(),
-            interval: None, timezone: None, adjusted: None,
-            fetched_at_utc: "now".to_string(),
-            records, notes: vec![],
-        }).is_err());
+        assert!(
+            finalize_result(FetchResult {
+                dataset: "ohlcv".to_string(),
+                source: "test".to_string(),
+                market: "us".to_string(),
+                symbol: "X".to_string(),
+                interval: None,
+                timezone: None,
+                adjusted: None,
+                fetched_at_utc: "now".to_string(),
+                records,
+                notes: vec![],
+            })
+            .is_err()
+        );
     }
 
     // ------------------------------------------------------------------

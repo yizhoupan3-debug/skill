@@ -3,8 +3,8 @@
 //! This module is intended to host the "runtime view" read-model builder and the
 //! continuity classification logic extracted from `framework_runtime/mod.rs`.
 
-use fr_utils::constants::*;
 use fr_utils::constants::EVIDENCE_INDEX_FILENAME;
+use fr_utils::constants::*;
 use fr_utils::json_io::{read_json_if_exists, read_json_strict};
 use fr_utils::json_value::{
     first_nonempty, join_lines, nonempty_string, safe_slug, stable_line_items, value_bool_or_none,
@@ -161,23 +161,25 @@ pub fn load_framework_runtime_view(
         }
     }
     if let Some(ref task_id) = focus_task_id
-        && !known_task_ids.iter().any(|existing| existing == task_id) {
-            known_task_ids.push(task_id.clone());
-        }
+        && !known_task_ids.iter().any(|existing| existing == task_id)
+    {
+        known_task_ids.push(task_id.clone());
+    }
     if task_id_override.is_none()
-        && let Some(task_id) = active_task_id.as_ref() {
-            let task_dir = mirror_root.join(task_id);
-            if task_registry_present
-                && task_dir.is_dir()
-                && !registry_task_ids_before_selection
-                    .iter()
-                    .any(|existing| existing == task_id)
-            {
-                control_plane_inconsistency_reasons.push(format!(
-                    "selected task_id '{task_id}' is missing from task_registry.json"
-                ));
-            }
+        && let Some(task_id) = active_task_id.as_ref()
+    {
+        let task_dir = mirror_root.join(task_id);
+        if task_registry_present
+            && task_dir.is_dir()
+            && !registry_task_ids_before_selection
+                .iter()
+                .any(|existing| existing == task_id)
+        {
+            control_plane_inconsistency_reasons.push(format!(
+                "selected task_id '{task_id}' is missing from task_registry.json"
+            ));
         }
+    }
     let task_root = active_task_id
         .as_ref()
         .map_or_else(|| mirror_root.clone(), |task_id| mirror_root.join(task_id));
@@ -714,9 +716,10 @@ fn normalize_supervisor_state(payload: &Value) -> Map<String, Value> {
         "state_reason",
     ] {
         if !continuity.contains_key(key)
-            && let Some(value) = source.get(key) {
-                continuity.insert(key.to_string(), value.clone());
-            }
+            && let Some(value) = source.get(key)
+        {
+            continuity.insert(key.to_string(), value.clone());
+        }
     }
     normalized.insert("continuity".to_string(), Value::Object(continuity));
 
@@ -754,15 +757,14 @@ fn normalize_evidence_index(payload: &Value) -> Vec<Map<String, Value>> {
 }
 
 fn normalize_trace_skills(payload: &Value) -> Vec<String> {
-    let skills = if payload.get("schema_version").and_then(Value::as_str)
-        == Some("trace-metadata-v2")
-    {
-        payload.get("matched_skills")
-    } else {
-        payload
-            .get("matched_skills")
-            .or_else(|| payload.get("skills"))
-    };
+    let skills =
+        if payload.get("schema_version").and_then(Value::as_str) == Some("trace-metadata-v2") {
+            payload.get("matched_skills")
+        } else {
+            payload
+                .get("matched_skills")
+                .or_else(|| payload.get("skills"))
+        };
     skills
         .and_then(Value::as_array)
         .map(|rows| {
@@ -807,9 +809,10 @@ fn authoritative_next_actions(
             )
         });
     if let Some(actions) = from_supervisor
-        && !actions.is_empty() {
-            return actions;
-        }
+        && !actions.is_empty()
+    {
+        return actions;
+    }
     snapshot_payload
         .get("next_actions")
         .and_then(Value::as_array)
@@ -862,9 +865,10 @@ fn trace_payload_identity_matches(
     if let Some(version) = payload
         .get("routing_runtime_version")
         .and_then(Value::as_u64)
-        && version != current_routing_runtime_version {
-            return false;
-        }
+        && version != current_routing_runtime_version
+    {
+        return false;
+    }
     true
 }
 
@@ -1007,8 +1011,11 @@ mod tests {
     #[test]
     fn classify_active_state() {
         let result = classify_runtime_continuity(&base_snapshot());
-        assert_eq!(result["state"], "active", "expected active, got {:?} with reasons {:?}",
-            result["state"], result["inconsistency_reasons"]);
+        assert_eq!(
+            result["state"], "active",
+            "expected active, got {:?} with reasons {:?}",
+            result["state"], result["inconsistency_reasons"]
+        );
         assert_eq!(result["can_resume"], true);
         assert_eq!(result["task"], "fix-bug");
         assert!(!result["phase"].as_str().unwrap_or("").is_empty());
@@ -1035,7 +1042,10 @@ mod tests {
     fn classifies_completed_via_terminal_phases() {
         let mut supervisor = Map::new();
         supervisor.insert("active_phase".into(), json!("completed"));
-        supervisor.insert("verification".into(), json!({"verification_status": "verified"}));
+        supervisor.insert(
+            "verification".into(),
+            json!({"verification_status": "verified"}),
+        );
         supervisor.insert("continuity".into(), json!({"story_state": "completed"}));
         let snap = FrameworkRuntimeView {
             session_summary_text: "phase: completed\nstatus: verified".into(),
@@ -1043,8 +1053,11 @@ mod tests {
             ..base_snapshot()
         };
         let result = classify_runtime_continuity(&snap);
-        assert_eq!(result["state"], "completed", "terminal phase => completed, got {:?}",
-            result["state"]);
+        assert_eq!(
+            result["state"], "completed",
+            "terminal phase => completed, got {:?}",
+            result["state"]
+        );
         assert!(result["recent_completed_execution"].is_object());
     }
 
@@ -1062,8 +1075,14 @@ mod tests {
     fn supervisor_terminal_overrides_summary() {
         let mut supervisor = Map::new();
         supervisor.insert("active_phase".into(), json!("completed"));
-        supervisor.insert("verification".into(), json!({"verification_status": "verified"}));
-        supervisor.insert("continuity".into(), json!({"story_state": "completed", "resume_allowed": false}));
+        supervisor.insert(
+            "verification".into(),
+            json!({"verification_status": "verified"}),
+        );
+        supervisor.insert(
+            "continuity".into(),
+            json!({"story_state": "completed", "resume_allowed": false}),
+        );
         let snap = FrameworkRuntimeView {
             session_summary_text: "phase: implement\nstatus: in_progress".into(),
             supervisor_state: supervisor,
@@ -1080,7 +1099,10 @@ mod tests {
         let mut supervisor = Map::new();
         supervisor.insert("active_phase".into(), json!("completed"));
         supervisor.insert("continuity".into(), Value::Object(continuity));
-        supervisor.insert("verification".into(), json!({"verification_status": "verified"}));
+        supervisor.insert(
+            "verification".into(),
+            json!({"verification_status": "verified"}),
+        );
         let snap = FrameworkRuntimeView {
             session_summary_text: "phase: completed".into(),
             supervisor_state: supervisor,
@@ -1088,9 +1110,16 @@ mod tests {
         };
         let result = classify_runtime_continuity(&snap);
         // Should show inconsistency: resume_allowed=true while terminal
-        assert!(result["inconsistency_reasons"].as_array().map(|a| a.iter().any(|r| {
-            r.as_str().map(|s| s.contains("resume_allowed")).unwrap_or(false)
-        })).unwrap_or(false));
+        assert!(
+            result["inconsistency_reasons"]
+                .as_array()
+                .map(|a| a.iter().any(|r| {
+                    r.as_str()
+                        .map(|s| s.contains("resume_allowed"))
+                        .unwrap_or(false)
+                }))
+                .unwrap_or(false)
+        );
     }
 
     // ── missing_control_plane_anchors ──
@@ -1126,7 +1155,10 @@ mod tests {
 
     #[test]
     fn workspace_name_from_root_uses_dir_name() {
-        assert_eq!(workspace_name_from_root(Path::new("/home/user/project")), "project");
+        assert_eq!(
+            workspace_name_from_root(Path::new("/home/user/project")),
+            "project"
+        );
     }
 
     #[test]
@@ -1204,6 +1236,9 @@ mod tests {
             ..base_snapshot()
         };
         let result = classify_runtime_continuity(&snap);
-        assert_ne!(result["state"], "active", "missing task should not be active");
+        assert_ne!(
+            result["state"], "active",
+            "missing task should not be active"
+        );
     }
 }

@@ -178,6 +178,7 @@ fn match_single_star_ext(path: &std::path::Path, path_str: &str, prefix: &str, e
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use std::collections::BTreeMap;
 

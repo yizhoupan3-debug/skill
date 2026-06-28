@@ -68,21 +68,25 @@ pub fn resolve_repo_root_arg(repo_root: Option<&Path>) -> Result<PathBuf, Framew
         } else if path.to_str().map(is_mcp_placeholder).unwrap_or(false) {
             // MCP placeholder not resolved (e.g. CLAUDE_PROJECT_DIR not set in Claude Desktop).
             // Fall back to cwd instead of using the literal placeholder string as a path.
-            std::env::current_dir()
-                .map_err(|err| FrameworkError::validation(format!("resolve current directory failed: {err}")))?
+            std::env::current_dir().map_err(|err| {
+                FrameworkError::validation(format!("resolve current directory failed: {err}"))
+            })?
         } else {
             path.to_path_buf()
         }
     } else if let Ok(value) = std::env::var("CLAUDE_PROJECT_DIR") {
         let value = value.trim();
         if value.is_empty() {
-            std::env::current_dir()
-                .map_err(|err| FrameworkError::validation(format!("resolve current directory failed: {err}")))?
+            std::env::current_dir().map_err(|err| {
+                FrameworkError::validation(format!("resolve current directory failed: {err}"))
+            })?
         } else {
             PathBuf::from(value)
         }
     } else {
-        std::env::current_dir().map_err(|err| FrameworkError::validation(format!("resolve current directory failed: {err}")))?
+        std::env::current_dir().map_err(|err| {
+            FrameworkError::validation(format!("resolve current directory failed: {err}"))
+        })?
     };
     let normalized = base.canonicalize().unwrap_or(base);
     if is_framework_root(&normalized) {

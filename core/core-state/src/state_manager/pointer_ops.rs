@@ -53,21 +53,22 @@ pub fn read_task_pointer_pair(repo_root: &Path) -> (Option<String>, Option<Strin
     let pointers_path = repo_root.join("artifacts/current/TASK_POINTERS.json");
     if pointers_path.is_file()
         && let Ok(raw) = fs::read_to_string(&pointers_path)
-            && let Ok(data) = serde_json::from_str::<Value>(&raw) {
-                let parse = |key: &str| -> Option<String> {
-                    let tid = data.get(key)?.as_str()?.trim().to_string();
-                    if tid.is_empty() {
-                        return None;
-                    }
-                    crate::utils::path_guard::safe_task_id_component(&tid)?;
-                    Some(tid)
-                };
-                let active = parse("active_task_id");
-                let focus = parse("focus_task_id");
-                if active.is_some() || focus.is_some() {
-                    return (active, focus);
-                }
+        && let Ok(data) = serde_json::from_str::<Value>(&raw)
+    {
+        let parse = |key: &str| -> Option<String> {
+            let tid = data.get(key)?.as_str()?.trim().to_string();
+            if tid.is_empty() {
+                return None;
             }
+            crate::utils::path_guard::safe_task_id_component(&tid)?;
+            Some(tid)
+        };
+        let active = parse("active_task_id");
+        let focus = parse("focus_task_id");
+        if active.is_some() || focus.is_some() {
+            return (active, focus);
+        }
+    }
     (None, None)
 }
 
@@ -207,12 +208,14 @@ pub fn sync_task_pointers_after_goal_drive(
 }
 
 /// Remove active/focus pointers when they reference `task_id` (complete / clear).
-pub fn neutralize_task_pointers_for_task(repo_root: &Path, task_id: &str) -> Result<(), FrameworkError> {
+pub fn neutralize_task_pointers_for_task(
+    repo_root: &Path,
+    task_id: &str,
+) -> Result<(), FrameworkError> {
     // Update TASK_POINTERS.json (Phase 3C consolidated file)
     let pointers_path = repo_root.join("artifacts/current/TASK_POINTERS.json");
     if pointers_path.is_file() {
-        let raw = fs::read_to_string(&pointers_path)
-            .map_err(FrameworkError::Io)?;
+        let raw = fs::read_to_string(&pointers_path).map_err(FrameworkError::Io)?;
         let mut data: Value = serde_json::from_str(&raw)?;
         let mut changed = false;
         if let Some(obj) = data.as_object_mut() {
@@ -228,9 +231,7 @@ pub fn neutralize_task_pointers_for_task(repo_root: &Path, task_id: &str) -> Res
             // (read_task_pointer_pair falls back to tasks[0].task_id)
             if let Some(tasks) = obj.get_mut("tasks").and_then(|v| v.as_array_mut()) {
                 let len_before = tasks.len();
-                tasks.retain(|entry| {
-                    entry.get("task_id").and_then(Value::as_str) != Some(task_id)
-                });
+                tasks.retain(|entry| entry.get("task_id").and_then(Value::as_str) != Some(task_id));
                 if tasks.len() != len_before {
                     changed = true;
                 }
@@ -244,12 +245,10 @@ pub fn neutralize_task_pointers_for_task(repo_root: &Path, task_id: &str) -> Res
     let active_path = repo_root.join("artifacts/current/active_task.json");
     let focus_path = repo_root.join("artifacts/current/focus_task.json");
     if pointer_file_matches_task_id(&active_path, task_id) {
-        fs::remove_file(&active_path)
-            .map_err(FrameworkError::Io)?;
+        fs::remove_file(&active_path).map_err(FrameworkError::Io)?;
     }
     if pointer_file_matches_task_id(&focus_path, task_id) {
-        fs::remove_file(&focus_path)
-            .map_err(FrameworkError::Io)?;
+        fs::remove_file(&focus_path).map_err(FrameworkError::Io)?;
     }
     Ok(())
 }

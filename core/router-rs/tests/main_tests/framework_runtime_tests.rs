@@ -1,8 +1,7 @@
 use super::common::*;
 use super::*;
 
-use serde_json::{json, Value};
-
+use serde_json::{Value, json};
 
 #[test]
 fn framework_statusline_uses_rust_runtime_view() {
@@ -10,9 +9,9 @@ fn framework_statusline_uses_rust_runtime_view() {
     let task_id = "statusline-task-20260424120000";
     let task_root = repo_root.join("artifacts").join("current").join(task_id);
     write_text_fixture(
-            &task_root.join("SESSION_SUMMARY.md"),
-            "# SESSION_SUMMARY\n\n- task: Validate status line\n- phase: integration\n- status: in_progress\n",
-        );
+        &task_root.join("SESSION_SUMMARY.md"),
+        "# SESSION_SUMMARY\n\n- task: Validate status line\n- phase: integration\n- status: in_progress\n",
+    );
     write_text_fixture(
         &task_root.join("NEXT_ACTIONS.json"),
         &json!({"next_actions": ["Ship it"]}).to_string(),
@@ -87,7 +86,6 @@ fn framework_statusline_uses_rust_runtime_view() {
     let _ = fs::remove_dir_all(&repo_root);
 }
 
-
 #[test]
 fn framework_snapshot_missing_recovery_anchors_is_not_resumable() {
     let repo_root = temp_dir_path("framework-missing-recovery-anchors");
@@ -98,7 +96,8 @@ fn framework_snapshot_missing_recovery_anchors_is_not_resumable() {
     );
 
     let snapshot =
-        build_framework_runtime_snapshot_envelope_with_level(&repo_root, None, None, "summary").expect("snapshot");
+        build_framework_runtime_snapshot_envelope_with_level(&repo_root, None, None, "summary")
+            .expect("snapshot");
     let continuity = &snapshot["runtime_snapshot"]["continuity"];
     let missing_anchors = continuity["missing_recovery_anchors"]
         .as_array()
@@ -113,7 +112,6 @@ fn framework_snapshot_missing_recovery_anchors_is_not_resumable() {
 
     let _ = fs::remove_dir_all(&repo_root);
 }
-
 
 #[test]
 fn framework_session_writer_materializes_complete_focus_continuity() {
@@ -157,7 +155,8 @@ fn framework_session_writer_materializes_complete_focus_continuity() {
     }
 
     let snapshot =
-        build_framework_runtime_snapshot_envelope_with_level(&repo_root, None, None, "summary").expect("snapshot");
+        build_framework_runtime_snapshot_envelope_with_level(&repo_root, None, None, "summary")
+            .expect("snapshot");
     let runtime = &snapshot["runtime_snapshot"];
     assert_eq!(runtime["active_task_id"], json!(task_id));
     assert_eq!(runtime["continuity"]["state"], json!("active"));
@@ -205,7 +204,6 @@ fn framework_session_writer_materializes_complete_focus_continuity() {
     let _ = fs::remove_dir_all(&repo_root);
 }
 
-
 #[test]
 fn continuity_audit_flags_ephemeral_registry_row() {
     let repo_root = temp_dir_path("continuity-audit-ephemeral");
@@ -232,7 +230,6 @@ fn continuity_audit_flags_ephemeral_registry_row() {
 
     let _ = fs::remove_dir_all(&repo_root);
 }
-
 
 #[test]
 fn resolve_task_view_notes_active_goal_missing_on_focus() {
@@ -269,7 +266,6 @@ fn resolve_task_view_notes_active_goal_missing_on_focus() {
     let _ = fs::remove_dir_all(&repo_root);
 }
 
-
 #[test]
 fn runtime_view_active_task_id_matches_resolve_task_view() {
     let repo_root = temp_dir_path("runtime-view-task-id-align");
@@ -293,7 +289,8 @@ fn runtime_view_active_task_id_matches_resolve_task_view() {
     .expect("write registry");
 
     let snapshot =
-        build_framework_runtime_snapshot_envelope_with_level(&repo_root, None, None, "summary").expect("snapshot");
+        build_framework_runtime_snapshot_envelope_with_level(&repo_root, None, None, "summary")
+            .expect("snapshot");
     let resolved = resolve_task_view(&repo_root, None);
     assert_eq!(
         snapshot["runtime_snapshot"]["active_task_id"],
@@ -303,7 +300,6 @@ fn runtime_view_active_task_id_matches_resolve_task_view() {
 
     let _ = fs::remove_dir_all(&repo_root);
 }
-
 
 #[test]
 fn stdio_framework_goal_drive_roundtrip() {
@@ -350,7 +346,6 @@ fn stdio_framework_goal_drive_roundtrip() {
     let _ = fs::remove_dir_all(&repo_root);
 }
 
-
 use runtime_core::qg_route::init_qg_route;
 #[test]
 fn stdio_framework_rfv_loop_roundtrip() {
@@ -387,8 +382,14 @@ fn stdio_framework_rfv_loop_roundtrip() {
     assert!(response.ok, "{:?}", response.error);
     let body = response.payload.expect("payload");
     // Old QG state machine deleted (Wave 4a-ii). Now returns GateVerdict from QG Route.
-    assert!(body.get("passed").is_some(), "GateVerdict should have passed field");
-    assert!(body.get("checkers_ran").is_some(), "GateVerdict should have checkers_ran");
+    assert!(
+        body.get("passed").is_some(),
+        "GateVerdict should have passed field"
+    );
+    assert!(
+        body.get("checkers_ran").is_some(),
+        "GateVerdict should have checkers_ran"
+    );
 
     let _ = fs::remove_dir_all(&repo_root);
 }
@@ -423,7 +424,6 @@ fn runtime_observability_exporter_descriptor_is_rust_owned() {
     );
 }
 
-
 #[test]
 fn runtime_observability_health_snapshot_is_rust_owned() {
     let payload = build_runtime_observability_health_snapshot();
@@ -454,15 +454,16 @@ fn runtime_observability_health_snapshot_is_rust_owned() {
     );
     let metric_names = payload["metric_names"].as_array().expect("metric names");
     assert_eq!(metric_names.len(), 6);
-    assert!(metric_names
-        .iter()
-        .any(|value| value == "runtime.route_mismatch_total"));
+    assert!(
+        metric_names
+            .iter()
+            .any(|value| value == "runtime.route_mismatch_total")
+    );
     assert_eq!(
         payload["exporter"]["exporter_authority"],
         Value::String(RUNTIME_CONTROL_PLANE_AUTHORITY.to_string())
     );
 }
-
 
 #[test]
 fn write_text_payload_uses_unique_temp_paths_under_concurrency() {
@@ -501,7 +502,7 @@ fn write_text_payload_uses_unique_temp_paths_under_concurrency() {
 
 #[test]
 fn framework_snapshot_summary_mode_is_smaller_than_full() {
-use framework_extra::snapshot::build_framework_runtime_snapshot_envelope_with_level;
+    use framework_extra::snapshot::build_framework_runtime_snapshot_envelope_with_level;
 
     let repo_root = temp_dir_path("framework-snapshot-detail-level");
     let task_id = "detail-level-task";
@@ -612,5 +613,3 @@ use framework_extra::snapshot::build_framework_runtime_snapshot_envelope_with_le
 
     let _ = fs::remove_dir_all(&repo_root);
 }
-
-

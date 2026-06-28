@@ -14,7 +14,11 @@ use std::sync::OnceLock;
 pub trait HostProjectionOps: Send + Sync {
     fn host_id(&self) -> &'static str;
 
-    fn install(&self, roots: &ResolvedProjectionRoots, scope: &str) -> std::result::Result<Value, String>;
+    fn install(
+        &self,
+        roots: &ResolvedProjectionRoots,
+        scope: &str,
+    ) -> std::result::Result<Value, String>;
 
     fn status(&self, roots: &ResolvedProjectionRoots) -> std::result::Result<Value, String>;
 
@@ -33,7 +37,10 @@ fn build_projection_ops_registry() -> HashMap<&'static str, Box<dyn HostProjecti
     let mut m: HashMap<&'static str, Box<dyn HostProjectionOps>> = HashMap::new();
 
     // Registration driven by RUNTIME_REGISTRY.json host_targets.supported.
-    include!(concat!(env!("OUT_DIR"), "/generated_projection_ops_registry.rs"));
+    include!(concat!(
+        env!("OUT_DIR"),
+        "/generated_projection_ops_registry.rs"
+    ));
 
     m
 }

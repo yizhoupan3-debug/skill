@@ -59,13 +59,15 @@ pub fn has_parallel_review_candidate_context(query: &str, tokens: &[String]) -> 
         Ok(guard) => provider_ref(&guard).has_parallel_review_candidate_context(query, tokens),
         Err(poisoned) => {
             tracing::warn!("[router-rs] tokenizer: recovering from poisoned RwLock");
-            provider_ref(&poisoned.into_inner()).has_parallel_review_candidate_context(query, tokens)
+            provider_ref(&poisoned.into_inner())
+                .has_parallel_review_candidate_context(query, tokens)
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     struct Stub;

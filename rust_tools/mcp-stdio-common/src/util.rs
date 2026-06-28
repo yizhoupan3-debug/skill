@@ -119,12 +119,7 @@ pub fn run_command_capture(command: &mut Command) -> Result<String> {
 ///
 /// The returned `Command` has its stdout/stderr piped. Callers may
 /// redirect them (e.g. to `Stdio::null()`) before spawning.
-pub fn soffice_convert_cmd(
-    profile_dir: &Path,
-    fmt: &str,
-    outdir: &Path,
-    input: &Path,
-) -> Command {
+pub fn soffice_convert_cmd(profile_dir: &Path, fmt: &str, outdir: &Path, input: &Path) -> Command {
     let mut cmd = Command::new("soffice");
     cmd.arg(format!(
         "-env:UserInstallation=file://{}",

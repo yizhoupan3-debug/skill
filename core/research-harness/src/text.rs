@@ -11,12 +11,18 @@ pub fn slugify(text: &str) -> String {
     let lowered = text.trim().to_lowercase();
     static NON_ALNUM: OnceLock<Regex> = OnceLock::new();
     let cleaned = NON_ALNUM
-        .get_or_init(|| Regex::new(r"[^a-z0-9]+").unwrap())
+        .get_or_init(|| {
+            #[allow(clippy::unwrap_used, clippy::expect_used)]
+            Regex::new(r"[^a-z0-9]+").unwrap()
+        })
         .replace_all(&lowered, "-")
         .to_string();
     static MULTI_DASH: OnceLock<Regex> = OnceLock::new();
     let collapsed = MULTI_DASH
-        .get_or_init(|| Regex::new(r"-+").unwrap())
+        .get_or_init(|| {
+            #[allow(clippy::unwrap_used, clippy::expect_used)]
+            Regex::new(r"-+").unwrap()
+        })
         .replace_all(&cleaned, "-")
         .trim_matches('-')
         .to_string();
@@ -51,11 +57,14 @@ pub fn decode_xml_entities(raw: &str) -> String {
 pub fn xml_text_between(raw: &str, tag: &str) -> Option<String> {
     static XML_TAG_RE_CACHE: LazyLock<Mutex<HashMap<String, Regex>>> =
         LazyLock::new(|| Mutex::new(HashMap::new()));
-    let re = match XML_TAG_RE_CACHE.lock().ok().and_then(|c| c.get(tag).cloned()) {
+    let re = match XML_TAG_RE_CACHE
+        .lock()
+        .ok()
+        .and_then(|c| c.get(tag).cloned())
+    {
         Some(r) => r,
         None => {
-            let pattern =
-                Regex::new(&format!(r"(?s)<{tag}(?:\s[^>]*)?>(.*?)</{tag}>")).ok()?;
+            let pattern = Regex::new(&format!(r"(?s)<{tag}(?:\s[^>]*)?>(.*?)</{tag}>")).ok()?;
             if let Ok(mut cache) = XML_TAG_RE_CACHE.lock() {
                 cache.insert(tag.to_string(), pattern.clone());
             }
@@ -70,14 +79,97 @@ pub fn xml_text_between(raw: &str, tag: &str) -> Option<String> {
 pub fn stopwords() -> &'static HashSet<&'static str> {
     static STOPWORDS: LazyLock<HashSet<&'static str>> = LazyLock::new(|| {
         [
-            "a", "an", "and", "are", "as", "at", "be", "by", "can", "for", "from", "in", "into", "is",
-            "it", "of", "on", "or", "reduce", "research", "that", "the", "this", "to", "use", "using",
+            "a",
+            "an",
+            "and",
+            "are",
+            "as",
+            "at",
+            "be",
+            "by",
+            "can",
+            "for",
+            "from",
+            "in",
+            "into",
+            "is",
+            "it",
+            "of",
+            "on",
+            "or",
+            "reduce",
+            "research",
+            "that",
+            "the",
+            "this",
+            "to",
+            "use",
+            "using",
             "with",
-            "的", "了", "在", "是", "我", "有", "和", "就", "不", "人", "都", "一", "一个", "上",
-            "也", "很", "到", "说", "要", "去", "你", "会", "着", "没有", "看", "好", "自己", "这",
-            "他", "她", "它", "们", "那", "被", "从", "把", "对", "但", "而", "与", "或", "中",
-            "等", "能", "可以", "什么", "怎么", "如何", "为什么", "是否", "通过", "使用", "基于",
-            "以及", "然后", "因此", "所以", "如果", "虽然", "但是", "对于", "关于", "已经", "正在",
+            "的",
+            "了",
+            "在",
+            "是",
+            "我",
+            "有",
+            "和",
+            "就",
+            "不",
+            "人",
+            "都",
+            "一",
+            "一个",
+            "上",
+            "也",
+            "很",
+            "到",
+            "说",
+            "要",
+            "去",
+            "你",
+            "会",
+            "着",
+            "没有",
+            "看",
+            "好",
+            "自己",
+            "这",
+            "他",
+            "她",
+            "它",
+            "们",
+            "那",
+            "被",
+            "从",
+            "把",
+            "对",
+            "但",
+            "而",
+            "与",
+            "或",
+            "中",
+            "等",
+            "能",
+            "可以",
+            "什么",
+            "怎么",
+            "如何",
+            "为什么",
+            "是否",
+            "通过",
+            "使用",
+            "基于",
+            "以及",
+            "然后",
+            "因此",
+            "所以",
+            "如果",
+            "虽然",
+            "但是",
+            "对于",
+            "关于",
+            "已经",
+            "正在",
         ]
         .into_iter()
         .collect()
@@ -118,21 +210,17 @@ pub fn compact_words(text: &str, limit: usize) -> Vec<String> {
 /// Contains an expanded stopword list covering English and CJK.
 pub fn extract_content_words(text: &str) -> HashSet<String> {
     let stopwords: HashSet<&str> = [
-        "the", "a", "an", "is", "are", "was", "were", "be", "been", "being",
-        "have", "has", "had", "do", "does", "did", "will", "would", "could",
-        "should", "may", "might", "shall", "can", "need", "dare", "ought",
-        "used", "to", "of", "in", "for", "on", "with", "at", "by", "from",
-        "as", "into", "through", "during", "before", "after", "above", "below",
-        "between", "out", "off", "over", "under", "again", "further", "then",
-        "once", "and", "but", "or", "nor", "not", "so", "yet", "both",
-        "either", "neither", "each", "every", "all", "any", "few", "more",
-        "most", "other", "some", "such", "no", "only", "own", "same",
-        "than", "too", "very", "just", "that", "this", "these", "those",
-        "it", "its", "we", "our", "they", "their",
-        // Chinese stopwords
-        "的", "了", "在", "是", "我", "有", "和", "就", "不", "人", "都",
-        "一", "一个", "上", "也", "很", "到", "说", "要", "去", "你",
-        "会", "着", "没有", "看", "好", "自己", "这",
+        "the", "a", "an", "is", "are", "was", "were", "be", "been", "being", "have", "has", "had",
+        "do", "does", "did", "will", "would", "could", "should", "may", "might", "shall", "can",
+        "need", "dare", "ought", "used", "to", "of", "in", "for", "on", "with", "at", "by", "from",
+        "as", "into", "through", "during", "before", "after", "above", "below", "between", "out",
+        "off", "over", "under", "again", "further", "then", "once", "and", "but", "or", "nor",
+        "not", "so", "yet", "both", "either", "neither", "each", "every", "all", "any", "few",
+        "more", "most", "other", "some", "such", "no", "only", "own", "same", "than", "too",
+        "very", "just", "that", "this", "these", "those", "it", "its", "we", "our", "they",
+        "their", // Chinese stopwords
+        "的", "了", "在", "是", "我", "有", "和", "就", "不", "人", "都", "一", "一个", "上", "也",
+        "很", "到", "说", "要", "去", "你", "会", "着", "没有", "看", "好", "自己", "这",
     ]
     .iter()
     .copied()

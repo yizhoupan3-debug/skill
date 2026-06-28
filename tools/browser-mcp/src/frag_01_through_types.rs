@@ -601,6 +601,7 @@ struct CdpClient {
 
 #[cfg(test)]
 mod browser_mcp_body_limit_tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use std::io::Cursor;
 

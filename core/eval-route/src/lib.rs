@@ -1,10 +1,10 @@
 #![deny(clippy::unwrap_used, clippy::expect_used)]
 
 use core_errors::FrameworkError;
+use framework_extra::route_manifest_fallback::route_task_with_manifest_fallback;
 use routing_engine::route::{
     ROUTE_AUTHORITY, ROUTE_DECISION_SCHEMA_VERSION, filter_records_for_host, load_records,
 };
-use framework_extra::route_manifest_fallback::route_task_with_manifest_fallback;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::path::Path;
@@ -39,7 +39,9 @@ pub struct EvalCasePayload {
     pub allow_overlay: bool,
 }
 
-fn default_true() -> bool { true }
+fn default_true() -> bool {
+    true
+}
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct EvalCasesPayload {
@@ -107,7 +109,7 @@ pub fn evaluate_route_cases(
                     case_id: case.id.clone(),
                     field: "host_filter".to_string(),
                     expected: json!("host-scoped records"),
-                    got: json!(err),
+                    got: json!(err.to_string()),
                     task: case.task.clone(),
                 });
                 failed += 1;
@@ -128,7 +130,7 @@ pub fn evaluate_route_cases(
                     case_id: case.id.clone(),
                     field: "route_error".to_string(),
                     expected: json!("valid decision"),
-                    got: json!(err),
+                    got: json!(err.to_string()),
                     task: case.task.clone(),
                 });
                 failed += 1;
@@ -261,13 +263,10 @@ pub fn evaluate_route_cases(
 pub fn run_eval_route(
     cases_path: &Path,
     runtime_path: Option<&Path>,
-) -> Result<EvalRouteReport, String> {
+) -> Result<EvalRouteReport, FrameworkError> {
     let cases = load_eval_cases(cases_path)?;
     let records = load_records(runtime_path)?;
-    Ok(evaluate_route_cases(
-        &records,
-        &cases.cases,
-    ))
+    Ok(evaluate_route_cases(&records, &cases.cases))
 }
 
 pub fn eval_route_contract() -> Value {
@@ -450,9 +449,7 @@ mod tests {
 
     #[test]
     fn load_eval_cases_missing_file_returns_error() {
-        let result = load_eval_cases(std::path::Path::new(
-            "/tmp/non_existent_file_xyz.json",
-        ));
+        let result = load_eval_cases(std::path::Path::new("/tmp/non_existent_file_xyz.json"));
         assert!(result.is_err());
     }
 
@@ -475,8 +472,7 @@ mod tests {
         record_b.host_platforms = vec!["cursor".to_string()];
         let records = vec![record_a, record_b];
 
-        let filtered_all =
-            filter_records_for_host(&records, None).expect("filter all");
+        let filtered_all = filter_records_for_host(&records, None).expect("filter all");
         assert_eq!(filtered_all.len(), 2);
 
         let filtered_codex =
@@ -495,7 +491,11 @@ mod tests {
     #[test]
     fn wrong_overlay_rate_detected() {
         let records = vec![make_record(
-            "gitx", "L0", "owner", "none", &["提交代码", "git"],
+            "gitx",
+            "L0",
+            "owner",
+            "none",
+            &["提交代码", "git"],
         )];
         let cases = vec![EvalCasePayload {
             id: "overlay-fail".to_string(),
@@ -513,7 +513,11 @@ mod tests {
     #[test]
     fn wrong_layer_rate_detected() {
         let records = vec![make_record(
-            "gitx", "L0", "owner", "none", &["提交代码", "git"],
+            "gitx",
+            "L0",
+            "owner",
+            "none",
+            &["提交代码", "git"],
         )];
         let cases = vec![EvalCasePayload {
             id: "layer-fail".to_string(),
@@ -546,8 +550,11 @@ mod tests {
                 }
             ]
         });
-        std::fs::write(&cases_path, serde_json::to_string_pretty(&cases_json).unwrap())
-            .expect("write eval_cases.json");
+        std::fs::write(
+            &cases_path,
+            serde_json::to_string_pretty(&cases_json).unwrap(),
+        )
+        .expect("write eval_cases.json");
 
         let runtime_path = dir.path().join("SKILL_ROUTING_RUNTIME.json");
         let runtime_json = serde_json::json!({
@@ -564,8 +571,11 @@ mod tests {
                 ]
             ]
         });
-        std::fs::write(&runtime_path, serde_json::to_string_pretty(&runtime_json).unwrap())
-            .expect("write SKILL_ROUTING_RUNTIME.json");
+        std::fs::write(
+            &runtime_path,
+            serde_json::to_string_pretty(&runtime_json).unwrap(),
+        )
+        .expect("write SKILL_ROUTING_RUNTIME.json");
 
         let report = run_eval_route(&cases_path, Some(&runtime_path))
             .expect("run_eval_route should succeed");

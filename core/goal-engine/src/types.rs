@@ -46,7 +46,11 @@ impl LoopPhase {
             LoopPhase::Discovering => &[LoopPhase::Preflight, LoopPhase::Interrupted],
             LoopPhase::Preflight => &[LoopPhase::Running, LoopPhase::Interrupted],
             LoopPhase::Running => &[LoopPhase::Verifying, LoopPhase::Interrupted],
-            LoopPhase::Verifying => &[LoopPhase::Completed, LoopPhase::Escalated, LoopPhase::Interrupted],
+            LoopPhase::Verifying => &[
+                LoopPhase::Completed,
+                LoopPhase::Escalated,
+                LoopPhase::Interrupted,
+            ],
             LoopPhase::Completed => &[], // terminal
             LoopPhase::Escalated => &[LoopPhase::Completed, LoopPhase::Interrupted],
             LoopPhase::Interrupted => &[], // terminal

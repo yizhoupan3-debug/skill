@@ -16,6 +16,5 @@ pub const WRITE_ONLY_AUXILIARY_FILES: &[&str] = &[
 ];
 
 /// Auxiliary JSON files that are document-only (policy declaration, no runtime effect).
-pub const DOCUMENT_ONLY_AUXILIARY_FILES: &[&str] = &[
-    "configs/framework/RUNTIME_PROVIDER_REGISTRY.json",
-];
+pub const DOCUMENT_ONLY_AUXILIARY_FILES: &[&str] =
+    &["configs/framework/RUNTIME_PROVIDER_REGISTRY.json"];

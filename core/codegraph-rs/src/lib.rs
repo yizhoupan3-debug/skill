@@ -147,13 +147,8 @@ impl CodeGraphIndex {
 
     /// Lightweight dead code count (COUNT(*) only, no row data).
     /// Preferred for hot-path queries that only need the number.
-    pub fn count_dead_code_only(
-        &self,
-        language: Option<&str>,
-    ) -> anyhow::Result<usize> {
-        Ok(db::node_ops::count_dead_code_only(
-            &self.conn, language,
-        )?)
+    pub fn count_dead_code_only(&self, language: Option<&str>) -> anyhow::Result<usize> {
+        Ok(db::node_ops::count_dead_code_only(&self.conn, language)?)
     }
 
     pub fn find_definition(
@@ -161,7 +156,9 @@ impl CodeGraphIndex {
         symbol: &str,
         file_path: Option<&str>,
     ) -> anyhow::Result<Vec<db::node_ops::DefinitionResult>> {
-        Ok(db::node_ops::find_definition(&self.conn, symbol, file_path)?)
+        Ok(db::node_ops::find_definition(
+            &self.conn, symbol, file_path,
+        )?)
     }
 
     /// Find all indexed symbols in a specific file.

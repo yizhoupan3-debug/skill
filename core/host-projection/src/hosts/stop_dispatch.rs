@@ -38,8 +38,12 @@ pub trait StopHostOps {
     /// Isolated per-host via host_id() subdirectory to prevent collision when
     /// multiple hosts share the same repo.
     fn hook_state_base(&self, repo_root: &Path) -> PathBuf {
-        let config_dir = framework_kernel::runtime_registry::host_private_config_dir(self.host_id());
-        repo_root.join(config_dir).join("hook-state").join(self.host_id())
+        let config_dir =
+            framework_kernel::runtime_registry::host_private_config_dir(self.host_id());
+        repo_root
+            .join(config_dir)
+            .join("hook-state")
+            .join(self.host_id())
     }
 
     /// Session key for state file naming.
@@ -81,17 +85,17 @@ pub fn run_unified_stop(
 
     // ── 2. Closeout advisory (non-blocking) ──
     let response_text = hook_dispatch::extract_response_text(payload);
-    if let Some(msg) = crate::hooks::closeout_stop_followup_for_completion_text(
-        repo_root,
-        &response_text,
-    ) {
+    if let Some(msg) =
+        crate::hooks::closeout_stop_followup_for_completion_text(repo_root, &response_text)
+    {
         return add_context("Stop", &format!("[advisory] {msg}"));
     }
 
     // ── 3. Build context ──
     let key = host.session_key(repo_root, payload);
     let base = host.hook_state_base(repo_root);
-    let review_path = base.join(core_policy::hook_review_disk_state::hook_review_subagent_state_basename(&key));
+    let review_path =
+        base.join(core_policy::hook_review_disk_state::hook_review_subagent_state_basename(&key));
     let touch_path = base.join(format!("hook_state_{key}.json"));
 
     // ── 4. Load state from disk ──
@@ -153,11 +157,8 @@ pub fn run_unified_stop(
     host.hydrate_goal_gate_from_disk(repo_root, &mut review_state, goal_drive_entrypoint);
 
     // ── 9. Review gate check (shared) + followup tracking ──
-    let review_suppressed = hook_dispatch::is_review_gate_suppressed(
-        host.host_id(),
-        Some(repo_root),
-        &prompt,
-    );
+    let review_suppressed =
+        hook_dispatch::is_review_gate_suppressed(host.host_id(), Some(repo_root), &prompt);
     let gate_fields = review_state.gate_fields();
     let review_advisory_needed = if review_suppressed {
         None
@@ -179,31 +180,45 @@ pub fn run_unified_stop(
     let goal_is_satisfied = review_state.goal_is_satisfied();
 
     // Try to read GOAL_STATE from disk for done_when validation
-    let done_when_coverage = goal_is_satisfied.then(|| {
-        // Only run disk validation if the base signals are satisfied
-        core_state::state_manager::read_goal_state(repo_root, None).ok().flatten().and_then(|goal| {
-            let done_when = goal.get("done_when").and_then(Value::as_array)?;
-            if done_when.is_empty() { return None; }
-            let total = done_when.len();
-            let covered = done_when.iter().filter(|item| {
-                item.as_str().map(|s| response_text.contains(s)).unwrap_or(false)
-            }).count();
-            Some((covered, total, done_when.clone()))
+    let done_when_coverage = goal_is_satisfied
+        .then(|| {
+            // Only run disk validation if the base signals are satisfied
+            core_state::state_manager::read_goal_state(repo_root, None)
+                .ok()
+                .flatten()
+                .and_then(|goal| {
+                    let done_when = goal.get("done_when").and_then(Value::as_array)?;
+                    if done_when.is_empty() {
+                        return None;
+                    }
+                    let total = done_when.len();
+                    let covered = done_when
+                        .iter()
+                        .filter(|item| {
+                            item.as_str()
+                                .map(|s| response_text.contains(s))
+                                .unwrap_or(false)
+                        })
+                        .count();
+                    Some((covered, total, done_when.clone()))
+                })
         })
-    }).flatten();
+        .flatten();
 
     if review_state.tracks_goal() && !goal_is_satisfied {
         review_state.goal.followup_count += 1;
         review_state.goal.goal_followup_count += 1;
         let _ = write_review_state(&review_path, &review_state);
         let message = if let Some((covered, total, items)) = &done_when_coverage {
-            let mut msg = format!("Goal not yet satisfied (contract={}, progress={}, verify={}). done_when: {covered}/{total} covered, continue working.",
+            let mut msg = format!(
+                "Goal not yet satisfied (contract={}, progress={}, verify={}). done_when: {covered}/{total} covered, continue working.",
                 review_state.goal.goal_contract_seen,
                 review_state.goal.goal_progress_seen,
                 review_state.goal.goal_verify_or_block_seen,
             );
             // List uncovered done_when items (up to 3)
-            let uncovered: Vec<&str> = items.iter()
+            let uncovered: Vec<&str> = items
+                .iter()
                 .filter_map(|item| item.as_str())
                 .filter(|s| !response_text.contains(s))
                 .take(3)
@@ -213,7 +228,8 @@ pub fn run_unified_stop(
             }
             msg
         } else {
-            format!("Goal not yet satisfied (contract={}, progress={}, verify={}). Continue working.",
+            format!(
+                "Goal not yet satisfied (contract={}, progress={}, verify={}). Continue working.",
                 review_state.goal.goal_contract_seen,
                 review_state.goal.goal_progress_seen,
                 review_state.goal.goal_verify_or_block_seen,
@@ -228,15 +244,17 @@ pub fn run_unified_stop(
         && review_state.tracks_goal()
         && !review_state.goal.done_when_advisory_sent
         && let Some((covered, total, _)) = &done_when_coverage
-            && *total > 0 && (*covered as f64 / *total as f64) < 0.5 {
-                let message = format!(
-                    "Goal signals satisfied but done_when coverage is low ({covered}/{total}). \
+        && *total > 0
+        && (*covered as f64 / *total as f64) < 0.5
+    {
+        let message = format!(
+            "Goal signals satisfied but done_when coverage is low ({covered}/{total}). \
                      Verify all completion conditions before completing. Still missing items may remain.",
-                );
-                review_state.goal.done_when_advisory_sent = true;
-                let _ = write_review_state(&review_path, &review_state);
-                return add_context("Stop", &message);
-            }
+        );
+        review_state.goal.done_when_advisory_sent = true;
+        let _ = write_review_state(&review_path, &review_state);
+        return add_context("Stop", &message);
+    }
 
     // ── 10b. Auto-complete detection ──
     // When goal signals are satisfied and all done_when (if any) are 100% covered,
@@ -248,17 +266,22 @@ pub fn run_unified_stop(
             .unwrap_or(true);
         if all_done {
             // Resolve task_id via pointer (same strategy used in goal ops)
-            let task_id = core_state::state_manager::read_primary_task_id(repo_root)
-                .unwrap_or_default();
+            let task_id =
+                core_state::state_manager::read_primary_task_id(repo_root).unwrap_or_default();
             if !task_id.is_empty() {
                 // GoalType::Linear removed in v10 — all goals follow loop semantics,
                 // so auto-complete is skipped (loop iteration is managed by explicit tool call).
-                tracing::info!("stop_dispatch: skipping auto-complete (all goals treated as loop after GoalType::Linear removal)");
+                tracing::info!(
+                    "stop_dispatch: skipping auto-complete (all goals treated as loop after GoalType::Linear removal)"
+                );
             }
             // After completion, check if the conversation describes a new complex task
             let next_goal = core_policy::goal_auto_detect::analyze_complexity(&prompt);
             if next_goal.is_complex {
-                return add_context("Stop", "[Goal Suggestion] 前一个任务已完成。检测到新的复杂任务，是否创建新 Goal？");
+                return add_context(
+                    "Stop",
+                    "[Goal Suggestion] 前一个任务已完成。检测到新的复杂任务，是否创建新 Goal？",
+                );
             }
         }
     }
@@ -271,11 +294,17 @@ pub fn run_unified_stop(
     };
     if touch_state.settings && !touch_state.settings_validated {
         clear_file(&touch_path);
-        return add_context("Stop", "[advisory] settings changed but not validated — run a verification command.");
+        return add_context(
+            "Stop",
+            "[advisory] settings changed but not validated — run a verification command.",
+        );
     }
     if touch_state.framework && !touch_state.framework_tested {
         clear_file(&touch_path);
-        return add_context("Stop", "[advisory] framework changes detected but not tested — run cargo test.");
+        return add_context(
+            "Stop",
+            "[advisory] framework changes detected but not tested — run cargo test.",
+        );
     }
 
     // ── 12. Conditional state cleanup ──
@@ -329,7 +358,9 @@ enum DiskState<T> {
     Unreadable,
 }
 
-fn load_review_gate_disk(path: &Path) -> DiskState<core_policy::hook_review_disk_state::HookReviewDiskCore> {
+fn load_review_gate_disk(
+    path: &Path,
+) -> DiskState<core_policy::hook_review_disk_state::HookReviewDiskCore> {
     match std::fs::read_to_string(path) {
         Ok(text) => match serde_json::from_str(&text) {
             Ok(state) => DiskState::Ok(state),
@@ -351,14 +382,16 @@ fn load_touch_state_disk(path: &Path) -> DiskState<Value> {
     }
 }
 
-fn write_review_state(path: &Path, state: &core_policy::hook_review_disk_state::HookReviewDiskCore) -> Result<(), String> {
-    let text = serde_json::to_string_pretty(state)
-        .map_err(|e| format!("serialize review state: {e}"))?;
+fn write_review_state(
+    path: &Path,
+    state: &core_policy::hook_review_disk_state::HookReviewDiskCore,
+) -> Result<(), String> {
+    let text =
+        serde_json::to_string_pretty(state).map_err(|e| format!("serialize review state: {e}"))?;
     if let Some(parent) = path.parent() {
         let _ = std::fs::create_dir_all(parent);
     }
-    std::fs::write(path, text)
-        .map_err(|e| format!("write review state: {e}"))
+    std::fs::write(path, text).map_err(|e| format!("write review state: {e}"))
 }
 
 fn clear_file(path: &Path) {
@@ -373,13 +406,18 @@ fn add_context(event: &str, msg: &str) -> Option<Value> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use std::path::Path;
 
     struct TestHost;
     impl StopHostOps for TestHost {
-        fn host_id(&self) -> &'static str { "claude" }
-        fn log_label(&self) -> &'static str { "TestHost" }
+        fn host_id(&self) -> &'static str {
+            "claude"
+        }
+        fn log_label(&self) -> &'static str {
+            "TestHost"
+        }
         fn session_key(&self, _repo_root: &Path, _payload: &Value) -> String {
             "test-session".to_string()
         }

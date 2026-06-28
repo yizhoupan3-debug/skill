@@ -37,11 +37,17 @@ pub struct TransitionVerdict {
 
 impl TransitionVerdict {
     fn allowed(reason: impl Into<String>) -> Self {
-        Self { passed: true, reason: reason.into() }
+        Self {
+            passed: true,
+            reason: reason.into(),
+        }
     }
 
     fn blocked(reason: impl Into<String>) -> Self {
-        Self { passed: false, reason: reason.into() }
+        Self {
+            passed: false,
+            reason: reason.into(),
+        }
     }
 }
 
@@ -65,9 +71,7 @@ pub fn validate_transition(
         TaskTransition::Fail => {
             TransitionVerdict::allowed("fail transition — no evidence required")
         }
-        TaskTransition::Complete => {
-            validate_complete_transition(repo_root, task_id)
-        }
+        TaskTransition::Complete => validate_complete_transition(repo_root, task_id),
     }
 }
 
@@ -81,18 +85,16 @@ fn validate_complete_transition(repo_root: &Path, task_id: &str) -> TransitionVe
         crate::state_manager::task_evidence_artifacts_summary_for_task(repo_root, tid);
 
     if !has_evidence {
-        return TransitionVerdict::blocked(
-            format!("task '{tid}' has no evidence artifacts — cannot verify completion"),
-        );
+        return TransitionVerdict::blocked(format!(
+            "task '{tid}' has no evidence artifacts — cannot verify completion"
+        ));
     }
 
     if !evidence_ok {
-        return TransitionVerdict::blocked(
-            format!(
-                "task '{tid}' has evidence artifacts but none indicate success \
+        return TransitionVerdict::blocked(format!(
+            "task '{tid}' has evidence artifacts but none indicate success \
                  (no exit_code=0 or success=true)"
-            ),
-        );
+        ));
     }
 
     TransitionVerdict::allowed(format!(
@@ -102,6 +104,7 @@ fn validate_complete_transition(repo_root: &Path, task_id: &str) -> TransitionVe
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use std::fs;
     use std::path::PathBuf;

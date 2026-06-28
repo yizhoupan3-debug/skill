@@ -43,9 +43,10 @@ pub fn sqlite_connection(path: &Path) -> Result<std::rc::Rc<Connection>> {
     CACHED.with(|cell| {
         let mut slot = cell.borrow_mut();
         if let Some((ref cached_path, ref cached_conn)) = *slot
-            && cached_path == path {
-                return Ok(Rc::clone(cached_conn));
-            }
+            && cached_path == path
+        {
+            return Ok(Rc::clone(cached_conn));
+        }
         let conn = Connection::open(path).map_err(|e| {
             FrameworkError::validation(format!(
                 "open sqlite runtime storage failed for {}: {e}",
@@ -53,9 +54,15 @@ pub fn sqlite_connection(path: &Path) -> Result<std::rc::Rc<Connection>> {
             ))
         })?;
         conn.pragma_update(None, "journal_mode", "WAL")
-            .map_err(|e| FrameworkError::validation(format!("enable sqlite runtime storage WAL failed: {e}")))?;
+            .map_err(|e| {
+                FrameworkError::validation(format!("enable sqlite runtime storage WAL failed: {e}"))
+            })?;
         conn.pragma_update(None, "synchronous", "NORMAL")
-            .map_err(|e| FrameworkError::validation(format!("set sqlite runtime storage synchronous mode failed: {e}")))?;
+            .map_err(|e| {
+                FrameworkError::validation(format!(
+                    "set sqlite runtime storage synchronous mode failed: {e}"
+                ))
+            })?;
         ensure_runtime_storage_sqlite_schema(&conn)?;
         let shared = Rc::new(conn);
         let result = Rc::clone(&shared);
@@ -110,16 +117,12 @@ const SQLITE_APPEND_SQL: &str =
      SET payload_text = runtime_storage_payloads.payload_text || excluded.payload_text";
 
 #[tracing::instrument(level = "debug", skip_all)]
-pub fn sqlite_payload_exists(
-    path: &Path,
-    db_path: &Path,
-    storage_root: &Path,
-) -> Result<bool> {
+pub fn sqlite_payload_exists(path: &Path, db_path: &Path, storage_root: &Path) -> Result<bool> {
     let stable_key = sqlite_lookup_key(path, storage_root)?;
     let conn = sqlite_connection(db_path)?;
-    let mut stmt = conn
-        .prepare_cached(SQLITE_EXISTS_SQL)
-        .map_err(|e| FrameworkError::validation(format!("prepare sqlite exists query failed: {e}")))?;
+    let mut stmt = conn.prepare_cached(SQLITE_EXISTS_SQL).map_err(|e| {
+        FrameworkError::validation(format!("prepare sqlite exists query failed: {e}"))
+    })?;
     let exists = stmt
         .query_row(params![stable_key], |row| row.get::<_, i64>(0))
         .optional()
@@ -129,18 +132,19 @@ pub fn sqlite_payload_exists(
 }
 
 #[tracing::instrument(level = "debug", skip_all)]
-pub fn sqlite_read_text(
-    path: &Path,
-    db_path: &Path,
-    storage_root: &Path,
-) -> Result<String> {
+pub fn sqlite_read_text(path: &Path, db_path: &Path, storage_root: &Path) -> Result<String> {
     let stable_key = sqlite_lookup_key(path, storage_root)?;
     let conn = sqlite_connection(db_path)?;
-    let mut stmt = conn
-        .prepare_cached(SQLITE_READ_SQL)
-        .map_err(|e| FrameworkError::validation(format!("prepare sqlite read query failed: {e}")))?;
+    let mut stmt = conn.prepare_cached(SQLITE_READ_SQL).map_err(|e| {
+        FrameworkError::validation(format!("prepare sqlite read query failed: {e}"))
+    })?;
     stmt.query_row(params![stable_key], |row| row.get::<_, String>(0))
-        .map_err(|e| FrameworkError::validation(format!("read sqlite payload failed for {}: {e}", path.display())))
+        .map_err(|e| {
+            FrameworkError::validation(format!(
+                "read sqlite payload failed for {}: {e}",
+                path.display()
+            ))
+        })
 }
 
 #[tracing::instrument(level = "debug", skip_all)]
@@ -156,7 +160,12 @@ pub fn sqlite_write_text(
     }
     let conn = sqlite_connection(db_path)?;
     conn.execute(SQLITE_WRITE_SQL, params![stable_key, payload_text])
-        .map_err(|e| FrameworkError::validation(format!("write sqlite payload failed for {}: {e}", path.display())))?;
+        .map_err(|e| {
+            FrameworkError::validation(format!(
+                "write sqlite payload failed for {}: {e}",
+                path.display()
+            ))
+        })?;
     Ok(())
 }
 
@@ -173,6 +182,11 @@ pub fn sqlite_append_text(
     }
     let conn = sqlite_connection(db_path)?;
     conn.execute(SQLITE_APPEND_SQL, params![stable_key, payload_text])
-        .map_err(|e| FrameworkError::validation(format!("append sqlite payload failed for {}: {e}", path.display())))?;
+        .map_err(|e| {
+            FrameworkError::validation(format!(
+                "append sqlite payload failed for {}: {e}",
+                path.display()
+            ))
+        })?;
     Ok(())
 }

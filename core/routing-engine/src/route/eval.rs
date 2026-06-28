@@ -1,3 +1,4 @@
+use core_errors::FrameworkError;
 use rayon::prelude::*;
 
 use std::collections::HashSet;
@@ -18,15 +19,17 @@ use super::types::{
 const ROUTING_EVAL_CASES_SCHEMA_VERSION: &str = "routing-eval-cases-v1";
 const ROUTING_EVAL_REPORT_SCHEMA_VERSION: &str = "routing-eval-v1";
 
-pub fn load_routing_eval_cases(path: &Path) -> Result<RoutingEvalCasesPayload, String> {
+pub fn load_routing_eval_cases(path: &Path) -> Result<RoutingEvalCasesPayload, FrameworkError> {
     let payload = read_json(path)?;
-    let cases = serde_json::from_value::<RoutingEvalCasesPayload>(payload)
-        .map_err(|err| format!("failed parsing {}: {err}", path.display()))?;
+    let cases =
+        serde_json::from_value::<RoutingEvalCasesPayload>(payload).map_err(FrameworkError::Json)?;
     if cases.schema_version != ROUTING_EVAL_CASES_SCHEMA_VERSION {
-        return Err(format!(
-            "routing eval case file returned an unknown schema: {:?}",
-            cases.schema_version
-        ));
+        return Err(FrameworkError::Unsupported {
+            what: format!(
+                "routing eval case file returned an unknown schema: {:?}",
+                cases.schema_version
+            ),
+        });
     }
     Ok(cases)
 }
@@ -34,10 +37,10 @@ pub fn load_routing_eval_cases(path: &Path) -> Result<RoutingEvalCasesPayload, S
 pub fn evaluate_routing_cases(
     records: &[SkillRecord],
     cases_payload: RoutingEvalCasesPayload,
-) -> Result<RoutingEvalReportPayload, String> {
+) -> Result<RoutingEvalReportPayload, FrameworkError> {
     let mut metrics = RoutingEvalMetricsPayload::default();
     let cases = cases_payload.cases;
-    let evaluate_one = |(input_index, case): (usize, RoutingEvalCasePayload)| -> Result<Option<EvaluatedRoutingCase>, String> {
+    let evaluate_one = |(input_index, case): (usize, RoutingEvalCasePayload)| -> Result<Option<EvaluatedRoutingCase>, FrameworkError> {
         let task = case.task.trim().to_string();
         if task.is_empty() {
             return Ok(None);
@@ -64,17 +67,21 @@ pub fn evaluate_routing_cases(
         )?;
         if let Some(expected) = case.expected_layer.as_ref().map(|s| s.trim()).filter(|s| !s.is_empty())
             && decision.layer != *expected {
-                return Err(format!(
-                    "routing-eval case id={:?}: expected_layer {expected:?} != actual {:?}",
-                    case.id, decision.layer
-                ));
+                return Err(FrameworkError::Validation {
+                    message: format!(
+                        "routing-eval case id={:?}: expected_layer {expected:?} != actual {:?}",
+                        case.id, decision.layer
+                    ),
+                });
             }
         if let Some(ref expected_ctx) = case.route_context
             && &decision.route_context != expected_ctx {
-                return Err(format!(
-                    "routing-eval case id={:?}: route_context mismatch: actual={:?} expected={expected_ctx:?}",
-                    case.id, decision.route_context
-                ));
+                return Err(FrameworkError::Validation {
+                    message: format!(
+                        "routing-eval case id={:?}: route_context mismatch: actual={:?} expected={expected_ctx:?}",
+                        case.id, decision.route_context
+                    ),
+                });
             }
         let selected_owner = decision.selected_skill.clone();
         let selected_overlay = decision.overlay_skill.clone();

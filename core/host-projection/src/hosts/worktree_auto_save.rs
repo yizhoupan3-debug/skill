@@ -164,12 +164,7 @@ fn git(repo_root: &Path, args: &[&str]) -> Option<String> {
 /// Count dirty files via `git status --porcelain` in `cwd`.
 fn dirty_file_count(_repo_root: &Path, cwd: &Path) -> usize {
     std::process::Command::new("git")
-        .args([
-            "-C",
-            &cwd.to_string_lossy(),
-            "status",
-            "--porcelain",
-        ])
+        .args(["-C", &cwd.to_string_lossy(), "status", "--porcelain"])
         .output()
         .ok()
         .map(|o| String::from_utf8(o.stdout).unwrap_or_default())
@@ -189,6 +184,7 @@ fn unix_ms() -> u64 {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     #[test]

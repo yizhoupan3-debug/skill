@@ -1,15 +1,12 @@
 use core_errors::FrameworkError;
 /// CLI 子命令、stdio 与 live execute 控制面（从 `main.rs` 拆分，阶段 1）。
-
 pub mod args;
 pub mod common;
 mod dispatch;
 pub mod router_command_dispatch;
 pub mod runtime_ops;
 
-pub use common::{
-    configure_compute_parallelism, env_usize,
-};
+pub use common::{configure_compute_parallelism, env_usize};
 pub use framework_extra::route_manifest_fallback::route_task_with_manifest_fallback;
 pub use runtime_ops::dispatch_stdio_json_request_payload;
 
@@ -30,9 +27,13 @@ pub fn run(args: &args::Cli) -> Result<(), FrameworkError> {
         return dispatch::dispatch_router_command(command);
     }
     if args.stdio_json {
-        return Ok(runtime_core::stdio_transport::run_stdio_json_loop(args.stdio_max_concurrency)?);
+        return Ok(runtime_core::stdio_transport::run_stdio_json_loop(
+            args.stdio_max_concurrency,
+        )?);
     }
-    Err(FrameworkError::validation("missing router-rs command; use `router-rs-cli --help` for canonical subcommands"))
+    Err(FrameworkError::validation(
+        "missing router-rs command; use `router-rs-cli --help` for canonical subcommands",
+    ))
 }
 
 pub use args::Cli;
@@ -58,9 +59,7 @@ pub fn cli_thin_shell_line_count() -> usize {
 
 #[cfg(test)]
 mod cli_thin_shell_budget_tests {
-    use super::{
-        CLI_THIN_SHELL_LINE_BUDGET, cli_thin_shell_line_count,
-    };
+    use super::{CLI_THIN_SHELL_LINE_BUDGET, cli_thin_shell_line_count};
 
     #[test]
     fn b7_cli_thin_shell_under_line_budget() {

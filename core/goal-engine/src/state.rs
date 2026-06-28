@@ -83,7 +83,8 @@ pub fn write_loop_state(
     let path = loop_state_path(repo_root, loop_id);
     let text = serde_json::to_string(state)
         .map_err(|e| LoopError::Serde(format!("serialize state: {e}")))?;
-    core_state_utils::atomic_write::write_atomic_text(&path, &text).map_err(|e| LoopError::Io(e.to_string()))
+    core_state_utils::atomic_write::write_atomic_text(&path, &text)
+        .map_err(|e| LoopError::Io(e.to_string()))
 }
 
 /// Create a new initial `LoopRunState` with the given loop ID and profile.
@@ -108,8 +109,18 @@ pub fn create_initial_state(loop_id: &str, profile: &str) -> LoopRunState {
 /// Logs a warning when the transition is not in the valid set, but still allows it.
 pub fn transition_phase(state: &mut LoopRunState, new_phase: LoopPhase) {
     let current_str = &state.phase;
-    if let Some(current) = [LoopPhase::Pending, LoopPhase::Discovering, LoopPhase::Preflight, LoopPhase::Running, LoopPhase::Verifying, LoopPhase::Completed, LoopPhase::Escalated, LoopPhase::Interrupted]
-        .iter().find(|p| p.as_str() == current_str)
+    if let Some(current) = [
+        LoopPhase::Pending,
+        LoopPhase::Discovering,
+        LoopPhase::Preflight,
+        LoopPhase::Running,
+        LoopPhase::Verifying,
+        LoopPhase::Completed,
+        LoopPhase::Escalated,
+        LoopPhase::Interrupted,
+    ]
+    .iter()
+    .find(|p| p.as_str() == current_str)
     {
         let valid = current.valid_transitions();
         if !valid.contains(&new_phase) {

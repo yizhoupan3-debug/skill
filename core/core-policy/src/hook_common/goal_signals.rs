@@ -19,8 +19,15 @@ pub const COMPLETION_DETECT_EN: &[&str] = &["done", "finished", "completed", "su
 
 /// 完成宣称（触发 closeout）：不含「验证通过/测试通过」等，避免与 goal verify 聊天轨打架；
 /// 中文用 3+ 字短语避免「完成度 / 完成任务拆分 / 通过阅读」等子串误命中。
-pub const COMPLETION_DETECT_ZH_PHRASES: &[&str] =
-    &["已完成", "已经完成", "全部完成", "完成了", "搞定", "任务完成", "验证通过"];
+pub const COMPLETION_DETECT_ZH_PHRASES: &[&str] = &[
+    "已完成",
+    "已经完成",
+    "全部完成",
+    "完成了",
+    "搞定",
+    "任务完成",
+    "验证通过",
+];
 
 /// 仅用于无磁盘 GOAL 时的聊天 progress/verify 提示（不进 closeout 词表）。
 pub const GOAL_CHAT_VERIFY_ZH_PHRASES: &[&str] = &["验证通过", "测试通过", "审核通过", "已通过"];
@@ -95,9 +102,7 @@ pub fn has_goal_progress_signal(text: &str) -> bool {
 /// Check if text contains goal verify or blocker signal.
 pub fn has_goal_verify_or_block_signal(text: &str) -> bool {
     goal_verify_or_block_re().is_match(text)
-        || GOAL_CHAT_VERIFY_ZH_PHRASES
-            .iter()
-            .any(|p| text.contains(p))
+        || GOAL_CHAT_VERIFY_ZH_PHRASES.iter().any(|p| text.contains(p))
 }
 
 /// Check for structured goal contract: Goal + Non-goals + Validation commands headings
@@ -128,7 +133,8 @@ pub fn nonempty_inline_heading_any(text: &str, heading: &str) -> bool {
         Regex::new(r"(?im)^\s*Non-goals\s*[:：]\s*(\S.+)$").expect("invalid heading regex")
     });
     static VALIDATION_RE: LazyLock<Regex> = LazyLock::new(|| {
-        Regex::new(r"(?im)^\s*Validation commands\s*[:：]\s*(\S.+)$").expect("invalid heading regex")
+        Regex::new(r"(?im)^\s*Validation commands\s*[:：]\s*(\S.+)$")
+            .expect("invalid heading regex")
     });
     static GOAL_ZH_RE: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(r"(?im)^\s*目标\s*[:：]\s*(\S.+)$").expect("invalid heading regex")
@@ -179,10 +185,7 @@ fn count_done_when_items(text: &str) -> usize {
         ))
         .expect("invalid zh regex")
     });
-    let heading_pairs = [
-        (HEADINGS[0], Some(re_done)),
-        (HEADINGS[1], Some(re_zh)),
-    ];
+    let heading_pairs = [(HEADINGS[0], Some(re_done)), (HEADINGS[1], Some(re_zh))];
     for (h, maybe_re) in heading_pairs {
         let Some(re) = maybe_re else {
             continue;
@@ -215,16 +218,14 @@ fn count_done_when_items(text: &str) -> usize {
             }
             if !in_section {
                 let lowered = line.to_ascii_lowercase();
-                if lowered.starts_with(&h_lower) && (lowered.contains(':') || line.contains('：')) {
+                if lowered.starts_with(&h_lower) && (lowered.contains(':') || line.contains('：'))
+                {
                     in_section = true;
                 }
                 continue;
             }
 
-            if goal_contract_re().is_match(line)
-                && !line
-                    .to_ascii_lowercase()
-                    .starts_with(&h_lower)
+            if goal_contract_re().is_match(line) && !line.to_ascii_lowercase().starts_with(&h_lower)
             {
                 break;
             }
@@ -251,12 +252,18 @@ mod tests {
     fn is_task_profile_returns_false_without_root() {
         assert!(!crate::hook_common::is_task_profile(None, "run the task"));
         assert!(!crate::hook_common::is_task_profile(None, "fix the bug"));
-        assert!(!crate::hook_common::is_task_profile(None, "analyze architecture"));
+        assert!(!crate::hook_common::is_task_profile(
+            None,
+            "analyze architecture"
+        ));
     }
 
     #[test]
     fn is_task_profile_returns_false_for_arbitrary_prompt_without_root() {
-        assert!(!crate::hook_common::is_task_profile(None, "深度review整个路由系统"));
+        assert!(!crate::hook_common::is_task_profile(
+            None,
+            "深度review整个路由系统"
+        ));
         assert!(!crate::hook_common::is_task_profile(None, "fix the bug"));
         assert!(!crate::hook_common::is_task_profile(None, ""));
     }

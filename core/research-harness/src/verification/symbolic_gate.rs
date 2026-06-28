@@ -42,9 +42,15 @@ impl GateChecker for Symbolic {
                 severity: Severity::C,
                 description: "No output_data provided — symbolic checks skipped".to_string(),
                 location: None,
-                suggestion: Some("pass output_data with symbolic keys to enable checks".to_string()),
+                suggestion: Some(
+                    "pass output_data with symbolic keys to enable checks".to_string(),
+                ),
             });
-            return CheckResult { checker_id: self.id().to_string(), passed: true, findings };
+            return CheckResult {
+                checker_id: self.id().to_string(),
+                passed: true,
+                findings,
+            };
         };
 
         // Identity verification (prove lhs == rhs via algebraic rewrite)
@@ -57,7 +63,9 @@ impl GateChecker for Symbolic {
                 severity: if proved { Severity::C } else { Severity::B },
                 description: format!("Identity '{lhs}' = '{rhs}': {proof}"),
                 location: None,
-                suggestion: if proved { None } else {
+                suggestion: if proved {
+                    None
+                } else {
                     Some("identity could not be proved — check expressions".to_string())
                 },
             });
@@ -73,10 +81,16 @@ impl GateChecker for Symbolic {
                 severity: if equiv { Severity::C } else { Severity::B },
                 description: format!(
                     "Equivalence '{lhs}' ≡ '{rhs}': {}",
-                    if equiv { "proved equivalent" } else { "not equivalent" }
+                    if equiv {
+                        "proved equivalent"
+                    } else {
+                        "not equivalent"
+                    }
                 ),
                 location: None,
-                suggestion: if equiv { None } else {
+                suggestion: if equiv {
+                    None
+                } else {
                     Some("expressions are not algebraically equivalent".to_string())
                 },
             });
@@ -136,7 +150,13 @@ impl GateChecker for Symbolic {
             }
         }
 
-        let passed = findings.iter().all(|f| matches!(f.severity, Severity::C | Severity::Warning));
-        CheckResult { checker_id: self.id().to_string(), passed, findings }
+        let passed = findings
+            .iter()
+            .all(|f| matches!(f.severity, Severity::C | Severity::Warning));
+        CheckResult {
+            checker_id: self.id().to_string(),
+            passed,
+            findings,
+        }
     }
 }

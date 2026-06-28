@@ -1,10 +1,10 @@
-use core_errors::FrameworkError;
 use super::types::BACKGROUND_STATE_CONTROL_PLANE_SCHEMA_VERSION;
+use crate::runtime_storage::RuntimeBackendCapabilities;
 use crate::{
     DEFAULT_STATE_SERVICE_AUTHORITY, DEFAULT_STATE_SERVICE_PROJECTION, DEFAULT_STATE_SERVICE_ROLE,
     runtime_backend_capabilities,
 };
-use crate::runtime_storage::RuntimeBackendCapabilities;
+use core_errors::FrameworkError;
 use serde_json::{Value, json};
 use std::path::Path;
 
@@ -61,13 +61,14 @@ pub(super) fn build_state_control_plane(
     });
     if let Some(Value::Object(descriptor)) = control_plane_descriptor
         && let Some(Value::Object(services)) = descriptor.get("services")
-            && let Some(Value::Object(service)) = services.get("state") {
-                for field in ["authority", "role", "projection", "delegate_kind"] {
-                    if let Some(value) = service.get(field) {
-                        payload[field] = value.clone();
-                    }
-                }
+        && let Some(Value::Object(service)) = services.get("state")
+    {
+        for field in ["authority", "role", "projection", "delegate_kind"] {
+            if let Some(value) = service.get(field) {
+                payload[field] = value.clone();
             }
+        }
+    }
     if payload.get("delegate_kind").and_then(Value::as_str) == Some("filesystem-state-store")
         && normalized_backend != "filesystem"
     {

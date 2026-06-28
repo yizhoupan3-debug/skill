@@ -13,7 +13,7 @@
 //! - `hub_entries_fts`: FTS5 virtual table for cross-workspace search
 
 use anyhow::{Context, Result};
-use rusqlite::{params, Connection};
+use rusqlite::{Connection, params};
 use std::path::{Path, PathBuf};
 
 use crate::log::db;
@@ -158,11 +158,7 @@ pub fn register_workspace(hub: &Connection, workspace_path: &Path, name: &str) -
 }
 
 /// Index all entries from a workspace's research-log.db into the hub.
-pub fn index_workspace(
-    hub: &Connection,
-    workspace_id: i64,
-    log_root: &Path,
-) -> Result<usize> {
+pub fn index_workspace(hub: &Connection, workspace_id: i64, log_root: &Path) -> Result<usize> {
     let db_path = log_root.join("research-log.db");
     if !db_path.exists() {
         return Ok(0);

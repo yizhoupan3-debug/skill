@@ -51,17 +51,46 @@ pub struct HostProviderHooks {
 
 // ── Method wrappers for function pointer calls ──
 impl RuntimeCoreHooks {
-    pub fn host_provider_strict_pre_tool_fallback_hint(&self, host_id: &str) -> Option<bool> { (self.host_provider.strict_pre_tool_fallback_hint)(host_id) }
-    pub fn host_provider_for_routing_spelling(&self, host_id: Option<&str>) -> Option<&'static str> { (self.host_provider.for_routing_spelling)(host_id) }
-    pub fn host_provider_registry(&self) -> Vec<(&'static str, Option<&'static str>)> { (self.host_provider.registry)() }
-    pub fn framework_goal_drive(&self, payload: Value) -> Result<Value, String> { (self.framework_goal_drive)(payload) }
-    pub fn handle_orchestrator_operation(&self, payload: Value) -> Result<Value, String> { (self.handle_orchestrator_operation)(payload) }
-    pub fn handle_background_state_operation(&self, payload: Value) -> Result<Value, String> { (self.handle_background_state_operation)(payload) }
-    pub fn runtime_concurrency_defaults_payload(&self) -> Value { (self.runtime_concurrency_defaults_payload)() }
-    pub fn eval_route_contract(&self) -> Value { (self.eval_route_contract)() }
-    pub fn run_eval_route(&self, cases_path: &Path, runtime: Option<&Path>) -> Result<Value, String> { (self.run_eval_route)(cases_path, runtime) }
-    pub fn generated_artifacts_status_for_repo(&self, repo_root: &Path) -> Result<String, String> { (self.generated_artifacts_status_for_repo)(repo_root) }
-    pub fn ensure_kernel_bootstrap(&self) { (self.ensure_kernel_bootstrap)() }
+    pub fn host_provider_strict_pre_tool_fallback_hint(&self, host_id: &str) -> Option<bool> {
+        (self.host_provider.strict_pre_tool_fallback_hint)(host_id)
+    }
+    pub fn host_provider_for_routing_spelling(
+        &self,
+        host_id: Option<&str>,
+    ) -> Option<&'static str> {
+        (self.host_provider.for_routing_spelling)(host_id)
+    }
+    pub fn host_provider_registry(&self) -> Vec<(&'static str, Option<&'static str>)> {
+        (self.host_provider.registry)()
+    }
+    pub fn framework_goal_drive(&self, payload: Value) -> Result<Value, String> {
+        (self.framework_goal_drive)(payload)
+    }
+    pub fn handle_orchestrator_operation(&self, payload: Value) -> Result<Value, String> {
+        (self.handle_orchestrator_operation)(payload)
+    }
+    pub fn handle_background_state_operation(&self, payload: Value) -> Result<Value, String> {
+        (self.handle_background_state_operation)(payload)
+    }
+    pub fn runtime_concurrency_defaults_payload(&self) -> Value {
+        (self.runtime_concurrency_defaults_payload)()
+    }
+    pub fn eval_route_contract(&self) -> Value {
+        (self.eval_route_contract)()
+    }
+    pub fn run_eval_route(
+        &self,
+        cases_path: &Path,
+        runtime: Option<&Path>,
+    ) -> Result<Value, String> {
+        (self.run_eval_route)(cases_path, runtime)
+    }
+    pub fn generated_artifacts_status_for_repo(&self, repo_root: &Path) -> Result<String, String> {
+        (self.generated_artifacts_status_for_repo)(repo_root)
+    }
+    pub fn ensure_kernel_bootstrap(&self) {
+        (self.ensure_kernel_bootstrap)()
+    }
 }
 
 /// All hooks that require callbacks into runtime-core.

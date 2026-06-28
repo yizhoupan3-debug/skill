@@ -83,9 +83,7 @@ impl FrameworkError {
 
     /// Create a `Path` error from a path-like value.
     pub fn path(path: impl Into<PathBuf>) -> Self {
-        Self::Path {
-            path: path.into(),
-        }
+        Self::Path { path: path.into() }
     }
 
     /// Create a `Validation` error from a message string.
@@ -97,16 +95,12 @@ impl FrameworkError {
 
     /// Create a `NotFound` error describing what was not found.
     pub fn not_found(what: impl Into<String>) -> Self {
-        Self::NotFound {
-            what: what.into(),
-        }
+        Self::NotFound { what: what.into() }
     }
 
     /// Create an `Unsupported` error describing what is unsupported.
     pub fn unsupported(what: impl Into<String>) -> Self {
-        Self::Unsupported {
-            what: what.into(),
-        }
+        Self::Unsupported { what: what.into() }
     }
 
     /// Create a `Lock` error from a message string.
@@ -133,6 +127,7 @@ impl From<String> for FrameworkError {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     #[test]
     fn smoke() {
         assert!(true);

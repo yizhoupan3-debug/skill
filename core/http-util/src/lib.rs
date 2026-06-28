@@ -36,6 +36,7 @@ pub fn cached_proxy_url() -> Option<&'static str> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     /// cached_proxy_url returns a consistent Option<(&str)> — once initialized

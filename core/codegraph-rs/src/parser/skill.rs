@@ -46,7 +46,11 @@ pub fn parse_skill_registry_with_content(
 }
 
 /// Core parse logic (extracted for testability and dual-entry reuse).
-fn parse_manifest_content(content: &str, mtime_ns: i64, content_hash: String) -> Option<ParsedFile> {
+fn parse_manifest_content(
+    content: &str,
+    mtime_ns: i64,
+    content_hash: String,
+) -> Option<ParsedFile> {
     let manifest: Value = serde_json::from_str(content).ok()?;
     let skills = manifest.get("skills")?.as_array()?;
 
@@ -114,6 +118,7 @@ fn parse_manifest_content(content: &str, mtime_ns: i64, content_hash: String) ->
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     #[test]

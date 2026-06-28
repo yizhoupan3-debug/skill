@@ -20,10 +20,10 @@ mod tests;
 pub mod hooks;
 pub mod router_env_flags;
 
-pub use types::{SESSION_SUPERVISOR_AUTHORITY, SESSION_SUPERVISOR_SCHEMA_VERSION};
-pub use types::WorkerSessionRecord;
 pub use types::AgentHealthEntry;
 pub use types::AgentHealthStore;
+pub use types::WorkerSessionRecord;
+pub use types::{SESSION_SUPERVISOR_AUTHORITY, SESSION_SUPERVISOR_SCHEMA_VERSION};
 pub use worker::classify_rate_limit_block;
 
 use idle_observer::maybe_trigger_idle_observation;
@@ -101,7 +101,11 @@ pub fn handle_session_supervisor_operation(payload: Value) -> Result<Value, Fram
                     .workers
                     .iter_mut()
                     .find(|worker| worker.worker_id == worker_id)
-                    .ok_or_else(|| FrameworkError::not_found(format!("Unknown supervisor worker_id: {worker_id}")))?;
+                    .ok_or_else(|| {
+                        FrameworkError::not_found(format!(
+                            "Unknown supervisor worker_id: {worker_id}"
+                        ))
+                    })?;
                 reconcile_process_state(worker);
                 worker.clone()
             };
@@ -146,7 +150,11 @@ pub fn handle_session_supervisor_operation(payload: Value) -> Result<Value, Fram
                     .workers
                     .iter_mut()
                     .find(|worker| worker.worker_id == worker_id)
-                    .ok_or_else(|| FrameworkError::not_found(format!("Unknown supervisor worker_id: {worker_id}")))?;
+                    .ok_or_else(|| {
+                        FrameworkError::not_found(format!(
+                            "Unknown supervisor worker_id: {worker_id}"
+                        ))
+                    })?;
                 let terminated = terminate_worker(worker, dry_run, &now)?;
                 (worker.clone(), terminated)
             };
@@ -170,7 +178,11 @@ pub fn handle_session_supervisor_operation(payload: Value) -> Result<Value, Fram
                     .workers
                     .iter_mut()
                     .find(|worker| worker.worker_id == worker_id)
-                    .ok_or_else(|| FrameworkError::not_found(format!("Unknown supervisor worker_id: {worker_id}")))?;
+                    .ok_or_else(|| {
+                        FrameworkError::not_found(format!(
+                            "Unknown supervisor worker_id: {worker_id}"
+                        ))
+                    })?;
                 let classification = mark_worker_blocked(worker, &payload, &now)?;
                 (worker.clone(), classification)
             };
@@ -240,10 +252,11 @@ pub fn handle_session_supervisor_operation(payload: Value) -> Result<Value, Fram
                 .map_err(FrameworkError::validation)?;
             let host_id = required_non_empty_string(&payload, "host_id", "agent health")
                 .map_err(FrameworkError::validation)?;
-            let tool_type = required_non_empty_string(&payload, "tool_type", "agent health").unwrap_or_else(|_| {
-                tracing::warn!("agent_register missing tool_type, defaulting to 'agent'");
-                "agent".to_string()
-            });
+            let tool_type = required_non_empty_string(&payload, "tool_type", "agent health")
+                .unwrap_or_else(|_| {
+                    tracing::warn!("agent_register missing tool_type, defaulting to 'agent'");
+                    "agent".to_string()
+                });
             let cwd = std::env::current_dir()?;
             process::register_agent_alive(&cwd, &agent_id, &host_id, &tool_type, &now)?;
             Ok(json!({
@@ -255,12 +268,14 @@ pub fn handle_session_supervisor_operation(payload: Value) -> Result<Value, Fram
         "agent_unregister" => {
             let agent_id = required_non_empty_string(&payload, "agent_id", "agent health")
                 .map_err(FrameworkError::validation)?;
-            let terminal_status = payload.get("terminal_status")
+            let terminal_status = payload
+                .get("terminal_status")
                 .and_then(|v| v.as_str())
                 .filter(|s| !s.is_empty())
                 .map(String::from)
                 .unwrap_or_else(|| "completed".to_string());
-            let error = payload.get("error")
+            let error = payload
+                .get("error")
                 .and_then(|v| v.as_str())
                 .filter(|s| !s.is_empty())
                 .map(String::from);
@@ -295,17 +310,20 @@ pub fn handle_session_supervisor_operation(payload: Value) -> Result<Value, Fram
         "team_create" => {
             let team_id = required_non_empty_string(&payload, "team_id", "team")
                 .map_err(FrameworkError::validation)?;
-            let name = payload.get("name")
+            let name = payload
+                .get("name")
                 .and_then(|v| v.as_str())
                 .filter(|s| !s.is_empty())
                 .map(String::from)
                 .unwrap_or_else(|| team_id.clone());
-            let supervisor = payload.get("supervisor_agent_id")
+            let supervisor = payload
+                .get("supervisor_agent_id")
                 .and_then(|v| v.as_str())
                 .filter(|s| !s.is_empty())
                 .map(String::from);
             let cwd = std::env::current_dir()?;
-            let team = team_manager::create_team(&cwd, &team_id, &name, supervisor.as_deref(), &now)?;
+            let team =
+                team_manager::create_team(&cwd, &team_id, &name, supervisor.as_deref(), &now)?;
             Ok(json!({
                 "operation": operation,
                 "team_id": team_id,
@@ -317,7 +335,8 @@ pub fn handle_session_supervisor_operation(payload: Value) -> Result<Value, Fram
                 .map_err(FrameworkError::validation)?;
             let agent_id = required_non_empty_string(&payload, "agent_id", "team")
                 .map_err(FrameworkError::validation)?;
-            let role = payload.get("role")
+            let role = payload
+                .get("role")
                 .and_then(|v| v.as_str())
                 .filter(|s| !s.is_empty())
                 .map(String::from)
@@ -325,7 +344,8 @@ pub fn handle_session_supervisor_operation(payload: Value) -> Result<Value, Fram
             let host_id = required_non_empty_string(&payload, "host_id", "team")
                 .map_err(FrameworkError::validation)?;
             let cwd = std::env::current_dir()?;
-            let member = team_manager::add_team_member(&cwd, &team_id, &agent_id, &role, &host_id, &now)?;
+            let member =
+                team_manager::add_team_member(&cwd, &team_id, &agent_id, &role, &host_id, &now)?;
             Ok(json!({
                 "operation": operation,
                 "team_id": team_id,
@@ -338,17 +358,26 @@ pub fn handle_session_supervisor_operation(payload: Value) -> Result<Value, Fram
                 .map_err(FrameworkError::validation)?;
             let agent_id = required_non_empty_string(&payload, "agent_id", "team")
                 .map_err(FrameworkError::validation)?;
-            let terminal_status = payload.get("terminal_status")
+            let terminal_status = payload
+                .get("terminal_status")
                 .and_then(|v| v.as_str())
                 .filter(|s| !s.is_empty())
                 .map(String::from)
                 .unwrap_or_else(|| "interrupted".to_string());
-            let error = payload.get("error")
+            let error = payload
+                .get("error")
                 .and_then(|v| v.as_str())
                 .filter(|s| !s.is_empty())
                 .map(String::from);
             let cwd = std::env::current_dir()?;
-            team_manager::remove_team_member(&cwd, &team_id, &agent_id, &terminal_status, error.as_deref(), &now)?;
+            team_manager::remove_team_member(
+                &cwd,
+                &team_id,
+                &agent_id,
+                &terminal_status,
+                error.as_deref(),
+                &now,
+            )?;
             Ok(json!({
                 "operation": operation,
                 "team_id": team_id,
@@ -372,18 +401,28 @@ pub fn handle_session_supervisor_operation(payload: Value) -> Result<Value, Fram
                 .map_err(FrameworkError::validation)?;
             let from_agent = required_non_empty_string(&payload, "from_agent", "team")
                 .map_err(FrameworkError::validation)?;
-            let to_agent = payload.get("to_agent")
+            let to_agent = payload
+                .get("to_agent")
                 .and_then(|v| v.as_str())
                 .filter(|s| !s.is_empty())
                 .map(String::from);
-            let msg_kind = payload.get("kind")
+            let msg_kind = payload
+                .get("kind")
                 .and_then(|v| v.as_str())
                 .filter(|s| !s.is_empty())
                 .map(String::from)
                 .unwrap_or_else(|| "command".to_string());
             let msg_payload = payload.get("payload").cloned().unwrap_or_default();
             let cwd = std::env::current_dir()?;
-            let msg = team_manager::send_message(&cwd, &team_id, &from_agent, to_agent.as_deref(), &msg_kind, msg_payload, &now)?;
+            let msg = team_manager::send_message(
+                &cwd,
+                &team_id,
+                &from_agent,
+                to_agent.as_deref(),
+                &msg_kind,
+                msg_payload,
+                &now,
+            )?;
             Ok(json!({
                 "operation": operation,
                 "team_id": team_id,
@@ -418,7 +457,8 @@ pub fn handle_session_supervisor_operation(payload: Value) -> Result<Value, Fram
         }
         "team_list" => {
             let cwd = std::env::current_dir()?;
-            let team_id_filter = payload.get("team_id")
+            let team_id_filter = payload
+                .get("team_id")
                 .and_then(|v| v.as_str())
                 .filter(|s| !s.is_empty());
             let teams = team_manager::team_list(&cwd, team_id_filter)?;
@@ -438,6 +478,8 @@ pub fn handle_session_supervisor_operation(payload: Value) -> Result<Value, Fram
             }))
         }
 
-        other => Err(FrameworkError::unsupported(format!("Unsupported session supervisor operation: {other}"))),
+        other => Err(FrameworkError::unsupported(format!(
+            "Unsupported session supervisor operation: {other}"
+        ))),
     }
 }

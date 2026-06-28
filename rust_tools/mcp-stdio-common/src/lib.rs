@@ -17,7 +17,8 @@ pub mod util;
 macro_rules! mcp_stdio_main {
     ($server_name:expr, $crate_name:ident) => {
         fn main() -> anyhow::Result<()> {
-            let repo_root = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+            let repo_root =
+                std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
             mcp_stdio_common::stdio_server::run_stdio_mcp(
                 &repo_root,
                 $server_name,

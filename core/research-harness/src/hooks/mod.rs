@@ -52,9 +52,7 @@ pub fn is_prose_enabled() -> bool {
 pub fn cache_dir() -> PathBuf {
     std::env::var("RESEARCH_HOOK_CACHE_DIR")
         .map(PathBuf::from)
-        .unwrap_or_else(|_| {
-            std::env::temp_dir().join("research-harness-hook-cache")
-        })
+        .unwrap_or_else(|_| std::env::temp_dir().join("research-harness-hook-cache"))
 }
 
 /// Get the cache TTL in seconds.
@@ -115,11 +113,7 @@ pub fn dispatch_prose(context: &str, repo_root: Option<&std::path::Path>) -> Opt
 
 /// Merge hook context into a Cursor-compatible JSON payload.
 /// Cursor expects hook output as a string field in the tool result JSON.
-pub fn merge_hook_context_json(
-    base_json: &str,
-    hook_name: &str,
-    hook_context: &str,
-) -> String {
+pub fn merge_hook_context_json(base_json: &str, hook_name: &str, hook_context: &str) -> String {
     if hook_context.is_empty() {
         return base_json.to_string();
     }
@@ -141,6 +135,7 @@ pub fn merge_hook_context_json(
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     #[test]
@@ -179,7 +174,10 @@ mod tests {
     #[test]
     fn cache_dir_default() {
         let dir = cache_dir();
-        assert!(dir.to_string_lossy().contains("research-harness-hook-cache"));
+        assert!(
+            dir.to_string_lossy()
+                .contains("research-harness-hook-cache")
+        );
     }
 
     #[test]
@@ -190,7 +188,10 @@ mod tests {
 
     #[test]
     fn is_cache_valid_nonexistent() {
-        assert!(!is_cache_valid(Path::new("/nonexistent/path"), Duration::from_secs(60)));
+        assert!(!is_cache_valid(
+            Path::new("/nonexistent/path"),
+            Duration::from_secs(60)
+        ));
     }
 
     #[test]

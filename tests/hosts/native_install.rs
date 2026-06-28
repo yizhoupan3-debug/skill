@@ -95,7 +95,9 @@ fn shell_installer_e2e_writes_expected_files() {
 fn cursor_hooks_template_matches_repo_hook_events_and_timeouts() {
     let root = project_root();
     let template = read_json(&root.join("configs/framework/cursor-hooks.workspace-template.json"));
-    let hooks = template["hooks"].as_object().expect("template hooks object");
+    let hooks = template["hooks"]
+        .as_object()
+        .expect("template hooks object");
 
     // Template must have the expected events: beforeSubmitPrompt, stop, sessionStart, sessionEnd, postToolUse, subagentStart, subagentStop
     let expected_events = [

@@ -80,8 +80,7 @@ fn bench_record_load(c: &mut Criterion) {
         });
     });
     group.bench_function("warm_load_records_cached", |b| {
-        let _ =
-            load_records_cached_for_stdio(Some(&runtime)).expect("prime cache");
+        let _ = load_records_cached_for_stdio(Some(&runtime)).expect("prime cache");
         b.iter(|| {
             black_box(
                 load_records_cached_for_stdio(Some(&runtime))
@@ -161,8 +160,7 @@ fn bench_search_core(c: &mut Criterion) {
 fn bench_host_filter_path(c: &mut Criterion) {
     let root = repo_root();
     let runtime = runtime_path(&root);
-    let records =
-        load_records_cached_for_stdio(Some(&runtime)).expect("cached records");
+    let records = load_records_cached_for_stdio(Some(&runtime)).expect("cached records");
     let query = "plugin creator";
 
     let mut group = c.benchmark_group("mcp_search_path");

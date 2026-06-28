@@ -4,12 +4,12 @@
 // ── B0 core modules ──
 pub mod constants;
 pub mod framework_host_targets;
+pub mod json_value;
 pub mod repo_roots;
 pub mod router_self;
 pub mod runtime_registry;
 pub mod time;
 pub mod tokenizer;
-pub mod json_value;
 
 // ── leaf modules migrated from runtime-core ──
 pub mod cli_args;
@@ -24,13 +24,12 @@ pub mod framework_profile;
 // Placed in L0 to break circular deps — all consumers already depend on framework-kernel.
 pub mod runtime_hooks;
 
+pub use json_value::*;
+pub use time::current_local_timestamp;
 pub use tokenizer::{
     TokenizerProvider, has_parallel_review_candidate_context, install_tokenizer_provider,
     tokenize_query,
 };
-pub use json_value::*;
-pub use time::current_local_timestamp;
-
 
 #[cfg(test)]
 mod tests {

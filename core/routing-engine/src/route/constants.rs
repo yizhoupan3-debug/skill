@@ -27,6 +27,7 @@ pub(super) const FRAMEWORK_COMMAND_KIND: &str = "framework_command";
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::FRAMEWORK_COMMAND_KIND;
 
     #[test]

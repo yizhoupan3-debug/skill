@@ -41,7 +41,8 @@ pub(crate) fn parse(source: &str) -> ParseOutput {
                 continue;
             }
             if let Some(rest) = line.trim_start().strip_prefix("title:") {
-                frontmatter_title = Some(rest.trim().trim_matches('"').trim_matches('\'').to_string());
+                frontmatter_title =
+                    Some(rest.trim().trim_matches('"').trim_matches('\'').to_string());
             }
             continue;
         }
@@ -54,7 +55,11 @@ pub(crate) fn parse(source: &str) -> ParseOutput {
         if is_backtick_fence || is_tilde_fence {
             match &active_fence {
                 None => {
-                    active_fence = Some(if is_backtick_fence { FenceStyle::Backtick } else { FenceStyle::Tilde });
+                    active_fence = Some(if is_backtick_fence {
+                        FenceStyle::Backtick
+                    } else {
+                        FenceStyle::Tilde
+                    });
                     prev_line = None;
                     continue;
                 }
@@ -83,7 +88,10 @@ pub(crate) fn parse(source: &str) -> ParseOutput {
         }
 
         // -- Setext heading: text followed by === or --- underline --
-        if !trimmed.is_empty() && trimmed.chars().all(|c| c == '=' || c == '-') && trimmed.len() >= 3 {
+        if !trimmed.is_empty()
+            && trimmed.chars().all(|c| c == '=' || c == '-')
+            && trimmed.len() >= 3
+        {
             let level = if trimmed.starts_with('=') { 1 } else { 2 };
             if let Some(text) = prev_line {
                 let clean = text.trim();
@@ -109,7 +117,11 @@ pub(crate) fn parse(source: &str) -> ParseOutput {
         if (1..=6).contains(&pound_count) {
             let rest = text_without_hash.trim();
             if !rest.is_empty() {
-                let kind = if pound_count <= 2 { "section" } else { "subsection" };
+                let kind = if pound_count <= 2 {
+                    "section"
+                } else {
+                    "subsection"
+                };
                 symbols.push(ParsedSymbol {
                     symbol: rest.to_string(),
                     kind: kind.to_string(),
@@ -155,6 +167,7 @@ pub(crate) fn parse(source: &str) -> ParseOutput {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     #[test]
@@ -210,7 +223,8 @@ mod tests {
 
     #[test]
     fn leading_spaces_upto_3_are_valid_headings() {
-        let src = " # Level-1 with 1 space\n  ## Level-2 with 2 spaces\n   ### Level-3 with 3 spaces\n";
+        let src =
+            " # Level-1 with 1 space\n  ## Level-2 with 2 spaces\n   ### Level-3 with 3 spaces\n";
         let out = parse(src);
         assert_eq!(out.symbols.len(), 3);
     }

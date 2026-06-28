@@ -4,7 +4,7 @@
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::path::{Path, PathBuf};
 
 // ── CLI Definition ──
@@ -427,11 +427,7 @@ fn cmd_sync(workspace: &PathBuf) -> Result<()> {
     Ok(())
 }
 
-fn cmd_draft_claims(
-    workspace: &PathBuf,
-    question: Option<String>,
-    count: usize,
-) -> Result<()> {
+fn cmd_draft_claims(workspace: &PathBuf, question: Option<String>, count: usize) -> Result<()> {
     let ws = resolve_workspace(workspace)?;
     let state = load_state(&ws)?;
     let next = research_harness::search::research::draft_claims_from_state(
@@ -450,10 +446,7 @@ fn cmd_draft_claims(
     for draft in &drafts {
         println!(
             "  {}: {} [{}]",
-            draft
-                .get("claim_id")
-                .and_then(Value::as_str)
-                .unwrap_or("?"),
+            draft.get("claim_id").and_then(Value::as_str).unwrap_or("?"),
             draft.get("claim").and_then(Value::as_str).unwrap_or("-"),
             draft.get("axis").and_then(Value::as_str).unwrap_or("-")
         );
@@ -528,27 +521,20 @@ fn cmd_research_all(
     Ok(())
 }
 
-fn cmd_gate_from_research(
-    workspace: &PathBuf,
-    min_results: usize,
-    apply: bool,
-) -> Result<()> {
+fn cmd_gate_from_research(workspace: &PathBuf, min_results: usize, apply: bool) -> Result<()> {
     let ws = resolve_workspace(workspace)?;
     let state = load_state(&ws)?;
-    let rec =
-        research_harness::search::research::novelty_gate_recommendation_from_research(
-            &state,
-            min_results,
-        );
+    let rec = research_harness::search::research::novelty_gate_recommendation_from_research(
+        &state,
+        min_results,
+    );
     println!(
         "{}",
         research_harness::search::research::format_gate_recommendation(&rec)
     );
     if apply {
         let next =
-            research_harness::search::research::apply_novelty_gate_recommendation(
-                &state, &rec,
-            );
+            research_harness::search::research::apply_novelty_gate_recommendation(&state, &rec);
         dump_state(&ws, &next)?;
         println!("\nRecommendation applied.");
     }
@@ -561,10 +547,7 @@ fn cmd_brief_first_claim(workspace: &PathBuf) -> Result<()> {
     if let Some(brief) = research_harness::search::strategy::current_brief(&state) {
         println!(
             "claim: {} — {}",
-            brief
-                .get("claim_id")
-                .and_then(Value::as_str)
-                .unwrap_or("?"),
+            brief.get("claim_id").and_then(Value::as_str).unwrap_or("?"),
             brief.get("claim").and_then(Value::as_str).unwrap_or("-")
         );
         println!(
@@ -747,10 +730,7 @@ fn cmd_audit_reuse(workspace: &PathBuf, _apply: bool) -> Result<()> {
     let ws = resolve_workspace(workspace)?;
     let state = load_state(&ws)?;
     let audit = research_harness::claims::lifecycle::reuse_audit(&state);
-    println!(
-        "Total runs: {}",
-        audit.get("runs").unwrap_or(&json!(0))
-    );
+    println!("Total runs: {}", audit.get("runs").unwrap_or(&json!(0)));
     println!(
         "Reusable runs: {}",
         audit.get("reusable_runs").unwrap_or(&json!(0))
@@ -809,10 +789,9 @@ fn cmd_set_novelty_gate(
         let next_obj = next
             .as_object_mut()
             .ok_or_else(|| anyhow::anyhow!("state must be an object after load"))?;
-        let gate = next_obj
-            .entry("novelty_gate")
-            .or_insert(json!({}));
-        let gate_obj = gate.as_object_mut()
+        let gate = next_obj.entry("novelty_gate").or_insert(json!({}));
+        let gate_obj = gate
+            .as_object_mut()
             .ok_or_else(|| anyhow::anyhow!("novelty_gate must be an object"))?;
         gate_obj.insert("status".into(), json!(status));
         if let Some(d) = decision {
@@ -844,22 +823,16 @@ fn cmd_barrier(
     let ws = resolve_workspace(workspace)?;
     // Initialize workspace for barrier research
     let barrier_dir = ws.join("barrier-research");
-    let state = research_harness::claims::lifecycle::default_state(
-        "barrier",
-        problem,
-        "barrier",
-    );
+    let state = research_harness::claims::lifecycle::default_state("barrier", problem, "barrier");
     std::fs::create_dir_all(&barrier_dir)?;
     research_harness::state::dump_state(&barrier_dir.join("research-state.yaml"), &state)?;
     // Draft claims from the barrier problem
     let with_claims =
         research_harness::search::research::draft_claims_from_state(&state, Some(problem), 3);
-    research_harness::state::dump_state(
-        &barrier_dir.join("research-state.yaml"),
-        &with_claims,
-    )?;
+    research_harness::state::dump_state(&barrier_dir.join("research-state.yaml"), &with_claims)?;
     // Write barrier report
-    let drafted_claims = with_claims.get("novelty_gate")
+    let drafted_claims = with_claims
+        .get("novelty_gate")
         .and_then(|g| g.get("draft_claims"))
         .cloned()
         .unwrap_or(json!([]));
@@ -868,9 +841,11 @@ fn cmd_barrier(
         .map(|arr| {
             arr.iter()
                 .filter_map(|c| {
-                    c.as_str()
-                        .map(|s| s.to_string())
-                        .or_else(|| c.get("claim").and_then(|v| v.as_str()).map(|s| s.to_string()))
+                    c.as_str().map(|s| s.to_string()).or_else(|| {
+                        c.get("claim")
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.to_string())
+                    })
                 })
                 .collect()
         })
@@ -889,7 +864,10 @@ fn cmd_barrier(
     });
     let report_path = ws.join(format!(
         "artifacts/research-barrier/{}/BARRIER_REPORT.json",
-        report.get("barrier_id").and_then(Value::as_str).unwrap_or("unknown")
+        report
+            .get("barrier_id")
+            .and_then(Value::as_str)
+            .unwrap_or("unknown")
     ));
     if let Some(parent) = report_path.parent() {
         std::fs::create_dir_all(parent)?;

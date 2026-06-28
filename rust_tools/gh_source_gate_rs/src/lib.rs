@@ -2,10 +2,10 @@
 
 pub mod mcp;
 
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{Context, Result, anyhow, bail};
 use regex::Regex;
 use serde::Serialize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -143,11 +143,7 @@ pub fn inspect_pr_checks_json(
 /// Fetch PR conversation comments, reviews, and review threads. Returns a JSON
 /// Value with `pull_request`, `summary`, `conversation_comments`, `reviews`, and
 /// `review_threads`.
-pub fn fetch_comments_json(
-    repo_root: &Path,
-    pr: Option<&str>,
-    open_only: bool,
-) -> Result<Value> {
+pub fn fetch_comments_json(repo_root: &Path, pr: Option<&str>, open_only: bool) -> Result<Value> {
     ensure_gh_authenticated(repo_root)?;
     let (owner, repo, number) = resolve_pr_ref(pr, repo_root)?;
     let mut result = fetch_all_comments(&owner, &repo, number, repo_root)?;
@@ -345,9 +341,8 @@ fn check_cli_source_owns_commands(repo_root: &Path) -> DoctorCheck {
     let main_source =
         fs::read_to_string(repo_root.join("rust_tools/gh_source_gate_rs/src/main.rs"))
             .unwrap_or_default();
-    let lib_source =
-        fs::read_to_string(repo_root.join("rust_tools/gh_source_gate_rs/src/lib.rs"))
-            .unwrap_or_default();
+    let lib_source = fs::read_to_string(repo_root.join("rust_tools/gh_source_gate_rs/src/lib.rs"))
+        .unwrap_or_default();
     let source = format!("{main_source}\n{lib_source}");
     let required = [
         "InspectPrChecks(InspectPrChecksArgs)",
@@ -653,7 +648,7 @@ fn fetch_job_log(job_id: &str, repo_root: &Path) -> (String, String) {
             return (
                 String::new(),
                 "Error: unable to resolve repository name for job logs.".to_string(),
-            )
+            );
         }
     };
     let endpoint = format!("/repos/{repo_slug}/actions/jobs/{job_id}/logs");
@@ -715,7 +710,8 @@ fn fetch_all_comments(owner: &str, repo: &str, number: i64, repo_root: &Path) ->
                 comments_cursor = None;
                 reviews_cursor = None;
                 threads_cursor = None;
-                if comments_cursor.is_none() && reviews_cursor.is_none() && threads_cursor.is_none() {
+                if comments_cursor.is_none() && reviews_cursor.is_none() && threads_cursor.is_none()
+                {
                     break;
                 }
                 continue;
@@ -732,9 +728,7 @@ fn fetch_all_comments(owner: &str, repo: &str, number: i64, repo_root: &Path) ->
             // Conservative: on errors, stop all pagination
             break;
         }
-        let pr = match payload
-            .pointer("/data/repository/pullRequest")
-        {
+        let pr = match payload.pointer("/data/repository/pullRequest") {
             Some(pr) => pr,
             None => {
                 warnings.push("missing pullRequest in GraphQL response".to_string());
@@ -979,7 +973,7 @@ fn run_command(args: &[&str], cwd: Option<&Path>, stdin: Option<&str>) -> GhResu
                     code: 1,
                     stdout: String::new(),
                     stderr: error.to_string(),
-                }
+                };
             }
         };
         if let Some(mut child_stdin) = child.stdin.take() {
@@ -1548,10 +1542,12 @@ const SUMMARY_MARKER: &str = "summary";
         );
         let report = build_doctor_report(root);
         assert_eq!(report.status, "failed");
-        assert!(report
-            .checks
-            .iter()
-            .any(|check| check.name == "removed-python-helper-files" && !check.ok));
+        assert!(
+            report
+                .checks
+                .iter()
+                .any(|check| check.name == "removed-python-helper-files" && !check.ok)
+        );
     }
 
     fn write_file(path: &Path, content: &str) {

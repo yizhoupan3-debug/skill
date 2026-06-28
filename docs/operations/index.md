@@ -120,7 +120,7 @@ cargo run --manifest-path tools/observer-rs/Cargo.toml -- audit --config configs
 
 **GOAL_STATE 状态机**：推荐路径 `[无] → running → paused/blocked/completed/superseded → .trash (clear)`。惯例约束（非硬约束）。`drive_until_done=true` + `status=running` = 应续跑。
 
-**TASK_STATE 聚合**：只读投影（schema v2），聚合 GOAL_STATE + QUALITY_GATE_STATE + EVIDENCE_INDEX + STEP_LEDGER + SESSION_SUMMARY + NEXT_ACTIONS + TRACE_METADATA。通过 `ROUTER_RS_TASK_STATE_AGGREGATE_AUTO=1` 启用。
+**TASK_STATE 聚合**：只读投影（schema v2），聚合 GOAL_STATE + RFV_LOOP_STATE + EVIDENCE_INDEX + STEP_LEDGER + SESSION_SUMMARY + NEXT_ACTIONS + TRACE_METADATA。通过 `ROUTER_RS_TASK_STATE_AGGREGATE_AUTO=1` 启用。
 
 **closeout 防护**：`goal_state_manage(operation=complete)` 不经过 `enforce_closeout_for_session_payload`。closeout_record 缺失时 advisory（非硬拦）。
 

@@ -5,7 +5,9 @@ use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-pub use framework_kernel::json_value::{required_non_empty_string, optional_non_empty_string, optional_bool};
+pub use framework_kernel::json_value::{
+    optional_bool, optional_non_empty_string, required_non_empty_string,
+};
 
 use core_errors::FrameworkError;
 
@@ -130,7 +132,9 @@ pub fn add_seconds_rfc3339(now: &str, seconds: i64) -> Result<String, FrameworkE
 pub fn parse_rfc3339(value: &str) -> Result<DateTime<Utc>, FrameworkError> {
     DateTime::parse_from_rfc3339(value)
         .map(|dt| dt.with_timezone(&Utc))
-        .map_err(|err| FrameworkError::validation(format!("invalid RFC3339 timestamp {value:?}: {err}")))
+        .map_err(|err| {
+            FrameworkError::validation(format!("invalid RFC3339 timestamp {value:?}: {err}"))
+        })
 }
 pub fn optional_i64(payload: &Value, key: &str) -> Option<i64> {
     payload.get(key).and_then(Value::as_i64)

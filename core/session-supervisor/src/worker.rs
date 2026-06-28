@@ -49,7 +49,7 @@ pub fn launch_worker(
         false,
         worktree_name_val.clone(),
         worktree_path_val.clone(),
-    ).map_err(FrameworkError::session)?;
+    )?;
     let resume_command = Some(build_driver_command(
         &host,
         &cwd,
@@ -59,7 +59,7 @@ pub fn launch_worker(
         true,
         worktree_name_val,
         worktree_path_val,
-    ).map_err(FrameworkError::session)?);
+    )?);
     let retry_policy = payload
         .get("retry_policy")
         .cloned()
@@ -201,10 +201,9 @@ pub fn resume_worker(
     dry_run: bool,
     now: &str,
 ) -> Result<String, FrameworkError> {
-    let command = worker
-        .resume_command
-        .clone()
-        .ok_or_else(|| FrameworkError::not_found(format!("Worker {} has no resume command", worker.worker_id)))?;
+    let command = worker.resume_command.clone().ok_or_else(|| {
+        FrameworkError::not_found(format!("Worker {} has no resume command", worker.worker_id))
+    })?;
 
     if dry_run {
         worker.status = "resume_scheduled".to_string();
@@ -220,9 +219,10 @@ pub fn resume_worker(
     }
 
     if let Some(pid) = worker.pid
-        && process_is_alive(pid) {
-            terminate_process(pid)?;
-        }
+        && process_is_alive(pid)
+    {
+        terminate_process(pid)?;
+    }
 
     let process_cwd = worker.worktree_path.as_deref().unwrap_or(&worker.cwd);
     let log_path = worker_log_path(state_path, &worker.worker_id);
@@ -262,9 +262,10 @@ pub fn terminate_worker(
     }
 
     if let Some(pid) = worker.pid
-        && process_is_alive(pid) {
-            terminate_process(pid)?;
-        }
+        && process_is_alive(pid)
+    {
+        terminate_process(pid)?;
+    }
     worker.status = "interrupted".to_string();
     worker.updated_at = now.to_string();
     push_event(
@@ -295,9 +296,10 @@ pub fn reap_stale_workers(
             continue;
         }
         if let Some(pid) = worker.pid
-            && process_is_alive(pid) {
-                continue;
-            }
+            && process_is_alive(pid)
+        {
+            continue;
+        }
         let updated = crate::runtime::parse_rfc3339(&worker.updated_at)?;
         let age = now_dt.signed_duration_since(updated).num_seconds();
         if age <= stale_after_secs {
@@ -318,7 +320,10 @@ pub fn reap_stale_workers(
     Ok(())
 }
 
-pub fn worker_ready_for_resume(worker: &WorkerSessionRecord, now: &str) -> Result<bool, FrameworkError> {
+pub fn worker_ready_for_resume(
+    worker: &WorkerSessionRecord,
+    now: &str,
+) -> Result<bool, FrameworkError> {
     if !matches!(
         worker.status.as_str(),
         "blocked_rate_limit" | "resume_scheduled"
@@ -399,13 +404,20 @@ fn rate_limit_patterns() -> &'static [Regex] {
     PATTERNS
         .get_or_init(|| {
             vec![
-                #[allow(clippy::expect_used)] Regex::new("(?i)rate limit").expect("valid regex"),
-                #[allow(clippy::expect_used)] Regex::new("(?i)too many (?:requests|queries)").expect("valid regex"),
-                #[allow(clippy::expect_used)] Regex::new("(?i)\\b429\\b").expect("valid regex"),
-                #[allow(clippy::expect_used)] Regex::new("(?i)overloaded").expect("valid regex"),
-                #[allow(clippy::expect_used)] Regex::new("(?i)try again (?:later|in|now)").expect("valid regex"),
-                #[allow(clippy::expect_used)] Regex::new("(?i)quota exceeded").expect("valid regex"),
-                #[allow(clippy::expect_used)] Regex::new("(?i)usage limit").expect("valid regex"),
+                #[allow(clippy::expect_used)]
+                Regex::new("(?i)rate limit").expect("valid regex"),
+                #[allow(clippy::expect_used)]
+                Regex::new("(?i)too many (?:requests|queries)").expect("valid regex"),
+                #[allow(clippy::expect_used)]
+                Regex::new("(?i)\\b429\\b").expect("valid regex"),
+                #[allow(clippy::expect_used)]
+                Regex::new("(?i)overloaded").expect("valid regex"),
+                #[allow(clippy::expect_used)]
+                Regex::new("(?i)try again (?:later|in|now)").expect("valid regex"),
+                #[allow(clippy::expect_used)]
+                Regex::new("(?i)quota exceeded").expect("valid regex"),
+                #[allow(clippy::expect_used)]
+                Regex::new("(?i)usage limit").expect("valid regex"),
             ]
         })
         .as_slice()

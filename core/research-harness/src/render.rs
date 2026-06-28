@@ -75,7 +75,10 @@ pub const REUSE_INDEX_BLOCK_END: &str = "<!-- autoresearch:reuse-index:end -->";
 
 pub fn escape_table_cell(value: &str) -> String {
     // Replace pipe and newlines — both break markdown table rendering.
-    value.replace('|', "/").replace('\n', " ").replace('\r', " ")
+    value
+        .replace('|', "/")
+        .replace('\n', " ")
+        .replace('\r', " ")
 }
 
 pub fn format_overlap_risk(overlap: &str) -> String {
@@ -123,12 +126,9 @@ fn summarize_rules_out(state: &Value) -> Vec<String> {
         let run_id = str_field(&record, "run_id");
         let rules = value_as_string_list(&record, "rules_out");
         if rules.is_empty() {
-            if ["failed", "ambiguous"].contains(
-                &record
-                    .get("outcome")
-                    .and_then(Value::as_str)
-                    .unwrap_or(""),
-            ) {
+            if ["failed", "ambiguous"]
+                .contains(&record.get("outcome").and_then(Value::as_str).unwrap_or(""))
+            {
                 lines.push(format!(
                     "{run_id}: {}",
                     str_field_default(&record, "summary", "_No summary_")
@@ -219,7 +219,10 @@ pub fn render_findings_summary(state: &Value) -> String {
     if let Some(entry) = crate::search::research::latest_external_research(state) {
         lines.push(String::new());
         lines.push("### Latest External Research".into());
-        lines.push(format!("- query: {}", str_field_default(entry, "query", "-")));
+        lines.push(format!(
+            "- query: {}",
+            str_field_default(entry, "query", "-")
+        ));
         lines.push(format!(
             "- results: {}",
             crate::search::research::external_research_result_count(entry)
@@ -263,10 +266,7 @@ pub fn render_novelty_gate_summary(state: &Value) -> String {
     let mut lines = vec![
         "## Managed Summary".into(),
         String::new(),
-        format!(
-            "- status: {}",
-            novelty_str(state, "status", "pending")
-        ),
+        format!("- status: {}", novelty_str(state, "status", "pending")),
         format!(
             "- overall novelty assessment: {}",
             crate::search::research::overall_novelty_assessment(state)
@@ -282,7 +282,8 @@ pub fn render_novelty_gate_summary(state: &Value) -> String {
         String::new(),
         "## Claim Comparison Matrix".into(),
         String::new(),
-        "| Claim | Axis | Closest Prior Work | Overlap | Difference | Confidence | Verdict |".into(),
+        "| Claim | Axis | Closest Prior Work | Overlap | Difference | Confidence | Verdict |"
+            .into(),
         "|---|---|---|---|---|---|---|".into(),
     ];
     if records.is_empty() {
@@ -304,9 +305,7 @@ pub fn render_novelty_gate_summary(state: &Value) -> String {
     lines.push(String::new());
     lines.push("## Differentiation Strategy".into());
     lines.push(String::new());
-    lines.push(
-        novelty_str(state, "differentiation_strategy", "_Not recorded yet._").to_string(),
-    );
+    lines.push(novelty_str(state, "differentiation_strategy", "_Not recorded yet._").to_string());
     lines.join("\n")
 }
 
@@ -333,9 +332,7 @@ pub fn render_reuse_index_summary(state: &Value) -> String {
                 escape_table_cell(str_field_default(record, "finding", "-")),
                 escape_table_cell(str_field_default(record, "decision_delta", "-")),
                 escape_table_cell(&value_as_string_list(record, "applies_to").join("; ")),
-                escape_table_cell(
-                    &value_as_string_list(record, "does_not_apply_to").join("; ")
-                ),
+                escape_table_cell(&value_as_string_list(record, "does_not_apply_to").join("; ")),
                 escape_table_cell(str_field_default(record, "reuse_note", "-")),
             ));
         }
@@ -392,7 +389,10 @@ pub fn render_search_plan_summary(state: &Value) -> String {
             str_field_default(&entry, "claim", "_missing_")
         ));
         lines.push(String::new());
-        lines.push(format!("- axis: {}", str_field_default(&entry, "axis", "-")));
+        lines.push(format!(
+            "- axis: {}",
+            str_field_default(&entry, "axis", "-")
+        ));
         lines.push(format!(
             "- recommended order: {}",
             entry
@@ -481,12 +481,12 @@ pub fn render_claims_summary(state: &Value) -> String {
         return lines.join("\n");
     }
     for draft in drafts {
-        lines.push(format!("### {}", str_field_default(draft, "claim_id", "C?")));
-        lines.push(String::new());
         lines.push(format!(
-            "- axis: {}",
-            str_field_default(draft, "axis", "-")
+            "### {}",
+            str_field_default(draft, "claim_id", "C?")
         ));
+        lines.push(String::new());
+        lines.push(format!("- axis: {}", str_field_default(draft, "axis", "-")));
         lines.push(format!(
             "- specificity: {}",
             str_field_default(draft, "specificity", "-")
@@ -639,7 +639,10 @@ pub fn render_current_context_summary(state: &Value) -> String {
     if freshness.history_bias_risk {
         lines.push(String::new());
         lines.push("### Reconcile First".into());
-        lines.push("- Confirm the active hypothesis is still the real target before trusting old notes.".into());
+        lines.push(
+            "- Confirm the active hypothesis is still the real target before trusting old notes."
+                .into(),
+        );
         lines.push("- Re-check live data, code, or current artifacts before extending any older conclusion.".into());
     }
     lines.join("\n")
@@ -685,10 +688,7 @@ pub fn format_hypothesis_card(hypothesis: &Value) -> String {
         "",
         "## Priority",
         "",
-        &format!(
-            "`{}`",
-            str_field_default(hypothesis, "priority", "medium")
-        ),
+        &format!("`{}`", str_field_default(hypothesis, "priority", "medium")),
         "",
         "## Baselines / Controls",
         "",
@@ -932,10 +932,7 @@ pub fn format_reflection_note(decision: &Value) -> String {
         "",
         "## Run",
         "",
-        &format!(
-            "`{}`",
-            str_field_default(decision, "run_id", "run-xxx")
-        ),
+        &format!("`{}`", str_field_default(decision, "run_id", "run-xxx")),
         "",
         "## What Happened",
         "",
@@ -951,10 +948,7 @@ pub fn format_reflection_note(decision: &Value) -> String {
         "",
         "## Direction",
         "",
-        &format!(
-            "`{}`",
-            str_field_default(decision, "direction", "DEEPEN")
-        ),
+        &format!("`{}`", str_field_default(decision, "direction", "DEEPEN")),
         "",
         "## Next Step",
         "",
@@ -991,8 +985,7 @@ pub fn format_resume(state: &Value) -> String {
         ),
         format!(
             "recommended_focus: {}",
-            crate::search::strategy::current_recommended_focus(state)
-                .unwrap_or_else(|| "-".into())
+            crate::search::strategy::current_recommended_focus(state).unwrap_or_else(|| "-".into())
         ),
         format!(
             "novelty_brief_claim: {}",
@@ -1150,6 +1143,7 @@ pub fn sync_managed_file(
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use serde_json::json;
 
@@ -1160,7 +1154,10 @@ mod tests {
 
     #[test]
     fn escape_table_cell_replaces_newlines() {
-        assert_eq!(escape_table_cell("line1\nline2\rline3"), "line1 line2 line3");
+        assert_eq!(
+            escape_table_cell("line1\nline2\rline3"),
+            "line1 line2 line3"
+        );
     }
 
     #[test]
@@ -1288,8 +1285,14 @@ mod tests {
     fn sync_managed_file_creates_file() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("test.md");
-        sync_managed_file(&path, "# Header\n\n", "<!--S-->", "<!--E-->", "content".into())
-            .unwrap();
+        sync_managed_file(
+            &path,
+            "# Header\n\n",
+            "<!--S-->",
+            "<!--E-->",
+            "content".into(),
+        )
+        .unwrap();
         let content = fs::read_to_string(&path).unwrap();
         assert!(content.contains("# Header"));
         assert!(content.contains("content"));

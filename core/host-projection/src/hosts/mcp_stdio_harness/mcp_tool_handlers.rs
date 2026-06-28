@@ -13,7 +13,12 @@ pub struct ToolCallContext {
 /// Trait for a group of related MCP tools.
 pub trait ToolHandler: Send + Sync {
     fn tool_names(&self) -> &[&'static str];
-    fn dispatch(&self, tool_name: &str, args: &Value, ctx: &ToolCallContext) -> Result<String, String>;
+    fn dispatch(
+        &self,
+        tool_name: &str,
+        args: &Value,
+        ctx: &ToolCallContext,
+    ) -> Result<String, String>;
 }
 
 /// Composite registry that chains multiple ToolHandler implementations.
@@ -48,7 +53,12 @@ impl CompositeRegistry {
         self.name_to_handler.contains_key(tool_name)
     }
 
-    pub fn dispatch(&self, tool_name: &str, args: &Value, ctx: &ToolCallContext) -> Result<String, String> {
+    pub fn dispatch(
+        &self,
+        tool_name: &str,
+        args: &Value,
+        ctx: &ToolCallContext,
+    ) -> Result<String, String> {
         if let Some(&idx) = self.name_to_handler.get(tool_name) {
             self.handlers[idx].dispatch(tool_name, args, ctx)
         } else {
@@ -64,9 +74,19 @@ impl CompositeRegistry {
 pub struct RoutingTools;
 impl ToolHandler for RoutingTools {
     fn tool_names(&self) -> &[&'static str] {
-        &["skill_route", "skill_search", "skill_read", "skill_route_status"]
+        &[
+            "skill_route",
+            "skill_search",
+            "skill_read",
+            "skill_route_status",
+        ]
     }
-    fn dispatch(&self, tool_name: &str, args: &Value, ctx: &ToolCallContext) -> Result<String, String> {
+    fn dispatch(
+        &self,
+        tool_name: &str,
+        args: &Value,
+        ctx: &ToolCallContext,
+    ) -> Result<String, String> {
         match tool_name {
             "skill_route" => tool_skill_route(args, &ctx.repo_root, &ctx.host_id),
             "skill_search" => tool_skill_search(args, &ctx.repo_root, &ctx.host_id),
@@ -86,10 +106,17 @@ impl ToolHandler for GoalTools {
     fn tool_names(&self) -> &[&'static str] {
         &["goal_state_read", "goal_state_manage"]
     }
-    fn dispatch(&self, tool_name: &str, args: &Value, ctx: &ToolCallContext) -> Result<String, String> {
+    fn dispatch(
+        &self,
+        tool_name: &str,
+        args: &Value,
+        ctx: &ToolCallContext,
+    ) -> Result<String, String> {
         match tool_name {
             "goal_state_read" => tool_goal_state_read(args, &ctx.repo_root),
-            "goal_state_manage" => tool_goal_state_manage(args, &ctx.repo_root, &ctx.connection_session_id),
+            "goal_state_manage" => {
+                tool_goal_state_manage(args, &ctx.repo_root, &ctx.connection_session_id)
+            }
             _ => Err(format!("GoalTools: unknown tool: {tool_name}")),
         }
     }
@@ -104,10 +131,17 @@ impl ToolHandler for CloseoutTools {
     fn tool_names(&self) -> &[&'static str] {
         &["closeout_gate", "closeout_record_write"]
     }
-    fn dispatch(&self, tool_name: &str, args: &Value, ctx: &ToolCallContext) -> Result<String, String> {
+    fn dispatch(
+        &self,
+        tool_name: &str,
+        args: &Value,
+        ctx: &ToolCallContext,
+    ) -> Result<String, String> {
         match tool_name {
             "closeout_gate" => tool_closeout_gate(args, &ctx.repo_root, &ctx.host_id),
-            "closeout_record_write" => tool_closeout_record_write(args, &ctx.repo_root, &ctx.host_id),
+            "closeout_record_write" => {
+                tool_closeout_record_write(args, &ctx.repo_root, &ctx.host_id)
+            }
             _ => Err(format!("CloseoutTools: unknown tool: {tool_name}")),
         }
     }
@@ -122,7 +156,12 @@ impl ToolHandler for FrameworkTools {
     fn tool_names(&self) -> &[&'static str] {
         &["record_evidence", "session_checkpoint"]
     }
-    fn dispatch(&self, tool_name: &str, args: &Value, ctx: &ToolCallContext) -> Result<String, String> {
+    fn dispatch(
+        &self,
+        tool_name: &str,
+        args: &Value,
+        ctx: &ToolCallContext,
+    ) -> Result<String, String> {
         match tool_name {
             "record_evidence" => tool_record_evidence(args, &ctx.repo_root),
             "session_checkpoint" => tool_session_checkpoint(args, &ctx.repo_root),
@@ -140,7 +179,12 @@ impl ToolHandler for ToolDomainTools {
     fn tool_names(&self) -> &[&'static str] {
         &["route_tool", "search_tools", "tool_registry_status"]
     }
-    fn dispatch(&self, tool_name: &str, args: &Value, ctx: &ToolCallContext) -> Result<String, String> {
+    fn dispatch(
+        &self,
+        tool_name: &str,
+        args: &Value,
+        ctx: &ToolCallContext,
+    ) -> Result<String, String> {
         match tool_name {
             "route_tool" => tool_route_tool(args, &ctx.repo_root, &ctx.host_id),
             "search_tools" => tool_search_tools(args, &ctx.repo_root, &ctx.host_id),
@@ -157,9 +201,20 @@ impl ToolHandler for ToolDomainTools {
 pub struct TaskCrudTools;
 impl ToolHandler for TaskCrudTools {
     fn tool_names(&self) -> &[&'static str] {
-        &["task_create", "task_list", "task_complete", "task_focus", "task_chain_advance"]
+        &[
+            "task_create",
+            "task_list",
+            "task_complete",
+            "task_focus",
+            "task_chain_advance",
+        ]
     }
-    fn dispatch(&self, tool_name: &str, args: &Value, ctx: &ToolCallContext) -> Result<String, String> {
+    fn dispatch(
+        &self,
+        tool_name: &str,
+        args: &Value,
+        ctx: &ToolCallContext,
+    ) -> Result<String, String> {
         match tool_name {
             "task_create" => Ok(tool_task_create(args, &ctx.repo_root)?),
             "task_list" => Ok(tool_task_list(&ctx.repo_root)?),
@@ -173,8 +228,9 @@ impl ToolHandler for TaskCrudTools {
 
 /// Resolve the tool registry path. Uses hooks, falls back to repo_root default.
 fn resolve_tool_registry_path(repo_root: &std::path::Path) -> std::path::PathBuf {
-    mcp_tool_registry::resolve_tool_registry_path()
-        .unwrap_or_else(|| repo_root.join(framework_kernel::constants::MCP_TOOL_REGISTRY_RELATIVE_PATH))
+    mcp_tool_registry::resolve_tool_registry_path().unwrap_or_else(|| {
+        repo_root.join(framework_kernel::constants::MCP_TOOL_REGISTRY_RELATIVE_PATH)
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -201,7 +257,12 @@ impl ToolHandler for OrchestratorTools {
             "orchestrator_worker_terminate",
         ]
     }
-    fn dispatch(&self, tool_name: &str, args: &Value, ctx: &ToolCallContext) -> Result<String, String> {
+    fn dispatch(
+        &self,
+        tool_name: &str,
+        args: &Value,
+        ctx: &ToolCallContext,
+    ) -> Result<String, String> {
         let operation = orchestrator_operation_for_tool(tool_name)?;
         let mut payload = args.clone();
         payload["operation"] = json!(operation);
@@ -209,7 +270,8 @@ impl ToolHandler for OrchestratorTools {
             "{}/artifacts/orchestrator/state.json",
             ctx.repo_root.display()
         ));
-        let result = framework_kernel::runtime_hooks::hooks().handle_orchestrator_operation(payload)?;
+        let result =
+            framework_kernel::runtime_hooks::hooks().handle_orchestrator_operation(payload)?;
         serde_json::to_string_pretty(&result).map_err(|e| e.to_string())
     }
 }
@@ -267,7 +329,8 @@ fn tool_route_tool(
     ctx_repo_root: &std::path::Path,
     host_id: &str,
 ) -> Result<String, String> {
-    let query = args.get("query")
+    let query = args
+        .get("query")
         .and_then(|v| v.as_str())
         .ok_or("route_tool: missing 'query' parameter")?;
     let effective_host = args
@@ -276,8 +339,9 @@ fn tool_route_tool(
         .filter(|h| !h.is_empty())
         .unwrap_or(host_id);
     let registry_path = resolve_tool_registry_path(ctx_repo_root);
-    let decision = tool_routing_engine::routing::route_tool(query, &registry_path, Some(effective_host))?
-        .ok_or_else(|| format!("route_tool: no matching tool found for query '{query}'"))?;
+    let decision =
+        tool_routing_engine::routing::route_tool(query, &registry_path, Some(effective_host))?
+            .ok_or_else(|| format!("route_tool: no matching tool found for query '{query}'"))?;
     serde_json::to_string(&decision).map_err(|e| e.to_string())
 }
 
@@ -288,12 +352,11 @@ fn tool_search_tools(
     ctx_repo_root: &std::path::Path,
     host_id: &str,
 ) -> Result<String, String> {
-    let query = args.get("query")
+    let query = args
+        .get("query")
         .and_then(|v| v.as_str())
         .ok_or("search_tools: missing 'query' parameter")?;
-    let top_k = args.get("top_k")
-        .and_then(|v| v.as_u64())
-        .unwrap_or(5) as usize;
+    let top_k = args.get("top_k").and_then(|v| v.as_u64()).unwrap_or(5) as usize;
     let effective_host = args
         .get("host_id")
         .and_then(Value::as_str)
@@ -302,7 +365,8 @@ fn tool_search_tools(
     let registry_path = resolve_tool_registry_path(ctx_repo_root);
     let records = mcp_tool_registry::load_tool_records_cached(&registry_path)
         .map_err(|e| format!("search_tools: failed to load registry: {e}"))?;
-    let results = tool_routing_engine::search::search_tools(query, &records, top_k, Some(effective_host));
+    let results =
+        tool_routing_engine::search::search_tools(query, &records, top_k, Some(effective_host));
     serde_json::to_string(&results).map_err(|e| e.to_string())
 }
 
@@ -328,4 +392,3 @@ fn tool_registry_status() -> Result<String, String> {
     });
     serde_json::to_string(&status).map_err(|e| e.to_string())
 }
-

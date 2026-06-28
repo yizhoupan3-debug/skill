@@ -46,16 +46,23 @@ pub fn search_tools(
         .iter()
         .filter_map(|record| {
             // Exclude deprecated and no_routing tools from search results
-            if record.tool_flags.iter().any(|f| f == "deprecated" || f == "no_routing") {
+            if record
+                .tool_flags
+                .iter()
+                .any(|f| f == "deprecated" || f == "no_routing")
+            {
                 return None;
             }
             // Apply host filtering: exclude host-mismatched records
             if let Some(ref hid) = hid_lower
                 && !record.host_platforms.is_empty()
-                    && !record.host_platforms.iter().any(|p| p.to_lowercase() == *hid)
-                {
-                    return None;
-                }
+                && !record
+                    .host_platforms
+                    .iter()
+                    .any(|p| p.to_lowercase() == *hid)
+            {
+                return None;
+            }
 
             let (score, reasons, matched_token_count) =
                 score_tool(record, &query_lower, &query_tokens, &weights);
@@ -83,12 +90,19 @@ pub fn search_tools(
             // Apply host filtering in fuzzy rescue too
             if let Some(ref hid) = hid_lower
                 && !record.host_platforms.is_empty()
-                    && !record.host_platforms.iter().any(|p| p.to_lowercase() == *hid)
-                {
-                    continue;
-                }
+                && !record
+                    .host_platforms
+                    .iter()
+                    .any(|p| p.to_lowercase() == *hid)
+            {
+                continue;
+            }
             // Skip deprecated and no_routing tools in fuzzy rescue
-            if record.tool_flags.iter().any(|f| f == "deprecated" || f == "no_routing") {
+            if record
+                .tool_flags
+                .iter()
+                .any(|f| f == "deprecated" || f == "no_routing")
+            {
                 continue;
             }
             if let Some(fuzzy_score) = best_fuzzy_score(&query_lower, &record.trigger_hints) {
@@ -117,6 +131,7 @@ pub fn search_tools(
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     fn test_tool_record(slug: &str, keywords: &[&str]) -> McpToolRecord {
@@ -188,13 +203,13 @@ mod tests {
 
     #[test]
     fn search_host_filter_fuzzy_rescue() {
-        let records = vec![test_tool_record(
-            "browser_screenshot",
-            &["screenshot"],
-        )];
+        let records = vec![test_tool_record("browser_screenshot", &["screenshot"])];
         // Fuzzy match but host mismatch — must not appear in results
         let results = search_tools("screeenshot", &records, 5, Some("cursor"));
-        assert!(results.is_empty(), "fuzzy rescue must not bypass host filter");
+        assert!(
+            results.is_empty(),
+            "fuzzy rescue must not bypass host filter"
+        );
     }
 
     #[test]
@@ -203,7 +218,10 @@ mod tests {
         record.tool_flags = vec!["deprecated".to_string()];
         let records = vec![record];
         let results = search_tools("legacy old_tool", &records, 5, None);
-        assert!(results.is_empty(), "deprecated tool must be excluded from search");
+        assert!(
+            results.is_empty(),
+            "deprecated tool must be excluded from search"
+        );
     }
 
     #[test]
@@ -212,6 +230,9 @@ mod tests {
         record.tool_flags = vec!["no_routing".to_string()];
         let records = vec![record];
         let results = search_tools("task_create", &records, 5, None);
-        assert!(results.is_empty(), "no_routing tool must be excluded from search");
+        assert!(
+            results.is_empty(),
+            "no_routing tool must be excluded from search"
+        );
     }
 }

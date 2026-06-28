@@ -1,40 +1,39 @@
 #![cfg(test)]
 #![allow(clippy::unwrap_used, clippy::expect_used)]
+use crate::route::RawSkillRecord;
 use crate::route::has_paper_review_judgment_context;
-    use crate::route::normalize_text;
-    use crate::route::RawSkillRecord;
-    use crate::route::{filter_records_for_host, route_task, search_skills};
-    use crate::route::{
-        has_explicit_framework_alias_call,
-        has_literal_framework_alias_call, skill_record_from_raw,
-    };
-    use crate::route::{
-        load_records, load_records_cached_for_stdio, load_records_cached_for_stdio_resolved,
-        load_records_from_runtime,
-    };
-    use serde_json::json;
-    use std::fs;
-    use std::path::PathBuf;
-    use std::sync::Arc;
-    use std::thread;
-    use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use crate::route::normalize_text;
+use crate::route::{filter_records_for_host, route_task, search_skills};
+use crate::route::{
+    has_explicit_framework_alias_call, has_literal_framework_alias_call, skill_record_from_raw,
+};
+use crate::route::{
+    load_records, load_records_cached_for_stdio, load_records_cached_for_stdio_resolved,
+    load_records_from_runtime,
+};
+use serde_json::json;
+use std::fs;
+use std::path::PathBuf;
+use std::sync::Arc;
+use std::thread;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-    fn temp_route_path(label: &str) -> PathBuf {
-        let nonce = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|d| d.as_nanos())
-            .unwrap_or(0);
-        std::env::temp_dir().join(format!("router-rs-route-{label}-{nonce}.json"))
-    }
+fn temp_route_path(label: &str) -> PathBuf {
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    std::env::temp_dir().join(format!("router-rs-route-{label}-{nonce}.json"))
+}
 
-    #[test]
-    fn runtime_sidecar_applies_declarative_negative_triggers() {
-        let path = temp_route_path("runtime-records");
-        let metadata_path = path
-            .parent()
-            .expect("runtime parent")
-            .join("SKILL_ROUTING_METADATA.json");
-        fs::write(
+#[test]
+fn runtime_sidecar_applies_declarative_negative_triggers() {
+    let path = temp_route_path("runtime-records");
+    let metadata_path = path
+        .parent()
+        .expect("runtime parent")
+        .join("SKILL_ROUTING_METADATA.json");
+    fs::write(
             &path,
             serde_json::to_string(&json!({
                 "version": 3,
@@ -54,123 +53,122 @@ use crate::route::has_paper_review_judgment_context;
             .expect("serialize runtime"),
         )
         .expect("write runtime");
-        fs::write(
-            &metadata_path,
-            serde_json::to_string(&json!({
-                "skills": {
-                    "sample-skill": {
-                        "negative_triggers": ["blocked route"]
-                    }
-                }
-            }))
-            .expect("serialize metadata"),
-        )
-        .expect("write metadata");
-
-        let records = load_records_from_runtime(&path).expect("load runtime");
-        let record = records
-            .iter()
-            .find(|record| record.slug == "sample-skill")
-            .expect("sample record");
-        assert!(record.do_not_use_tokens.contains("blocked"));
-        assert!(record.do_not_use_tokens.contains("route"));
-
-        fs::remove_file(path).expect("cleanup runtime");
-        fs::remove_file(metadata_path).expect("cleanup metadata");
-    }
-
-    #[test]
-    fn manifest_sidecar_applies_declarative_negative_triggers_to_runtime_records() {
-        let root = std::env::temp_dir().join(format!(
-            "router-rs-route-meta-sidecar-{}",
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .expect("time went backwards")
-                .as_nanos()
-        ));
-        fs::create_dir_all(&root).expect("create temp route root");
-        let runtime_path = root.join("SKILL_ROUTING_RUNTIME.json");
-        let manifest_path = root.join("SKILL_MANIFEST.json");
-        let metadata_path = root.join("SKILL_ROUTING_METADATA.json");
-        let runtime_payload = json!({
-            "version": 3,
-            "keys": ["slug", "layer", "owner", "gate", "session_start", "summary", "trigger_hints", "priority", "skill_path"],
-            "skills": [[
-                "sample-skill",
-                "L1",
-                "owner",
-                "none",
-                "n/a",
-                "Sample skill",
-                ["sample"],
-                "P1",
-                "skills/sample-skill/SKILL.md"
-            ]]
-        });
-        let manifest_payload = json!({
-            "keys": ["slug", "layer", "owner", "gate", "priority", "description", "session_start", "trigger_hints", "source", "skill_path"],
-            "skills": [[
-                "sample-skill",
-                "L1",
-                "owner",
-                "none",
-                "P1",
-                "Sample skill",
-                "n/a",
-                ["sample"],
-                "project",
-                "skills/sample-skill/SKILL.md"
-            ]]
-        });
-        let metadata_payload = json!({
-            "schema_version": "skill-routing-metadata-v1",
+    fs::write(
+        &metadata_path,
+        serde_json::to_string(&json!({
             "skills": {
                 "sample-skill": {
-                    "negative_triggers": ["sidecar blocked"]
+                    "negative_triggers": ["blocked route"]
                 }
             }
-        });
-        fs::write(
-            &runtime_path,
-            serde_json::to_string(&runtime_payload).unwrap(),
-        )
-        .expect("write runtime");
-        fs::write(
-            &manifest_path,
-            serde_json::to_string(&manifest_payload).unwrap(),
-        )
-        .expect("write manifest");
-        fs::write(
-            &metadata_path,
-            serde_json::to_string(&metadata_payload).unwrap(),
-        )
-        .expect("write metadata");
+        }))
+        .expect("serialize metadata"),
+    )
+    .expect("write metadata");
 
-        let records =
-            load_records(Some(&runtime_path)).expect("load route records");
-        let record = records
-            .iter()
-            .find(|record| record.slug == "sample-skill")
-            .expect("sample record");
-        assert!(record.do_not_use_tokens.contains("sidecar"));
-        assert!(record.do_not_use_tokens.contains("blocked"));
+    let records = load_records_from_runtime(&path).expect("load runtime");
+    let record = records
+        .iter()
+        .find(|record| record.slug == "sample-skill")
+        .expect("sample record");
+    assert!(record.do_not_use_tokens.contains("blocked"));
+    assert!(record.do_not_use_tokens.contains("route"));
 
-        fs::remove_dir_all(root).expect("cleanup route root");
-    }
+    fs::remove_file(path).expect("cleanup runtime");
+    fs::remove_file(metadata_path).expect("cleanup metadata");
+}
 
-    #[test]
-    fn metadata_positive_triggers_and_primary_policy_change_route_decision() {
-        let root = std::env::temp_dir().join(format!(
-            "router-rs-route-meta-exec-{}",
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .expect("time went backwards")
-                .as_nanos()
-        ));
-        fs::create_dir_all(&root).expect("create temp route root");
-        let runtime_path = root.join("SKILL_ROUTING_RUNTIME.json");
-        let metadata_path = root.join("SKILL_ROUTING_METADATA.json");
-        fs::write(
+#[test]
+fn manifest_sidecar_applies_declarative_negative_triggers_to_runtime_records() {
+    let root = std::env::temp_dir().join(format!(
+        "router-rs-route-meta-sidecar-{}",
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time went backwards")
+            .as_nanos()
+    ));
+    fs::create_dir_all(&root).expect("create temp route root");
+    let runtime_path = root.join("SKILL_ROUTING_RUNTIME.json");
+    let manifest_path = root.join("SKILL_MANIFEST.json");
+    let metadata_path = root.join("SKILL_ROUTING_METADATA.json");
+    let runtime_payload = json!({
+        "version": 3,
+        "keys": ["slug", "layer", "owner", "gate", "session_start", "summary", "trigger_hints", "priority", "skill_path"],
+        "skills": [[
+            "sample-skill",
+            "L1",
+            "owner",
+            "none",
+            "n/a",
+            "Sample skill",
+            ["sample"],
+            "P1",
+            "skills/sample-skill/SKILL.md"
+        ]]
+    });
+    let manifest_payload = json!({
+        "keys": ["slug", "layer", "owner", "gate", "priority", "description", "session_start", "trigger_hints", "source", "skill_path"],
+        "skills": [[
+            "sample-skill",
+            "L1",
+            "owner",
+            "none",
+            "P1",
+            "Sample skill",
+            "n/a",
+            ["sample"],
+            "project",
+            "skills/sample-skill/SKILL.md"
+        ]]
+    });
+    let metadata_payload = json!({
+        "schema_version": "skill-routing-metadata-v1",
+        "skills": {
+            "sample-skill": {
+                "negative_triggers": ["sidecar blocked"]
+            }
+        }
+    });
+    fs::write(
+        &runtime_path,
+        serde_json::to_string(&runtime_payload).unwrap(),
+    )
+    .expect("write runtime");
+    fs::write(
+        &manifest_path,
+        serde_json::to_string(&manifest_payload).unwrap(),
+    )
+    .expect("write manifest");
+    fs::write(
+        &metadata_path,
+        serde_json::to_string(&metadata_payload).unwrap(),
+    )
+    .expect("write metadata");
+
+    let records = load_records(Some(&runtime_path)).expect("load route records");
+    let record = records
+        .iter()
+        .find(|record| record.slug == "sample-skill")
+        .expect("sample record");
+    assert!(record.do_not_use_tokens.contains("sidecar"));
+    assert!(record.do_not_use_tokens.contains("blocked"));
+
+    fs::remove_dir_all(root).expect("cleanup route root");
+}
+
+#[test]
+fn metadata_positive_triggers_and_primary_policy_change_route_decision() {
+    let root = std::env::temp_dir().join(format!(
+        "router-rs-route-meta-exec-{}",
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time went backwards")
+            .as_nanos()
+    ));
+    fs::create_dir_all(&root).expect("create temp route root");
+    let runtime_path = root.join("SKILL_ROUTING_RUNTIME.json");
+    let metadata_path = root.join("SKILL_ROUTING_METADATA.json");
+    fs::write(
             &runtime_path,
             serde_json::to_string(&json!({
                 "version": 3,
@@ -183,64 +181,64 @@ use crate::route::has_paper_review_judgment_context;
             .unwrap(),
         )
         .expect("write runtime");
-        fs::write(
-            &metadata_path,
-            serde_json::to_string(&json!({
-                "schema_version": "skill-routing-metadata-v1",
-                "skills": {
-                    "beta-owner": {
-                        "positive_triggers": ["needle phrase"],
-                        "overlay_policy": {"primary_allowed": false},
-                        "fallback_policy": {"mode": "explicit-only"}
-                    }
+    fs::write(
+        &metadata_path,
+        serde_json::to_string(&json!({
+            "schema_version": "skill-routing-metadata-v1",
+            "skills": {
+                "beta-owner": {
+                    "positive_triggers": ["needle phrase"],
+                    "overlay_policy": {"primary_allowed": false},
+                    "fallback_policy": {"mode": "explicit-only"}
                 }
-            }))
-            .unwrap(),
-        )
-        .expect("write metadata");
+            }
+        }))
+        .unwrap(),
+    )
+    .expect("write metadata");
 
-        let records = load_records_from_runtime(&runtime_path).expect("load runtime");
-        let beta = records
-            .iter()
-            .find(|record| record.slug == "beta-owner")
-            .expect("beta record");
-        assert!(
-            beta.metadata_positive_triggers
-                .contains(&"needle phrase".to_string())
-        );
-        assert!(!beta.primary_allowed);
-        assert_eq!(beta.fallback_policy_mode, "explicit-only");
-        assert!(!beta.trigger_hints.contains(&"needle phrase".to_string()));
+    let records = load_records_from_runtime(&runtime_path).expect("load runtime");
+    let beta = records
+        .iter()
+        .find(|record| record.slug == "beta-owner")
+        .expect("beta record");
+    assert!(
+        beta.metadata_positive_triggers
+            .contains(&"needle phrase".to_string())
+    );
+    assert!(!beta.primary_allowed);
+    assert_eq!(beta.fallback_policy_mode, "explicit-only");
+    assert!(!beta.trigger_hints.contains(&"needle phrase".to_string()));
 
-        let matches = search_skills(&records, "needle phrase", 2);
-        assert_eq!(
-            matches.first().map(|row| row.slug.as_str()),
-            Some("beta-owner")
-        );
+    let matches = search_skills(&records, "needle phrase", 2);
+    assert_eq!(
+        matches.first().map(|row| row.slug.as_str()),
+        Some("beta-owner")
+    );
 
-        let decision = route_task(&records, "needle phrase alpha", "session", false, true)
-            .expect("route decision");
-        assert_eq!(
-            decision.selected_skill, "alpha-owner",
-            "metadata primary_allowed=false must keep beta out of primary selection"
-        );
+    let decision = route_task(&records, "needle phrase alpha", "session", false, true)
+        .expect("route decision");
+    assert_eq!(
+        decision.selected_skill, "alpha-owner",
+        "metadata primary_allowed=false must keep beta out of primary selection"
+    );
 
-        fs::remove_dir_all(root).expect("cleanup route root");
-    }
+    fs::remove_dir_all(root).expect("cleanup route root");
+}
 
-    #[test]
-    fn metadata_positive_trigger_scores_once_with_source_reason() {
-        let root = std::env::temp_dir().join(format!(
-            "router-rs-route-meta-single-score-{}",
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .expect("time went backwards")
-                .as_nanos()
-        ));
-        fs::create_dir_all(&root).expect("create temp route root");
-        let runtime_path = root.join("SKILL_ROUTING_RUNTIME.json");
-        let metadata_path = root.join("SKILL_ROUTING_METADATA.json");
-        fs::write(
+#[test]
+fn metadata_positive_trigger_scores_once_with_source_reason() {
+    let root = std::env::temp_dir().join(format!(
+        "router-rs-route-meta-single-score-{}",
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time went backwards")
+            .as_nanos()
+    ));
+    fs::create_dir_all(&root).expect("create temp route root");
+    let runtime_path = root.join("SKILL_ROUTING_RUNTIME.json");
+    let metadata_path = root.join("SKILL_ROUTING_METADATA.json");
+    fs::write(
             &runtime_path,
             serde_json::to_string(&json!({
                 "version": 3,
@@ -260,61 +258,61 @@ use crate::route::has_paper_review_judgment_context;
             .unwrap(),
         )
         .expect("write runtime");
-        fs::write(
-            &metadata_path,
-            serde_json::to_string(&json!({
-                "schema_version": "skill-routing-metadata-v1",
-                "skills": {
-                    "metadata-owner": {
-                        "positive_triggers": ["needle phrase"]
-                    }
+    fs::write(
+        &metadata_path,
+        serde_json::to_string(&json!({
+            "schema_version": "skill-routing-metadata-v1",
+            "skills": {
+                "metadata-owner": {
+                    "positive_triggers": ["needle phrase"]
                 }
-            }))
-            .unwrap(),
-        )
-        .expect("write metadata");
+            }
+        }))
+        .unwrap(),
+    )
+    .expect("write metadata");
 
-        let records = load_records_from_runtime(&runtime_path).expect("load runtime");
-        let decision = route_task(
-            &records,
-            "metadata owner needle phrase",
-            "session",
-            false,
-            true,
-        )
-        .expect("route");
-        let trigger_reasons = decision
+    let records = load_records_from_runtime(&runtime_path).expect("load runtime");
+    let decision = route_task(
+        &records,
+        "metadata owner needle phrase",
+        "session",
+        false,
+        true,
+    )
+    .expect("route");
+    let trigger_reasons = decision
+        .reasons
+        .iter()
+        .filter(|reason| reason.contains("needle phrase"))
+        .count();
+    assert_eq!(
+        trigger_reasons, 1,
+        "metadata trigger must not be double-counted"
+    );
+    assert!(
+        decision
             .reasons
             .iter()
-            .filter(|reason| reason.contains("needle phrase"))
-            .count();
-        assert_eq!(
-            trigger_reasons, 1,
-            "metadata trigger must not be double-counted"
-        );
-        assert!(
-            decision
-                .reasons
-                .iter()
-                .any(|reason| reason.contains("Routing metadata positive trigger matched"))
-        );
+            .any(|reason| reason.contains("Routing metadata positive trigger matched"))
+    );
 
-        fs::remove_dir_all(root).expect("cleanup route root");
-    }
+    fs::remove_dir_all(root).expect("cleanup route root");
+}
 
-    #[test]
-    fn route_metadata_rejects_unknown_fallback_policy_mode() {
-        let root = std::env::temp_dir().join(format!(
-            "router-rs-route-meta-bad-fallback-{}",
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .expect("time went backwards")
-                .as_nanos()
-        ));
-        fs::create_dir_all(&root).expect("create temp route root");
-        let runtime_path = root.join("SKILL_ROUTING_RUNTIME.json");
-        let metadata_path = root.join("SKILL_ROUTING_METADATA.json");
-        fs::write(
+#[test]
+fn route_metadata_rejects_unknown_fallback_policy_mode() {
+    let root = std::env::temp_dir().join(format!(
+        "router-rs-route-meta-bad-fallback-{}",
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time went backwards")
+            .as_nanos()
+    ));
+    fs::create_dir_all(&root).expect("create temp route root");
+    let runtime_path = root.join("SKILL_ROUTING_RUNTIME.json");
+    let metadata_path = root.join("SKILL_ROUTING_METADATA.json");
+    fs::write(
             &runtime_path,
             serde_json::to_string(&json!({
                 "version": 3,
@@ -334,103 +332,101 @@ use crate::route::has_paper_review_judgment_context;
             .unwrap(),
         )
         .expect("write runtime");
-        fs::write(
-            &metadata_path,
-            serde_json::to_string(&json!({
-                "schema_version": "skill-routing-metadata-v1",
-                "skills": {
-                    "sample-skill": {
-                        "fallback_policy": {"mode": "surprise"}
-                    }
+    fs::write(
+        &metadata_path,
+        serde_json::to_string(&json!({
+            "schema_version": "skill-routing-metadata-v1",
+            "skills": {
+                "sample-skill": {
+                    "fallback_policy": {"mode": "surprise"}
                 }
-            }))
-            .unwrap(),
-        )
-        .expect("write metadata");
+            }
+        }))
+        .unwrap(),
+    )
+    .expect("write metadata");
 
-        let err = load_records_from_runtime(&runtime_path).expect_err("invalid mode must fail");
-        assert!(err.contains("unsupported fallback_policy.mode"));
+    let err = load_records_from_runtime(&runtime_path).expect_err("invalid mode must fail");
+    assert!(err.contains("unsupported fallback_policy.mode"));
 
-        fs::remove_dir_all(root).expect("cleanup route root");
-    }
+    fs::remove_dir_all(root).expect("cleanup route root");
+}
 
-    #[test]
-    fn host_filter_uses_record_platforms_and_fails_closed() {
-        let records = vec![
-            skill_record_from_raw(RawSkillRecord {
-                slug: "codex-only".to_string(),
-                skill_path: Some("skills/codex-only/SKILL.md".to_string()),
-                layer: "L1".to_string(),
-                owner: "owner".to_string(),
-                gate: "none".to_string(),
-                priority: "P1".to_string(),
-                session_start: "n/a".to_string(),
-                summary: "Codex only".to_string(),
-                short_description: String::new(),
-                when_to_use: String::new(),
-                do_not_use: String::new(),
-                tags: Vec::new(),
-                trigger_hints: vec!["codex only".to_string()],
-                host_platforms: vec!["codex".to_string()],
-                record_kind: "skill".to_string(),
-                skill_flags: vec![],
-            }),
-            skill_record_from_raw(RawSkillRecord {
-                slug: "all-command".to_string(),
-                skill_path: Some("skills/all-command/SKILL.md".to_string()),
-                layer: "L0".to_string(),
-                owner: "owner".to_string(),
-                gate: "none".to_string(),
-                priority: "P1".to_string(),
-                session_start: "n/a".to_string(),
-                summary: "Framework command".to_string(),
-                short_description: String::new(),
-                when_to_use: String::new(),
-                do_not_use: String::new(),
-                tags: Vec::new(),
-                trigger_hints: vec!["/all-command".to_string()],
-                host_platforms: Vec::new(),
-                record_kind: "framework_command".to_string(),
-                skill_flags: vec![],
-            }),
-        ];
+#[test]
+fn host_filter_uses_record_platforms_and_fails_closed() {
+    let records = vec![
+        skill_record_from_raw(RawSkillRecord {
+            slug: "codex-only".to_string(),
+            skill_path: Some("skills/codex-only/SKILL.md".to_string()),
+            layer: "L1".to_string(),
+            owner: "owner".to_string(),
+            gate: "none".to_string(),
+            priority: "P1".to_string(),
+            session_start: "n/a".to_string(),
+            summary: "Codex only".to_string(),
+            short_description: String::new(),
+            when_to_use: String::new(),
+            do_not_use: String::new(),
+            tags: Vec::new(),
+            trigger_hints: vec!["codex only".to_string()],
+            host_platforms: vec!["codex".to_string()],
+            record_kind: "skill".to_string(),
+            skill_flags: vec![],
+        }),
+        skill_record_from_raw(RawSkillRecord {
+            slug: "all-command".to_string(),
+            skill_path: Some("skills/all-command/SKILL.md".to_string()),
+            layer: "L0".to_string(),
+            owner: "owner".to_string(),
+            gate: "none".to_string(),
+            priority: "P1".to_string(),
+            session_start: "n/a".to_string(),
+            summary: "Framework command".to_string(),
+            short_description: String::new(),
+            when_to_use: String::new(),
+            do_not_use: String::new(),
+            tags: Vec::new(),
+            trigger_hints: vec!["/all-command".to_string()],
+            host_platforms: Vec::new(),
+            record_kind: "framework_command".to_string(),
+            skill_flags: vec![],
+        }),
+    ];
 
-        let filtered =
-            filter_records_for_host(records.clone(), Some("codex")).expect("codex filter");
-        assert!(filtered.iter().any(|record| record.slug == "codex-only"));
-        assert!(filtered.iter().any(|record| record.slug == "all-command"));
+    let filtered = filter_records_for_host(records.clone(), Some("codex")).expect("codex filter");
+    assert!(filtered.iter().any(|record| record.slug == "codex-only"));
+    assert!(filtered.iter().any(|record| record.slug == "all-command"));
 
-        // framework_commands always pass through host filter; skills without matching platform are filtered out
-        let filtered_cursor =
-            filter_records_for_host(records, Some("cursor")).expect("cursor filter");
-        assert!(
-            !filtered_cursor
-                .iter()
-                .any(|record| record.slug == "codex-only"),
-            "codex-only skill must be filtered out for cursor host"
-        );
-        assert!(
-            filtered_cursor
-                .iter()
-                .any(|record| record.slug == "all-command"),
-            "framework_command must pass through regardless of host"
-        );
-    }
+    // framework_commands always pass through host filter; skills without matching platform are filtered out
+    let filtered_cursor = filter_records_for_host(records, Some("cursor")).expect("cursor filter");
+    assert!(
+        !filtered_cursor
+            .iter()
+            .any(|record| record.slug == "codex-only"),
+        "codex-only skill must be filtered out for cursor host"
+    );
+    assert!(
+        filtered_cursor
+            .iter()
+            .any(|record| record.slug == "all-command"),
+        "framework_command must pass through regardless of host"
+    );
+}
 
-    #[test]
-    fn stdio_route_cache_refreshes_when_metadata_sidecar_changes() {
-        let root = std::env::temp_dir().join(format!(
-            "router-rs-route-meta-cache-{}",
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .expect("time went backwards")
-                .as_nanos()
-        ));
-        fs::create_dir_all(&root).expect("create temp route root");
-        let runtime_path = root.join("SKILL_ROUTING_RUNTIME.json");
-        let manifest_path = root.join("SKILL_MANIFEST.json");
-        let metadata_path = root.join("SKILL_ROUTING_METADATA.json");
-        fs::write(
+#[test]
+fn stdio_route_cache_refreshes_when_metadata_sidecar_changes() {
+    let root = std::env::temp_dir().join(format!(
+        "router-rs-route-meta-cache-{}",
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time went backwards")
+            .as_nanos()
+    ));
+    fs::create_dir_all(&root).expect("create temp route root");
+    let runtime_path = root.join("SKILL_ROUTING_RUNTIME.json");
+    let manifest_path = root.join("SKILL_MANIFEST.json");
+    let metadata_path = root.join("SKILL_ROUTING_METADATA.json");
+    fs::write(
             &runtime_path,
             serde_json::to_string(&json!({
                 "version": 3,
@@ -450,7 +446,7 @@ use crate::route::has_paper_review_judgment_context;
             .unwrap(),
         )
         .expect("write runtime");
-        fs::write(
+    fs::write(
             &manifest_path,
             serde_json::to_string(&json!({
                 "keys": ["slug", "layer", "owner", "gate", "priority", "description", "session_start", "trigger_hints", "source", "skill_path"],
@@ -470,48 +466,46 @@ use crate::route::has_paper_review_judgment_context;
             .unwrap(),
         )
         .expect("write manifest");
-        fs::write(
-            &metadata_path,
-            serde_json::to_string(&json!({
-                "schema_version": "skill-routing-metadata-v1",
-                "skills": {"sample-skill": {"negative_triggers": ["first blocked"]}}
-            }))
-            .unwrap(),
-        )
-        .expect("write metadata");
+    fs::write(
+        &metadata_path,
+        serde_json::to_string(&json!({
+            "schema_version": "skill-routing-metadata-v1",
+            "skills": {"sample-skill": {"negative_triggers": ["first blocked"]}}
+        }))
+        .unwrap(),
+    )
+    .expect("write metadata");
 
-        let first =
-            load_records_cached_for_stdio_resolved(Some(&runtime_path))
-                .expect("first cached load");
-        assert!(first[0].do_not_use_tokens.contains("first"));
-        assert!(!first[0].do_not_use_tokens.contains("second"));
+    let first =
+        load_records_cached_for_stdio_resolved(Some(&runtime_path)).expect("first cached load");
+    assert!(first[0].do_not_use_tokens.contains("first"));
+    assert!(!first[0].do_not_use_tokens.contains("second"));
 
-        thread::sleep(Duration::from_millis(25));
-        fs::write(
-            &metadata_path,
-            serde_json::to_string(&json!({
-                "schema_version": "skill-routing-metadata-v1",
-                "skills": {"sample-skill": {"negative_triggers": ["second blocked"]}}
-            }))
-            .unwrap(),
-        )
-        .expect("update metadata");
-        let second =
-            load_records_cached_for_stdio_resolved(Some(&runtime_path))
-                .expect("second cached load");
-        assert!(!second[0].do_not_use_tokens.contains("first"));
-        assert!(second[0].do_not_use_tokens.contains("second"));
+    thread::sleep(Duration::from_millis(25));
+    fs::write(
+        &metadata_path,
+        serde_json::to_string(&json!({
+            "schema_version": "skill-routing-metadata-v1",
+            "skills": {"sample-skill": {"negative_triggers": ["second blocked"]}}
+        }))
+        .unwrap(),
+    )
+    .expect("update metadata");
+    let second =
+        load_records_cached_for_stdio_resolved(Some(&runtime_path)).expect("second cached load");
+    assert!(!second[0].do_not_use_tokens.contains("first"));
+    assert!(second[0].do_not_use_tokens.contains("second"));
 
-        fs::remove_dir_all(root).expect("cleanup route root");
-    }
+    fs::remove_dir_all(root).expect("cleanup route root");
+}
 
-    #[test]
-    fn load_records_prefers_default_runtime_even_with_explicit_manifest() {
-        let root = temp_route_path("runtime-first-manifest");
-        let skills_root = root.join("skills");
-        fs::create_dir_all(&skills_root).expect("create skills root");
-        let manifest_path = skills_root.join("SKILL_MANIFEST.json");
-        fs::write(
+#[test]
+fn load_records_prefers_default_runtime_even_with_explicit_manifest() {
+    let root = temp_route_path("runtime-first-manifest");
+    let skills_root = root.join("skills");
+    fs::create_dir_all(&skills_root).expect("create skills root");
+    let manifest_path = skills_root.join("SKILL_MANIFEST.json");
+    fs::write(
             &manifest_path,
             serde_json::to_string(&json!({
                 "keys": ["slug", "layer", "owner", "gate", "priority", "description", "session_start", "trigger_hints", "source", "skill_path"],
@@ -533,38 +527,38 @@ use crate::route::has_paper_review_judgment_context;
         )
         .expect("write manifest");
 
-        let loaded = load_records(None).expect("load records");
-        assert!(
-            loaded.iter().any(|record| record.slug == "gitx"),
-            "default runtime hot index should be preferred when available"
-        );
-        assert!(
-            loaded.iter().all(|record| record.slug != "manifest-owner"),
-            "explicit manifest should not bypass runtime-first loading"
-        );
+    let loaded = load_records(None).expect("load records");
+    assert!(
+        loaded.iter().any(|record| record.slug == "gitx"),
+        "default runtime hot index should be preferred when available"
+    );
+    assert!(
+        loaded.iter().all(|record| record.slug != "manifest-owner"),
+        "explicit manifest should not bypass runtime-first loading"
+    );
 
-        fs::remove_dir_all(&root).expect("cleanup route root");
-    }
+    fs::remove_dir_all(&root).expect("cleanup route root");
+}
 
-    #[test]
-    fn records_cache_evicts_oldest_admission_when_over_capacity() {
-        // In test builds of routing-engine, RECORDS_CACHE_MAX_KEYS=4; in non-test builds (which
-        // is how runtime-core compiles routing-engine as a dependency), the cap is 64.
-        // We create 70 pairs to exceed either cap.
-        let cap_plus = 70usize;
-        let root = std::env::temp_dir().join(format!(
-            "router-rs-records-cache-evict-{}",
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .expect("time went backwards")
-                .as_nanos()
-        ));
-        fs::create_dir_all(&root).expect("create temp cache-evict root");
-        let mut pairs: Vec<(PathBuf, PathBuf)> = Vec::new();
-        for idx in 0..cap_plus {
-            let runtime_path = root.join(format!("SKILL_ROUTING_RUNTIME_{idx}.json"));
-            let manifest_path = root.join(format!("SKILL_MANIFEST_{idx}.json"));
-            fs::write(
+#[test]
+fn records_cache_evicts_oldest_admission_when_over_capacity() {
+    // In test builds of routing-engine, RECORDS_CACHE_MAX_KEYS=4; in non-test builds (which
+    // is how runtime-core compiles routing-engine as a dependency), the cap is 64.
+    // We create 70 pairs to exceed either cap.
+    let cap_plus = 70usize;
+    let root = std::env::temp_dir().join(format!(
+        "router-rs-records-cache-evict-{}",
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time went backwards")
+            .as_nanos()
+    ));
+    fs::create_dir_all(&root).expect("create temp cache-evict root");
+    let mut pairs: Vec<(PathBuf, PathBuf)> = Vec::new();
+    for idx in 0..cap_plus {
+        let runtime_path = root.join(format!("SKILL_ROUTING_RUNTIME_{idx}.json"));
+        let manifest_path = root.join(format!("SKILL_MANIFEST_{idx}.json"));
+        fs::write(
                 &runtime_path,
                 serde_json::to_string(&json!({
                     "keys": ["slug", "layer", "owner", "gate", "summary", "trigger_hints", "priority", "session_start"],
@@ -573,7 +567,7 @@ use crate::route::has_paper_review_judgment_context;
                 .expect("serialize runtime fixture"),
             )
             .expect("write runtime fixture");
-            fs::write(
+        fs::write(
                 &manifest_path,
                 serde_json::to_string(&json!({
                     "keys": ["slug", "description", "layer", "owner", "gate", "trigger_hints", "priority", "session_start"],
@@ -582,92 +576,90 @@ use crate::route::has_paper_review_judgment_context;
                 .expect("serialize manifest fixture"),
             )
             .expect("write manifest fixture");
-            pairs.push((runtime_path, manifest_path));
-        }
-
-        let first = load_records_cached_for_stdio(Some(&pairs[0].0))
-            .expect("load pair 0");
-        for (runtime_path, _manifest_path) in pairs.iter().skip(1) {
-            load_records_cached_for_stdio(Some(runtime_path))
-                .expect("load subsequent pair");
-        }
-        let replay = load_records_cached_for_stdio(Some(&pairs[0].0))
-            .expect("reload pair 0 after fifo eviction");
-        assert!(
-            !Arc::ptr_eq(&first, &replay),
-            "test builds cap the cache at RECORDS_CACHE_MAX_KEYS; oldest key must reload"
-        );
-
-        fs::remove_dir_all(&root).expect("cleanup cache-evict root");
+        pairs.push((runtime_path, manifest_path));
     }
 
-    #[test]
-    fn paper_stack_plain_slug_counts_as_explicit_framework_alias_when_hint_has_sigil() {
-        let record = skill_record_from_raw(RawSkillRecord {
-            slug: "paper-reviewer".to_string(),
-            skill_path: Some("skills/paper-reviewer/SKILL.md".to_string()),
-            layer: "L2".to_string(),
-            owner: "owner".to_string(),
-            gate: "none".to_string(),
-            priority: "P2".to_string(),
-            session_start: "preferred".to_string(),
-            summary: "paper reviewer lane".to_string(),
-            short_description: String::new(),
-            when_to_use: String::new(),
-            do_not_use: String::new(),
-            tags: Vec::new(),
-            trigger_hints: vec!["$paper-reviewer".to_string(), "/paper-reviewer".to_string()],
-            host_platforms: vec!["codex".to_string()],
-            record_kind: "skill".to_string(),
-            skill_flags: vec![],
-        });
-        assert!(!record.framework_alias_entrypoints.is_empty());
-        let query = normalize_text("用 paper-reviewer 逻辑模式看一下 claim/evidence");
-        assert!(
-            has_literal_framework_alias_call(&query, &record),
-            "expected plain slug token to satisfy literal alias call"
-        );
-        let tokens = vec![
-            "用".into(),
-            "paper-reviewer".into(),
-            "逻辑模式看一下".into(),
-            "claim/evidence".into(),
-        ];
-        assert!(
-            has_explicit_framework_alias_call(&query, &tokens, &record),
-            "expected plain slug parity for scoring gate"
-        );
-        let tight = normalize_text("用paper-reviewer审一下 claim");
-        assert!(
-            has_literal_framework_alias_call(&tight, &record),
-            "expected slug token detection without spaces around CJK adjacency"
-        );
+    let first = load_records_cached_for_stdio(Some(&pairs[0].0)).expect("load pair 0");
+    for (runtime_path, _manifest_path) in pairs.iter().skip(1) {
+        load_records_cached_for_stdio(Some(runtime_path)).expect("load subsequent pair");
     }
+    let replay = load_records_cached_for_stdio(Some(&pairs[0].0))
+        .expect("reload pair 0 after fifo eviction");
+    assert!(
+        !Arc::ptr_eq(&first, &replay),
+        "test builds cap the cache at RECORDS_CACHE_MAX_KEYS; oldest key must reload"
+    );
 
-    #[test]
-    fn manuscript_critique_only_wording_triggers_paper_review_judgment_heuristic() {
-        let qt = normalize_text("只想要科学性批评不要改稿 manuscript");
-        let tokens: Vec<String> = Vec::new();
-        assert!(has_paper_review_judgment_context(&qt, &tokens));
-    }
+    fs::remove_dir_all(&root).expect("cleanup cache-evict root");
+}
 
-    #[test]
-    fn manifest_paper_writing_row_accepts_plain_slug_literal() {
-        let runtime_path =
-            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../skills/SKILL_ROUTING_RUNTIME.json");
-        let records = load_records_from_runtime(&runtime_path).expect("runtime load");
-        let rec = records
-            .iter()
-            .find(|r| r.slug == "paper-workbench")
-            .expect("paper-workbench row");
-        assert!(
-            !rec.framework_alias_entrypoints.is_empty(),
-            "manifest row should carry framework alias entrypoints"
-        );
-        let q = normalize_text("用 paper-workbench 做一轮论文改稿");
-        assert!(
-            has_literal_framework_alias_call(&q, rec),
-            "{:?}",
-            rec.framework_alias_entrypoints
-        );
-    }
+#[test]
+fn paper_stack_plain_slug_counts_as_explicit_framework_alias_when_hint_has_sigil() {
+    let record = skill_record_from_raw(RawSkillRecord {
+        slug: "paper-reviewer".to_string(),
+        skill_path: Some("skills/paper-reviewer/SKILL.md".to_string()),
+        layer: "L2".to_string(),
+        owner: "owner".to_string(),
+        gate: "none".to_string(),
+        priority: "P2".to_string(),
+        session_start: "preferred".to_string(),
+        summary: "paper reviewer lane".to_string(),
+        short_description: String::new(),
+        when_to_use: String::new(),
+        do_not_use: String::new(),
+        tags: Vec::new(),
+        trigger_hints: vec!["$paper-reviewer".to_string(), "/paper-reviewer".to_string()],
+        host_platforms: vec!["codex".to_string()],
+        record_kind: "skill".to_string(),
+        skill_flags: vec![],
+    });
+    assert!(!record.framework_alias_entrypoints.is_empty());
+    let query = normalize_text("用 paper-reviewer 逻辑模式看一下 claim/evidence");
+    assert!(
+        has_literal_framework_alias_call(&query, &record),
+        "expected plain slug token to satisfy literal alias call"
+    );
+    let tokens = vec![
+        "用".into(),
+        "paper-reviewer".into(),
+        "逻辑模式看一下".into(),
+        "claim/evidence".into(),
+    ];
+    assert!(
+        has_explicit_framework_alias_call(&query, &tokens, &record),
+        "expected plain slug parity for scoring gate"
+    );
+    let tight = normalize_text("用paper-reviewer审一下 claim");
+    assert!(
+        has_literal_framework_alias_call(&tight, &record),
+        "expected slug token detection without spaces around CJK adjacency"
+    );
+}
+
+#[test]
+fn manuscript_critique_only_wording_triggers_paper_review_judgment_heuristic() {
+    let qt = normalize_text("只想要科学性批评不要改稿 manuscript");
+    let tokens: Vec<String> = Vec::new();
+    assert!(has_paper_review_judgment_context(&qt, &tokens));
+}
+
+#[test]
+fn manifest_paper_writing_row_accepts_plain_slug_literal() {
+    let runtime_path =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../skills/SKILL_ROUTING_RUNTIME.json");
+    let records = load_records_from_runtime(&runtime_path).expect("runtime load");
+    let rec = records
+        .iter()
+        .find(|r| r.slug == "paper-workbench")
+        .expect("paper-workbench row");
+    assert!(
+        !rec.framework_alias_entrypoints.is_empty(),
+        "manifest row should carry framework alias entrypoints"
+    );
+    let q = normalize_text("用 paper-workbench 做一轮论文改稿");
+    assert!(
+        has_literal_framework_alias_call(&q, rec),
+        "{:?}",
+        rec.framework_alias_entrypoints
+    );
+}

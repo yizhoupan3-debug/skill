@@ -2,9 +2,9 @@
 //!
 //! 与 prose-chain-contract.md 和 research-language-norms.md 对齐。
 
-use std::collections::HashMap;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 /// 检查文本中的术语使用是否与术语表一致。
 /// 返回不一致的术语列表（找到的非标准用法）。
@@ -132,9 +132,18 @@ pub struct SlopHit {
 /// 返回 hedging 词汇计数。
 pub fn count_hedging_words(text: &str) -> usize {
     let hedging_words = [
-        "may", "might", "could", "possibly", "potentially",
-        "it seems", "appears to", "somewhat", "rather", "quite",
-        "to some extent", "arguably",
+        "may",
+        "might",
+        "could",
+        "possibly",
+        "potentially",
+        "it seems",
+        "appears to",
+        "somewhat",
+        "rather",
+        "quite",
+        "to some extent",
+        "arguably",
     ];
     let lower = text.to_ascii_lowercase();
     hedging_words
@@ -156,6 +165,7 @@ pub fn count_hedging_words(text: &str) -> usize {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     #[test]
@@ -176,10 +186,9 @@ mod tests {
     fn test_terminology_consistency() {
         let mut glossary = HashMap::new();
         glossary.insert("neural network".to_string(), "neural net".to_string());
-        let violations = check_terminology_consistency(
-            "We use a neural network for classification.",
-            &glossary,
-        ).unwrap();
+        let violations =
+            check_terminology_consistency("We use a neural network for classification.", &glossary)
+                .unwrap();
         assert_eq!(violations.len(), 1);
     }
 
@@ -195,7 +204,10 @@ mod tests {
         // "may" should NOT match inside "mayhem"
         let may_contributions = count_hedging_words("may");
         let mayhem_count = count_hedging_words("mayhem");
-        assert!(mayhem_count < may_contributions, "mayhem should not count as hedging");
+        assert!(
+            mayhem_count < may_contributions,
+            "mayhem should not count as hedging"
+        );
         // "quite" should NOT match inside "quiteinteresting" (nonsense word but demonstrates)
         assert_eq!(count_hedging_words("quiteinteresting"), 0);
     }
@@ -211,21 +223,33 @@ mod tests {
     fn en_slop_word_boundary() {
         // "harness" in "research-harness" — hyphen is a boundary, so it still matches
         let hits = detect_en_slop("the research-harness system");
-        let harness_hits: Vec<_> = hits.iter().filter(|h| h.word.to_ascii_lowercase() == "harness").collect();
-        assert!(!harness_hits.is_empty(), "research-harness should still match 'harness' slop");
+        let harness_hits: Vec<_> = hits
+            .iter()
+            .filter(|h| h.word.to_ascii_lowercase() == "harness")
+            .collect();
+        assert!(
+            !harness_hits.is_empty(),
+            "research-harness should still match 'harness' slop"
+        );
 
         // "robust" should NOT match inside "robustness"
         let hits2 = detect_en_slop("the robustness of the method");
-        let robust_hits: Vec<_> = hits2.iter().filter(|h| h.word.to_ascii_lowercase() == "robust").collect();
-        assert!(robust_hits.is_empty(), "robustness should not match 'robust' slop");
+        let robust_hits: Vec<_> = hits2
+            .iter()
+            .filter(|h| h.word.to_ascii_lowercase() == "robust")
+            .collect();
+        assert!(
+            robust_hits.is_empty(),
+            "robustness should not match 'robust' slop"
+        );
     }
 
     #[test]
     fn is_whole_word_utility() {
-        assert!(is_whole_word("hello world", 0, 5));  // "hello" at start
-        assert!(is_whole_word("hello world", 6, 5));  // "world" at end
+        assert!(is_whole_word("hello world", 0, 5)); // "hello" at start
+        assert!(is_whole_word("hello world", 6, 5)); // "world" at end
         assert!(is_whole_word("say hello world", 4, 5)); // "hello" in middle
-        assert!(!is_whole_word("mayhem", 0, 3));       // "may" inside "mayhem"
-        assert!(!is_whole_word("boot", 1, 2));         // "oo" is not whole
+        assert!(!is_whole_word("mayhem", 0, 3)); // "may" inside "mayhem"
+        assert!(!is_whole_word("boot", 1, 2)); // "oo" is not whole
     }
 }

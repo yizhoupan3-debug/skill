@@ -35,7 +35,7 @@ pub(super) fn normalize_limit(limit: usize) -> usize {
 // NOTE: xml_text_between, decode_xml_entities, compact_words, and stopwords
 // are implemented in text.rs and re-exported here for search-internal callers.
 
-pub(super) use crate::text::{xml_text_between, decode_xml_entities, compact_words};
+pub(super) use crate::text::{compact_words, decode_xml_entities, xml_text_between};
 
 // ── arXiv regex patterns (migrated from main.rs constants) ──
 

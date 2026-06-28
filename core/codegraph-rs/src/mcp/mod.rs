@@ -31,7 +31,6 @@ pub fn run_stdio_mcp(repo_root: &Path) -> anyhow::Result<()> {
     )
 }
 
-
 pub fn tool_definitions() -> Vec<Value> {
     let node_array = json!({"type": "array", "items": node_schema()});
     vec![
@@ -405,6 +404,7 @@ fn optional_str<'a>(value: &'a Value, key: &str) -> Option<&'a str> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::{dispatch_tool_call, tool_definitions};
     use crate::CodeGraphIndex;
     use serde_json::json;
@@ -649,7 +649,8 @@ mod tests {
         assert!(
             !parsed["candidates"]
                 .as_array()
-                .expect("as_array should succeed").is_empty()
+                .expect("as_array should succeed")
+                .is_empty()
         );
 
         let _ = std::fs::remove_dir_all(root);

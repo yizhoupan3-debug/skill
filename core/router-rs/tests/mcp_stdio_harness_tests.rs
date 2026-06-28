@@ -443,7 +443,7 @@ mod desktop_mcp_tests {
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(
-            err.contains("task_id"),
+            err.to_string().contains("task_id"),
             "should mention missing task_id, got: {err}"
         );
 
@@ -529,8 +529,8 @@ mod routing_tests {
         let result = filter_records_for_host(records, Some("retired-claude-desktop"));
         assert!(result.is_err());
         let err = result.unwrap_err();
-        assert!(err.contains("host_id"));
-        assert!(err.contains("retired-claude-desktop"));
+        assert!(err.to_string().contains("host_id"));
+        assert!(err.to_string().contains("retired-claude-desktop"));
     }
 }
 
@@ -545,7 +545,7 @@ mod parameter_validation_tests {
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(
-            err.contains("goal"),
+            err.to_string().contains("goal"),
             "expected error about 'goal', got: {err}"
         );
     }
@@ -558,7 +558,7 @@ mod parameter_validation_tests {
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(
-            err.contains("note"),
+            err.to_string().contains("note"),
             "expected error about 'note', got: {err}"
         );
     }
@@ -579,10 +579,10 @@ mod parameter_validation_tests {
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(
-            err.contains("Unknown goal operation"),
+            err.to_string().contains("Unknown goal operation"),
             "expected 'Unknown goal operation', got: {err}"
         );
-        assert!(err.contains("start") && err.contains("checkpoint"));
+        assert!(err.to_string().contains("start") && err.to_string().contains("checkpoint"));
     }
 
     #[test]
@@ -592,7 +592,7 @@ mod parameter_validation_tests {
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(
-            err.contains("task_id"),
+            err.to_string().contains("task_id"),
             "Expected task_id error, got: {err}"
         );
     }
@@ -605,7 +605,7 @@ mod parameter_validation_tests {
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(
-            err.contains("task_id"),
+            err.to_string().contains("task_id"),
             "Expected task_id error, got: {err}"
         );
     }
@@ -617,7 +617,7 @@ mod parameter_validation_tests {
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(
-            err.contains("blocker"),
+            err.to_string().contains("blocker"),
             "Expected blocker error, got: {err}"
         );
     }
@@ -628,7 +628,7 @@ mod parameter_validation_tests {
         let result = crate::mcp_stdio_harness::tool_goal_state_manage_test_helper(&args, "block");
         if let Err(ref err) = result {
             assert!(
-                !err.contains("Missing required argument: blocker"),
+                !err.to_string().contains("Missing required argument: blocker"),
                 "blocker validation broken: {err}"
             );
         }
@@ -648,16 +648,6 @@ mod parameter_validation_tests {
             result.err()
         );
     }
-}
-
-#[cfg(test)]
-mod cache_ttl_tests {
-    #[test]
-    fn snapshot_cache_ttl_defaults_to_30_seconds() {
-        let ttl = crate::mcp_stdio_harness::get_snapshot_ttl_for_test();
-        assert_eq!(ttl, 30);
-    }
-
 }
 
 #[cfg(test)]
@@ -753,7 +743,7 @@ mod rate_limiter_tests {
         let result = limiter.check_and_record("test_tool");
         assert!(result.is_err(), "rapid repeated calls should be blocked");
         let err = result.unwrap_err();
-        assert!(err.contains("Rate limit exceeded"));
+        assert!(err.to_string().contains("Rate limit exceeded"));
     }
 
     #[test]

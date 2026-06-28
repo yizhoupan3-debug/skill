@@ -77,12 +77,9 @@ const EXECUTION_DRY_RUN_REQUIRED_RUNTIME_FIELDS: [&str; 6] = [
 
 // Error format strings extracted as constants for reuse (fully static only -
 // dynamic format strings stay inline since format! requires a literal)
-const ERR_RUNTIME_FIELDS_MISSING: &str =
-    "runtime control plane execution descriptor returned an invalid kernel_metadata_contract.runtime_fields.";
-const ERR_UNEXPECTED_RUNTIME_FIELDS: &str =
-    "runtime control plane execution descriptor returned an unexpected kernel_metadata_contract.runtime_fields.";
-const ERR_UNEXPECTED_STEADY_STATE_FIELDS: &str =
-    "runtime control plane execution descriptor returned an unexpected kernel_metadata_contract.steady_state_fields.";
+const ERR_RUNTIME_FIELDS_MISSING: &str = "runtime control plane execution descriptor returned an invalid kernel_metadata_contract.runtime_fields.";
+const ERR_UNEXPECTED_RUNTIME_FIELDS: &str = "runtime control plane execution descriptor returned an unexpected kernel_metadata_contract.runtime_fields.";
+const ERR_UNEXPECTED_STEADY_STATE_FIELDS: &str = "runtime control plane execution descriptor returned an unexpected kernel_metadata_contract.steady_state_fields.";
 
 #[derive(Debug, Clone)]
 struct ExecutionKernelExpectations {
@@ -105,9 +102,9 @@ fn non_empty_string(value: Option<&Value>, fallback: &str) -> String {
 }
 
 fn required_object<'a>(value: &'a Value, context: &str) -> Result<&'a Map<String, Value>> {
-    value
-        .as_object()
-        .ok_or_else(|| FrameworkError::validation(format!("{context} must decode to a JSON object.")))
+    value.as_object().ok_or_else(|| {
+        FrameworkError::validation(format!("{context} must decode to a JSON object."))
+    })
 }
 
 fn required_payload_object<'a>(
@@ -116,7 +113,9 @@ fn required_payload_object<'a>(
 ) -> Result<&'a Map<String, Value>> {
     match value {
         Some(Value::Object(map)) => Ok(map),
-        Some(_) => Err(FrameworkError::validation(format!("{context} must decode to a JSON object."))),
+        Some(_) => Err(FrameworkError::validation(format!(
+            "{context} must decode to a JSON object."
+        ))),
         None => Err(FrameworkError::validation(format!("{context} is missing."))),
     }
 }
@@ -128,7 +127,9 @@ fn required_string_field(
 ) -> Result<String> {
     match payload.get(field) {
         Some(Value::String(value)) => Ok(value.clone()),
-        Some(Value::Null) | None => Err(FrameworkError::validation(format!("{context} is missing {field}."))),
+        Some(Value::Null) | None => Err(FrameworkError::validation(format!(
+            "{context} is missing {field}."
+        ))),
         Some(other) => {
             let type_name = match other {
                 Value::String(_) => "string",
@@ -578,9 +579,7 @@ fn normalize_execution_kernel_metadata_contract_impl(
     }
     let payload = required_object(
         kernel_metadata_contract.ok_or_else(|| {
-            FrameworkError::validation(
-                "internal: kernel_metadata_contract was None".to_string(),
-            )
+            FrameworkError::validation("internal: kernel_metadata_contract was None".to_string())
         })?,
         "runtime control plane execution descriptor returned an invalid kernel_metadata_contract",
     )?;
@@ -613,12 +612,12 @@ fn normalize_execution_kernel_metadata_contract_impl(
         ));
     }
 
-    let runtime_fields_value = payload.get("runtime_fields").ok_or_else(|| {
-        FrameworkError::validation(ERR_RUNTIME_FIELDS_MISSING)
-    })?;
-    let runtime_fields_map = runtime_fields_value.as_object().ok_or_else(|| {
-        FrameworkError::validation(ERR_RUNTIME_FIELDS_MISSING)
-    })?;
+    let runtime_fields_value = payload
+        .get("runtime_fields")
+        .ok_or_else(|| FrameworkError::validation(ERR_RUNTIME_FIELDS_MISSING))?;
+    let runtime_fields_map = runtime_fields_value
+        .as_object()
+        .ok_or_else(|| FrameworkError::validation(ERR_RUNTIME_FIELDS_MISSING))?;
     let normalized_runtime_fields = json!({
         "shared": normalize_runtime_field_group(Some(runtime_fields_map), "shared", &EXECUTION_SHARED_RUNTIME_FIELDS)?,
         "live_primary_required": normalize_runtime_field_group(
@@ -638,9 +637,7 @@ fn normalize_execution_kernel_metadata_contract_impl(
         )?,
     });
     if payload.get("runtime_fields") != Some(&normalized_runtime_fields) {
-        return Err(FrameworkError::validation(
-            ERR_UNEXPECTED_RUNTIME_FIELDS,
-        ));
+        return Err(FrameworkError::validation(ERR_UNEXPECTED_RUNTIME_FIELDS));
     }
 
     for section in ["metadata_keys", "defaults"] {
@@ -687,8 +684,7 @@ fn validate_execution_kernel_steady_state_metadata_impl(
     expectations: &ExecutionKernelExpectations,
     response_shape: Option<&str>,
 ) -> Result<Map<String, Value>> {
-    let metadata =
-        required_object(metadata, "execution-kernel steady-state metadata")?;
+    let metadata = required_object(metadata, "execution-kernel steady-state metadata")?;
     let metadata_contract = build_execution_kernel_metadata_contract();
     let metadata_contract_object =
         required_object(&metadata_contract, "execution kernel metadata contract")?;

@@ -9,6 +9,7 @@
 
 use crate::frontmatter_parser;
 use crate::paths;
+use core_errors::FrameworkError;
 use core_state_utils::atomic_write::write_atomic_text;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -69,11 +70,16 @@ fn should_omit(v: &Value) -> bool {
 // ---------------------------------------------------------------------------
 
 /// Build the YAML frontmatter string for a registry row.
-fn build_frontmatter_yaml(row: &[Value], col_idx: &HashMap<&str, usize>) -> Result<String, String> {
+fn build_frontmatter_yaml(
+    row: &[Value],
+    col_idx: &HashMap<&str, usize>,
+) -> Result<String, FrameworkError> {
     let mut map = serde_json::Map::new();
 
     for &(registry_col, yaml_key) in FRONTMATTER_KEYS {
-        let Some(&idx) = col_idx.get(registry_col) else { continue };
+        let Some(&idx) = col_idx.get(registry_col) else {
+            continue;
+        };
         if idx >= row.len() {
             continue;
         }
@@ -86,15 +92,16 @@ fn build_frontmatter_yaml(row: &[Value], col_idx: &HashMap<&str, usize>) -> Resu
 
     // Special handling: always include trigger_hints (even if empty)
     if let Some(&idx) = col_idx.get("trigger_hints")
-        && idx < row.len() {
-            let hints = &row[idx];
-            if should_omit(hints) {
-                map.insert("trigger_hints".to_string(), Value::Array(vec![]));
-            }
+        && idx < row.len()
+    {
+        let hints = &row[idx];
+        if should_omit(hints) {
+            map.insert("trigger_hints".to_string(), Value::Array(vec![]));
         }
+    }
 
     let yaml_text = serde_yml::to_string(&Value::Object(map))
-        .map_err(|e| format!("YAML serialization failed: {e}"))?;
+        .map_err(|e| FrameworkError::validation(format!("YAML serialization failed: {e}")))?;
 
     Ok(yaml_text)
 }
@@ -111,16 +118,18 @@ pub fn generate_frontmatter(
     repo_root: &Path,
     slug: Option<&str>,
     dry_run: bool,
-) -> Result<GenerateReport, String> {
+) -> Result<GenerateReport, FrameworkError> {
     let runtime_path = paths::runtime_json(repo_root);
-    let doc: Value =
-        serde_json::from_str(&fs::read_to_string(&runtime_path).map_err(|e| e.to_string())?)
-            .map_err(|e| e.to_string())?;
+    let doc: Value = serde_json::from_str(&fs::read_to_string(&runtime_path)?)?;
 
     let keys: Vec<String> = doc["keys"]
         .as_array()
-        .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
-        .ok_or_else(|| "runtime JSON missing keys array".to_string())?;
+        .map(|a| {
+            a.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect()
+        })
+        .ok_or_else(|| FrameworkError::validation("runtime JSON missing keys array"))?;
 
     let col_idx: HashMap<&str, usize> = keys
         .iter()
@@ -129,12 +138,9 @@ pub fn generate_frontmatter(
         .collect();
     let slug_idx = *col_idx
         .get("slug")
-        .ok_or_else(|| "runtime JSON missing slug column".to_string())?;
+        .ok_or_else(|| FrameworkError::validation("runtime JSON missing slug column"))?;
 
-    let total_skills = doc["skills"]
-        .as_array()
-        .map(|a| a.len())
-        .unwrap_or(0);
+    let total_skills = doc["skills"].as_array().map(|a| a.len()).unwrap_or(0);
 
     let mut report = GenerateReport {
         total_skills,
@@ -145,7 +151,9 @@ pub fn generate_frontmatter(
     };
 
     let Some(rows) = doc["skills"].as_array() else {
-        return Err("runtime JSON missing skills array".to_string());
+        return Err(FrameworkError::validation(
+            "runtime JSON missing skills array",
+        ));
     };
 
     for row in rows {
@@ -162,9 +170,10 @@ pub fn generate_frontmatter(
 
         // Filter by slug if specified
         if let Some(target) = slug
-            && current_slug != target {
-                continue;
-            }
+            && current_slug != target
+        {
+            continue;
+        }
 
         let skill_md_path = paths::skill_md(repo_root, &current_slug);
 
@@ -172,7 +181,9 @@ pub fn generate_frontmatter(
         let existing = match fs::read_to_string(&skill_md_path) {
             Ok(t) => t,
             Err(e) => {
-                report.errors.push(format!("{current_slug}: cannot read SKILL.md: {e}"));
+                report
+                    .errors
+                    .push(format!("{current_slug}: cannot read SKILL.md: {e}"));
                 continue;
             }
         };
@@ -199,8 +210,9 @@ pub fn generate_frontmatter(
 
         // Write (if not dry-run)
         if !dry_run {
-            write_atomic_text(&skill_md_path, &new_content)
-                .map_err(|e| format!("{current_slug}: write failed: {e}"))?;
+            write_atomic_text(&skill_md_path, &new_content).map_err(|e| {
+                FrameworkError::validation(format!("{current_slug}: write failed: {e}"))
+            })?;
         }
 
         report.skills_generated += 1;

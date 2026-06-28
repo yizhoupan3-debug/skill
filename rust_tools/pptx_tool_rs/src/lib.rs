@@ -1,14 +1,14 @@
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{Context, Result, anyhow, bail};
 use clap::{Args, Subcommand, ValueEnum};
-use font8x8::{UnicodeFonts, BASIC_FONTS};
+use font8x8::{BASIC_FONTS, UnicodeFonts};
 use image::{
-    imageops::{self, FilterType},
     DynamicImage, Rgba, RgbaImage,
+    imageops::{self, FilterType},
 };
 use regex::Regex;
 use roxmltree::{Document, Node};
 use serde::Serialize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::ffi::OsStr;
@@ -19,11 +19,11 @@ use std::process::{Command, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
 use tempfile::TempDir;
-use zip::{write::SimpleFileOptions, ZipArchive, ZipWriter};
+use zip::{ZipArchive, ZipWriter, write::SimpleFileOptions};
 
+pub mod mcp;
 pub mod office;
 pub mod qa;
-pub mod mcp;
 
 pub const EMU_PER_INCH: f64 = 914_400.0;
 pub const POINTS_PER_INCH: f64 = 72.0;
@@ -325,7 +325,6 @@ pub struct OfficeBatchArgs {
     json: bool,
 }
 
-
 #[derive(Debug, Serialize)]
 pub struct InitSummary {
     workdir: String,
@@ -430,7 +429,6 @@ pub enum EmitFormat {
     Json,
     Text,
 }
-
 
 include!("commands.rs");
 
@@ -557,7 +555,11 @@ pub struct PptxSlideSpec {
     layout: &'static str,
 }
 
-pub fn write_outline_deck_pptx(outline: &Value, output: &Path, template: &DeckTemplate) -> Result<()> {
+pub fn write_outline_deck_pptx(
+    outline: &Value,
+    output: &Path,
+    template: &DeckTemplate,
+) -> Result<()> {
     let outline = naturalize_outline_value(outline);
     let slides = build_pptx_slide_specs(&outline);
     let palette = ppt_palette(outline.get("palette").and_then(Value::as_str).unwrap_or(
@@ -665,7 +667,12 @@ pub fn strict_quality_gate(payload: &Value) -> Result<()> {
     qa::strict_quality_gate(payload)
 }
 
-pub fn render_paths(input: &Path, output_dir: &Path, width: u32, height: u32) -> Result<Vec<PathBuf>> {
+pub fn render_paths(
+    input: &Path,
+    output_dir: &Path,
+    width: u32,
+    height: u32,
+) -> Result<Vec<PathBuf>> {
     let dpi = if has_extension(input, "pdf") {
         calc_dpi_via_pdf(input, width, height)?
     } else {
@@ -966,7 +973,10 @@ pub fn collect_read_full_elements(
             .or_else(|| element.get("element_type"))
             .and_then(Value::as_str)
             .unwrap_or("shape");
-        if let Some(text) = element.get("text").and_then(|t| t.get("fullText")).and_then(Value::as_str)
+        if let Some(text) = element
+            .get("text")
+            .and_then(|t| t.get("fullText"))
+            .and_then(Value::as_str)
         {
             if !text.trim().is_empty() {
                 let lower = name.to_lowercase();
@@ -1053,7 +1063,7 @@ pub fn create_montage_command(args: CreateMontageArgs) -> Result<()> {
                 Ok(img) => items.push((input.clone(), Some(img))),
                 Err(err) if args.fail_on_image_error => {
                     return Err(err)
-                        .with_context(|| format!("failed to open {}", raster_path.display()))
+                        .with_context(|| format!("failed to open {}", raster_path.display()));
                 }
                 Err(_) => items.push((input.clone(), None)),
             },
@@ -1165,7 +1175,9 @@ pub fn slides_test_command(args: SlidesTestArgs) -> Result<()> {
         bail!("slides-test failed: dense text aesthetic risk detected");
     }
     if args.fail_on_any
-        && (!overflow_failing.is_empty() || !overlap_failing.is_empty() || !aesthetic_failing.is_empty())
+        && (!overflow_failing.is_empty()
+            || !overlap_failing.is_empty()
+            || !aesthetic_failing.is_empty())
     {
         bail!("slides-test failed: one or more checks reported issues");
     }
@@ -1443,11 +1455,15 @@ pub fn calc_dpi_via_pdf(input: &Path, max_w_px: u32, max_h_px: u32) -> Result<u3
 pub fn parse_pdf_page_size(value: &str) -> Result<(f64, f64)> {
     fn re_pts() -> &'static Regex {
         static RE: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
-        RE.get_or_init(|| Regex::new(r"([0-9]+(?:\.[0-9]+)?)\s*x\s*([0-9]+(?:\.[0-9]+)?)\s*pts\b").unwrap())
+        RE.get_or_init(|| {
+            Regex::new(r"([0-9]+(?:\.[0-9]+)?)\s*x\s*([0-9]+(?:\.[0-9]+)?)\s*pts\b").unwrap()
+        })
     }
     fn re_in() -> &'static Regex {
         static RE: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
-        RE.get_or_init(|| Regex::new(r"([0-9]+(?:\.[0-9]+)?)\s*x\s*([0-9]+(?:\.[0-9]+)?)\s*in\b").unwrap())
+        RE.get_or_init(|| {
+            Regex::new(r"([0-9]+(?:\.[0-9]+)?)\s*x\s*([0-9]+(?:\.[0-9]+)?)\s*in\b").unwrap()
+        })
     }
     fn re_bare() -> &'static Regex {
         static RE: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
@@ -1566,7 +1582,10 @@ pub fn run_command_timeout(command: &mut Command, timeout: Duration) -> Result<(
     }
 }
 
-pub fn resolve_input_paths(input_files: &[String], input_dir: Option<&str>) -> Result<Vec<PathBuf>> {
+pub fn resolve_input_paths(
+    input_files: &[String],
+    input_dir: Option<&str>,
+) -> Result<Vec<PathBuf>> {
     let mut paths = Vec::new();
     if !input_files.is_empty() {
         for item in input_files {

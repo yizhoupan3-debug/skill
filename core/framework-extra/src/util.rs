@@ -8,17 +8,8 @@
 // ── Re-exports (canonical implementations in fr-utils) ──
 
 pub use fr_utils::util::{
-    count_evidence_rows,
-    current_local_timestamp,
-    defaulted_payload_text,
-    hash_file_for_test,
-    is_terminal,
-    normalize_task_registry_rows,
-    parse_session_summary,
-    registry_rows_from_payload,
-    required_payload_text,
-    supervisor_contract,
-    truncate_utf8_chars,
-    write_json_if_changed_unlocked,
-    write_text_if_changed_unlocked,
+    count_evidence_rows, current_local_timestamp, defaulted_payload_text, hash_file_for_test,
+    is_terminal, normalize_task_registry_rows, parse_session_summary, registry_rows_from_payload,
+    required_payload_text, supervisor_contract, truncate_utf8_chars,
+    write_json_if_changed_unlocked, write_text_if_changed_unlocked,
 };

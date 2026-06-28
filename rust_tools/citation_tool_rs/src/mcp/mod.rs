@@ -1,11 +1,13 @@
 //! MCP tool definitions and dispatch for citation_tool_rs.
 
 use anyhow::Result;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::path::Path;
 
-use crate::{audit_report_to_markdown, claim_findings_to_markdown, lint_claims, make_report,
-            parse_bibtex, read_text};
+use crate::{
+    audit_report_to_markdown, claim_findings_to_markdown, lint_claims, make_report, parse_bibtex,
+    read_text,
+};
 
 /// MCP tool definitions exposed by this server.
 pub fn tool_definitions() -> Vec<Value> {
@@ -79,10 +81,7 @@ fn tool_citation_audit(args: &Value) -> Result<Value, anyhow::Error> {
         .get("manuscript_path")
         .and_then(Value::as_str)
         .map(Path::new);
-    let format_str = args
-        .get("format")
-        .and_then(Value::as_str)
-        .unwrap_or("json");
+    let format_str = args.get("format").and_then(Value::as_str).unwrap_or("json");
     let cluster_threshold = args
         .get("cluster_threshold")
         .and_then(Value::as_u64)

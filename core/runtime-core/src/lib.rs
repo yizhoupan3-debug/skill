@@ -6,21 +6,21 @@
 //! Single source of truth for framework_runtime and supporting modules.
 
 // ── original four (flattened from runtime-storage) ──
-pub use rt_storage::{runtime_envelope_ids, runtime_storage};
 #[cfg(feature = "l5-state")]
 pub use rt_storage::background_state;
+pub use rt_storage::{runtime_envelope_ids, runtime_storage};
 pub use trace_runtime;
 
 // ── migrated modules (B3) ──
-pub use core_state::closeout_validation as closeout_enforcement;
+pub use core_state::closeout_validation;
 pub use fr_contracts::execution_contract;
 pub mod framework_runtime;
 pub use framework_kernel::framework_profile;
 
 // ── QG Route: scene-dispatched CheckerRegistry bridge ──
 mod checkers;
-pub mod qg_route;
 pub mod qg_entry;
+pub mod qg_route;
 
 // ── Schema Drift: migrated from runtime-exit-gate ──
 pub mod schema_drift;
@@ -28,38 +28,31 @@ pub mod schema_drift;
 // ── subdomain module groups ──
 
 // │  backward-compatible re-exports from subdomain groups ─────────────────────
-pub use runtime_infra::{
-    kernel_bootstrap, kernel_utils, stdio_transport,
-};
 pub use fr_exec::router_env_flags::{
-    router_rs_subagent_model_inherit_nudge_enabled,
-    router_rs_review_gate_disabled_for_host, router_rs_review_pending_cycle_max,
-    router_rs_review_spawn_first_nudge_enabled,
+    router_rs_cargo_check_sync_enabled, router_rs_continuity_post_tool_evidence_enabled,
+    router_rs_env_enabled_default_false, router_rs_env_enabled_default_true,
+    router_rs_hook_legacy_subtracted_events_enabled, router_rs_hook_outbound_context_max_bytes,
+    router_rs_hook_silent_enabled, router_rs_hook_state_dir_sync_enabled,
+    router_rs_hook_state_fail_open_enabled, router_rs_hook_state_file_sync_enabled,
+    router_rs_hook_state_legacy_full_sweep_enabled, router_rs_hook_state_lock_retries,
+    router_rs_hook_state_stale_sweep_days, router_rs_hook_timing_enabled,
     router_rs_operator_inject_globally_enabled, router_rs_pre_goal_enabled,
-    router_rs_hook_silent_enabled, router_rs_hook_outbound_context_max_bytes,
-    router_rs_pre_goal_strict_disk_enabled, router_rs_hook_state_fail_open_enabled,
-    router_rs_hook_state_lock_retries, router_rs_hook_state_file_sync_enabled,
-    router_rs_hook_state_dir_sync_enabled, router_rs_cargo_check_sync_enabled,
-    router_rs_hook_state_legacy_full_sweep_enabled, router_rs_hook_state_stale_sweep_days,
-    router_rs_hook_legacy_subtracted_events_enabled,
-    router_rs_env_enabled_default_true, router_rs_env_enabled_default_false,
+    router_rs_pre_goal_strict_disk_enabled, router_rs_qg_max_rounds_cap,
     router_rs_review_fork_context_missing_infer_false_enabled,
-    router_rs_task_ledger_flock_enabled, router_rs_hook_timing_enabled,
-    router_rs_continuity_post_tool_evidence_enabled,
-    router_rs_review_gate_stop_max_nudges_cap, router_rs_qg_max_rounds_cap,
+    router_rs_review_gate_disabled_for_host, router_rs_review_gate_stop_max_nudges_cap,
+    router_rs_review_pending_cycle_max, router_rs_review_spawn_first_nudge_enabled,
+    router_rs_subagent_model_inherit_nudge_enabled, router_rs_task_ledger_flock_enabled,
 };
+pub use runtime_infra::{kernel_bootstrap, kernel_utils, stdio_transport};
 
 // ── re-exports from rt_core_contracts (remaining pure contract modules) ──
 pub use rt_core_contracts::{
-    formal_toolchain, harness_contract, harness_context_signals, hook_event_routing,
-    mcp_pre_guard, web_fetch_guard, hook_observation_rules,
+    formal_toolchain, harness_context_signals, harness_contract, hook_event_routing,
+    hook_observation_rules, mcp_pre_guard, web_fetch_guard,
 };
 
 // ── re-exports from core-state (flattened) ──
-pub use core_state::{
-    step_ledger, task_state,
-    state_manager as goal_drive,
-};
+pub use core_state::{state_manager as goal_drive, step_ledger, task_state};
 // ── local contract modules (remain in runtime-core due to internal coupling) ──
 pub mod hook_timing;
 
@@ -174,7 +167,7 @@ pub fn init_hooks() {
                 },
                 build_automatic_continuity_checkpoint_payload: framework_runtime::build_automatic_continuity_checkpoint_payload_with_task_id,
                 append_evidence_index: framework_extra::evidence::append_evidence_index_merged_row,
-                closeout_record_schema_version: || closeout_enforcement::CLOSEOUT_RECORD_SCHEMA_VERSION,
+                closeout_record_schema_version: || closeout_validation::CLOSEOUT_RECORD_SCHEMA_VERSION,
                 // web_fetch_guard (3 fields)
                 validate_and_resolve_web_fetch_url: |url| {
                     web_fetch_guard::validate_and_resolve_web_fetch_url(url).map(|(u, addrs)| {

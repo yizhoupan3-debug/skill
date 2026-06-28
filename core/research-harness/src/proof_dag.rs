@@ -107,7 +107,11 @@ pub struct VerificationResultExt {
 
 impl VerificationResultExt {
     pub fn new(status: VerificationStatus, round: u64) -> Self {
-        Self { status, validated_at_round: round, stale: false }
+        Self {
+            status,
+            validated_at_round: round,
+            stale: false,
+        }
     }
 
     pub fn stale(&mut self) {
@@ -131,13 +135,19 @@ impl Blueprint {
     pub fn new(goal: &str, name: &str) -> Self {
         let root = "root".to_string();
         let mut nodes = HashMap::new();
-        nodes.insert(root.clone(), DagNode::OrNode {
-            id: root.clone(),
-            label: format!("Prove: {goal}"),
-            children: vec![],
-        });
+        nodes.insert(
+            root.clone(),
+            DagNode::OrNode {
+                id: root.clone(),
+                label: format!("Prove: {goal}"),
+                children: vec![],
+            },
+        );
         let mut status = HashMap::new();
-        status.insert(root.clone(), VerificationResultExt::new(VerificationStatus::Skip, 0));
+        status.insert(
+            root.clone(),
+            VerificationResultExt::new(VerificationStatus::Skip, 0),
+        );
 
         Self {
             name: name.to_string(),
@@ -159,17 +169,30 @@ impl Blueprint {
     /// # AND constraint
     ///
     /// At least one child must be non-ManualProse.
-    pub fn decompose(&mut self, parent_id: &str, children: Vec<DagNode>, and: bool) -> Result<(), FrameworkError> {
+    pub fn decompose(
+        &mut self,
+        parent_id: &str,
+        children: Vec<DagNode>,
+        and: bool,
+    ) -> Result<(), FrameworkError> {
         // Verify parent exists and is not a leaf
-        let parent = self.nodes.get(parent_id)
+        let parent = self
+            .nodes
+            .get(parent_id)
             .ok_or_else(|| FrameworkError::not_found(format!("node {parent_id}")))?;
         if parent.is_leaf() {
-            return Err(FrameworkError::validation(format!("cannot decompose leaf node {parent_id}")));
+            return Err(FrameworkError::validation(format!(
+                "cannot decompose leaf node {parent_id}"
+            )));
         }
         let parent_label = parent.label().to_string();
 
         // AND constraint: at least one child must be non-ManualProse
-        if and && children.iter().all(|c| matches!(c.backend(), Some(VerificationBackend::ManualProse))) {
+        if and
+            && children
+                .iter()
+                .all(|c| matches!(c.backend(), Some(VerificationBackend::ManualProse)))
+        {
             return Err(FrameworkError::validation(
                 "AND node must have at least one non-ManualProse child",
             ));
@@ -180,14 +203,25 @@ impl Blueprint {
         for child in children {
             let cid = child.id().to_string();
             self.nodes.insert(cid.clone(), child);
-            self.status.insert(cid, VerificationResultExt::new(VerificationStatus::Skip, self.round));
+            self.status.insert(
+                cid,
+                VerificationResultExt::new(VerificationStatus::Skip, self.round),
+            );
         }
 
         // Replace parent with the appropriate internal node
         let new_parent = if and {
-            DagNode::AndNode { id: parent_id.to_string(), label: parent_label.clone(), children: child_ids }
+            DagNode::AndNode {
+                id: parent_id.to_string(),
+                label: parent_label.clone(),
+                children: child_ids,
+            }
         } else {
-            DagNode::OrNode { id: parent_id.to_string(), label: parent_label.clone(), children: child_ids }
+            DagNode::OrNode {
+                id: parent_id.to_string(),
+                label: parent_label.clone(),
+                children: child_ids,
+            }
         };
         self.nodes.insert(parent_id.to_string(), new_parent);
 
@@ -216,10 +250,16 @@ impl Blueprint {
         Ok(())
     }
 
-    fn verify_node(&mut self, node_id: &str, round: u64) -> Result<VerificationResultExt, FrameworkError> {
+    fn verify_node(
+        &mut self,
+        node_id: &str,
+        round: u64,
+    ) -> Result<VerificationResultExt, FrameworkError> {
         // Extract all data from self.nodes before any mutation to avoid borrow conflicts
         let (node_children, node_is_leaf, node_backend, is_or) = {
-            let node = self.nodes.get(node_id)
+            let node = self
+                .nodes
+                .get(node_id)
                 .ok_or_else(|| FrameworkError::not_found(format!("node {node_id}")))?;
             (
                 node.children().to_vec(),
@@ -260,10 +300,20 @@ impl Blueprint {
             for child_id in &node_children {
                 let child_result = self.verify_node(child_id, round)?;
                 match child_result.status {
-                    VerificationStatus::Fail => { all_pass = false; worst = VerificationStatus::Fail; all_skip = false; }
-                    VerificationStatus::Warn => { all_pass = false; worst = VerificationStatus::Warn; all_skip = false; }
+                    VerificationStatus::Fail => {
+                        all_pass = false;
+                        worst = VerificationStatus::Fail;
+                        all_skip = false;
+                    }
+                    VerificationStatus::Warn => {
+                        all_pass = false;
+                        worst = VerificationStatus::Warn;
+                        all_skip = false;
+                    }
                     VerificationStatus::Skip => {}
-                    VerificationStatus::Pass => { all_skip = false; }
+                    VerificationStatus::Pass => {
+                        all_skip = false;
+                    }
                 }
             }
             if all_skip {
@@ -282,7 +332,9 @@ impl Blueprint {
         // Capture children and label BEFORE any mutable operations on self.nodes
         // (avoids holding an immutable borrow across mutable HashMap operations).
         let (children, label) = {
-            let node = self.nodes.get(node_id)
+            let node = self
+                .nodes
+                .get(node_id)
                 .ok_or_else(|| FrameworkError::not_found(format!("node {node_id}")))?;
             (node.children().to_vec(), node.label().to_string())
         };
@@ -292,7 +344,9 @@ impl Blueprint {
         let mut seen = std::collections::HashSet::new();
         let mut stack = children.clone();
         while let Some(cid) = stack.pop() {
-            if !seen.insert(cid.clone()) { continue; }
+            if !seen.insert(cid.clone()) {
+                continue;
+            }
             to_remove.push(cid.clone());
             if let Some(child) = self.nodes.get(&cid) {
                 stack.extend(child.children().iter().cloned());
@@ -306,11 +360,14 @@ impl Blueprint {
         }
 
         // Convert parent back to OR with no children
-        self.nodes.insert(node_id.to_string(), DagNode::OrNode {
-            id: node_id.to_string(),
-            label,
-            children: vec![],
-        });
+        self.nodes.insert(
+            node_id.to_string(),
+            DagNode::OrNode {
+                id: node_id.to_string(),
+                label,
+                children: vec![],
+            },
+        );
 
         Ok(())
     }
@@ -347,7 +404,11 @@ impl Blueprint {
 
     pub fn manual_prose_ratio(&self) -> f64 {
         let (total, manual) = self.leaf_counts();
-        if total == 0 { 0.0 } else { manual as f64 / total as f64 }
+        if total == 0 {
+            0.0
+        } else {
+            manual as f64 / total as f64
+        }
     }
 
     /// Validate that ManualProse ratio does not exceed max_pct (default 0.30).
@@ -356,8 +417,10 @@ impl Blueprint {
         if ratio > max_pct {
             Err(FrameworkError::validation(format!(
                 "ManualProse ratio {:.1}% exceeds cap of {:.0}% ({} manual / {} total leaves)",
-                ratio * 100.0, max_pct * 100.0,
-                self.leaf_counts().1, self.leaf_counts().0,
+                ratio * 100.0,
+                max_pct * 100.0,
+                self.leaf_counts().1,
+                self.leaf_counts().0,
             )))
         } else {
             Ok(())
@@ -371,7 +434,11 @@ impl Blueprint {
     /// Produce a JSON-serializable status summary.
     pub fn status_summary(&self) -> serde_json::Value {
         let (total, manual) = self.leaf_counts();
-        let ratio = if total == 0 { 0.0 } else { manual as f64 / total as f64 };
+        let ratio = if total == 0 {
+            0.0
+        } else {
+            manual as f64 / total as f64
+        };
 
         let node_summaries: Vec<serde_json::Value> = self.nodes.iter().map(|(id, node)| {
             let st = self.status.get(id);
@@ -406,6 +473,7 @@ impl Blueprint {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     #[test]
@@ -420,8 +488,16 @@ mod tests {
     fn test_decompose_and() {
         let mut bp = Blueprint::new("inequality", "test");
         let children = vec![
-            DagNode::Leaf { id: "c1".into(), claim: "x >= 0".into(), backend: VerificationBackend::Z3 },
-            DagNode::Leaf { id: "c2".into(), claim: "y >= 0".into(), backend: VerificationBackend::SymPy },
+            DagNode::Leaf {
+                id: "c1".into(),
+                claim: "x >= 0".into(),
+                backend: VerificationBackend::Z3,
+            },
+            DagNode::Leaf {
+                id: "c2".into(),
+                claim: "y >= 0".into(),
+                backend: VerificationBackend::SymPy,
+            },
         ];
         assert!(bp.decompose("root", children, true).is_ok());
         assert_eq!(bp.nodes.len(), 3);
@@ -430,9 +506,11 @@ mod tests {
     #[test]
     fn test_decompose_all_manual_prose_rejected() {
         let mut bp = Blueprint::new("test", "test");
-        let children = vec![
-            DagNode::Leaf { id: "c1".into(), claim: "manual proof".into(), backend: VerificationBackend::ManualProse },
-        ];
+        let children = vec![DagNode::Leaf {
+            id: "c1".into(),
+            claim: "manual proof".into(),
+            backend: VerificationBackend::ManualProse,
+        }];
         let result = bp.decompose("root", children, true);
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("non-ManualProse"));
@@ -441,9 +519,11 @@ mod tests {
     #[test]
     fn test_backtrack() {
         let mut bp = Blueprint::new("goal", "test");
-        let children = vec![
-            DagNode::Leaf { id: "c1".into(), claim: "step 1".into(), backend: VerificationBackend::Z3 },
-        ];
+        let children = vec![DagNode::Leaf {
+            id: "c1".into(),
+            claim: "step 1".into(),
+            backend: VerificationBackend::Z3,
+        }];
         bp.decompose("root", children, false).unwrap();
         assert_eq!(bp.nodes.len(), 2);
         bp.backtrack("root").unwrap();
@@ -454,9 +534,21 @@ mod tests {
     fn test_manual_prose_ratio() {
         let mut bp = Blueprint::new("goal", "test");
         let children = vec![
-            DagNode::Leaf { id: "c1".into(), claim: "auto".into(), backend: VerificationBackend::Z3 },
-            DagNode::Leaf { id: "c2".into(), claim: "manual".into(), backend: VerificationBackend::ManualProse },
-            DagNode::Leaf { id: "c3".into(), claim: "auto2".into(), backend: VerificationBackend::SymPy },
+            DagNode::Leaf {
+                id: "c1".into(),
+                claim: "auto".into(),
+                backend: VerificationBackend::Z3,
+            },
+            DagNode::Leaf {
+                id: "c2".into(),
+                claim: "manual".into(),
+                backend: VerificationBackend::ManualProse,
+            },
+            DagNode::Leaf {
+                id: "c3".into(),
+                claim: "auto2".into(),
+                backend: VerificationBackend::SymPy,
+            },
         ];
         bp.decompose("root", children, false).unwrap();
         let (total, manual) = bp.leaf_counts();
@@ -469,8 +561,16 @@ mod tests {
     fn test_manual_prose_cap_exceeded() {
         let mut bp = Blueprint::new("goal", "test");
         let children = vec![
-            DagNode::Leaf { id: "c1".into(), claim: "m1".into(), backend: VerificationBackend::ManualProse },
-            DagNode::Leaf { id: "c2".into(), claim: "m2".into(), backend: VerificationBackend::ManualProse },
+            DagNode::Leaf {
+                id: "c1".into(),
+                claim: "m1".into(),
+                backend: VerificationBackend::ManualProse,
+            },
+            DagNode::Leaf {
+                id: "c2".into(),
+                claim: "m2".into(),
+                backend: VerificationBackend::ManualProse,
+            },
         ];
         // Use OrNode (no non-ManualProse constraint for OR)
         bp.decompose("root", children, false).unwrap();
@@ -482,8 +582,16 @@ mod tests {
     fn test_verify_or_node() {
         let mut bp = Blueprint::new("goal", "test");
         let children = vec![
-            DagNode::Leaf { id: "c1".into(), claim: "via A".into(), backend: VerificationBackend::Z3 },
-            DagNode::Leaf { id: "c2".into(), claim: "via B".into(), backend: VerificationBackend::SymPy },
+            DagNode::Leaf {
+                id: "c1".into(),
+                claim: "via A".into(),
+                backend: VerificationBackend::Z3,
+            },
+            DagNode::Leaf {
+                id: "c2".into(),
+                claim: "via B".into(),
+                backend: VerificationBackend::SymPy,
+            },
         ];
         bp.decompose("root", children, false).unwrap();
         bp.verify().unwrap();
@@ -498,8 +606,16 @@ mod tests {
     fn test_verify_and_node() {
         let mut bp = Blueprint::new("goal", "test");
         let children = vec![
-            DagNode::Leaf { id: "c1".into(), claim: "auto".into(), backend: VerificationBackend::Z3 },
-            DagNode::Leaf { id: "c2".into(), claim: "manual".into(), backend: VerificationBackend::ManualProse },
+            DagNode::Leaf {
+                id: "c1".into(),
+                claim: "auto".into(),
+                backend: VerificationBackend::Z3,
+            },
+            DagNode::Leaf {
+                id: "c2".into(),
+                claim: "manual".into(),
+                backend: VerificationBackend::ManualProse,
+            },
         ];
         bp.decompose("root", children, true).unwrap();
         bp.verify().unwrap();
@@ -521,9 +637,11 @@ mod tests {
     #[test]
     fn test_status_summary() {
         let mut bp = Blueprint::new("test inequality", "ineq_test");
-        let children = vec![
-            DagNode::Leaf { id: "c1".into(), claim: "x >= 0".into(), backend: VerificationBackend::Z3 },
-        ];
+        let children = vec![DagNode::Leaf {
+            id: "c1".into(),
+            claim: "x >= 0".into(),
+            backend: VerificationBackend::Z3,
+        }];
         bp.decompose("root", children, false).unwrap();
         bp.verify().unwrap();
         let summary = bp.status_summary();

@@ -22,7 +22,10 @@ fn rust_contracts_doc_no_longer_uses_stale_transition_wording() {
 #[test]
 fn host_and_contract_docs_avoid_stale_codex_wording() {
     let root = project_root();
-    let mut paths = vec![doc_registry::DOC_ARCHITECTURE.to_string(), doc_registry::AGENTS_MD.to_string()];
+    let mut paths = vec![
+        doc_registry::DOC_ARCHITECTURE.to_string(),
+        doc_registry::AGENTS_MD.to_string(),
+    ];
     let hosts_dir = root.join("docs/hosts");
     if hosts_dir.is_dir() {
         for entry in std::fs::read_dir(&hosts_dir).expect("read docs/hosts") {

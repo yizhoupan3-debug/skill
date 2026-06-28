@@ -3,16 +3,20 @@
 //! User-facing layer over the Task Engine: define todo → view todo → complete todo.
 
 use super::*;
-use core_state::task_ledger::{append_transaction_assuming_l1_held, LedgerTransaction};
-use core_state::transition_validation::{validate_transition, TaskTransition};
+use core_errors::FrameworkError;
+use core_state::task_ledger::{LedgerTransaction, append_transaction_assuming_l1_held};
+use core_state::transition_validation::{TaskTransition, validate_transition};
 use core_state_utils::task_write_lock::apply_task_ledger_mutation;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::path::Path;
 
 /// Create a new task: ensure directory, set focus, append `task_created` ledger entry.
 ///
 /// Idempotent: if `task_id` directory already has a `TASK_LEDGER.jsonl`, returns early.
-pub(crate) fn tool_task_create(arguments: &Value, repo_root: &Path) -> std::result::Result<String, String> {
+pub(crate) fn tool_task_create(
+    arguments: &Value,
+    repo_root: &Path,
+) -> std::result::Result<String, String> {
     let task_id = arguments
         .get("task_id")
         .and_then(Value::as_str)
@@ -86,28 +90,56 @@ pub(crate) fn tool_task_list(repo_root: &Path) -> std::result::Result<String, St
         // Read from GOAL_STATE.json (TASK_STATE.json removed in Wave 2b).
         let goal_path = task_dir.join("GOAL_STATE.json");
 
-        let (status, goal_summary, has_evidence, goal_type, iteration_count) = if goal_path.is_file() {
-            let raw = fs::read_to_string(&goal_path).unwrap_or_default();
-            let v: Value = serde_json::from_str(&raw).unwrap_or(json!({}));
-            let status = v.get("status").and_then(Value::as_str).unwrap_or("unknown").to_string();
-            let goal_summary = v.get("goal").and_then(Value::as_str).unwrap_or("").to_string();
-            let evidence_path = task_dir.join("EVIDENCE_INDEX.json");
-            let has_evidence = evidence_path.is_file()
-                && fs::read_to_string(&evidence_path)
-                    .ok()
-                    .and_then(|raw| serde_json::from_str::<Value>(&raw).ok())
-                    .and_then(|v| {
-                        v.get("artifacts")
-                            .and_then(Value::as_array)
-                            .map(|a| !a.is_empty())
-                    })
-                    .unwrap_or(false);
-            let goal_type = v.get("goal_type").and_then(Value::as_str).unwrap_or("").to_string();
-            let iteration_count = v.get("iteration_count").and_then(Value::as_u64).unwrap_or(0);
-            (status, goal_summary, has_evidence, goal_type, iteration_count)
-        } else {
-            ("created".to_string(), String::new(), false, String::new(), 0)
-        };
+        let (status, goal_summary, has_evidence, goal_type, iteration_count) =
+            if goal_path.is_file() {
+                let raw = fs::read_to_string(&goal_path).unwrap_or_default();
+                let v: Value = serde_json::from_str(&raw).unwrap_or(json!({}));
+                let status = v
+                    .get("status")
+                    .and_then(Value::as_str)
+                    .unwrap_or("unknown")
+                    .to_string();
+                let goal_summary = v
+                    .get("goal")
+                    .and_then(Value::as_str)
+                    .unwrap_or("")
+                    .to_string();
+                let evidence_path = task_dir.join("EVIDENCE_INDEX.json");
+                let has_evidence = evidence_path.is_file()
+                    && fs::read_to_string(&evidence_path)
+                        .ok()
+                        .and_then(|raw| serde_json::from_str::<Value>(&raw).ok())
+                        .and_then(|v| {
+                            v.get("artifacts")
+                                .and_then(Value::as_array)
+                                .map(|a| !a.is_empty())
+                        })
+                        .unwrap_or(false);
+                let goal_type = v
+                    .get("goal_type")
+                    .and_then(Value::as_str)
+                    .unwrap_or("")
+                    .to_string();
+                let iteration_count = v
+                    .get("iteration_count")
+                    .and_then(Value::as_u64)
+                    .unwrap_or(0);
+                (
+                    status,
+                    goal_summary,
+                    has_evidence,
+                    goal_type,
+                    iteration_count,
+                )
+            } else {
+                (
+                    "created".to_string(),
+                    String::new(),
+                    false,
+                    String::new(),
+                    0,
+                )
+            };
 
         tasks.push(json!({
             "task_id": task_id,
@@ -132,7 +164,10 @@ pub(crate) fn tool_task_list(repo_root: &Path) -> std::result::Result<String, St
 
 /// Complete a task. If GOAL_STATE exists, delegates to `framework_goal_drive(complete)`.
 /// Otherwise, neutralizes pointers and appends `task_completed` ledger entry.
-pub(crate) fn tool_task_complete(arguments: &Value, repo_root: &Path) -> std::result::Result<String, String> {
+pub(crate) fn tool_task_complete(
+    arguments: &Value,
+    repo_root: &Path,
+) -> std::result::Result<String, String> {
     let task_id = arguments
         .get("task_id")
         .and_then(Value::as_str)
@@ -167,7 +202,10 @@ pub(crate) fn tool_task_complete(arguments: &Value, repo_root: &Path) -> std::re
     // No GOAL_STATE → evidence check + pointer neutralization + ledger
     let transition_v = validate_transition(repo_root, &task_id, TaskTransition::Complete);
     if !transition_v.passed {
-        return Err(format!("task_complete blocked by evidence gate: {}", transition_v.reason));
+        return Err(format!(
+            "task_complete blocked by evidence gate: {}",
+            transition_v.reason
+        ));
     }
     apply_task_ledger_mutation(repo_root, || {
         core_state::state_manager::neutralize_task_pointers_for_task(
@@ -210,7 +248,10 @@ pub(crate) fn tool_task_complete(arguments: &Value, repo_root: &Path) -> std::re
 /// with concurrent `tool_task_focus` or `neutralize_task_pointers_for_task`
 /// (called from `tool_task_complete` / `framework_goal_drive complete`)
 /// on the shared `TASK_POINTERS.json`.
-pub(crate) fn tool_task_focus(arguments: &Value, repo_root: &Path) -> std::result::Result<String, String> {
+pub(crate) fn tool_task_focus(
+    arguments: &Value,
+    repo_root: &Path,
+) -> std::result::Result<String, String> {
     let task_id = arguments
         .get("task_id")
         .and_then(Value::as_str)
@@ -260,10 +301,15 @@ pub(crate) fn tool_task_focus(arguments: &Value, repo_root: &Path) -> std::resul
 
 /// Advance the task chain to the next task.
 /// Reads TASK_CHAIN.json, marks current as completed, switches focus to next.
-pub(crate) fn tool_task_chain_advance(_arguments: &Value, repo_root: &Path) -> std::result::Result<String, String> {
+pub(crate) fn tool_task_chain_advance(
+    _arguments: &Value,
+    repo_root: &Path,
+) -> std::result::Result<String, String> {
     let chain_path = repo_root.join("artifacts/current/TASK_CHAIN.json");
     if !chain_path.is_file() {
-        return Err("TASK_CHAIN.json not found — create one first to use task_chain_advance".to_string());
+        return Err(
+            "TASK_CHAIN.json not found — create one first to use task_chain_advance".to_string(),
+        );
     }
 
     // Goals always follow loop semantics (GoalType::Linear removed in v10).
@@ -275,21 +321,25 @@ pub(crate) fn tool_task_chain_advance(_arguments: &Value, repo_root: &Path) -> s
             "status": "loop_goal_skipped",
             "message": "current task follows loop semantics — task chain advance skipped",
             "task_id": tid,
-        }).to_string());
+        })
+        .to_string());
     }
 
     // Wrap the read-modify-write cycle in the task lock to prevent concurrent
     // chain_advance calls from corrupting TASK_CHAIN.json.
     let repo_root_owned = repo_root.to_path_buf();
     let result = apply_task_ledger_mutation(repo_root, || {
-        let raw = std::fs::read_to_string(&repo_root_owned.join("artifacts/current/TASK_CHAIN.json"))
-            .map_err(|e| format!("read TASK_CHAIN.json: {e}"))?;
-        let mut chain: Value = serde_json::from_str(&raw).map_err(|e| format!("parse TASK_CHAIN.json: {e}"))?;
+        let raw =
+            std::fs::read_to_string(&repo_root_owned.join("artifacts/current/TASK_CHAIN.json"))
+                .map_err(FrameworkError::Io)?;
+        let mut chain: Value = serde_json::from_str(&raw).map_err(FrameworkError::Json)?;
         let current_index = chain["current_index"].as_u64().unwrap_or(0) as usize;
         let tasks_len = chain["tasks"].as_array().map(|a| a.len()).unwrap_or(0);
 
         if current_index >= tasks_len {
-            return Err("all tasks in chain are completed — no task to advance to".to_string());
+            return Err(FrameworkError::validation(
+                "all tasks in chain are completed — no task to advance to",
+            ));
         }
 
         // Extract next task info before any writes (avoids borrow conflicts)
@@ -297,9 +347,16 @@ pub(crate) fn tool_task_chain_advance(_arguments: &Value, repo_root: &Path) -> s
         let (next_id, next_title, all_complete) = if next >= tasks_len {
             (None, None, true)
         } else {
-            let tasks = chain["tasks"].as_array().ok_or("TASK_CHAIN.json: 'tasks' is not an array")?;
+            let tasks = chain["tasks"].as_array().ok_or_else(|| {
+                FrameworkError::config("TASK_CHAIN.json: 'tasks' is not an array")
+            })?;
             let next_obj = &tasks[next];
-            let nid = next_obj["task_id"].as_str().ok_or("TASK_CHAIN.json: next task missing 'task_id'")?.to_string();
+            let nid = next_obj["task_id"]
+                .as_str()
+                .ok_or_else(|| {
+                    FrameworkError::config("TASK_CHAIN.json: next task missing 'task_id'")
+                })?
+                .to_string();
             let ntitle = next_obj["title"].as_str().unwrap_or(&nid).to_string();
             (Some(nid), Some(ntitle), false)
         };
@@ -316,16 +373,18 @@ pub(crate) fn tool_task_chain_advance(_arguments: &Value, repo_root: &Path) -> s
         if all_complete {
             chain["current_index"] = json!(tasks_len);
             let path = repo_root_owned.join("artifacts/current/TASK_CHAIN.json");
-            core_state_utils::atomic_write::write_atomic_json(&path, &chain)
-                .map_err(|e| format!("write TASK_CHAIN.json: {e}"))?;
+            core_state_utils::atomic_write::write_atomic_json(&path, &chain)?;
             return Ok(json!({
                 "ok": true,
                 "status": "chain_complete",
                 "message": "all tasks in chain completed",
-            }).to_string());
+            })
+            .to_string());
         }
 
+        #[allow(clippy::unwrap_used)]
         let next_id = next_id.unwrap();
+        #[allow(clippy::unwrap_used)]
         let next_title = next_title.unwrap();
 
         // Mark next as running
@@ -338,8 +397,7 @@ pub(crate) fn tool_task_chain_advance(_arguments: &Value, repo_root: &Path) -> s
         }
         chain["current_index"] = json!(next);
         let path = repo_root_owned.join("artifacts/current/TASK_CHAIN.json");
-        core_state_utils::atomic_write::write_atomic_json(&path, &chain)
-            .map_err(|e| format!("write TASK_CHAIN.json: {e}"))?;
+        core_state_utils::atomic_write::write_atomic_json(&path, &chain)?;
 
         // Atomically switch focus to the next task
         core_state::state_manager::set_task_focus(&repo_root_owned, &next_id, &next_title)?;
@@ -348,13 +406,15 @@ pub(crate) fn tool_task_chain_advance(_arguments: &Value, repo_root: &Path) -> s
             "ok": true,
             "next_task_id": next_id,
             "next_title": next_title,
-        }).to_string())
+        })
+        .to_string())
     })?;
     Ok(result)
 }
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use std::time::{SystemTime, UNIX_EPOCH};
 

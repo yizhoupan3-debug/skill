@@ -75,7 +75,9 @@ pub fn parse_bibtex_to_json(text: &str) -> Vec<serde_json::Value> {
         let abs_at = pos + at_pos;
         // Match @type{ or @type(
         let after_at = &text[abs_at + 1..];
-        let type_end = after_at.find(|c: char| !c.is_alphanumeric() && c != '_').unwrap_or(after_at.len());
+        let type_end = after_at
+            .find(|c: char| !c.is_alphanumeric() && c != '_')
+            .unwrap_or(after_at.len());
         if type_end == 0 {
             pos = abs_at + 1;
             continue;
@@ -86,7 +88,11 @@ pub fn parse_bibtex_to_json(text: &str) -> Vec<serde_json::Value> {
             pos = abs_at + 1;
             continue;
         }
-        let open_char = if after_type.starts_with('{') { '{' } else { '(' };
+        let open_char = if after_type.starts_with('{') {
+            '{'
+        } else {
+            '('
+        };
         let close_char = if open_char == '{' { '}' } else { ')' };
         let body_start = abs_at + 1 + (after_at.len() - after_type.len()) + 1;
 
@@ -166,6 +172,7 @@ pub fn parse_bibtex_to_json(text: &str) -> Vec<serde_json::Value> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     #[test]
@@ -211,8 +218,14 @@ mod tests {
         assert_eq!(entry["entry_type"], "article");
         assert_eq!(entry["key"], "smith2024");
         let fields = entry["fields"].as_object().unwrap();
-        assert_eq!(fields.get("author").and_then(|v| v.as_str()), Some("Smith, Jane"));
-        assert_eq!(fields.get("title").and_then(|v| v.as_str()), Some("A Great Paper"));
+        assert_eq!(
+            fields.get("author").and_then(|v| v.as_str()),
+            Some("Smith, Jane")
+        );
+        assert_eq!(
+            fields.get("title").and_then(|v| v.as_str()),
+            Some("A Great Paper")
+        );
         assert_eq!(fields.get("year").and_then(|v| v.as_str()), Some("2024"));
     }
 
@@ -226,8 +239,14 @@ mod tests {
         let entry = &entries[0];
         let fields = entry["fields"].as_object().unwrap();
         let author = fields.get("author").and_then(|v| v.as_str()).unwrap();
-        assert!(author.contains("Żołnierz"), "Polish chars should survive ascii truncation bug: {author}");
-        assert!(author.contains("Nguyễn"), "Vietnamese chars should survive: {author}");
+        assert!(
+            author.contains("Żołnierz"),
+            "Polish chars should survive ascii truncation bug: {author}"
+        );
+        assert!(
+            author.contains("Nguyễn"),
+            "Vietnamese chars should survive: {author}"
+        );
     }
 
     #[test]

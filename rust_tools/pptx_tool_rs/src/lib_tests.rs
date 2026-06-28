@@ -7,10 +7,7 @@ mod tests {
     #[test]
     fn parse_slide_range_single_and_span() {
         assert_eq!(parse_slide_range("3", 10).unwrap(), vec![3]);
-        assert_eq!(
-            parse_slide_range("1-3", 10).unwrap(),
-            vec![1, 2, 3]
-        );
+        assert_eq!(parse_slide_range("1-3", 10).unwrap(), vec![1, 2, 3]);
         assert!(parse_slide_range("0", 5).is_err());
         assert!(parse_slide_range("11", 10).is_err());
         assert!(parse_slide_range("3-2", 10).is_err());

@@ -2,20 +2,20 @@ pub mod batch;
 pub mod mcp;
 pub mod schema;
 
-use anyhow::{anyhow, bail, Context, Result};
-use calamine::{open_workbook, Data, Reader as CalamineReader, Xlsx};
-use quick_xml::events::{BytesStart, Event};
+use anyhow::{Context, Result, anyhow, bail};
+use calamine::{Data, Reader as CalamineReader, Xlsx, open_workbook};
 use quick_xml::Reader as XmlReader;
+use quick_xml::events::{BytesStart, Event};
 use serde::Serialize;
 use std::collections::HashMap;
 use std::fmt::Write as _;
-use std::fs::{self, canonicalize, File};
+use std::fs::{self, File, canonicalize};
 use std::io::{BufWriter, Read, Seek};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use tempfile::TempDir;
-use zip::result::ZipError;
 use zip::ZipArchive;
+use zip::result::ZipError;
 
 pub use mcp_stdio_common::util::{
     expand_path, file_sha256, has_extension, run_command, run_command_capture, soffice_convert_cmd,
@@ -1526,7 +1526,13 @@ fn print_xlsx_read_text(output: &XlsxReadOutput) {
     print!("{}", xlsx_read_text_string(output));
 }
 
-pub fn read_xlsx(input: &str, max_rows: usize, sheets: &[String], as_json: bool, compact: bool) -> Result<()> {
+pub fn read_xlsx(
+    input: &str,
+    max_rows: usize,
+    sheets: &[String],
+    as_json: bool,
+    compact: bool,
+) -> Result<()> {
     let output = read_xlsx_content(Path::new(input), max_rows, sheets)?;
     if as_json {
         let payload = if compact {
@@ -1971,7 +1977,6 @@ pub struct RenderDocxArgs {
 // ---------------------------------------------------------------------------
 // Tests (from original main.rs)
 // ---------------------------------------------------------------------------
-
 
 #[cfg(test)]
 #[path = "lib_tests.rs"]

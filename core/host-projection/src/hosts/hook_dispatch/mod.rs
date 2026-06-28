@@ -160,7 +160,9 @@ pub trait HostHookDispatcher: HostHookConfig {
             review_required,
             core_policy::hook_common::has_override(&prompt),
         );
-        if contexts.is_empty() { None } else {
+        if contexts.is_empty() {
+            None
+        } else {
             Some(HookOutput::AdditionalContext(contexts.join("\n")))
         }
     }
@@ -177,9 +179,15 @@ pub trait HostHookDispatcher: HostHookConfig {
         // Auto-register subagent in health registry when a subagent tool is called.
         // This covers hosts (like Claude) that don't fire SubagentStart/SubagentStop events.
         if core_policy::subagent::is_subagent_tool(&normalized) {
-            let agent_id = extract_subagent_id_from_payload(event.payload)
-                .unwrap_or_else(|| format!("agent-{}", std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_nanos()));
+            let agent_id = extract_subagent_id_from_payload(event.payload).unwrap_or_else(|| {
+                format!(
+                    "agent-{}",
+                    std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_nanos()
+                )
+            });
             let now = framework_kernel::time::now_iso();
             let _payload = serde_json::json!({
                 "operation": "agent_register",
@@ -193,7 +201,8 @@ pub trait HostHookDispatcher: HostHookConfig {
         // Auto-checkpoint: if there's an active goal and the tool call succeeded,
         // record a basic progress checkpoint (advisory, best-effort).
         if crate::hooks::post_tool_call_succeeded(event.payload)
-            && let Ok(Some(goal)) = core_state::state_manager::read_goal_state(event.repo_root, None)
+            && let Ok(Some(goal)) =
+                core_state::state_manager::read_goal_state(event.repo_root, None)
             && core_state::state_manager::goal_state_requests_continuation(&goal)
         {
             let note = format!("auto-checkpoint: tool={normalized}");
@@ -237,20 +246,21 @@ pub trait HostHookDispatcher: HostHookConfig {
 
         // Detect stale goals from a previous session and warn the user
         if let Ok(Some(goal)) = core_state::state_manager::read_goal_state(event.repo_root, None)
-            && goal.get("stale").and_then(Value::as_bool).unwrap_or(false) {
-                let stale_reason = goal
-                    .get("stale_reason")
-                    .and_then(Value::as_str)
-                    .unwrap_or("previous session");
-                let goal_text = goal
-                    .get("goal")
-                    .and_then(Value::as_str)
-                    .unwrap_or("(unnamed)");
-                contexts.push(format!(
-                    "[Continuity] 检测到前一个 session 的未完成 Goal: 「{goal_text}」({stale_reason})。\
+            && goal.get("stale").and_then(Value::as_bool).unwrap_or(false)
+        {
+            let stale_reason = goal
+                .get("stale_reason")
+                .and_then(Value::as_str)
+                .unwrap_or("previous session");
+            let goal_text = goal
+                .get("goal")
+                .and_then(Value::as_str)
+                .unwrap_or("(unnamed)");
+            contexts.push(format!(
+                "[Continuity] 检测到前一个 session 的未完成 Goal: 「{goal_text}」({stale_reason})。\
                      如需清除请调用 goal_state_manage(operation=clear)。"
-                ));
-            }
+            ));
+        }
 
         if contexts.is_empty() {
             None
@@ -266,9 +276,15 @@ pub trait HostHookDispatcher: HostHookConfig {
 
     /// SubagentStart: register agent in session-supervisor health registry.
     fn handle_subagent_start(&self, event: &HookEvent) -> Option<HookOutput> {
-        let agent_id = extract_subagent_id_from_payload(event.payload)
-            .unwrap_or_else(|| format!("agent-{}", std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_nanos()));
+        let agent_id = extract_subagent_id_from_payload(event.payload).unwrap_or_else(|| {
+            format!(
+                "agent-{}",
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_nanos()
+            )
+        });
         let host_id = self.host_id();
         let now = framework_kernel::time::now_iso();
         let _payload = serde_json::json!({
@@ -323,10 +339,12 @@ pub trait HostHookDispatcher: HostHookConfig {
         // Inject pending session-start audit into the first event after
         // SessionStart — not into SessionStart itself. Written by
         // dispatch_hook_command(), consumed once here.
-        if output.is_none() && normalized.as_ref() != "sessionstart"
-            && let Some(audit) = self.take_audit_result(event.repo_root) {
-                return Some(HookOutput::AdditionalContext(audit));
-            }
+        if output.is_none()
+            && normalized.as_ref() != "sessionstart"
+            && let Some(audit) = self.take_audit_result(event.repo_root)
+        {
+            return Some(HookOutput::AdditionalContext(audit));
+        }
         output
     }
 }
@@ -392,10 +410,10 @@ fn build_task_list_summary_context(repo_root: &Path) -> Option<String> {
 
 pub use core_policy::subagent::{SUBAGENT_TOOL_NAMES, is_subagent_tool};
 
-pub use core_policy::session_key::SESSION_KEY_CWD_FIELDS;
 pub use core_policy::session_key::SESSION_ID_FIELDS;
-pub use core_policy::session_key::TOOL_INPUT_SESSION_ID_FIELDS;
+pub use core_policy::session_key::SESSION_KEY_CWD_FIELDS;
 pub use core_policy::session_key::TOOL_INPUT_METADATA_SESSION_ID_FIELDS;
+pub use core_policy::session_key::TOOL_INPUT_SESSION_ID_FIELDS;
 
 pub use crate::hosts::generic_config::GenericHostConfig;
 pub use crate::hosts::host_state::{

@@ -17,8 +17,9 @@ pub fn validate_and_resolve_web_fetch_url(
     url: &str,
 ) -> Result<(reqwest::Url, Vec<std::net::SocketAddr>)> {
     let trimmed = url.trim();
-    let parsed = reqwest::Url::parse(trimmed)
-        .map_err(|e| FrameworkError::validation(format!("web_fetch invalid URL for DNS pin: {url}: {e}")))?;
+    let parsed = reqwest::Url::parse(trimmed).map_err(|e| {
+        FrameworkError::validation(format!("web_fetch invalid URL for DNS pin: {url}: {e}"))
+    })?;
     if !matches!(parsed.scheme(), "http" | "https") {
         return Err(FrameworkError::validation(format!(
             "web_fetch only supports http(s) URLs: {url}"
@@ -26,9 +27,7 @@ pub fn validate_and_resolve_web_fetch_url(
     }
     let host = parsed
         .host_str()
-        .ok_or_else(|| {
-            FrameworkError::validation(format!("web_fetch URL missing host: {url}"))
-        })?;
+        .ok_or_else(|| FrameworkError::validation(format!("web_fetch URL missing host: {url}")))?;
     validate_web_fetch_host_basic(host)?;
     if let Some(port) = parsed.port() {
         validate_web_fetch_port(port)?;
@@ -42,9 +41,9 @@ pub fn validate_and_resolve_web_fetch_url(
 }
 
 pub fn resolve_web_fetch_redirect(base: &reqwest::Url, location: &str) -> Result<String> {
-    let next = base
-        .join(location.trim())
-        .map_err(|e| FrameworkError::validation(format!("web_fetch invalid redirect location: {e}")))?;
+    let next = base.join(location.trim()).map_err(|e| {
+        FrameworkError::validation(format!("web_fetch invalid redirect location: {e}"))
+    })?;
     let next_str = next.to_string();
     // Use validate_and_resolve to close DNS-rebind TOCTOU — single pass DNS resolve + IP check.
     // This prevents the redirect target from re-resolving to a private IP between validation
@@ -66,9 +65,7 @@ fn validate_web_fetch_port(port: u16) -> Result<()> {
 pub(crate) fn validate_web_fetch_host_basic(host: &str) -> Result<()> {
     let host = host.trim().trim_end_matches('.');
     if host.is_empty() {
-        return Err(FrameworkError::validation(
-            "web_fetch URL missing host",
-        ));
+        return Err(FrameworkError::validation("web_fetch URL missing host"));
     }
     let lower: Cow<'_, str> = if host.bytes().all(|b| !b.is_ascii_uppercase()) {
         Cow::Borrowed(host)
@@ -109,9 +106,9 @@ fn validate_web_fetch_host(host: &str) -> Result<()> {
         .strip_prefix('[')
         .and_then(|h| h.strip_suffix(']'))
         .unwrap_or(host);
-    let addrs = (lookup_host, 443u16)
-        .to_socket_addrs()
-        .map_err(|err| FrameworkError::validation(format!("web_fetch DNS lookup failed for {host}: {err}")))?;
+    let addrs = (lookup_host, 443u16).to_socket_addrs().map_err(|err| {
+        FrameworkError::validation(format!("web_fetch DNS lookup failed for {host}: {err}"))
+    })?;
     let mut any = false;
     for addr in addrs {
         any = true;
@@ -167,17 +164,16 @@ fn is_forbidden_web_fetch_ipv6(ip: Ipv6Addr) -> bool {
 
 /// Resolves `host` and returns all `SocketAddr` entries that pass the SSRF guard.
 /// Used to pin DNS results before the HTTP request, preventing DNS rebinding.
-pub fn resolve_web_fetch_addresses(
-    host: &str,
-    port: u16,
-) -> Result<Vec<std::net::SocketAddr>> {
+pub fn resolve_web_fetch_addresses(host: &str, port: u16) -> Result<Vec<std::net::SocketAddr>> {
     let lookup_host = host
         .strip_prefix('[')
         .and_then(|h| h.strip_suffix(']'))
         .unwrap_or(host);
     let addrs: Vec<std::net::SocketAddr> = (lookup_host, port)
         .to_socket_addrs()
-        .map_err(|err| FrameworkError::validation(format!("web_fetch DNS lookup failed for {host}: {err}")))?
+        .map_err(|err| {
+            FrameworkError::validation(format!("web_fetch DNS lookup failed for {host}: {err}"))
+        })?
         .collect();
     if addrs.is_empty() {
         return Err(FrameworkError::validation(format!(
@@ -209,9 +205,9 @@ pub fn validate_browser_open_url(url: &str) -> Result<()> {
             url
         )));
     }
-    let host = parsed
-        .host_str()
-        .ok_or_else(|| FrameworkError::validation(format!("browser_open URL missing host: {url}")))?;
+    let host = parsed.host_str().ok_or_else(|| {
+        FrameworkError::validation(format!("browser_open URL missing host: {url}"))
+    })?;
     validate_web_fetch_host(host)?;
     if let Some(port) = parsed.port() {
         validate_web_fetch_port(port)?;
@@ -221,6 +217,7 @@ pub fn validate_browser_open_url(url: &str) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     #[test]

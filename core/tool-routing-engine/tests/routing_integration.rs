@@ -1,5 +1,6 @@
 #[cfg(test)]
 mod routing_integration_tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use mcp_tool_registry::McpToolRecord;
 
     fn test_record(slug: &str, display_name: &str, keywords: &[&str]) -> McpToolRecord {
@@ -21,19 +22,32 @@ mod routing_integration_tests {
     fn make_records() -> Vec<McpToolRecord> {
         vec![
             test_record("pdf-read", "PDF 文本提取", &["pdf", "PDF", "文档", "论文"]),
-            test_record("browser-screenshot", "浏览器截图", &["截图", "浏览器", "screenshot"]),
+            test_record(
+                "browser-screenshot",
+                "浏览器截图",
+                &["截图", "浏览器", "screenshot"],
+            ),
             test_record("browser-click", "浏览器点击", &["点击", "click"]),
             test_record("web-fetch", "网页抓取", &["网页", "fetch", "url", "抓取"]),
-            test_record("codegraph-search", "代码图搜索", &["代码", "搜索", "codegraph"]),
+            test_record(
+                "codegraph-search",
+                "代码图搜索",
+                &["代码", "搜索", "codegraph"],
+            ),
             test_record("task-create", "任务创建", &["任务", "task", "创建"]),
-            test_record("knowledge-search", "知识搜索", &["知识", "knowledge", "学术"]),
+            test_record(
+                "knowledge-search",
+                "知识搜索",
+                &["知识", "knowledge", "学术"],
+            ),
         ]
     }
 
     #[test]
     fn route_exact_match() {
         let records = make_records();
-        let decision = tool_routing_engine::routing::route_tool_from_records("pdf-read", &records, None);
+        let decision =
+            tool_routing_engine::routing::route_tool_from_records("pdf-read", &records, None);
         assert!(decision.is_some());
         assert_eq!(decision.unwrap().selected_tool, "pdf-read");
     }
@@ -41,7 +55,8 @@ mod routing_integration_tests {
     #[test]
     fn route_chinese_keyword() {
         let records = make_records();
-        let decision = tool_routing_engine::routing::route_tool_from_records("帮我截图", &records, None);
+        let decision =
+            tool_routing_engine::routing::route_tool_from_records("帮我截图", &records, None);
         assert!(decision.is_some());
         assert_eq!(decision.unwrap().selected_tool, "browser-screenshot");
     }
@@ -49,7 +64,8 @@ mod routing_integration_tests {
     #[test]
     fn route_browser_action() {
         let records = make_records();
-        let decision = tool_routing_engine::routing::route_tool_from_records("click 按钮", &records, None);
+        let decision =
+            tool_routing_engine::routing::route_tool_from_records("click 按钮", &records, None);
         assert!(decision.is_some());
         assert_eq!(decision.unwrap().selected_tool, "browser-click");
     }
@@ -57,7 +73,8 @@ mod routing_integration_tests {
     #[test]
     fn route_web_fetch() {
         let records = make_records();
-        let decision = tool_routing_engine::routing::route_tool_from_records("抓取网页内容", &records, None);
+        let decision =
+            tool_routing_engine::routing::route_tool_from_records("抓取网页内容", &records, None);
         assert!(decision.is_some());
         assert_eq!(decision.unwrap().selected_tool, "web-fetch");
     }
@@ -65,7 +82,8 @@ mod routing_integration_tests {
     #[test]
     fn route_code_search() {
         let records = make_records();
-        let decision = tool_routing_engine::routing::route_tool_from_records("搜索代码", &records, None);
+        let decision =
+            tool_routing_engine::routing::route_tool_from_records("搜索代码", &records, None);
         assert!(decision.is_some());
         assert_eq!(decision.unwrap().selected_tool, "codegraph-search");
     }
@@ -81,20 +99,27 @@ mod routing_integration_tests {
     #[test]
     fn route_empty_returns_none() {
         let records = make_records();
-        assert!(tool_routing_engine::routing::route_tool_from_records("", &records, None).is_none());
+        assert!(
+            tool_routing_engine::routing::route_tool_from_records("", &records, None).is_none()
+        );
     }
 
     #[test]
     fn route_host_filter() {
         let records = make_records();
-        let decision = tool_routing_engine::routing::route_tool_from_records("PDF 文档", &records, Some("cursor"));
+        let decision = tool_routing_engine::routing::route_tool_from_records(
+            "PDF 文档",
+            &records,
+            Some("cursor"),
+        );
         assert!(decision.is_none());
     }
 
     #[test]
     fn route_fuzzy_typo() {
         let records = make_records();
-        let decision = tool_routing_engine::routing::route_tool_from_records("screeenshot", &records, None);
+        let decision =
+            tool_routing_engine::routing::route_tool_from_records("screeenshot", &records, None);
         assert!(decision.is_some(), "typo should fuzzy-match");
         let d = decision.unwrap();
         assert!(d.fuzzy_match, "should be flagged as fuzzy match");
@@ -112,7 +137,10 @@ mod routing_integration_tests {
 
         for record in &records {
             assert!(!record.slug.is_empty(), "every tool must have a slug");
-            assert!(!record.display_name.is_empty(), "every tool must have a display_name");
+            assert!(
+                !record.display_name.is_empty(),
+                "every tool must have a display_name"
+            );
         }
     }
 
@@ -125,14 +153,15 @@ mod routing_integration_tests {
 
         for record in &records {
             // Skip tools excluded from routing (deprecated or no_routing)
-            if record.tool_flags.iter().any(|f| f == "deprecated" || f == "no_routing") {
+            if record
+                .tool_flags
+                .iter()
+                .any(|f| f == "deprecated" || f == "no_routing")
+            {
                 continue;
             }
-            let decision = tool_routing_engine::routing::route_tool_from_records(
-                &record.slug,
-                &records,
-                None,
-            );
+            let decision =
+                tool_routing_engine::routing::route_tool_from_records(&record.slug, &records, None);
             assert!(
                 decision.is_some(),
                 "tool '{}' should be reachable by exact slug match",

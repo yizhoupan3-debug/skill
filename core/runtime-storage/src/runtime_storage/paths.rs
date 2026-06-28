@@ -195,15 +195,17 @@ pub fn effective_storage_root_for_request(
     }
     let backend_family = normalized_backend_family(&request.backend_family);
     if matches!(backend_family.as_str(), "sqlite" | "sqlite3")
-        && let Some(db_path_str) = request.sqlite_db_path.as_deref() {
-            let trimmed = db_path_str.trim();
-            if !trimmed.is_empty()
-                && let Ok(normalized) = normalize_runtime_path(trimmed)
-                    && let Some(parent) = normalized.parent()
-                        && !parent.as_os_str().is_empty() {
-                            return Some(parent.display().to_string());
-                        }
+        && let Some(db_path_str) = request.sqlite_db_path.as_deref()
+    {
+        let trimmed = db_path_str.trim();
+        if !trimmed.is_empty()
+            && let Ok(normalized) = normalize_runtime_path(trimmed)
+            && let Some(parent) = normalized.parent()
+            && !parent.as_os_str().is_empty()
+        {
+            return Some(parent.display().to_string());
         }
+    }
     explicit_storage_root_override()
 }
 

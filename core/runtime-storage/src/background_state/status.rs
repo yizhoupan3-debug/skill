@@ -1,6 +1,6 @@
-use core_errors::FrameworkError;
 use super::types::*;
 use chrono::{DateTime, Utc};
+use core_errors::FrameworkError;
 
 /// Best-effort RFC3339 parse used by the reaper. Non-RFC3339 timestamps
 /// (legacy or hand-edited state) are treated as "unknown age" and skipped.
@@ -91,7 +91,10 @@ pub(super) fn validate_transition(
     if allowed {
         Ok(())
     } else {
-        Err(FrameworkError::validation(format!("Invalid background job transition: {:?} -> {:?}", previous_status, next_status)))
+        Err(FrameworkError::validation(format!(
+            "Invalid background job transition: {:?} -> {:?}",
+            previous_status, next_status
+        )))
     }
 }
 impl BackgroundRunStatus {
@@ -182,54 +185,79 @@ impl BackgroundJobStatusMutation {
             },
             Some(existing) => BackgroundRunStatus {
                 job_id: existing.job_id.clone(),
-                session_id: self.session_id.clone().or_else(|| existing.session_id.clone()),
+                session_id: self
+                    .session_id
+                    .clone()
+                    .or_else(|| existing.session_id.clone()),
                 status: self.status.clone(),
-                parallel_group_id: self.parallel_group_id.clone()
+                parallel_group_id: self
+                    .parallel_group_id
+                    .clone()
                     .or_else(|| existing.parallel_group_id.clone()),
-                lane_id: self.lane_id.clone()
-                    .or_else(|| existing.lane_id.clone()),
-                parent_job_id: self.parent_job_id.clone()
+                lane_id: self.lane_id.clone().or_else(|| existing.lane_id.clone()),
+                parent_job_id: self
+                    .parent_job_id
+                    .clone()
                     .or_else(|| existing.parent_job_id.clone()),
-                multitask_strategy: self.multitask_strategy
+                multitask_strategy: self
+                    .multitask_strategy
                     .clone()
                     .unwrap_or_else(|| existing.multitask_strategy.clone()),
-                result: self.result.clone()
-                    .or_else(|| existing.result.clone()),
-                error: self.error.clone()
-                    .or_else(|| existing.error.clone()),
+                result: self.result.clone().or_else(|| existing.result.clone()),
+                error: self.error.clone().or_else(|| existing.error.clone()),
                 created_at: existing.created_at.clone(),
                 updated_at: framework_kernel::time::now_iso(),
                 attempt: self.attempt.unwrap_or(existing.attempt),
                 retry_count: self.retry_count.unwrap_or(existing.retry_count),
                 max_attempts: self.max_attempts.unwrap_or(existing.max_attempts),
                 timeout_seconds: self.timeout_seconds.or(existing.timeout_seconds),
-                claimed_by: self.claimed_by.clone()
+                claimed_by: self
+                    .claimed_by
+                    .clone()
                     .or_else(|| existing.claimed_by.clone()),
-                claimed_at: self.claimed_at.clone()
+                claimed_at: self
+                    .claimed_at
+                    .clone()
                     .or_else(|| existing.claimed_at.clone()),
-                backoff_base_seconds: self.backoff_base_seconds
+                backoff_base_seconds: self
+                    .backoff_base_seconds
                     .unwrap_or(existing.backoff_base_seconds),
-                backoff_multiplier: self.backoff_multiplier
+                backoff_multiplier: self
+                    .backoff_multiplier
                     .unwrap_or(existing.backoff_multiplier),
-                max_backoff_seconds: self.max_backoff_seconds
-                    .or(existing.max_backoff_seconds),
-                backoff_seconds: self.backoff_seconds
-                    .or(existing.backoff_seconds),
-                next_retry_at: self.next_retry_at.clone()
+                max_backoff_seconds: self.max_backoff_seconds.or(existing.max_backoff_seconds),
+                backoff_seconds: self.backoff_seconds.or(existing.backoff_seconds),
+                next_retry_at: self
+                    .next_retry_at
+                    .clone()
                     .or_else(|| existing.next_retry_at.clone()),
-                retry_scheduled_at: self.retry_scheduled_at.clone()
+                retry_scheduled_at: self
+                    .retry_scheduled_at
+                    .clone()
                     .or_else(|| existing.retry_scheduled_at.clone()),
-                retry_claimed_at: self.retry_claimed_at.clone()
+                retry_claimed_at: self
+                    .retry_claimed_at
+                    .clone()
                     .or_else(|| existing.retry_claimed_at.clone()),
-                interrupt_requested_at: self.interrupt_requested_at.clone()
+                interrupt_requested_at: self
+                    .interrupt_requested_at
+                    .clone()
                     .or_else(|| existing.interrupt_requested_at.clone()),
-                interrupted_at: self.interrupted_at.clone()
+                interrupted_at: self
+                    .interrupted_at
+                    .clone()
                     .or_else(|| existing.interrupted_at.clone()),
-                last_attempt_started_at: self.last_attempt_started_at.clone()
+                last_attempt_started_at: self
+                    .last_attempt_started_at
+                    .clone()
                     .or_else(|| existing.last_attempt_started_at.clone()),
-                last_attempt_finished_at: self.last_attempt_finished_at.clone()
+                last_attempt_finished_at: self
+                    .last_attempt_finished_at
+                    .clone()
                     .or_else(|| existing.last_attempt_finished_at.clone()),
-                last_failure_at: self.last_failure_at.clone()
+                last_failure_at: self
+                    .last_failure_at
+                    .clone()
                     .or_else(|| existing.last_failure_at.clone()),
             },
         }

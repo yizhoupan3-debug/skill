@@ -9,8 +9,8 @@ use std::path::Path;
 
 use fr_utils::io_utils::validate_write_path;
 use rt_storage::runtime_envelope_ids::{
-    CHECKPOINT_RESUME_MANIFEST_AUTHORITY, CHECKPOINT_RESUME_MANIFEST_SCHEMA_VERSION,
     CHECKPOINT_MANIFEST_WRITE_AUTHORITY, CHECKPOINT_MANIFEST_WRITE_SCHEMA_VERSION,
+    CHECKPOINT_RESUME_MANIFEST_AUTHORITY, CHECKPOINT_RESUME_MANIFEST_SCHEMA_VERSION,
     RUNTIME_CONTROL_PLANE_AUTHORITY, TRACE_DESCRIPTOR_AUTHORITY, TRACE_DESCRIPTOR_SCHEMA_VERSION,
     TRANSPORT_BINDING_WRITE_AUTHORITY, TRANSPORT_BINDING_WRITE_SCHEMA_VERSION,
 };
@@ -278,9 +278,10 @@ pub fn build_checkpoint_resume_manifest(payload: Value) -> Result<Value, Framewo
         "control_plane": payload.get("control_plane").cloned().unwrap_or(Value::Null),
     });
     if let Some(updated_at) = optional_non_empty_string(&payload, "updated_at")
-        && let Some(map) = resume_manifest.as_object_mut() {
-            map.insert("updated_at".to_string(), Value::String(updated_at));
-        }
+        && let Some(map) = resume_manifest.as_object_mut()
+    {
+        map.insert("updated_at".to_string(), Value::String(updated_at));
+    }
     Ok(json!({
         "schema_version": CHECKPOINT_RESUME_MANIFEST_SCHEMA_VERSION,
         "authority": CHECKPOINT_RESUME_MANIFEST_AUTHORITY,
@@ -293,8 +294,9 @@ pub fn build_checkpoint_resume_manifest(payload: Value) -> Result<Value, Framewo
 fn write_json_payload(path: &Path, payload: &Value) -> Result<usize, FrameworkError> {
     let serialized = format!(
         "{}\n",
-        serde_json::to_string_pretty(payload)
-            .map_err(|err| FrameworkError::validation(format!("serialize persisted payload failed: {err}")))?
+        serde_json::to_string_pretty(payload).map_err(|err| FrameworkError::validation(
+            format!("serialize persisted payload failed: {err}")
+        ))?
     );
     write_text_payload(path, &serialized)
 }
@@ -368,8 +370,11 @@ mod tests {
 
     #[test]
     fn transport_payload_with_job_id_uses_job_stream_key() {
-        let payload =
-            build_trace_transport_payload(&json!({}), "sess-1".to_string(), Some("job-42".to_string()));
+        let payload = build_trace_transport_payload(
+            &json!({}),
+            "sess-1".to_string(),
+            Some("job-42".to_string()),
+        );
         assert_eq!(
             payload.get("stream_id").and_then(Value::as_str),
             Some("stream::job-42")
@@ -529,10 +534,7 @@ mod tests {
         let desc = build_trace_handoff_descriptor(input).expect("handoff");
         let handoff = &desc["handoff"];
         assert_eq!(handoff["checkpoint_backend_family"], "redis");
-        assert_eq!(
-            handoff["stream_id"],
-            "stream::transport-job"
-        );
+        assert_eq!(handoff["stream_id"], "stream::transport-job");
     }
 
     #[test]
@@ -582,8 +584,7 @@ mod tests {
 
     #[test]
     fn resume_manifest_requires_session_id() {
-        let err =
-            build_checkpoint_resume_manifest(json!({})).expect_err("missing session_id");
+        let err = build_checkpoint_resume_manifest(json!({})).expect_err("missing session_id");
         assert!(err.to_string().contains("session_id"));
     }
 
@@ -591,10 +592,7 @@ mod tests {
     fn resume_manifest_defaults_running_generation_zero() {
         let input = json!({"session_id": "sess-1"});
         let manifest = build_checkpoint_resume_manifest(input).expect("manifest");
-        assert_eq!(
-            manifest["resume_manifest"]["status"],
-            "running"
-        );
+        assert_eq!(manifest["resume_manifest"]["status"], "running");
         assert_eq!(manifest["resume_manifest"]["generation"], 0);
     }
 
@@ -619,7 +617,12 @@ mod tests {
     fn resume_manifest_top_level_schema() {
         let input = json!({"session_id": "sess-1"});
         let manifest = build_checkpoint_resume_manifest(input).expect("manifest");
-        assert!(manifest.get("schema_version").and_then(Value::as_str).is_some());
+        assert!(
+            manifest
+                .get("schema_version")
+                .and_then(Value::as_str)
+                .is_some()
+        );
         assert!(manifest.get("authority").and_then(Value::as_str).is_some());
         assert!(manifest.get("resume_manifest").is_some());
     }
@@ -659,24 +662,25 @@ mod tests {
     fn write_text_payload_rejects_unsafe_path() {
         let err = write_text_payload(Path::new("/nonexistent/test.txt"), "data")
             .expect_err("should reject");
-        assert!(!err.to_string().is_empty(), "error message must not be empty");
+        assert!(
+            !err.to_string().is_empty(),
+            "error message must not be empty"
+        );
     }
 
     // ── write_transport_binding_payload ──
 
     #[test]
     fn write_transport_binding_requires_path() {
-        let err =
-            write_transport_binding_payload(json!({"session_id": "sess-1"}))
-                .expect_err("missing path");
+        let err = write_transport_binding_payload(json!({"session_id": "sess-1"}))
+            .expect_err("missing path");
         assert!(err.to_string().contains("path"));
     }
 
     #[test]
     fn write_transport_binding_requires_session_id() {
-        let err =
-            write_transport_binding_payload(json!({"path": "/tmp/bind.json"}))
-                .expect_err("missing session_id");
+        let err = write_transport_binding_payload(json!({"path": "/tmp/bind.json"}))
+            .expect_err("missing session_id");
         assert!(err.to_string().contains("session_id"));
     }
 

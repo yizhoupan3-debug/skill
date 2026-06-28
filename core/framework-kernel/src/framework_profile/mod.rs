@@ -33,15 +33,19 @@ fn repo_scan_root() -> PathBuf {
 // ── load / validate / bundle ──
 
 pub fn load_framework_profile(path: &Path) -> Result<FrameworkProfileContract, FrameworkError> {
-    let text = fs::read_to_string(path)
-        .map_err(|err| FrameworkError::validation(format!("failed reading {}: {err}", path.display())))?;
-    let profile: FrameworkProfileContract = serde_json::from_str(&text)
-        .map_err(|err| FrameworkError::validation(format!("failed parsing {}: {err}", path.display())))?;
+    let text = fs::read_to_string(path).map_err(|err| {
+        FrameworkError::validation(format!("failed reading {}: {err}", path.display()))
+    })?;
+    let profile: FrameworkProfileContract = serde_json::from_str(&text).map_err(|err| {
+        FrameworkError::validation(format!("failed parsing {}: {err}", path.display()))
+    })?;
     validate_framework_profile(&profile)?;
     Ok(profile)
 }
 
-pub fn build_profile_bundle(profile: FrameworkProfileContract) -> Result<ProfileBundle, FrameworkError> {
+pub fn build_profile_bundle(
+    profile: FrameworkProfileContract,
+) -> Result<ProfileBundle, FrameworkError> {
     validate_framework_profile(&profile)?;
 
     let normalized_mcp_servers = normalize_mcp_servers(&profile.mcp_servers);
@@ -172,7 +176,10 @@ fn compile_workspace_bootstrap(profile: &FrameworkProfileContract) -> Map<String
     let default_skills = || {
         value_object([
             ("project_dir", Value::String("skills".to_string())),
-            ("user_dir", Value::String("${CODEX_HOME}/skills".to_string())),
+            (
+                "user_dir",
+                Value::String("${CODEX_HOME}/skills".to_string()),
+            ),
             ("source_dir", Value::String("skills".to_string())),
         ])
     };
@@ -189,7 +196,10 @@ fn compile_workspace_bootstrap(profile: &FrameworkProfileContract) -> Map<String
             Some(skills_val) => skills_val,
             None => default_skills(),
         };
-        match bootstrap.get_mut("resources").and_then(Value::as_object_mut) {
+        match bootstrap
+            .get_mut("resources")
+            .and_then(Value::as_object_mut)
+        {
             Some(res) => {
                 res.insert("skills".to_string(), skills);
             }
@@ -256,8 +266,6 @@ fn build_shared_contract(
     normalized_mcp_servers: &[Value],
     workspace_bootstrap: &Map<String, Value>,
 ) -> Map<String, Value> {
-
-
     let Value::Object(contract) = serde_json::json!({
         "routing": {
             "mode": profile
@@ -331,15 +339,19 @@ fn load_host_profile_specs() -> Result<Vec<HostProfileSpec>, FrameworkError> {
         .join("configs")
         .join("framework")
         .join("RUNTIME_REGISTRY.json");
-    let raw = fs::read_to_string(&registry_path)
-        .map_err(|err| FrameworkError::validation(format!("failed reading {}: {err}", registry_path.display())))?;
-    let registry: Value = serde_json::from_str(&raw)
-        .map_err(|err| FrameworkError::validation(format!("failed parsing {}: {err}", registry_path.display())))?;
+    let raw = fs::read_to_string(&registry_path).map_err(|err| {
+        FrameworkError::validation(format!("failed reading {}: {err}", registry_path.display()))
+    })?;
+    let registry: Value = serde_json::from_str(&raw).map_err(|err| {
+        FrameworkError::validation(format!("failed parsing {}: {err}", registry_path.display()))
+    })?;
     let projections = registry
         .get("host_projections")
         .and_then(Value::as_object)
         .ok_or_else(|| {
-            FrameworkError::validation("RUNTIME_REGISTRY.json missing host_projections for profile bundle")
+            FrameworkError::validation(
+                "RUNTIME_REGISTRY.json missing host_projections for profile bundle",
+            )
         })?;
     let mut keys = projections.keys().cloned().collect::<Vec<_>>();
     keys.sort();
@@ -348,20 +360,30 @@ fn load_host_profile_specs() -> Result<Vec<HostProfileSpec>, FrameworkError> {
         let projection = projections
             .get(&host_key)
             .and_then(Value::as_object)
-            .ok_or_else(|| FrameworkError::validation(format!("host_projections.{host_key} must be an object")))?;
+            .ok_or_else(|| {
+                FrameworkError::validation(format!("host_projections.{host_key} must be an object"))
+            })?;
         let host_cli = projection
             .get("host_id")
             .and_then(Value::as_str)
             .map(str::trim)
             .filter(|value| !value.is_empty())
-            .ok_or_else(|| FrameworkError::validation(format!("host_projections.{host_key}.host_id is required")))?
+            .ok_or_else(|| {
+                FrameworkError::validation(format!(
+                    "host_projections.{host_key}.host_id is required"
+                ))
+            })?
             .to_string();
         let transport = projection
             .get("transport")
             .and_then(Value::as_str)
             .map(str::trim)
             .filter(|value| !value.is_empty())
-            .ok_or_else(|| FrameworkError::validation(format!("host_projections.{host_key}.transport is required")))?
+            .ok_or_else(|| {
+                FrameworkError::validation(format!(
+                    "host_projections.{host_key}.transport is required"
+                ))
+            })?
             .to_string();
         let capabilities = projection
             .get("capabilities")
@@ -464,10 +486,9 @@ fn resolve_host_capability_requirements(
         let satisfied = match requirement.as_str() {
             Some("required") => true,
             Some("optional") => false,
-            Some("mcp_server") => ctx
-                .normalized_mcp_servers
-                .iter()
-                .any(|server| server.get("server_id").and_then(Value::as_str) == Some(key.as_str())),
+            Some("mcp_server") => ctx.normalized_mcp_servers.iter().any(|server| {
+                server.get("server_id").and_then(Value::as_str) == Some(key.as_str())
+            }),
             Some("workspace_bootstrap") => ctx.workspace_bootstrap.contains_key(key),
             _ => false,
         };
@@ -505,6 +526,7 @@ fn value_object<const N: usize>(pairs: [(&str, Value); N]) -> Value {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use serde_json::json;
 

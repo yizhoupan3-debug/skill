@@ -7,13 +7,11 @@ use std::path::Path;
 use std::sync::{Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use super::util::build_prefixed_id;
+use super::util::{build_trace_cursor, trace_event_string_field, trace_event_usize_field};
 use super::{
     TRACE_COMPACTION_DELTA_SCHEMA_VERSION, TRACE_RECORD_EVENT_SCHEMA_VERSION,
     TRACE_STREAM_IO_AUTHORITY, TraceRecordEventRequestPayload, TraceRecordEventResponsePayload,
-};
-use super::util::build_prefixed_id;
-use super::util::{
-    build_trace_cursor, trace_event_string_field, trace_event_usize_field,
 };
 
 #[tracing::instrument(level = "debug", skip_all)]
@@ -62,8 +60,9 @@ pub fn record_trace_event(
         "event": &event_value,
         "sink_schema_version": payload.sink_schema_version,
     }))
-    .map_err(|err| TraceError::validation(format!("serialize trace event sink line failed: {err}")))?
-        + "\n";
+    .map_err(|err| {
+        TraceError::validation(format!("serialize trace event sink line failed: {err}"))
+    })? + "\n";
     if payload.write_outputs
         && let Some(path) = payload.path.as_deref()
     {
@@ -158,9 +157,9 @@ fn maybe_append_compaction_delta(
             "job_id": event_object.get("job_id").cloned().unwrap_or(Value::Null),
         },
     });
-    let delta_line = serde_json::to_string(&delta)
-        .map_err(|err| TraceError::validation(format!("serialize trace compaction delta failed: {err}")))?
-        + "\n";
+    let delta_line = serde_json::to_string(&delta).map_err(|err| {
+        TraceError::validation(format!("serialize trace compaction delta failed: {err}"))
+    })? + "\n";
     if write_outputs {
         if let Err(err) = append_text(Path::new(delta_path), &delta_line) {
             tracing::error!(event_id = %event_id, delta_path = %delta_path, "append compaction delta failed: {err}");
@@ -208,20 +207,18 @@ fn append_text(path: &Path, payload: &str) -> Result<(), TraceError> {
                 path.display()
             ))
         })?;
-    file.write_all(payload.as_bytes())
-        .map_err(|err| {
-            TraceError::validation(format!(
-                "append trace payload failed for {}: {err}",
-                path.display()
-            ))
-        })?;
-    file.sync_data()
-        .map_err(|err| {
-            TraceError::validation(format!(
-                "sync trace payload failed for {}: {err}",
-                path.display()
-            ))
-        })
+    file.write_all(payload.as_bytes()).map_err(|err| {
+        TraceError::validation(format!(
+            "append trace payload failed for {}: {err}",
+            path.display()
+        ))
+    })?;
+    file.sync_data().map_err(|err| {
+        TraceError::validation(format!(
+            "sync trace payload failed for {}: {err}",
+            path.display()
+        ))
+    })
 }
 
 fn trace_append_lock() -> &'static Mutex<()> {

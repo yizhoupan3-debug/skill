@@ -52,7 +52,16 @@ pub fn prompt_signals_prose_work(text: &str) -> bool {
 
     // 强信号：论文写作/润色
     static STRONG_ZH: &[&str] = &[
-        "润色", "改稿", "论文", "手稿", "引言", "摘要", "讨论节", "结论节", "相关工作", "方法论",
+        "润色",
+        "改稿",
+        "论文",
+        "手稿",
+        "引言",
+        "摘要",
+        "讨论节",
+        "结论节",
+        "相关工作",
+        "方法论",
     ];
     if STRONG_ZH.iter().any(|k| text.contains(k)) {
         return true;
@@ -132,6 +141,7 @@ pub fn maybe_append_prose_context(context: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use serde_json::json;
     use std::sync::{Mutex, OnceLock};
@@ -152,12 +162,16 @@ mod tests {
 
     #[test]
     fn signal_polish_zh() {
-        assert!(prompt_signals_prose_work("帮我把这段引言润色一下，中文正文"));
+        assert!(prompt_signals_prose_work(
+            "帮我把这段引言润色一下，中文正文"
+        ));
     }
 
     #[test]
     fn signal_colloquial_edit_without_polish_keyword() {
-        assert!(prompt_signals_prose_work("论文讨论节这段读起来不通顺，帮我改改"));
+        assert!(prompt_signals_prose_work(
+            "论文讨论节这段读起来不通顺，帮我改改"
+        ));
     }
 
     #[test]
@@ -169,12 +183,16 @@ mod tests {
 
     #[test]
     fn signal_negative_ci_only() {
-        assert!(!prompt_signals_prose_work("fix cargo test in pull request workflow"));
+        assert!(!prompt_signals_prose_work(
+            "fix cargo test in pull request workflow"
+        ));
     }
 
     #[test]
     fn signal_negative_abstract_base_class() {
-        assert!(!prompt_signals_prose_work("edit the abstract base class in this Java module"));
+        assert!(!prompt_signals_prose_work(
+            "edit the abstract base class in this Java module"
+        ));
     }
 
     #[test]
@@ -202,8 +220,7 @@ mod tests {
             .nth(2)
             .expect("repo root")
             .to_path_buf();
-        let on_disk =
-            std::fs::read_to_string(repo_root.join(REL_PATH)).expect("readable");
+        let on_disk = std::fs::read_to_string(repo_root.join(REL_PATH)).expect("readable");
         assert_eq!(BUILTIN_BLOCK.clone(), on_disk.trim());
         assert!(BUILTIN_BLOCK.contains("language_register"));
     }
@@ -227,7 +244,13 @@ mod tests {
 
         assert!(paper_prose_hook_requested("cursor"));
         let mut out = json!({ "continue": true });
-        maybe_merge_paper_prose_before_submit(&tmp, &mut out, "英文论文润色 abstract", false, "cursor");
+        maybe_merge_paper_prose_before_submit(
+            &tmp,
+            &mut out,
+            "英文论文润色 abstract",
+            false,
+            "cursor",
+        );
         let ctx = out
             .get("additional_context")
             .and_then(Value::as_str)

@@ -109,10 +109,10 @@ pub fn acquire_task_ledger_repo_lock(
 /// Run `f` while holding the repo task-ledger flock (when enabled via env).
 pub fn apply_task_ledger_mutation<T>(
     repo_root: &Path,
-    f: impl FnOnce() -> Result<T, String>,
+    f: impl FnOnce() -> Result<T, FrameworkError>,
 ) -> Result<T, FrameworkError> {
     let _guard = acquire_task_ledger_repo_lock(repo_root, Duration::from_secs(30))?;
-    f().map_err(FrameworkError::validation)
+    f()
 }
 
 #[cfg(test)]

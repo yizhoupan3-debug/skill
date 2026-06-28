@@ -82,16 +82,8 @@ fn analyze_single_drift(orig: &Claim, curr: &Claim) -> DriftResult {
     let text_drift = 1.0 - text_sim;
 
     // Evidence shift: compare evidence sources
-    let orig_sources: HashSet<&str> = orig
-        .evidence
-        .iter()
-        .map(|e| e.source.as_str())
-        .collect();
-    let curr_sources: HashSet<&str> = curr
-        .evidence
-        .iter()
-        .map(|e| e.source.as_str())
-        .collect();
+    let orig_sources: HashSet<&str> = orig.evidence.iter().map(|e| e.source.as_str()).collect();
+    let curr_sources: HashSet<&str> = curr.evidence.iter().map(|e| e.source.as_str()).collect();
     let evidence_sim = if orig_sources.is_empty() && curr_sources.is_empty() {
         1.0
     } else if orig_sources.is_empty() || curr_sources.is_empty() {
@@ -107,7 +99,10 @@ fn analyze_single_drift(orig: &Claim, curr: &Claim) -> DriftResult {
     let ceiling_drift = ceiling_distance(&orig.ceiling, &curr.ceiling);
 
     // Weighted aggregate
-    let drift_score = round_to(0.5 * text_drift + 0.25 * evidence_drift + 0.25 * ceiling_drift, 2);
+    let drift_score = round_to(
+        0.5 * text_drift + 0.25 * evidence_drift + 0.25 * ceiling_drift,
+        2,
+    );
 
     // Determine drift type
     let drift_type = if drift_score < 0.15 {
@@ -192,6 +187,7 @@ fn round_to(value: f64, decimals: i32) -> f64 {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use crate::types::{ClaimCeiling, EvidenceAnchor, EvidenceStrength};
 
@@ -227,10 +223,7 @@ mod tests {
 
     #[test]
     fn scope_contraction_removed_claim() {
-        let orig = vec![
-            make_claim("C1", "A"),
-            make_claim("C2", "B"),
-        ];
+        let orig = vec![make_claim("C1", "A"), make_claim("C2", "B")];
         let curr = vec![make_claim("C1", "A")];
         let results = detect_drift(&orig, &curr).unwrap();
         let removed = results.iter().find(|r| r.claim_id == "C2").unwrap();
@@ -239,9 +232,15 @@ mod tests {
 
     #[test]
     fn text_drift_rewording() {
-        let mut orig_claim = make_claim("C1", "The transformer model achieves state of the art results on machine translation benchmarks");
+        let mut orig_claim = make_claim(
+            "C1",
+            "The transformer model achieves state of the art results on machine translation benchmarks",
+        );
         orig_claim.ceiling = ClaimCeiling::TopVenue;
-        let mut curr_claim = make_claim("C1", "Our proposed architecture demonstrates competitive performance across multiple natural language processing tasks");
+        let mut curr_claim = make_claim(
+            "C1",
+            "Our proposed architecture demonstrates competitive performance across multiple natural language processing tasks",
+        );
         curr_claim.ceiling = ClaimCeiling::TopVenue;
         let results = detect_drift(&[orig_claim], &[curr_claim]).unwrap();
         assert!(results[0].drift_score > 0.3);
@@ -269,7 +268,11 @@ mod tests {
     fn ceiling_max_matches_variants() {
         // Guard: when a new ClaimCeiling variant is added, ceiling_max and
         // ceiling_value must be updated together.
-        assert_eq!(ceiling_max(), 3, "ceiling_max must match the largest ceiling_value. If you added a variant to ClaimCeiling, update ceiling_value and ceiling_max.");
+        assert_eq!(
+            ceiling_max(),
+            3,
+            "ceiling_max must match the largest ceiling_value. If you added a variant to ClaimCeiling, update ceiling_value and ceiling_max."
+        );
         assert_eq!(ceiling_value(&ClaimCeiling::TopVenue), 3);
     }
 }

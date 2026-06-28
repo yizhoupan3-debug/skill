@@ -5,19 +5,16 @@
 //! Set `ROUTER_RS_UPDATE_RUN_AUTORESEARCH_CLI_TESTS=1` to also run `autoresearch_cli` (network / arXiv).
 
 use core_errors::FrameworkError;
-use framework_kernel::cli_args::{
-    MaintRepoArgs, MaintRootsArgs, MaintSubcommand, UpdateAuditArgs,
-};
-use host_projection::host_integration::{
-    resolve_maint_roots, run_host_integration_from_args,
-};
+use framework_kernel::cli_args::{MaintRepoArgs, MaintRootsArgs, MaintSubcommand, UpdateAuditArgs};
+use host_projection::host_integration::{resolve_maint_roots, run_host_integration_from_args};
 use serde_json::{Value, json};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use tracing;
 
-#[path = "clean.rs"] mod clean;
+#[path = "clean.rs"]
+mod clean;
 
 pub fn dispatch(command: MaintSubcommand) -> Result<(), FrameworkError> {
     match command {
@@ -26,7 +23,8 @@ pub fn dispatch(command: MaintSubcommand) -> Result<(), FrameworkError> {
             host_projection::hosts::host_extensions::schema_drift::verify_host_projection(
                 &repo_from_maint_repo_args(&args)?,
                 &host_id,
-            ).map_err(FrameworkError::validation)
+            )
+            .map_err(FrameworkError::validation)
         }
         MaintSubcommand::UpdateOneShot(args) => update_one_shot(args),
         MaintSubcommand::UpdateAudit(args) => update_audit(args),
@@ -97,9 +95,13 @@ fn repo_from_update_audit_args(args: &UpdateAuditArgs) -> Result<PathBuf, Framew
     }
     let root = String::from_utf8_lossy(&output.stdout).trim().to_string();
     if root.is_empty() {
-        return Err(FrameworkError::validation("git rev-parse returned an empty repository root"));
+        return Err(FrameworkError::validation(
+            "git rev-parse returned an empty repository root",
+        ));
     }
-    fs::canonicalize(&root).map_err(|err| FrameworkError::validation(format!("failed to canonicalize git root {root}: {err}")))
+    fs::canonicalize(&root).map_err(|err| {
+        FrameworkError::validation(format!("failed to canonicalize git root {root}: {err}"))
+    })
 }
 
 fn refresh_host_projections(args: MaintRootsArgs) -> Result<(), FrameworkError> {
@@ -161,7 +163,9 @@ fn refresh_host_projections(args: MaintRootsArgs) -> Result<(), FrameworkError> 
     verify_installable_projections(&fw, &installable_tools)?;
     // Verify all installable hosts
     for host_id in framework_kernel::runtime_registry::ALL_HOST_IDS {
-        host_projection::hosts::host_extensions::schema_drift::verify_host_projection(&fw, host_id)?;
+        host_projection::hosts::host_extensions::schema_drift::verify_host_projection(
+            &fw, host_id,
+        )?;
     }
     tracing::info!(
         "ok: refreshed installable host projections (cursor=user; claude=project+user; others=project): {}",
@@ -205,7 +209,10 @@ fn installable_projection_tools(repo_root: &Path) -> Result<Vec<String>, Framewo
 /// Verify host projections using the unified registry-driven verifier.
 /// All host-specific data (hooks path, events, launcher) is derived from
 /// the HostProvider registry via `verify_host_projection`.
-fn verify_installable_projections(repo_root: &Path, tools: &[String]) -> Result<(), FrameworkError> {
+fn verify_installable_projections(
+    repo_root: &Path,
+    tools: &[String],
+) -> Result<(), FrameworkError> {
     for tool in tools {
         // tool is an install_tool name (e.g. "cursor", "claude").
         // Resolve to host_id via registry, then verify.
@@ -215,13 +222,11 @@ fn verify_installable_projections(repo_root: &Path, tools: &[String]) -> Result<
             .map(|(id, _)| id.clone())
             .unwrap_or_else(|| tool.clone());
         host_projection::hosts::host_extensions::schema_drift::verify_host_projection(
-            repo_root,
-            &host_id,
+            repo_root, &host_id,
         )?;
     }
     Ok(())
 }
-
 
 fn update_one_shot(args: MaintRootsArgs) -> Result<(), FrameworkError> {
     let (fw, art) = resolve_maint_roots(
@@ -254,7 +259,9 @@ fn update_one_shot(args: MaintRootsArgs) -> Result<(), FrameworkError> {
         ],
     )?;
 
-    tracing::info!("cargo test → integration harness (offline-stable suites; see maint module docs)");
+    tracing::info!(
+        "cargo test → integration harness (offline-stable suites; see maint module docs)"
+    );
     const DEFAULT_SUITES: &[&str] = &[
         "policy_contracts",
         "documentation_contracts",
@@ -396,7 +403,10 @@ fn git_lines(repo_root: &Path, args: &[&str]) -> Result<Vec<String>, FrameworkEr
     git_lines_with_trim(repo_root, args, true)
 }
 
-fn git_lines_preserve_leading(repo_root: &Path, args: &[&str]) -> Result<Vec<String>, FrameworkError> {
+fn git_lines_preserve_leading(
+    repo_root: &Path,
+    args: &[&str],
+) -> Result<Vec<String>, FrameworkError> {
     git_lines_with_trim(repo_root, args, false)
 }
 
@@ -480,12 +490,7 @@ fn key_document_candidates(tracked: &[String], untracked: &[String]) -> Vec<Valu
 
 fn is_key_document_path(path: &str) -> bool {
     let lower = path.to_ascii_lowercase();
-    let is_root_doc = matches!(
-        path,
-        "README.md"
-            | "AGENTS.md"
-            | "docs/README.md"
-    );
+    let is_root_doc = matches!(path, "README.md" | "AGENTS.md" | "docs/README.md");
     let is_research_doc = lower.contains("research")
         || lower.contains("paper")
         || lower.contains("experiment")
@@ -508,7 +513,10 @@ fn is_document_like_path(lower: &str) -> bool {
     )
 }
 
-fn dead_code_markers(repo_root: &Path, untracked: &[String]) -> Result<Vec<String>, FrameworkError> {
+fn dead_code_markers(
+    repo_root: &Path,
+    untracked: &[String],
+) -> Result<Vec<String>, FrameworkError> {
     let mut markers = git_grep_lines(
         repo_root,
         r"(allow\(dead_code\)|dead code|unused|obsolete|deprecated|retired)",
@@ -530,7 +538,10 @@ fn dead_code_markers(repo_root: &Path, untracked: &[String]) -> Result<Vec<Strin
     Ok(markers)
 }
 
-fn stale_doc_markers(repo_root: &Path, untracked: &[String]) -> Result<Vec<String>, FrameworkError> {
+fn stale_doc_markers(
+    repo_root: &Path,
+    untracked: &[String],
+) -> Result<Vec<String>, FrameworkError> {
     let mut markers = git_grep_lines(
         repo_root,
         r"(stale|obsolete|deprecated|retired|outdated|TODO|FIXME|旧|废弃|过期)",
@@ -623,7 +634,8 @@ fn untracked_keyword_markers(
         if !include_path(&lower_path) {
             continue;
         }
-        let Ok(full_path) = core_state_utils::path_guard::join_repo_relative_under_root(repo_root, path)
+        let Ok(full_path) =
+            core_state_utils::path_guard::join_repo_relative_under_root(repo_root, path)
         else {
             continue;
         };
@@ -670,12 +682,21 @@ fn cap_values(mut values: Vec<Value>, max: usize) -> Vec<Value> {
 fn host_home_path(host_id: &str) -> Result<PathBuf, FrameworkError> {
     let env_var = framework_kernel::runtime_registry::home_env_var(host_id);
     if !env_var.is_empty()
-        && let Some(path) = std::env::var_os(env_var) {
-            return Ok(PathBuf::from(path));
-        }
+        && let Some(path) = std::env::var_os(env_var)
+    {
+        return Ok(PathBuf::from(path));
+    }
     std::env::var_os("HOME")
-        .map(|h| PathBuf::from(h).join(framework_kernel::runtime_registry::host_private_config_dir(host_id)))
-        .ok_or_else(|| FrameworkError::validation(format!("{env_var} or HOME must be set for host skill publish")))
+        .map(|h| {
+            PathBuf::from(h).join(framework_kernel::runtime_registry::host_private_config_dir(
+                host_id,
+            ))
+        })
+        .ok_or_else(|| {
+            FrameworkError::validation(format!(
+                "{env_var} or HOME must be set for host skill publish"
+            ))
+        })
 }
 
 fn autoresearch_integration_tests_enabled() -> bool {
@@ -707,15 +728,12 @@ fn print_local_homes(fw: PathBuf) -> Result<(), FrameworkError> {
             .unwrap_or_else(|| local.clone());
         println!("export {env_var}={}", home.display());
     }
-    println!(
-        "# note: GUI apps may need launching from this shell to inherit host HOME vars"
-    );
+    println!("# note: GUI apps may need launching from this shell to inherit host HOME vars");
     println!(
         "# Claude Desktop MCP (macOS): ~/Library/Application Support/Claude/claude_desktop_config.json"
     );
     Ok(())
 }
-
 
 fn run_cargo(repo_root: &Path, args: &[&str]) -> Result<(), FrameworkError> {
     let status = Command::new("cargo")
@@ -723,7 +741,9 @@ fn run_cargo(repo_root: &Path, args: &[&str]) -> Result<(), FrameworkError> {
         .current_dir(repo_root)
         .status()?;
     if !status.success() {
-        return Err(FrameworkError::config(format!("cargo failed with {status}")));
+        return Err(FrameworkError::config(format!(
+            "cargo failed with {status}"
+        )));
     }
     Ok(())
 }
@@ -735,13 +755,17 @@ fn run_router(repo_root: &Path, args: &[&str]) -> Result<(), FrameworkError> {
         .current_dir(repo_root)
         .status()?;
     if !status.success() {
-        return Err(FrameworkError::config(format!("router-rs {} failed: {status}", args.join(" "))));
+        return Err(FrameworkError::config(format!(
+            "router-rs {} failed: {status}",
+            args.join(" ")
+        )));
     }
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     // ── is_key_document_path ──
@@ -852,4 +876,3 @@ mod tests {
         }
     }
 }
-

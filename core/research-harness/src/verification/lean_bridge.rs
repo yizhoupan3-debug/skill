@@ -109,12 +109,14 @@ pub fn verify_lean_theorem(script: &str) -> VerificationResult {
 
     let output = match result {
         Ok(o) => o,
-        Err(e) => return VerificationResult {
-            check_name: "math_lean_verify".into(),
-            status: VerificationStatus::Warn,
-            details: e.to_string(),
-            evidence_path: None,
-        },
+        Err(e) => {
+            return VerificationResult {
+                check_name: "math_lean_verify".into(),
+                status: VerificationStatus::Warn,
+                details: e.to_string(),
+                evidence_path: None,
+            };
+        }
     };
 
     if output.status.success() {

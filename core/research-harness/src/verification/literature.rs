@@ -27,10 +27,7 @@ pub async fn verify_doi_reachable(doi: &str) -> Result<bool> {
 ///
 /// 基于关键词重叠：对每个 claim 提取内容词，检查是否有至少 2 个内容词
 /// 超过 threshold 30% 出现在 reference 中。
-pub fn verify_claim_coverage(
-    claims: &[String],
-    references: &[String],
-) -> Result<f64> {
+pub fn verify_claim_coverage(claims: &[String], references: &[String]) -> Result<f64> {
     if claims.is_empty() {
         return Ok(1.0); // 没有 claim → 100% 覆盖（空集）
     }
@@ -53,9 +50,12 @@ pub fn verify_claim_coverage(
             continue;
         }
         // 要求至少 2 个词重叠或 30% 以上重叠，避免单高频词假阳性
-        let overlap_count = claim_words.iter().filter(|w| ref_words.contains(*w as &str)).count();
-        let has_overlap = overlap_count >= 2
-            || (overlap_count as f64 / claim_words.len() as f64) >= 0.3;
+        let overlap_count = claim_words
+            .iter()
+            .filter(|w| ref_words.contains(*w as &str))
+            .count();
+        let has_overlap =
+            overlap_count >= 2 || (overlap_count as f64 / claim_words.len() as f64) >= 0.3;
         if has_overlap {
             covered += 1;
         }
@@ -71,6 +71,7 @@ fn extract_content_words(text: &str) -> HashSet<String> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     #[test]

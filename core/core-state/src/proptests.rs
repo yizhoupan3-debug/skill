@@ -6,14 +6,16 @@
 
 #[cfg(test)]
 pub(crate) mod proptests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use proptest::prelude::*;
     use serde_json::{Value, json};
 
     use crate::state_manager::goal_ops::{
         count_nonempty_string_items, validate_drive_contract, value_string_list,
     };
-    use crate::state_manager::{evidence_index_entry_implies_success, goal_state_requests_continuation};
-
+    use crate::state_manager::{
+        evidence_index_entry_implies_success, goal_state_requests_continuation,
+    };
 
     // ── Strategy helpers ────────────────────────────────────────────────
 
@@ -24,9 +26,8 @@ pub(crate) mod proptests {
             any::<bool>().prop_map(Value::Bool),
             any::<i64>().prop_map(|n| json!(n)),
             ".*".prop_map(Value::String),
-            prop::collection::vec("[a-z]{0,3}", 0..3).prop_map(|v| {
-                Value::Array(v.into_iter().map(Value::String).collect())
-            }),
+            prop::collection::vec("[a-z]{0,3}", 0..3)
+                .prop_map(|v| { Value::Array(v.into_iter().map(Value::String).collect()) }),
             prop::collection::hash_map(
                 "[a-z]{0,3}",
                 prop_oneof![
@@ -37,9 +38,7 @@ pub(crate) mod proptests {
                 ],
                 0..3,
             )
-            .prop_map(|m| {
-                Value::Object(m.into_iter().collect())
-            }),
+            .prop_map(|m| { Value::Object(m.into_iter().collect()) }),
             Just(Value::Null),
         ]
     }
@@ -62,21 +61,21 @@ pub(crate) mod proptests {
     }
 
     fn arb_nonempty_value_list(min: usize, max: usize) -> impl Strategy<Value = Vec<Value>> {
-        prop::collection::vec(
-            arb_nonempty_string().prop_map(Value::String),
-            min..=max,
-        )
+        prop::collection::vec(arb_nonempty_string().prop_map(Value::String), min..=max)
     }
 
     fn arb_goal_state() -> impl Strategy<Value = Value> {
         (
             any::<bool>(),
             any::<bool>(),
-            prop_oneof![Just("running"), Just("paused"), Just("completed"), Just("blocked"), Just("superseded")],
             prop_oneof![
-                Just(Value::Null),
-                any::<bool>().prop_map(Value::Bool),
+                Just("running"),
+                Just("paused"),
+                Just("completed"),
+                Just("blocked"),
+                Just("superseded")
             ],
+            prop_oneof![Just(Value::Null), any::<bool>().prop_map(Value::Bool),],
         )
             .prop_map(|(stale, drive, status, session_id)| {
                 json!({
@@ -269,66 +268,60 @@ pub(crate) mod proptests {
                 })
             }
             Op::Pause => match state {
-                Some(s) if s.status == GoalStatus::Running => {
-                    Some(SimGoal {
-                        status: GoalStatus::Paused,
-                        drive_until_done: false,
-                        ..s
-                    })
-                }
+                Some(s) if s.status == GoalStatus::Running => Some(SimGoal {
+                    status: GoalStatus::Paused,
+                    drive_until_done: false,
+                    ..s
+                }),
                 _ => state,
             },
             Op::Resume => match state {
-                Some(s) if !s.archived && s.status != GoalStatus::Completed => {
-                    Some(SimGoal {
-                        status: GoalStatus::Running,
-                        drive_until_done: true,
-                        ..s
-                    })
-                }
+                Some(s) if !s.archived && s.status != GoalStatus::Completed => Some(SimGoal {
+                    status: GoalStatus::Running,
+                    drive_until_done: true,
+                    ..s
+                }),
                 _ => state,
             },
             Op::Checkpoint => match state {
-                Some(s) if s.status == GoalStatus::Running => {
-                    Some(SimGoal {
-                        checkpoint_count: s.checkpoint_count + 1,
-                        ..s
-                    })
-                }
+                Some(s) if s.status == GoalStatus::Running => Some(SimGoal {
+                    checkpoint_count: s.checkpoint_count + 1,
+                    ..s
+                }),
                 _ => state,
             },
             Op::Block => match state {
-                Some(s) if s.status == GoalStatus::Running => {
-                    Some(SimGoal {
-                        status: GoalStatus::Blocked,
-                        ..s
-                    })
-                }
+                Some(s) if s.status == GoalStatus::Running => Some(SimGoal {
+                    status: GoalStatus::Blocked,
+                    ..s
+                }),
                 _ => state,
             },
             Op::Unblock => match state {
-                Some(s) if s.status == GoalStatus::Blocked => {
-                    Some(SimGoal {
-                        status: GoalStatus::Running,
-                        drive_until_done: true,
-                        ..s
-                    })
-                }
+                Some(s) if s.status == GoalStatus::Blocked => Some(SimGoal {
+                    status: GoalStatus::Running,
+                    drive_until_done: true,
+                    ..s
+                }),
                 _ => state,
             },
             Op::Amend => match state {
-                Some(ref s) if s.archived || s.status == GoalStatus::Completed || s.status == GoalStatus::Superseded => state,
+                Some(ref s)
+                    if s.archived
+                        || s.status == GoalStatus::Completed
+                        || s.status == GoalStatus::Superseded =>
+                {
+                    state
+                }
                 Some(s) => Some(s), // amend preserves state in simulation (actual changes immaterial here)
                 None => state,
             },
             Op::Complete => match state {
-                Some(s) if !s.archived => {
-                    Some(SimGoal {
-                        status: GoalStatus::Completed,
-                        archived: true,
-                        ..s
-                    })
-                }
+                Some(s) if !s.archived => Some(SimGoal {
+                    status: GoalStatus::Completed,
+                    archived: true,
+                    ..s
+                }),
                 _ => state,
             },
             Op::Clear => None,

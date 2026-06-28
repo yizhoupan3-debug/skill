@@ -369,8 +369,14 @@ mod tests {
     #[test]
     fn runtime_concurrency_defaults_payload_populates_fields() {
         let payload = runtime_concurrency_defaults_payload();
-        assert_eq!(payload.router_stdio.default_pool_size, DEFAULT_ROUTER_STDIO_POOL_SIZE);
-        assert_eq!(payload.router_stdio.max_pool_size, MAX_ROUTER_STDIO_POOL_SIZE);
+        assert_eq!(
+            payload.router_stdio.default_pool_size,
+            DEFAULT_ROUTER_STDIO_POOL_SIZE
+        );
+        assert_eq!(
+            payload.router_stdio.max_pool_size,
+            MAX_ROUTER_STDIO_POOL_SIZE
+        );
         assert!(!payload.router_stdio.env_keys.is_empty());
         assert!(!payload.router_stdio.stdio_max_concurrency_arg.is_empty());
         assert!(!payload.router_stdio.request_concurrency_field.is_empty());
@@ -381,7 +387,10 @@ mod tests {
     #[test]
     fn runtime_concurrency_defaults_compute_section() {
         let payload = runtime_concurrency_defaults_payload();
-        assert_eq!(payload.compute.default_threads, DEFAULT_COMPUTE_THREADS_LOCAL);
+        assert_eq!(
+            payload.compute.default_threads,
+            DEFAULT_COMPUTE_THREADS_LOCAL
+        );
         assert_eq!(payload.compute.max_threads, MAX_COMPUTE_THREADS_LOCAL);
         assert!(!payload.compute.env_keys.is_empty());
         assert!(!payload.compute.cli_arg.is_empty());
@@ -391,12 +400,30 @@ mod tests {
     #[test]
     fn runtime_concurrency_defaults_background_and_subagent() {
         let payload = runtime_concurrency_defaults_payload();
-        assert_eq!(payload.max_background_jobs, DEFAULT_MAX_BACKGROUND_JOBS_LOCAL);
-        assert_eq!(payload.max_background_jobs_limit, MAX_BACKGROUND_JOBS_LIMIT_LOCAL);
-        assert_eq!(payload.background_job_timeout_seconds, DEFAULT_BACKGROUND_JOB_TIMEOUT_SECONDS_LOCAL);
-        assert_eq!(payload.max_concurrent_subagents, DEFAULT_MAX_CONCURRENT_SUBAGENTS_LOCAL);
-        assert_eq!(payload.max_concurrent_subagents_limit, MAX_CONCURRENT_SUBAGENTS_LIMIT_LOCAL);
-        assert_eq!(payload.subagent_timeout_seconds, DEFAULT_SUBAGENT_TIMEOUT_SECONDS_LOCAL);
+        assert_eq!(
+            payload.max_background_jobs,
+            DEFAULT_MAX_BACKGROUND_JOBS_LOCAL
+        );
+        assert_eq!(
+            payload.max_background_jobs_limit,
+            MAX_BACKGROUND_JOBS_LIMIT_LOCAL
+        );
+        assert_eq!(
+            payload.background_job_timeout_seconds,
+            DEFAULT_BACKGROUND_JOB_TIMEOUT_SECONDS_LOCAL
+        );
+        assert_eq!(
+            payload.max_concurrent_subagents,
+            DEFAULT_MAX_CONCURRENT_SUBAGENTS_LOCAL
+        );
+        assert_eq!(
+            payload.max_concurrent_subagents_limit,
+            MAX_CONCURRENT_SUBAGENTS_LIMIT_LOCAL
+        );
+        assert_eq!(
+            payload.subagent_timeout_seconds,
+            DEFAULT_SUBAGENT_TIMEOUT_SECONDS_LOCAL
+        );
     }
 
     #[test]
@@ -447,8 +474,7 @@ mod tests {
             aggregator_api_key: "key".into(),
         };
         let json_str = serde_json::to_string(&payload).unwrap();
-        let deserialized: ExecuteRequestPayload =
-            serde_json::from_str(&json_str).unwrap();
+        let deserialized: ExecuteRequestPayload = serde_json::from_str(&json_str).unwrap();
         assert_eq!(deserialized.schema_version, "v1");
         assert_eq!(deserialized.task, "do stuff");
         assert_eq!(deserialized.default_output_tokens, 4096);
@@ -499,8 +525,7 @@ mod tests {
             batch_size: None,
         };
         let json_str = serde_json::to_string(&payload).unwrap();
-        let back: BackgroundControlRequestPayload =
-            serde_json::from_str(&json_str).unwrap();
+        let back: BackgroundControlRequestPayload = serde_json::from_str(&json_str).unwrap();
         assert_eq!(back.operation, "checkpoint");
         assert_eq!(back.multitask_strategy.as_deref(), Some("parallel"));
     }

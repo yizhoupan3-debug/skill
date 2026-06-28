@@ -34,15 +34,12 @@ pub use validation::{
 // Re-export from pointer_ops
 pub use pointer_ops::{
     ensure_task_directory, neutralize_task_pointers_for_task, read_active_task_id,
-    read_focus_task_id, read_primary_task_id,
-    read_task_pointer_pair, set_task_focus,
+    read_focus_task_id, read_primary_task_id, read_task_pointer_pair, set_task_focus,
     sync_task_pointers_after_goal_drive, write_active_task_pointer,
 };
 
 // Re-export from quality_gate_ops (primary names)
-pub use quality_gate_ops::{
-    quality_gate_state_path, read_quality_gate_state,
-};
+pub use quality_gate_ops::{read_rfv_loop_state, rfv_loop_state_path};
 // Re-export from goal_ops
 pub use goal_ops::{
     framework_goal_drive, task_evidence_artifacts_summary_for_task,
@@ -102,23 +99,31 @@ fn current_env_session_id() -> Option<String> {
 fn annotate_goal_staleness(goal: &mut Value) {
     let goal_session_id = match goal.get("session_id").and_then(Value::as_str) {
         Some(s) => s.trim(),
-        None => { return; }
+        None => {
+            return;
+        }
     };
-    if goal_session_id.is_empty() { return; }
+    if goal_session_id.is_empty() {
+        return;
+    }
     let current_session_id = current_env_session_id();
     match current_session_id {
         Some(ref current) if current != goal_session_id => {
             if let Some(obj) = goal.as_object_mut() {
                 obj.insert("stale".to_string(), serde_json::json!(true));
-                obj.insert("stale_reason".to_string(), serde_json::json!("session_id mismatch: goal belongs to a different session"));
+                obj.insert(
+                    "stale_reason".to_string(),
+                    serde_json::json!("session_id mismatch: goal belongs to a different session"),
+                );
             }
         }
         None => {
             if goal_session_id.starts_with("auto-")
-                && let Some(obj) = goal.as_object_mut() {
-                    obj.insert("stale".to_string(), serde_json::json!(true));
-                    obj.insert("stale_reason".to_string(), serde_json::json!("auto-generated session_id from older version; cannot verify current session"));
-                }
+                && let Some(obj) = goal.as_object_mut()
+            {
+                obj.insert("stale".to_string(), serde_json::json!(true));
+                obj.insert("stale_reason".to_string(), serde_json::json!("auto-generated session_id from older version; cannot verify current session"));
+            }
         }
         _ => {}
     }
@@ -131,17 +136,23 @@ pub fn read_goal_state(
 ) -> Result<Option<Value>, FrameworkError> {
     let task_id = if let Some(t) = task_id_override {
         if t.trim().is_empty() {
-            return Err(FrameworkError::validation("framework_goal_drive: task_id override is empty"));
+            return Err(FrameworkError::validation(
+                "framework_goal_drive: task_id override is empty",
+            ));
         }
         t.trim().to_string()
     } else {
         let (active, focus) = read_task_pointer_pair(repo_root);
-        let Some(t) = active.or(focus) else { return Ok(None); };
+        let Some(t) = active.or(focus) else {
+            return Ok(None);
+        };
         t
     };
     crate::utils::path_guard::validate_task_id_component(&task_id)?;
     let path = goal_state_path_for_task(repo_root, &task_id)?;
-    if !path.is_file() { return Ok(None); }
+    if !path.is_file() {
+        return Ok(None);
+    }
     let raw = fs::read_to_string(&path)?;
     let mut value: Value = serde_json::from_str(&raw)?;
     annotate_goal_staleness(&mut value);
@@ -149,33 +160,51 @@ pub fn read_goal_state(
 }
 
 pub fn read_goal_state_pair_if_valid(repo_root: &Path, task_id: &str) -> Option<(Value, String)> {
-    if task_id.trim().is_empty() { return None; }
+    if task_id.trim().is_empty() {
+        return None;
+    }
     let path = match goal_state_path_for_task(repo_root, task_id) {
         Ok(p) => p,
         Err(_) => goal_state_path_for_nested_under_current(repo_root, task_id)?,
     };
-    if !path.is_file() { return None; }
+    if !path.is_file() {
+        return None;
+    }
     let raw = match fs::read_to_string(&path) {
         Ok(s) => s,
-        Err(e) => { tracing::warn!("read goal state ({:?}): {e}", path); return None; }
+        Err(e) => {
+            tracing::warn!("read goal state ({:?}): {e}", path);
+            return None;
+        }
     };
     let mut value: Value = match serde_json::from_str(&raw) {
         Ok(v) => v,
-        Err(e) => { tracing::warn!("parse goal state ({:?}): {e}", path); return None; }
+        Err(e) => {
+            tracing::warn!("parse goal state ({:?}): {e}", path);
+            return None;
+        }
     };
     annotate_goal_staleness(&mut value);
-    let tid_out = task_id.trim().replace('\\', "/").trim_matches('/').to_string();
+    let tid_out = task_id
+        .trim()
+        .replace('\\', "/")
+        .trim_matches('/')
+        .to_string();
     Some((value, tid_out))
 }
 
 pub fn goal_state_requests_continuation(state: &Value) -> bool {
-    if state.get("stale").and_then(Value::as_bool) == Some(true) { return false; }
+    if state.get("stale").and_then(Value::as_bool) == Some(true) {
+        return false;
+    }
     state.get("status").and_then(Value::as_str) == Some("running")
 }
 
 // ── Hydration ──
 
-pub fn read_goal_state_for_hydration(repo_root: &Path) -> Result<Option<(Value, String)>, FrameworkError> {
+pub fn read_goal_state_for_hydration(
+    repo_root: &Path,
+) -> Result<Option<(Value, String)>, FrameworkError> {
     let (active_task_id, focus_task_id) = read_task_pointer_pair(repo_root);
     read_goal_state_for_hydration_from_pointer_ids(repo_root, &active_task_id, &focus_task_id)
 }
@@ -193,22 +222,37 @@ pub fn select_goal_state_from_pointer_ids(
     active_task_id: &Option<String>,
     focus_task_id: &Option<String>,
 ) -> Result<Option<(Value, String)>, FrameworkError> {
-    let active_pair = active_task_id.as_ref().and_then(|id| read_goal_state_pair_if_valid(repo_root, id));
-    let focus_pair = focus_task_id.as_ref().and_then(|id| read_goal_state_pair_if_valid(repo_root, id));
+    let active_pair = active_task_id
+        .as_ref()
+        .and_then(|id| read_goal_state_pair_if_valid(repo_root, id));
+    let focus_pair = focus_task_id
+        .as_ref()
+        .and_then(|id| read_goal_state_pair_if_valid(repo_root, id));
     if let Some((goal, tid)) = active_pair {
-        if goal_state_requests_continuation(&goal) { return Ok(Some((goal, tid))); }
+        if goal_state_requests_continuation(&goal) {
+            return Ok(Some((goal, tid)));
+        }
         if let Some((fgoal, ftid)) = focus_pair {
-            if goal_state_requests_continuation(&fgoal) { return Ok(Some((fgoal, ftid))); }
+            if goal_state_requests_continuation(&fgoal) {
+                return Ok(Some((fgoal, ftid)));
+            }
             return Ok(Some((fgoal, ftid)));
         }
         return Ok(Some((goal, tid)));
     }
-    if active_task_id.as_ref().is_some_and(|id| !id.trim().is_empty()) {
-        if let Some(pair) = focus_pair { return Ok(Some(pair)); }
+    if active_task_id
+        .as_ref()
+        .is_some_and(|id| !id.trim().is_empty())
+    {
+        if let Some(pair) = focus_pair {
+            return Ok(Some(pair));
+        }
         return Ok(None);
     }
     if let Some((goal, tid)) = focus_pair {
-        if goal_state_requests_continuation(&goal) { return Ok(Some((goal, tid))); }
+        if goal_state_requests_continuation(&goal) {
+            return Ok(Some((goal, tid)));
+        }
         return Ok(Some((goal, tid)));
     }
     Ok(None)
@@ -222,7 +266,9 @@ fn discover_goal_state_task_ids_under_current(
     repo_root: &Path,
 ) -> Result<Vec<(String, SystemTime)>, FrameworkError> {
     let current = repo_root.join("artifacts/current");
-    if !current.is_dir() { return Ok(Vec::new()); }
+    if !current.is_dir() {
+        return Ok(Vec::new());
+    }
     let mut out = Vec::new();
     visit_goal_state_dirs(&current, &current, GOAL_DISCOVER_MAX_DEPTH, &mut out)?;
     Ok(out)
@@ -234,21 +280,33 @@ fn visit_goal_state_dirs(
     depth: usize,
     out: &mut Vec<(String, SystemTime)>,
 ) -> Result<(), FrameworkError> {
-    if depth == 0 { return Ok(()); }
+    if depth == 0 {
+        return Ok(());
+    }
     let goal_path = dir.join(GOAL_STATE_FILENAME);
     if goal_path.is_file()
-        && let Ok(rel) = dir.strip_prefix(current_root) {
-            let tid_norm = rel.to_str().map(|s| s.trim().replace('\\', "/")).filter(|s| !s.is_empty());
-            if let Some(tid_norm) = tid_norm {
-                let mtime = fs::metadata(&goal_path).and_then(|m| m.modified()).unwrap_or(SystemTime::UNIX_EPOCH);
-                out.push((tid_norm, mtime));
-            }
+        && let Ok(rel) = dir.strip_prefix(current_root)
+    {
+        let tid_norm = rel
+            .to_str()
+            .map(|s| s.trim().replace('\\', "/"))
+            .filter(|s| !s.is_empty());
+        if let Some(tid_norm) = tid_norm {
+            let mtime = fs::metadata(&goal_path)
+                .and_then(|m| m.modified())
+                .unwrap_or(SystemTime::UNIX_EPOCH);
+            out.push((tid_norm, mtime));
         }
-    if !dir.is_dir() { return Ok(()); }
+    }
+    if !dir.is_dir() {
+        return Ok(());
+    }
     for entry in fs::read_dir(dir)? {
         let entry = entry?;
         let p = entry.path();
-        if p.is_dir() { visit_goal_state_dirs(&p, current_root, depth - 1, out)?; }
+        if p.is_dir() {
+            visit_goal_state_dirs(&p, current_root, depth - 1, out)?;
+        }
     }
     Ok(())
 }
@@ -257,10 +315,14 @@ pub fn read_goal_state_for_diagnostics_scan(
     repo_root: &Path,
 ) -> Result<Option<(Value, String)>, FrameworkError> {
     let mut candidates = discover_goal_state_task_ids_under_current(repo_root)?;
-    if candidates.is_empty() { return Ok(None); }
+    if candidates.is_empty() {
+        return Ok(None);
+    }
     candidates.sort_by_key(|(_, score)| std::cmp::Reverse(*score));
     for (tid, _) in candidates {
-        if let Some(pair) = read_goal_state_pair_if_valid(repo_root, &tid) { return Ok(Some(pair)); }
+        if let Some(pair) = read_goal_state_pair_if_valid(repo_root, &tid) {
+            return Ok(Some(pair));
+        }
     }
     Ok(None)
 }
@@ -268,7 +330,9 @@ pub fn read_goal_state_for_diagnostics_scan(
 // ── Evidence helpers ──
 
 pub fn evidence_index_entry_implies_success(entry: &Value) -> bool {
-    if entry.get("success").and_then(Value::as_bool) == Some(true) { return true; }
+    if entry.get("success").and_then(Value::as_bool) == Some(true) {
+        return true;
+    }
     match entry.get("exit_code") {
         Some(v) => v.as_i64() == Some(0) || v.as_u64() == Some(0),
         None => false,
@@ -276,7 +340,7 @@ pub fn evidence_index_entry_implies_success(entry: &Value) -> bool {
 }
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used)]
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use serde_json::{Value, json};
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -399,8 +463,10 @@ mod tests {
             "task_id": "t-lite",
         }))
         .expect("status");
-        assert!(!st["goal_state"].get("lifecycle_profile").is_some(),
-            "lifecycle_profile should not be written to GOAL_STATE in v10");
+        assert!(
+            !st["goal_state"].get("lifecycle_profile").is_some(),
+            "lifecycle_profile should not be written to GOAL_STATE in v10"
+        );
         let _ = fs::remove_dir_all(&repo);
     }
 
@@ -766,10 +832,15 @@ mod tests {
         let result = read_goal_state(&repo, Some("nogate"))
             .expect("read")
             .expect("state");
-        assert_eq!(result["status"], json!("running"),
-            "goal must stay running after iteration complete");
-        assert!(result.get("archived").is_none(),
-            "goal must NOT be archived after iteration complete");
+        assert_eq!(
+            result["status"],
+            json!("running"),
+            "goal must stay running after iteration complete"
+        );
+        assert!(
+            result.get("archived").is_none(),
+            "goal must NOT be archived after iteration complete"
+        );
         let _ = fs::remove_dir_all(&repo);
     }
 
@@ -787,7 +858,7 @@ mod tests {
         let rr = repo.display().to_string();
 
         // Write old-format RFV state file (remnant of removed QG state machine).
-        let rfv_path = quality_gate_state_path(&repo, "mx-task").expect("rfv path");
+        let rfv_path = rfv_loop_state_path(&repo, "mx-task").expect("rfv path");
         if let Some(parent) = rfv_path.parent() {
             fs::create_dir_all(parent).expect("mkdir rfv dir");
         }
@@ -822,14 +893,17 @@ mod tests {
         // Old RFV file is left as-is (Wave 4a-ii: no mutual exclusion).
         let raw = fs::read_to_string(&rfv_path).expect("read rfv");
         let v: Value = serde_json::from_str(&raw).expect("parse rfv");
-        assert_eq!(v["loop_status"], json!("active"),
-            "old RFV should not be superseded — QG互斥已删除");
+        assert_eq!(
+            v["loop_status"],
+            json!("active"),
+            "old RFV should not be superseded — QG互斥已删除"
+        );
 
-    let _ = fs::remove_dir_all(&repo);
-}
+        let _ = fs::remove_dir_all(&repo);
+    }
 
-#[test]
-fn goal_complete_rejected_when_completion_gates_depth_not_met() {
+    #[test]
+    fn goal_complete_rejected_when_completion_gates_depth_not_met() {
         let suffix = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("time")
@@ -933,11 +1007,16 @@ fn goal_complete_rejected_when_completion_gates_depth_not_met() {
         let result = read_goal_state(&repo, Some("gok"))
             .expect("read")
             .expect("state");
-        assert_eq!(result["status"], json!("running"),
-            "goal must stay running after iteration complete");
+        assert_eq!(
+            result["status"],
+            json!("running"),
+            "goal must stay running after iteration complete"
+        );
         assert_eq!(result["iteration_count"], json!(1));
-        assert!(result.get("archived").is_none(),
-            "goal must NOT be archived after iteration complete");
+        assert!(
+            result.get("archived").is_none(),
+            "goal must NOT be archived after iteration complete"
+        );
         let _ = fs::remove_dir_all(&repo);
     }
 
@@ -951,7 +1030,7 @@ fn goal_complete_rejected_when_completion_gates_depth_not_met() {
         let _ = fs::remove_dir_all(&repo);
         fs::create_dir_all(repo.join("artifacts/current/rfv-task")).expect("mkdir");
 
-        let path = quality_gate_state_path(&repo, "rfv-task").expect("path");
+        let path = rfv_loop_state_path(&repo, "rfv-task").expect("path");
         let state = json!({
             "schema_version": "router-rs-quality-gate-v1",
             "loop_status": "active",
@@ -959,23 +1038,23 @@ fn goal_complete_rejected_when_completion_gates_depth_not_met() {
         });
         crate::utils::atomic_write::write_atomic_json(&path, &state).expect("write rfv");
 
-        let read = read_quality_gate_state(&repo, Some("rfv-task"))
+        let read = read_rfv_loop_state(&repo, Some("rfv-task"))
             .expect("read")
             .expect("some");
         assert_eq!(read["loop_status"], json!("active"));
 
-        let via_active = read_quality_gate_state(&repo, Some("rfv-task"))
+        let via_active = read_rfv_loop_state(&repo, Some("rfv-task"))
             .expect("read active")
             .expect("some");
         assert_eq!(via_active["goal"], json!("g"));
 
         assert!(
-            read_quality_gate_state(&repo, Some("missing-task"))
+            read_rfv_loop_state(&repo, Some("missing-task"))
                 .expect("read missing")
                 .is_none()
         );
 
-        let err = read_quality_gate_state(&repo, Some("   ")).expect_err("empty override");
+        let err = read_rfv_loop_state(&repo, Some("   ")).expect_err("empty override");
         assert!(err.to_string().contains("empty"));
 
         let _ = fs::remove_dir_all(&repo);
@@ -1037,10 +1116,15 @@ fn goal_complete_rejected_when_completion_gates_depth_not_met() {
         let result = read_goal_state(&repo, Some("sess-task"))
             .expect("read")
             .expect("state");
-        assert_eq!(result["status"], json!("running"),
-            "goal must stay running after iteration complete");
-        assert!(result.get("archived").is_none(),
-            "goal must NOT be archived after iteration complete");
+        assert_eq!(
+            result["status"],
+            json!("running"),
+            "goal must stay running after iteration complete"
+        );
+        assert!(
+            result.get("archived").is_none(),
+            "goal must NOT be archived after iteration complete"
+        );
 
         let _ = fs::remove_dir_all(&repo);
     }
@@ -1138,7 +1222,11 @@ fn goal_complete_rejected_when_completion_gates_depth_not_met() {
         let st = read_goal_state(&repo, Some("auto-stale"))
             .expect("read")
             .expect("state");
-        assert_eq!(st["stale"], json!(true), "auto-{{nanos}} goal must be stale");
+        assert_eq!(
+            st["stale"],
+            json!(true),
+            "auto-{{nanos}} goal must be stale"
+        );
         assert!(
             st["stale_reason"]
                 .as_str()
@@ -1303,10 +1391,22 @@ fn goal_complete_rejected_when_completion_gates_depth_not_met() {
             .expect("read")
             .expect("state");
         assert_eq!(st["goal"], json!("updated goal"));
-        assert_eq!(st["non_goals"][0], json!("original non-goal"), "non_goals should be preserved");
-        assert_eq!(st["done_when"].as_array().map(|a| a.len()), Some(3), "done_when should be replaced");
+        assert_eq!(
+            st["non_goals"][0],
+            json!("original non-goal"),
+            "non_goals should be preserved"
+        );
+        assert_eq!(
+            st["done_when"].as_array().map(|a| a.len()),
+            Some(3),
+            "done_when should be replaced"
+        );
         // Checkpoints should be preserved
-        assert_eq!(st["checkpoints"].as_array().map(|a| a.len()), Some(1), "checkpoints preserved");
+        assert_eq!(
+            st["checkpoints"].as_array().map(|a| a.len()),
+            Some(1),
+            "checkpoints preserved"
+        );
         assert_eq!(st["checkpoints"][0]["note"], json!("first milestone"));
         // Status should remain running
         assert_eq!(st["status"], json!("running"));
@@ -1514,15 +1614,28 @@ fn goal_complete_rejected_when_completion_gates_depth_not_met() {
 
         // 6. Verify
         let goal_path = goal_state_path_for_task(&repo, "lifecycle-task").expect("goal path");
-        assert!(goal_path.is_file(), "GOAL_STATE.json must still exist after iteration complete");
+        assert!(
+            goal_path.is_file(),
+            "GOAL_STATE.json must still exist after iteration complete"
+        );
 
         let state = read_goal_state(&repo, Some("lifecycle-task"))
             .expect("read goal state")
             .expect("state exists");
-        assert!(state.get("archived").is_none(), "archived must NOT be present (loop semantics)");
-        assert_eq!(state["status"], json!("running"),
-            "goal must stay running after iteration complete");
-        assert_eq!(state["goal"], json!("updated goal"), "amend goal must persist");
+        assert!(
+            state.get("archived").is_none(),
+            "archived must NOT be present (loop semantics)"
+        );
+        assert_eq!(
+            state["status"],
+            json!("running"),
+            "goal must stay running after iteration complete"
+        );
+        assert_eq!(
+            state["goal"],
+            json!("updated goal"),
+            "amend goal must persist"
+        );
         assert_eq!(
             state["checkpoints"].as_array().map(|a| a.len()),
             Some(2),
@@ -1557,7 +1670,10 @@ fn goal_complete_rejected_when_completion_gates_depth_not_met() {
         .expect("start");
 
         let goal_path = goal_state_path_for_task(&repo, "cp-task").expect("path");
-        assert!(goal_path.is_file(), "GOAL_STATE.json must exist before complete");
+        assert!(
+            goal_path.is_file(),
+            "GOAL_STATE.json must exist before complete"
+        );
 
         // Capture raw content hash (length as proxy) before complete
         let raw_before = fs::read_to_string(&goal_path).expect("read before");
@@ -1579,15 +1695,23 @@ fn goal_complete_rejected_when_completion_gates_depth_not_met() {
         let state = read_goal_state(&repo, Some("cp-task"))
             .expect("read after complete")
             .expect("state exists");
-        assert_eq!(state["status"], json!("running"),
-            "goal must stay running after iteration complete");
-        assert!(state.get("archived").is_none(),
-            "goal must NOT be archived after iteration complete");
+        assert_eq!(
+            state["status"],
+            json!("running"),
+            "goal must stay running after iteration complete"
+        );
+        assert!(
+            state.get("archived").is_none(),
+            "goal must NOT be archived after iteration complete"
+        );
         assert_eq!(state["iteration_count"], json!(1));
 
         // File content changed (iteration_count updated)
         let raw_after = fs::read_to_string(&goal_path).expect("read after");
-        assert_ne!(raw_before, raw_after, "file content must change after iteration complete");
+        assert_ne!(
+            raw_before, raw_after,
+            "file content must change after iteration complete"
+        );
 
         let _ = fs::remove_dir_all(&repo);
     }
@@ -1679,8 +1803,10 @@ fn goal_complete_rejected_when_completion_gates_depth_not_met() {
             "goal_type": "loop",
             "drive_until_done": false,
         });
-        assert!(goal_state_requests_continuation(&state),
-            "running loop goal must request continuation even with drive_until_done=false");
+        assert!(
+            goal_state_requests_continuation(&state),
+            "running loop goal must request continuation even with drive_until_done=false"
+        );
     }
 
     #[test]
@@ -1689,23 +1815,29 @@ fn goal_complete_rejected_when_completion_gates_depth_not_met() {
             "status": "paused",
             "goal_type": "loop",
         });
-        assert!(!goal_state_requests_continuation(&paused),
-            "paused loop goal must NOT request continuation");
+        assert!(
+            !goal_state_requests_continuation(&paused),
+            "paused loop goal must NOT request continuation"
+        );
 
         let blocked = json!({
             "status": "blocked",
             "goal_type": "loop",
         });
-        assert!(!goal_state_requests_continuation(&blocked),
-            "blocked loop goal must NOT request continuation");
+        assert!(
+            !goal_state_requests_continuation(&blocked),
+            "blocked loop goal must NOT request continuation"
+        );
 
         let completed = json!({
             "status": "completed",
             "goal_type": "loop",
             "archived": true,
         });
-        assert!(!goal_state_requests_continuation(&completed),
-            "completed loop goal must NOT request continuation");
+        assert!(
+            !goal_state_requests_continuation(&completed),
+            "completed loop goal must NOT request continuation"
+        );
     }
 
     #[test]
@@ -1715,8 +1847,9 @@ fn goal_complete_rejected_when_completion_gates_depth_not_met() {
             "goal_type": "loop",
             "stale": true,
         });
-        assert!(!goal_state_requests_continuation(&state),
-            "stale loop goal must NOT request continuation");
+        assert!(
+            !goal_state_requests_continuation(&state),
+            "stale loop goal must NOT request continuation"
+        );
     }
-
 }

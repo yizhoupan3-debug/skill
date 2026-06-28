@@ -23,8 +23,5 @@ fn task_pointers_help_docs() {
         .arg("--help")
         .output()
         .expect("router-rs --help should run");
-    assert!(
-        output.status.success(),
-        "router-rs --help should exit 0"
-    );
+    assert!(output.status.success(), "router-rs --help should exit 0");
 }

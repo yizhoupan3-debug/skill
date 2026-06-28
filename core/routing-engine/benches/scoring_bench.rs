@@ -9,7 +9,7 @@
 //! Generates synthetic SkillRecord data in-memory (no disk I/O).
 
 use criterion::{BenchmarkId, Criterion, black_box};
-use routing_engine::route::{search_skills, SkillRecord};
+use routing_engine::route::{SkillRecord, search_skills};
 use std::collections::HashSet;
 use std::time::{Duration, Instant};
 
@@ -65,7 +65,11 @@ fn make_skill_records(count: usize) -> Vec<SkillRecord> {
         .map(|i| {
             let cat = i % 5;
             SkillRecord {
-                slug: format!("skill-{}-{}", i, ["search", "analyze", "generate", "transform", "validate"][cat]),
+                slug: format!(
+                    "skill-{}-{}",
+                    i,
+                    ["search", "analyze", "generate", "transform", "validate"][cat]
+                ),
                 skill_path: Some(format!("skills/skill-{}/SKILL.md", i)),
                 layer: layers[cat].to_string(),
                 owner: owners[cat].to_string(),
@@ -73,13 +77,20 @@ fn make_skill_records(count: usize) -> Vec<SkillRecord> {
                 priority: "normal".to_string(),
                 session_start: "any".to_string(),
                 summary: format!("Skill #{}: {}", i, summaries[cat]),
-                slug_lower: format!("skill-{}-{}", i, ["search", "analyze", "generate", "transform", "validate"][cat]),
+                slug_lower: format!(
+                    "skill-{}-{}",
+                    i,
+                    ["search", "analyze", "generate", "transform", "validate"][cat]
+                ),
                 owner_lower: owners[cat].to_string(),
                 gate_lower: gates[i % gates.len()].to_string(),
                 session_start_lower: "any".to_string(),
                 gate_phrases: vec![],
                 trigger_hints: vec![format!("hint_{}", i)],
-                name_tokens: name_token_sets[cat].iter().map(|s| (*s).to_string()).collect(),
+                name_tokens: name_token_sets[cat]
+                    .iter()
+                    .map(|s| (*s).to_string())
+                    .collect(),
                 keyword_tokens: keyword_sets[cat].iter().map(|s| (*s).to_string()).collect(),
                 alias_tokens: HashSet::new(),
                 do_not_use_tokens: HashSet::new(),
@@ -105,7 +116,10 @@ fn bench_search_skills(c: &mut Criterion) {
     let queries: &[(&str, &str)] = &[
         ("short", "search"),
         ("medium", "find code analysis tools"),
-        ("long", "I need a skill that can search through the codebase and find relevant patterns for code review and analysis"),
+        (
+            "long",
+            "I need a skill that can search through the codebase and find relevant patterns for code review and analysis",
+        ),
     ];
 
     let mut group = c.benchmark_group("search_skills");

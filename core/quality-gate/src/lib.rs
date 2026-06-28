@@ -24,9 +24,9 @@ pub use checker::GateChecker;
 pub use registry::CheckerRegistry;
 pub use types::{CheckContext, CheckResult, Finding, GateVerdict, Severity};
 
-
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     #[test]
     fn smoke() {
         assert!(true);

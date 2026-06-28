@@ -3,8 +3,8 @@
 use std::collections::HashMap;
 
 use crate::checker::GateChecker;
-use crate::types::{CheckContext, CheckResult, Finding, GateVerdict, Severity};
 use crate::scene;
+use crate::types::{CheckContext, CheckResult, Finding, GateVerdict, Severity};
 
 /// Registry mapping scene identifiers to their registered checkers.
 ///
@@ -59,9 +59,10 @@ impl CheckerRegistry {
             // Sub-scene filtering (Wave 6): skip checkers with a mismatched affinity.
             if let Some(ref sub) = ctx.sub_scene
                 && let Some(affinity) = checker.sub_scene_affinity()
-                    && affinity != sub.as_str() {
-                        continue;
-                    }
+                && affinity != sub.as_str()
+            {
+                continue;
+            }
 
             let result = checker.check(ctx);
             if !result.findings.is_empty() || !result.passed {
@@ -134,9 +135,10 @@ fn aggregate(results: &[CheckResult]) -> GateVerdict {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
-    use crate::types::Severity;
     use crate::scene;
+    use crate::types::Severity;
 
     struct DummyChecker {
         id: &'static str,
@@ -144,9 +146,15 @@ mod tests {
     }
 
     impl GateChecker for DummyChecker {
-        fn id(&self) -> &'static str { self.id }
-        fn scenes(&self) -> Vec<&'static str> { vec![scene::GENERAL] }
-        fn description(&self) -> &'static str { "dummy checker for tests" }
+        fn id(&self) -> &'static str {
+            self.id
+        }
+        fn scenes(&self) -> Vec<&'static str> {
+            vec![scene::GENERAL]
+        }
+        fn description(&self) -> &'static str {
+            "dummy checker for tests"
+        }
         fn check(&self, _ctx: &CheckContext) -> CheckResult {
             self.result.clone()
         }
@@ -177,14 +185,17 @@ mod tests {
     #[test]
     fn test_unknown_scene_falls_back_to_general() {
         let mut registry = CheckerRegistry::new();
-        registry.register(scene::GENERAL, Box::new(DummyChecker {
-            id: "gen",
-            result: CheckResult {
-                checker_id: "gen".to_string(),
-                passed: true,
-                findings: vec![],
-            },
-        }));
+        registry.register(
+            scene::GENERAL,
+            Box::new(DummyChecker {
+                id: "gen",
+                result: CheckResult {
+                    checker_id: "gen".to_string(),
+                    passed: true,
+                    findings: vec![],
+                },
+            }),
+        );
         let v = registry.evaluate("nonexistent", &make_ctx("t1"));
         // Falls back to "general" which has the gen checker
         assert_eq!(v.checkers_ran, 1);
@@ -193,22 +204,23 @@ mod tests {
     #[test]
     fn test_p0_blocks_gate() {
         let mut registry = CheckerRegistry::new();
-        registry.register(scene::GENERAL, Box::new(DummyChecker {
-            id: "p0-checker",
-            result: CheckResult {
-                checker_id: "p0-checker".to_string(),
-                passed: false,
-                findings: vec![
-                    Finding {
+        registry.register(
+            scene::GENERAL,
+            Box::new(DummyChecker {
+                id: "p0-checker",
+                result: CheckResult {
+                    checker_id: "p0-checker".to_string(),
+                    passed: false,
+                    findings: vec![Finding {
                         id: "f1".to_string(),
                         severity: Severity::P0,
                         description: "critical bug".to_string(),
                         location: None,
                         suggestion: None,
-                    },
-                ],
-            },
-        }));
+                    }],
+                },
+            }),
+        );
         let v = registry.evaluate(scene::GENERAL, &make_ctx("t1"));
         assert!(!v.passed);
         assert_eq!(v.blockers.len(), 1);
@@ -218,22 +230,23 @@ mod tests {
     #[test]
     fn test_warning_only_passes() {
         let mut registry = CheckerRegistry::new();
-        registry.register(scene::GENERAL, Box::new(DummyChecker {
-            id: "warn-checker",
-            result: CheckResult {
-                checker_id: "warn-checker".to_string(),
-                passed: true,
-                findings: vec![
-                    Finding {
+        registry.register(
+            scene::GENERAL,
+            Box::new(DummyChecker {
+                id: "warn-checker",
+                result: CheckResult {
+                    checker_id: "warn-checker".to_string(),
+                    passed: true,
+                    findings: vec![Finding {
                         id: "w1".to_string(),
                         severity: Severity::Warning,
                         description: "minor style issue".to_string(),
                         location: None,
                         suggestion: None,
-                    },
-                ],
-            },
-        }));
+                    }],
+                },
+            }),
+        );
         let v = registry.evaluate(scene::GENERAL, &make_ctx("t1"));
         assert!(v.passed);
         assert_eq!(v.advisories.len(), 1);
@@ -242,14 +255,17 @@ mod tests {
     #[test]
     fn test_empty_findings_passes() {
         let mut registry = CheckerRegistry::new();
-        registry.register(scene::GENERAL, Box::new(DummyChecker {
-            id: "empty",
-            result: CheckResult {
-                checker_id: "empty".to_string(),
-                passed: true,
-                findings: vec![],
-            },
-        }));
+        registry.register(
+            scene::GENERAL,
+            Box::new(DummyChecker {
+                id: "empty",
+                result: CheckResult {
+                    checker_id: "empty".to_string(),
+                    passed: true,
+                    findings: vec![],
+                },
+            }),
+        );
         let v = registry.evaluate(scene::GENERAL, &make_ctx("t1"));
         assert!(v.passed);
         assert_eq!(v.checkers_ran, 1);
@@ -260,29 +276,32 @@ mod tests {
     #[test]
     fn test_mixed_severity_blockers_only() {
         let mut registry = CheckerRegistry::new();
-        registry.register(scene::GENERAL, Box::new(DummyChecker {
-            id: "mixed",
-            result: CheckResult {
-                checker_id: "mixed".to_string(),
-                passed: false,
-                findings: vec![
-                    Finding {
-                        id: "b1".to_string(),
-                        severity: Severity::B,
-                        description: "blocker".to_string(),
-                        location: None,
-                        suggestion: None,
-                    },
-                    Finding {
-                        id: "w1".to_string(),
-                        severity: Severity::Warning,
-                        description: "advice".to_string(),
-                        location: None,
-                        suggestion: None,
-                    },
-                ],
-            },
-        }));
+        registry.register(
+            scene::GENERAL,
+            Box::new(DummyChecker {
+                id: "mixed",
+                result: CheckResult {
+                    checker_id: "mixed".to_string(),
+                    passed: false,
+                    findings: vec![
+                        Finding {
+                            id: "b1".to_string(),
+                            severity: Severity::B,
+                            description: "blocker".to_string(),
+                            location: None,
+                            suggestion: None,
+                        },
+                        Finding {
+                            id: "w1".to_string(),
+                            severity: Severity::Warning,
+                            description: "advice".to_string(),
+                            location: None,
+                            suggestion: None,
+                        },
+                    ],
+                },
+            }),
+        );
         let v = registry.evaluate(scene::GENERAL, &make_ctx("t1"));
         assert!(!v.passed);
         assert_eq!(v.blockers.len(), 1);

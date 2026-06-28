@@ -5,17 +5,15 @@
 //! **Writes** serialize via `task_write_lock`
 //! (phase 2); this module only aggregates read models (`ResolvedTaskView`, `ContinuityFrame`).
 
+use crate::state_manager::{read_goal_state, task_evidence_artifacts_summary_for_task};
 use crate::state_manager::{
-    read_goal_state, task_evidence_artifacts_summary_for_task,
-};
-use crate::state_manager::{
-    read_quality_gate_state, validate_external_research_strict, validate_external_research_structured,
+    read_rfv_loop_state, validate_external_research_strict, validate_external_research_structured,
 };
 
-#[cfg(not(test))]
-use std::sync::OnceLock;
 use serde_json::Value;
 use std::path::Path;
+#[cfg(not(test))]
+use std::sync::OnceLock;
 
 // Re-export pure type definitions from core-state-types (L2) for backward compatibility.
 pub use core_state_types::task_state_types::*;
@@ -243,15 +241,15 @@ fn goal_diagnostics_scan_hydrate_enabled() -> bool {
     #[cfg(not(test))]
     {
         static CACHED: OnceLock<bool> = OnceLock::new();
-        *CACHED.get_or_init(|| {
-            match std::env::var("ROUTER_RS_GOAL_DIAGNOSTICS_SCAN_HYDRATE") {
+        *CACHED.get_or_init(
+            || match std::env::var("ROUTER_RS_GOAL_DIAGNOSTICS_SCAN_HYDRATE") {
                 Ok(v) => {
                     let t = v.trim().to_lowercase();
                     matches!(t.as_str(), "1" | "true" | "yes" | "on")
                 }
                 Err(_) => false,
-            }
-        })
+            },
+        )
     }
     #[cfg(test)]
     {
@@ -290,9 +288,10 @@ pub fn depth_compliance_aggregate(
     let mut c = DepthCompliance::default();
 
     if let Some(g) = goal
-        && let Some(arr) = g.get("checkpoints").and_then(Value::as_array) {
-            c.goal_checkpoint_count = arr.len() as u64;
-        }
+        && let Some(arr) = g.get("checkpoints").and_then(Value::as_array)
+    {
+        c.goal_checkpoint_count = arr.len() as u64;
+    }
 
     let mut strict_task = false;
     if let Some(r) = qg {
@@ -339,11 +338,11 @@ pub fn depth_compliance_aggregate(
                     c.qg_external_deep_structured_round_count += 1;
                     if strict_task
                         && let Some(er) = round.get("external_research")
-                            && validate_external_research_structured(er).is_ok()
-                                && validate_external_research_strict(er).is_ok()
-                            {
-                                c.qg_external_strict_ok_round_count += 1;
-                            }
+                        && validate_external_research_structured(er).is_ok()
+                        && validate_external_research_strict(er).is_ok()
+                    {
+                        c.qg_external_strict_ok_round_count += 1;
+                    }
                 }
             }
         }
@@ -380,9 +379,6 @@ pub fn task_view_has_active_goal_focus_mismatch_note(view: &ResolvedTaskView) ->
         .iter()
         .any(|n| n.starts_with(RESOLUTION_NOTE_ACTIVE_GOAL_MISSING_FOCUS_HAS_GOAL))
 }
-
-
-
 
 fn push_resolution_read_err(notes: &mut Vec<String>, prefix: &'static str, err: String) {
     let mut line = format!("{prefix}: {err}");
@@ -466,13 +462,19 @@ pub fn hydrate_task_state_hybrid(
     // Always read directly from physical files.
     match read_goal_state(repo_root, Some(task_id)) {
         Ok(g) => goal_state = g,
-        Err(e) => push_resolution_read_err(&mut resolution_notes, "goal_state_read_failed", e.to_string()),
+        Err(e) => push_resolution_read_err(
+            &mut resolution_notes,
+            "goal_state_read_failed",
+            e.to_string(),
+        ),
     }
-    match read_quality_gate_state(repo_root, Some(task_id)) {
+    match read_rfv_loop_state(repo_root, Some(task_id)) {
         Ok(v) => rfv_loop_state = v,
-        Err(e) => {
-            push_resolution_read_err(&mut resolution_notes, "rfv_loop_state_read_failed", e.to_string())
-        }
+        Err(e) => push_resolution_read_err(
+            &mut resolution_notes,
+            "rfv_loop_state_read_failed",
+            e.to_string(),
+        ),
     }
     let (mut evidence_rows_non_empty, mut has_successful_verification) =
         task_evidence_artifacts_summary_for_task(repo_root, task_id);
@@ -581,7 +583,6 @@ pub fn resolve_task_view_with_pointers(
     }
 }
 
-
 /// Parse `GOAL_STATE.completion_gates`. Missing / null → **off** (no gate). Object with
 /// `"enabled": false` → parsed but [`validate_goal_completion_gates`] is a no-op.
 pub fn parse_goal_completion_gates(goal: &Value) -> Option<GoalCompletionGates> {
@@ -641,12 +642,13 @@ pub fn validate_goal_completion_gates(
         );
     };
     if let Some(min) = gates.min_depth_score
-        && dc.depth_score < min {
-            return Err(format!(
-                "GOAL completion_gates: depth_score={} < min_depth_score={} (fix RFV/EVIDENCE/checkpoints or lower the gate; rollup from resolve_task_view)",
-                dc.depth_score, min
-            ));
-        }
+        && dc.depth_score < min
+    {
+        return Err(format!(
+            "GOAL completion_gates: depth_score={} < min_depth_score={} (fix RFV/EVIDENCE/checkpoints or lower the gate; rollup from resolve_task_view)",
+            dc.depth_score, min
+        ));
+    }
     if gates.require_successful_evidence_row {
         let ok = view
             .evidence
@@ -684,7 +686,7 @@ pub fn validate_goal_completion_gates(
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used)]
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use serde_json::json;
     use std::fs;
@@ -707,8 +709,10 @@ mod tests {
     fn write_focus(tmp: &Path, id: &str) {
         // Merge focus_task_id into TASK_POINTERS.json (write_active may have written it first).
         let p = tmp.join("artifacts/current/TASK_POINTERS.json");
-        let mut data: serde_json::Value =
-            fs::read_to_string(&p).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
+        let mut data: serde_json::Value = fs::read_to_string(&p)
+            .ok()
+            .and_then(|s| serde_json::from_str(&s).ok())
+            .unwrap_or_default();
         data["focus_task_id"] = serde_json::json!(id);
         fs::write(p, serde_json::to_string_pretty(&data).unwrap()).unwrap();
     }
@@ -765,7 +769,8 @@ mod tests {
         let ev = v.evidence.as_ref().expect("evidence");
         assert!(!ev.evidence_rows_non_empty);
         assert!(!ev.has_successful_verification);
-        assert!(!v.resolution_notes.iter().any(|n| {
+        assert!(
+            !v.resolution_notes.iter().any(|n| {
                 n.starts_with(super::RESOLUTION_NOTE_ACTIVE_GOAL_MISSING_FOCUS_HAS_GOAL)
             }),
             "unexpected focus-has-goal note when active has GOAL: {:?}",
@@ -774,7 +779,9 @@ mod tests {
         match prior_hint {
             Some(p) => {
                 // SAFETY: test-only; DEPTH_SCORE_MODE_ENV_TEST_MUTEX prevents concurrent env access from other tests.
-                unsafe { core_state_utils::env_sync::set_env("ROUTER_RS_DEPTH_COMPLIANCE_HINT", &p) }
+                unsafe {
+                    core_state_utils::env_sync::set_env("ROUTER_RS_DEPTH_COMPLIANCE_HINT", &p)
+                }
             }
             None => {
                 // SAFETY: test-only; DEPTH_SCORE_MODE_ENV_TEST_MUTEX prevents concurrent env access from other tests.
@@ -909,7 +916,7 @@ mod tests {
         assert!(
             v.resolution_notes
                 .iter()
-                .any(|n| n.contains("parse") || n.contains("GOAL")),
+                .any(|n| n.contains("goal_state_read_failed") || n.contains("JSON error")),
             "notes={:?}",
             v.resolution_notes
         );
@@ -1136,7 +1143,9 @@ mod tests {
         match prior_hint {
             Some(p) => {
                 // SAFETY: test-only; DEPTH_SCORE_MODE_ENV_TEST_MUTEX prevents concurrent env access from other tests.
-                unsafe { core_state_utils::env_sync::set_env("ROUTER_RS_DEPTH_COMPLIANCE_HINT", &p) }
+                unsafe {
+                    core_state_utils::env_sync::set_env("ROUTER_RS_DEPTH_COMPLIANCE_HINT", &p)
+                }
             }
             None => {
                 // SAFETY: test-only; DEPTH_SCORE_MODE_ENV_TEST_MUTEX prevents concurrent env access from other tests.

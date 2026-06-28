@@ -2,8 +2,8 @@
 
 use crate::common::{project_root, read_json, read_text};
 use crate::policy::policy_helpers::{
-    allowed_python_control_plane_path, collect_files, collect_files_with_extension,
-    RETIRED_RUNTIME_OWNED_SKILL_SLUGS,
+    RETIRED_RUNTIME_OWNED_SKILL_SLUGS, allowed_python_control_plane_path, collect_files,
+    collect_files_with_extension,
 };
 use core_policy::doc_registry;
 use std::collections::HashSet;
@@ -100,13 +100,11 @@ fn github_source_gate_python_helpers_stay_removed() {
 
 #[test]
 fn generated_routing_surfaces_do_not_reference_removed_python_helpers() {
-    let generated = [
-        "skills/SKILL_ROUTING_RUNTIME.json",
-    ]
-    .iter()
-    .map(|path| read_text(&project_root().join(path)))
-    .collect::<Vec<_>>()
-    .join("\n");
+    let generated = ["skills/SKILL_ROUTING_RUNTIME.json"]
+        .iter()
+        .map(|path| read_text(&project_root().join(path)))
+        .collect::<Vec<_>>()
+        .join("\n");
     assert!(!generated.contains("inspect_pr_checks.py"));
     assert!(!generated.contains("fetch_comments.py"));
     assert!(generated.contains("gh-source-gate"));
@@ -115,10 +113,10 @@ fn generated_routing_surfaces_do_not_reference_removed_python_helpers() {
 #[test]
 fn removed_router_flags_are_absent_from_user_docs() {
     let docs = doc_registry::all_keys()
-    .iter()
-    .map(|path| read_text(&project_root().join(path)))
-    .collect::<Vec<_>>()
-    .join("\n");
+        .iter()
+        .map(|path| read_text(&project_root().join(path)))
+        .collect::<Vec<_>>()
+        .join("\n");
 
     for removed_flag in [
         "--framework-refresh-json",
@@ -190,7 +188,10 @@ fn framework_runtime_python_package_stays_removed() {
 #[test]
 fn repo_local_codex_omits_framework_mcp_entrypoint() {
     // .codex/ 目录在未运行 install-skills codex 时不存在
-    assert!(!project_root().join(".codex").exists(), ".codex/ directory must not exist in repo (only generated on install)");
+    assert!(
+        !project_root().join(".codex").exists(),
+        ".codex/ directory must not exist in repo (only generated on install)"
+    );
 }
 
 #[test]

@@ -73,10 +73,7 @@ impl GateChecker for ProseQCChecker {
                     findings.push(Finding {
                         id: "prose_qc_read_error".to_string(),
                         severity: Severity::C,
-                        description: format!(
-                            "cannot read paper file {}: {e}",
-                            file_path.display()
-                        ),
+                        description: format!("cannot read paper file {}: {e}", file_path.display()),
                         location: Some(file_path.display().to_string()),
                         suggestion: None,
                     });

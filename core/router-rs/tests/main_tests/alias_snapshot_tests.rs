@@ -1,7 +1,7 @@
 use super::common::*;
 use super::*;
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 fn write_framework_alias_registry_fixture(repo_root: &Path) {
     let registry_dir = repo_root.join("configs").join("framework");
@@ -10,9 +10,6 @@ fn write_framework_alias_registry_fixture(repo_root: &Path) {
         .join("../../configs/framework/RUNTIME_REGISTRY.json");
     fs::copy(source, registry_dir.join("RUNTIME_REGISTRY.json")).expect("copy runtime registry");
 }
-
-
-
 
 #[test]
 fn framework_alias_builds_compact_deepinterview_payload() {
@@ -106,7 +103,6 @@ fn framework_alias_builds_compact_deepinterview_payload() {
     let _ = fs::remove_dir_all(&repo_root);
 }
 
-
 #[test]
 fn framework_alias_fails_closed_for_missing_alias_record() {
     let repo_root = std::env::temp_dir().join(format!(
@@ -134,11 +130,10 @@ fn framework_alias_fails_closed_for_missing_alias_record() {
         },
     )
     .expect_err("missing alias should fail closed");
-    assert!(err.contains("Unknown framework alias `team`"));
+    assert!(err.to_string().contains("Unknown framework alias `team`"));
 
     let _ = fs::remove_dir_all(&repo_root);
 }
-
 
 #[test]
 fn framework_alias_compact_payload_omits_duplicate_prompt_fields() {
@@ -232,7 +227,6 @@ fn framework_alias_compact_payload_omits_duplicate_prompt_fields() {
     let _ = fs::remove_dir_all(&repo_root);
 }
 
-
 #[test]
 fn framework_snapshot_reconciles_stale_supervisor_against_current_pointers() {
     let repo_root = temp_dir_path("runtime-anchor-reconcile");
@@ -286,7 +280,8 @@ fn framework_snapshot_reconciles_stale_supervisor_against_current_pointers() {
     );
 
     let payload =
-        build_framework_runtime_snapshot_envelope_with_level(&repo_root, None, None, "summary").expect("build snapshot");
+        build_framework_runtime_snapshot_envelope_with_level(&repo_root, None, None, "summary")
+            .expect("build snapshot");
     let snapshot = &payload["runtime_snapshot"];
     assert_eq!(snapshot["active_task_id"], json!("fresh-task"));
     assert_eq!(snapshot["continuity"]["state"], json!("inconsistent"));
@@ -296,13 +291,14 @@ fn framework_snapshot_reconciles_stale_supervisor_against_current_pointers() {
         .iter()
         .filter_map(Value::as_str)
         .collect::<Vec<_>>();
-    assert!(reasons
-        .iter()
-        .any(|reason| reason.contains("supervisor task_id 'stale-task' disagrees")));
+    assert!(
+        reasons
+            .iter()
+            .any(|reason| reason.contains("supervisor task_id 'stale-task' disagrees"))
+    );
 
     let _ = fs::remove_dir_all(&repo_root);
 }
-
 
 #[test]
 fn framework_runtime_snapshot_surfaces_invalid_task_registry_json() {
@@ -311,7 +307,8 @@ fn framework_runtime_snapshot_surfaces_invalid_task_registry_json() {
     fs::create_dir_all(&current_root).unwrap();
     fs::write(current_root.join("task_registry.json"), "{truncated").unwrap();
     let payload =
-        build_framework_runtime_snapshot_envelope_with_level(&repo_root, None, None, "summary").expect("snapshot");
+        build_framework_runtime_snapshot_envelope_with_level(&repo_root, None, None, "summary")
+            .expect("snapshot");
     let reasons = payload["runtime_snapshot"]["control_plane_inconsistency_reasons"]
         .as_array()
         .expect("control plane reasons");

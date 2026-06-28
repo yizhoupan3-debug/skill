@@ -110,6 +110,7 @@ pub fn normalize_tool_name(value: Option<&str>) -> String {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     #[test]
@@ -155,7 +156,10 @@ mod tests {
         assert!(origin.is_mcp());
         assert!(!origin.is_native());
         match &origin {
-            ToolOrigin::McpServer { server_id, tool_name } => {
+            ToolOrigin::McpServer {
+                server_id,
+                tool_name,
+            } => {
                 assert_eq!(server_id, "browser-mcp");
                 assert_eq!(tool_name, "browser_click");
             }
@@ -165,7 +169,9 @@ mod tests {
 
     #[test]
     fn classify_tool_origin_native() {
-        for tool in &["Bash", "Write", "Edit", "Read", "Agent", "shell", "bash", "task"] {
+        for tool in &[
+            "Bash", "Write", "Edit", "Read", "Agent", "shell", "bash", "task",
+        ] {
             let origin = classify_tool_origin(tool);
             assert!(origin.is_native(), "{tool} should be NativeHost");
         }

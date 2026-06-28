@@ -5,7 +5,8 @@ use std::path::Path;
 
 use core_policy::hook_policy::{HookPolicyEvaluateRequest, evaluate_hook_policy};
 use core_policy::review_gate_engine::{
-    fork_context_from_values, fork_context_false_means_independent, review_independent_reviewer_evidence,
+    fork_context_false_means_independent, fork_context_from_values,
+    review_independent_reviewer_evidence,
 };
 use serde_json::json;
 

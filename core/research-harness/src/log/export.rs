@@ -42,7 +42,9 @@ pub fn export_csv(conn: &rusqlite::Connection) -> Result<String, anyhow::Error> 
 }
 
 /// 导出所有条目为 Obsidian Markdown 文件列表 (filename → content)。
-pub fn export_obsidian(conn: &rusqlite::Connection) -> Result<Vec<(String, String)>, anyhow::Error> {
+pub fn export_obsidian(
+    conn: &rusqlite::Connection,
+) -> Result<Vec<(String, String)>, anyhow::Error> {
     let ids = db::list_entry_ids(conn)?;
     let mut files = Vec::new();
     for id in &ids {
@@ -59,11 +61,12 @@ pub fn export_obsidian(conn: &rusqlite::Connection) -> Result<Vec<(String, Strin
 
 fn escape_csv(s: &str) -> String {
     // Prefix with tab if starts with formula-triggering characters (CSV injection prevention).
-    let guarded = if s.starts_with('+') || s.starts_with('-') || s.starts_with('=') || s.starts_with('@') {
-        format!("\t{s}")
-    } else {
-        s.to_string()
-    };
+    let guarded =
+        if s.starts_with('+') || s.starts_with('-') || s.starts_with('=') || s.starts_with('@') {
+            format!("\t{s}")
+        } else {
+            s.to_string()
+        };
     if guarded.contains(',') || guarded.contains('"') || guarded.contains('\n') {
         format!("\"{}\"", guarded.replace('"', "\"\""))
     } else {
@@ -73,6 +76,7 @@ fn escape_csv(s: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use crate::log::{db, models::*};
     use std::path::Path;

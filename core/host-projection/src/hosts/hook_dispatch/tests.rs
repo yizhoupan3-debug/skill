@@ -1,3 +1,5 @@
+#![allow(clippy::unwrap_used, clippy::expect_used)]
+
 use super::*;
 use serde_json::json;
 use std::path::{Path, PathBuf};
@@ -64,18 +66,24 @@ fn test_hook_output_to_json_value_covers_all_variants() {
     let result = hook_output_to_json_value("E", Some(ctx));
     assert_eq!(result["context_append"], "[E] test");
 
-    let block = HookOutput::Block { reason: "blocked".to_string() };
+    let block = HookOutput::Block {
+        reason: "blocked".to_string(),
+    };
     let result = hook_output_to_json_value("E", Some(block));
     assert_eq!(result["decision"], "block");
 
-    let deny = HookOutput::Deny { reason: "denied".to_string() };
+    let deny = HookOutput::Deny {
+        reason: "denied".to_string(),
+    };
     let result = hook_output_to_json_value("E", Some(deny));
     assert_eq!(result["decision"], "block");
 }
 
 #[test]
 fn test_warn_returns_warning_field() {
-    let warn = HookOutput::Warn { message: "caution".to_string() };
+    let warn = HookOutput::Warn {
+        message: "caution".to_string(),
+    };
     let result = hook_output_to_json_value("E", Some(warn));
     assert_eq!(result["warning"], "caution");
 }

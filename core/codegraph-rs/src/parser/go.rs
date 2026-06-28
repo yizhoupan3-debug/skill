@@ -34,31 +34,32 @@ fn collect_all(
     match node.kind() {
         "function_declaration" | "method_declaration" | "type_declaration" => {
             if let Some(name) = node.child_by_field_name("name")
-                && let Ok(text) = name.utf8_text(source) {
-                    symbols.push(ParsedSymbol {
-                        symbol: text.to_string(),
-                        kind: node.kind().trim_end_matches("_declaration").to_string(),
-                        line: node.start_position().row as u32 + 1,
-                        start_col: node.start_position().column as u32 + 1,
-                        end_line: node.end_position().row as u32 + 1,
-                        end_col: node.end_position().column as u32 + 1,
-                    });
-                }
+                && let Ok(text) = name.utf8_text(source)
+            {
+                symbols.push(ParsedSymbol {
+                    symbol: text.to_string(),
+                    kind: node.kind().trim_end_matches("_declaration").to_string(),
+                    line: node.start_position().row as u32 + 1,
+                    start_col: node.start_position().column as u32 + 1,
+                    end_line: node.end_position().row as u32 + 1,
+                    end_col: node.end_position().column as u32 + 1,
+                });
+            }
         }
         _ => {}
     }
     // Collect call edges at this node
     if node.kind() == "call_expression"
         && let Some(func) = node.child_by_field_name("function")
-            && let (Some(caller), Some(callee)) =
-                (enclosing_symbol(node, source), callee_name(func, source))
-            {
-                edges.push(ParsedEdge {
-                    caller_symbol: caller,
-                    callee_symbol: callee,
-                    line: node.start_position().row as u32 + 1,
-                });
-            }
+        && let (Some(caller), Some(callee)) =
+            (enclosing_symbol(node, source), callee_name(func, source))
+    {
+        edges.push(ParsedEdge {
+            caller_symbol: caller,
+            callee_symbol: callee,
+            line: node.start_position().row as u32 + 1,
+        });
+    }
     // Recurse into children
     for i in 0..node.named_child_count() {
         if let Some(child) = node.named_child(i) {
@@ -84,9 +85,10 @@ fn enclosing_symbol(node: Node<'_>, source: &[u8]) -> Option<String> {
         match ancestor.kind() {
             "function_declaration" | "method_declaration" => {
                 if let Some(name) = ancestor.child_by_field_name("name")
-                    && let Ok(text) = name.utf8_text(source) {
-                        return Some(text.to_string());
-                    }
+                    && let Ok(text) = name.utf8_text(source)
+                {
+                    return Some(text.to_string());
+                }
             }
             _ => {}
         }
@@ -97,6 +99,7 @@ fn enclosing_symbol(node: Node<'_>, source: &[u8]) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::parse;
 
     #[test]
@@ -107,8 +110,16 @@ type Reader interface {
 }
 "#;
         let out = parse(src);
-        let symbols: Vec<_> = out.symbols.iter().map(|s| (s.symbol.as_str(), s.kind.as_str())).collect();
-        assert!(symbols.is_empty(), "interface method declarations inside type_declaration are not extracted: {:?}", symbols);
+        let symbols: Vec<_> = out
+            .symbols
+            .iter()
+            .map(|s| (s.symbol.as_str(), s.kind.as_str()))
+            .collect();
+        assert!(
+            symbols.is_empty(),
+            "interface method declarations inside type_declaration are not extracted: {:?}",
+            symbols
+        );
     }
 
     #[test]
@@ -119,9 +130,21 @@ func (f Foo) Bar() { f.Baz() }
 func (f Foo) Baz() {}
 "#;
         let out = parse(src);
-        let symbols: Vec<_> = out.symbols.iter().map(|s| (s.symbol.as_str(), s.kind.as_str())).collect();
-        assert!(symbols.contains(&("Bar", "method")), "should find method: {:?}", symbols);
-        assert!(symbols.contains(&("Baz", "method")), "should find method: {:?}", symbols);
+        let symbols: Vec<_> = out
+            .symbols
+            .iter()
+            .map(|s| (s.symbol.as_str(), s.kind.as_str()))
+            .collect();
+        assert!(
+            symbols.contains(&("Bar", "method")),
+            "should find method: {:?}",
+            symbols
+        );
+        assert!(
+            symbols.contains(&("Baz", "method")),
+            "should find method: {:?}",
+            symbols
+        );
     }
 
     #[test]
@@ -132,7 +155,11 @@ func (s Svc) Run() { s.helper() }
 func (s Svc) helper() {}
 "#;
         let out = parse(src);
-        let edge = out.edges.iter().find(|e| e.callee_symbol == "helper").expect("helper edge");
+        let edge = out
+            .edges
+            .iter()
+            .find(|e| e.callee_symbol == "helper")
+            .expect("helper edge");
         assert_eq!(edge.caller_symbol, "Run");
     }
 
@@ -148,7 +175,11 @@ func main() {
         let symbols: Vec<_> = out.symbols.iter().map(|s| s.symbol.as_str()).collect();
         assert!(symbols.contains(&"worker"));
         assert!(symbols.contains(&"main"));
-        let edge = out.edges.iter().find(|e| e.callee_symbol == "worker").expect("worker edge");
+        let edge = out
+            .edges
+            .iter()
+            .find(|e| e.callee_symbol == "worker")
+            .expect("worker edge");
         assert_eq!(edge.caller_symbol, "main");
     }
 }

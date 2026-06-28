@@ -30,10 +30,15 @@ pub fn validate_task_id_component(task_id: &str) -> Result<&str, FrameworkError>
 
 /// Join `relative` (POSIX-ish, no `..` / absolute) under `root`. Used for host entrypoint sync
 /// and runtime `skill_path` validation.
-pub fn join_repo_relative_under_root(root: &Path, relative: &str) -> Result<PathBuf, FrameworkError> {
+pub fn join_repo_relative_under_root(
+    root: &Path,
+    relative: &str,
+) -> Result<PathBuf, FrameworkError> {
     let rel = relative.trim().replace('\\', "/");
     if rel.is_empty() {
-        return Err(FrameworkError::validation("relative path is empty".to_string()));
+        return Err(FrameworkError::validation(
+            "relative path is empty".to_string(),
+        ));
     }
     let parsed = Path::new(rel.as_str());
     if parsed.is_absolute() {
@@ -47,7 +52,9 @@ pub fn join_repo_relative_under_root(root: &Path, relative: &str) -> Result<Path
             Component::CurDir => {}
             Component::Normal(part) => tail.push(part),
             Component::ParentDir | Component::RootDir | Component::Prefix(_) => {
-                return Err(FrameworkError::validation(format!("invalid relative path segment in {relative:?}")));
+                return Err(FrameworkError::validation(format!(
+                    "invalid relative path segment in {relative:?}"
+                )));
             }
         }
     }
@@ -80,7 +87,10 @@ pub fn reject_unsafe_path(path: &Path) -> Result<(), FrameworkError> {
         Ok(_) => {}
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
         Err(err) => {
-            return Err(FrameworkError::validation(format!("stat write path {} failed: {err}", path.display())));
+            return Err(FrameworkError::validation(format!(
+                "stat write path {} failed: {err}",
+                path.display()
+            )));
         }
     }
     Ok(())

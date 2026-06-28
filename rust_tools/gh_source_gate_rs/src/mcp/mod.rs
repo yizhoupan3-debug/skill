@@ -1,44 +1,42 @@
 //! MCP tool definitions and dispatch for gh_source_gate_rs.
 
 use anyhow::Result;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::path::Path;
 
-use crate::{find_git_root, inspect_pr_checks_json, fetch_comments_json, doctor_json};
+use crate::{doctor_json, fetch_comments_json, find_git_root, inspect_pr_checks_json};
 
 /// MCP tool definitions exposed by this server.
 pub fn tool_definitions() -> Vec<Value> {
-    vec![
-        json!({
-            "name": "gh_source_gate",
-            "description": "Inspect failing GitHub Actions checks, fetch PR review comments, or run doctor diagnostics for a repository.",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "url": {
-                        "type": "string",
-                        "description": "GitHub PR URL or repo path (absolute). If empty, uses current directory."
-                    },
-                    "action": {
-                        "type": "string",
-                        "enum": ["validate", "audit", "check"],
-                        "description": "Operation: 'check' inspects failing PR checks, 'audit' fetches review comments and threads, 'validate' runs doctor diagnostics.",
-                        "default": "check"
-                    },
-                    "pr": {
-                        "type": "string",
-                        "description": "PR number or URL override (optional, auto-detected if omitted)"
-                    },
-                    "open_only": {
-                        "type": "boolean",
-                        "description": "For audit action: only return unresolved, non-outdated review threads.",
-                        "default": false
-                    }
+    vec![json!({
+        "name": "gh_source_gate",
+        "description": "Inspect failing GitHub Actions checks, fetch PR review comments, or run doctor diagnostics for a repository.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "url": {
+                    "type": "string",
+                    "description": "GitHub PR URL or repo path (absolute). If empty, uses current directory."
                 },
-                "required": ["url"]
-            }
-        }),
-    ]
+                "action": {
+                    "type": "string",
+                    "enum": ["validate", "audit", "check"],
+                    "description": "Operation: 'check' inspects failing PR checks, 'audit' fetches review comments and threads, 'validate' runs doctor diagnostics.",
+                    "default": "check"
+                },
+                "pr": {
+                    "type": "string",
+                    "description": "PR number or URL override (optional, auto-detected if omitted)"
+                },
+                "open_only": {
+                    "type": "boolean",
+                    "description": "For audit action: only return unresolved, non-outdated review threads.",
+                    "default": false
+                }
+            },
+            "required": ["url"]
+        }
+    })]
 }
 
 /// Dispatch a tool call by name and arguments.
@@ -86,8 +84,7 @@ fn tool_gh_source_gate(args: &Value) -> Result<Value, anyhow::Error> {
 
     match action {
         "check" => {
-            let result =
-                inspect_pr_checks_json(&repo_root, effective_pr, 160, 30)?;
+            let result = inspect_pr_checks_json(&repo_root, effective_pr, 160, 30)?;
             let text = serde_json::to_string_pretty(&result)?;
             Ok(json!({
                 "content": [{"type": "text", "text": text}],
@@ -98,8 +95,7 @@ fn tool_gh_source_gate(args: &Value) -> Result<Value, anyhow::Error> {
             }))
         }
         "audit" => {
-            let result =
-                fetch_comments_json(&repo_root, effective_pr, open_only)?;
+            let result = fetch_comments_json(&repo_root, effective_pr, open_only)?;
             let text = serde_json::to_string_pretty(&result)?;
             Ok(json!({
                 "content": [{"type": "text", "text": text}],

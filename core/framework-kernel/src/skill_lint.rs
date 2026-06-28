@@ -3,8 +3,7 @@ use serde_json::{Value, json};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-pub const HARNESS_SKILL_LINT_SCHEMA_VERSION: &str =
-    "router-rs-harness-skill-contract-lint-v1";
+pub const HARNESS_SKILL_LINT_SCHEMA_VERSION: &str = "router-rs-harness-skill-contract-lint-v1";
 pub const HARNESS_CONTRACT_AUTHORITY: &str = "rust-harness-contract";
 
 pub const FAILURE_TAXONOMY: &[(&str, &str)] = &[
@@ -85,8 +84,9 @@ pub fn lint_skill_contracts(payload: Value) -> Result<Value, FrameworkError> {
             ));
             continue;
         }
-        let text = fs::read_to_string(&path)
-            .map_err(|err| FrameworkError::validation(format!("read skill {} failed: {err}", path.display())))?;
+        let text = fs::read_to_string(&path).map_err(|err| {
+            FrameworkError::validation(format!("read skill {} failed: {err}", path.display()))
+        })?;
         scanned.push(slug.clone());
         lint_one_skill(&slug, &path, &text, &mut findings);
     }
@@ -239,7 +239,9 @@ fn default_high_impact_skill_slugs() -> Vec<String> {
 
 fn frontmatter_block(text: &str) -> Option<&str> {
     let text = text.strip_prefix('\u{FEFF}').unwrap_or(text);
-    let trimmed = text.strip_prefix("---\r\n").or_else(|| text.strip_prefix("---\n"))?;
+    let trimmed = text
+        .strip_prefix("---\r\n")
+        .or_else(|| text.strip_prefix("---\n"))?;
     let end = trimmed.find("\r\n---").or_else(|| trimmed.find("\n---"))?;
     Some(&trimmed[..end])
 }

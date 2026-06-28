@@ -22,13 +22,13 @@ use regex::Regex;
 use serde_json::Value;
 use std::sync::OnceLock;
 
-pub mod paper;
 pub mod design;
+pub mod paper;
 pub mod technical;
 pub mod tooling;
 
-pub use paper::*;
 pub use design::*;
+pub use paper::*;
 pub use technical::*;
 pub use tooling::*;
 
@@ -226,20 +226,22 @@ pub(crate) fn signal_matches(
     query_token_list: &[String],
     markers: &[&str],
 ) -> bool {
-    markers
-        .iter()
-        .any(|m| {
-            // Short ASCII-only markers (≤2 chars) must only match at token level
-            // to avoid false positives from substring matches (e.g. "ux" in
-            // "luxury"/"flux"/"auxiliary").  Longer or mixed-script markers are
-            // specific enough for substring containment to be safe.
-            let use_contains = m.len() > 2 || !m.is_ascii();
-            (use_contains && query_text.contains(*m)) || text_matches_phrase(query_token_list, m)
-        })
+    markers.iter().any(|m| {
+        // Short ASCII-only markers (≤2 chars) must only match at token level
+        // to avoid false positives from substring matches (e.g. "ux" in
+        // "luxury"/"flux"/"auxiliary").  Longer or mixed-script markers are
+        // specific enough for substring containment to be safe.
+        let use_contains = m.len() > 2 || !m.is_ascii();
+        (use_contains && query_text.contains(*m)) || text_matches_phrase(query_token_list, m)
+    })
 }
 
 /// Look up a signal definition by name and evaluate it.
-pub(crate) fn has_signal_by_name(name: &str, query_text: &str, query_token_list: &[String]) -> bool {
+pub(crate) fn has_signal_by_name(
+    name: &str,
+    query_text: &str,
+    query_token_list: &[String],
+) -> bool {
     SIGNAL_DEFS
         .iter()
         .find(|def| def.name == name)
@@ -258,8 +260,11 @@ const ROUTING_SIGNAL_MARKERS_SCHEMA_VERSION: &str = "routing-signal-markers-v1";
 pub(crate) fn routing_signal_markers_json() -> &'static Value {
     static CELL: OnceLock<Value> = OnceLock::new();
     CELL.get_or_init(|| {
-        let v: Value = serde_json::from_str(ROUTING_SIGNAL_MARKERS_EMBED)
-            .expect("ROUTING_SIGNAL_MARKERS.json: embedded JSON must parse (build artifact corrupted)");
+        let v: Value = serde_json::from_str(ROUTING_SIGNAL_MARKERS_EMBED).unwrap_or_else(|e| {
+            panic!(
+                "ROUTING_SIGNAL_MARKERS.json: embedded JSON must parse (build artifact corrupted): {e}"
+            )
+        });
         let version = v.get("schema_version").and_then(Value::as_str);
         assert_eq!(
             version,
@@ -287,7 +292,7 @@ pub(crate) fn meta_routing_anchors() -> &'static [String] {
         let arr = root
             .pointer("/meta_routing_task/anchor_any_of_substrings")
             .and_then(Value::as_array)
-            .expect("meta_routing_task.anchor_any_of_substrings");
+            .unwrap_or_else(|| panic!("meta_routing_task.anchor_any_of_substrings"));
         arr.iter()
             .filter_map(|v| v.as_str().map(str::to_string))
             .collect()
@@ -301,7 +306,7 @@ pub(crate) fn meta_routing_markers() -> &'static [String] {
         let arr = root
             .pointer("/meta_routing_task/marker_any_of_substrings")
             .and_then(Value::as_array)
-            .expect("meta_routing_task.marker_any_of_substrings");
+            .unwrap_or_else(|| panic!("meta_routing_task.marker_any_of_substrings"));
         arr.iter()
             .filter_map(|v| v.as_str().map(str::to_string))
             .collect()
@@ -336,17 +341,10 @@ pub(crate) fn supervisor_marker_strings() -> &'static [String] {
 
 pub(crate) fn github_pr_standalone_token_regex() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| Regex::new(r"(?i)\bpr\b").expect("static github pr token regex"))
+    RE.get_or_init(|| {
+        Regex::new(r"(?i)\bpr\b").unwrap_or_else(|e| panic!("static github pr token regex: {e}"))
+    })
 }
-
-
-
-
-
-
-
-
-
 
 pub fn has_rendered_visual_evidence_context(query_text: &str, query_token_list: &[String]) -> bool {
     let direct_evidence = [
@@ -367,7 +365,10 @@ pub fn has_rendered_visual_evidence_context(query_text: &str, query_token_list: 
 /// Check whether user mentions existing image files (screenshots, exported
 /// charts) that suggest they want a visual review.
 /// Only called from `has_rendered_visual_evidence_context` above.
-pub(crate) fn has_existing_image_file_context(query_text: &str, query_token_list: &[String]) -> bool {
+pub(crate) fn has_existing_image_file_context(
+    query_text: &str,
+    query_token_list: &[String],
+) -> bool {
     let has_image_extension = [".png", ".jpg", ".jpeg"]
         .iter()
         .any(|marker| query_text.contains(marker))
@@ -394,8 +395,6 @@ pub(crate) fn has_existing_image_file_context(query_text: &str, query_token_list
     .iter()
     .any(|marker| query_text.contains(marker) || text_matches_phrase(query_token_list, marker))
 }
-
-
 
 /// Returns `true` when the record`s `owner_lower` is `"overlay"`.
 ///
@@ -446,14 +445,6 @@ pub fn has_plan_mode_owner_context(query_text: &str, query_token_list: &[String]
         || (query_text.contains("可验收") && query_text.contains("todo"))
 }
 
-
-
-
-
-
-
-
-
 pub(crate) fn detect_research_directory(cwd: &std::path::Path) -> bool {
     cwd.ancestors().any(|dir| {
         dir.join("research-state.yaml").is_file() || dir.join(".research.toml").is_file()
@@ -473,8 +464,7 @@ pub fn has_research_context(query_text: &str, query_token_list: &[String]) -> bo
     }
     // No caching: directory detection is cheap (2 is_file per ancestor) and
     // caching would miss user-initiated "cd" across directories during a session.
-    std::env::current_dir()
-        .is_ok_and(|cwd| detect_research_directory(&cwd))
+    std::env::current_dir().is_ok_and(|cwd| detect_research_directory(&cwd))
 }
 
 /// True when the query is about reviewing/checking a mathematical proof or derivation,
@@ -501,31 +491,15 @@ pub fn has_ci_failure_context(query_text: &str, query_token_list: &[String]) -> 
         "模板编译失败",
     ]
     .iter()
-    .any(|marker| {
-        query_text.contains(*marker)
-            || text_matches_phrase(query_token_list, marker)
-    });
+    .any(|marker| query_text.contains(*marker) || text_matches_phrase(query_token_list, marker));
     phrase_match || query_token_list.iter().any(|token| token == "ci")
 }
-
 
 pub fn should_route_to_gh_fix_ci(query_text: &str, query_token_list: &[String]) -> bool {
     has_ci_failure_context(query_text, query_token_list)
         && (has_github_pr_context(query_text, query_token_list)
             || !has_non_github_ci_provider_context(query_text, query_token_list))
 }
-
-
-
-
-
-
-
-
-
-
-
-
 
 pub fn artifact_gate_matches_query(query_token_list: &[String]) -> bool {
     gate_hint_phrases("artifact")
@@ -573,18 +547,6 @@ pub fn artifact_gate_target_slug(query_token_list: &[String]) -> Option<&'static
             .then_some(*slug)
     })
 }
-
-
-
-
-
-
-
-
-
-
-
-
 
 pub fn build_route_context(query_text: &str, query_token_list: &[String]) -> RouteContextPayload {
     let completion_requested = completion_marker_strings().iter().any(|marker| {
@@ -659,6 +621,7 @@ pub fn build_route_context(query_text: &str, query_token_list: &[String]) -> Rou
 
 #[cfg(test)]
 mod paper_prose_edit_context_tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use crate::route::tokenize_route_text;
 
@@ -715,6 +678,7 @@ mod paper_prose_edit_context_tests {
 
 #[cfg(test)]
 mod paper_review_slice_context_tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use crate::route::tokenize_route_text;
 
@@ -735,6 +699,7 @@ mod paper_review_slice_context_tests {
 
 #[cfg(test)]
 mod github_pr_context_tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use crate::route::tokenize_query;
 
@@ -761,6 +726,7 @@ mod github_pr_context_tests {
 
 #[cfg(test)]
 mod research_context_tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use crate::route::tokenize_route_text;
 
@@ -809,7 +775,11 @@ mod research_context_tests {
     #[test]
     pub(crate) fn detect_research_directory_finds_toml_marker() {
         let dir = tempfile::tempdir().unwrap();
-        std::fs::write(dir.path().join(".research.toml"), "[research]\nenabled = true").unwrap();
+        std::fs::write(
+            dir.path().join(".research.toml"),
+            "[research]\nenabled = true",
+        )
+        .unwrap();
         assert!(detect_research_directory(dir.path()));
     }
 
@@ -831,6 +801,7 @@ mod research_context_tests {
 
 #[cfg(test)]
 mod signal_marker_case_tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     /// Compile-time safety net: all SIGNAL_DEFS markers must be lowercase ASCII.

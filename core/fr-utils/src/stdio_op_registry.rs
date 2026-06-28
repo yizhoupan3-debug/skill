@@ -163,30 +163,49 @@ pub fn handles_runtime_output_stdio_op(_op: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     #[test]
     fn classify_routing_ops() {
         assert_eq!(classify_stdio_op("route"), Some(StdioOpDomain::Routing));
-        assert_eq!(classify_stdio_op("search_skills"), Some(StdioOpDomain::Routing));
-        assert_eq!(classify_stdio_op("eval_route"), Some(StdioOpDomain::Routing));
+        assert_eq!(
+            classify_stdio_op("search_skills"),
+            Some(StdioOpDomain::Routing)
+        );
+        assert_eq!(
+            classify_stdio_op("eval_route"),
+            Some(StdioOpDomain::Routing)
+        );
     }
 
     #[test]
     fn classify_runtime_ops() {
         assert_eq!(classify_stdio_op("execute"), Some(StdioOpDomain::Runtime));
-        assert_eq!(classify_stdio_op("orchestrator"), Some(StdioOpDomain::Runtime));
+        assert_eq!(
+            classify_stdio_op("orchestrator"),
+            Some(StdioOpDomain::Runtime)
+        );
     }
 
     #[test]
     fn classify_trace_ops() {
-        assert_eq!(classify_stdio_op("trace_record_event"), Some(StdioOpDomain::Trace));
-        assert_eq!(classify_stdio_op("trace_stream_replay"), Some(StdioOpDomain::Trace));
+        assert_eq!(
+            classify_stdio_op("trace_record_event"),
+            Some(StdioOpDomain::Trace)
+        );
+        assert_eq!(
+            classify_stdio_op("trace_stream_replay"),
+            Some(StdioOpDomain::Trace)
+        );
     }
 
     #[test]
     fn classify_framework_ops() {
-        assert_eq!(classify_stdio_op("framework_goal_drive"), Some(StdioOpDomain::Framework));
+        assert_eq!(
+            classify_stdio_op("framework_goal_drive"),
+            Some(StdioOpDomain::Framework)
+        );
     }
 
     #[test]

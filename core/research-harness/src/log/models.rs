@@ -317,7 +317,7 @@ mod tests {
             entry_id_b: "e2".into(),
             relation: Some("extends".into()),
             weight: 0.8,
-            
+
             confidence: None,
             notes: None,
             created_at: "2026-01-01T00:00:00Z".into(),

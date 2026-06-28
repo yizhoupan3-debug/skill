@@ -21,14 +21,13 @@ pub struct ReadOutput {
 }
 
 pub fn page_count(path: &Path) -> Result<u32> {
-    let doc = lopdf::Document::load(path)
-        .with_context(|| format!("load pdf {}", path.display()))?;
+    let doc =
+        lopdf::Document::load(path).with_context(|| format!("load pdf {}", path.display()))?;
     Ok(doc.get_pages().len() as u32)
 }
 
 pub fn extract_text(path: &Path) -> Result<String> {
-    pdf_extract::extract_text(path)
-        .with_context(|| format!("extract text from {}", path.display()))
+    pdf_extract::extract_text(path).with_context(|| format!("extract text from {}", path.display()))
 }
 
 /// Sample text from the first `min(SHALLOW_SAMPLE_PAGES, page_count)` pages only.

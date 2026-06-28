@@ -8,8 +8,7 @@
 
 use core_errors::FrameworkError;
 use core_state::closeout_validation::{
-    evaluate_closeout_record_value_with_context,
-    CloseoutEvidenceContext,
+    CloseoutEvidenceContext, evaluate_closeout_record_value_with_context,
 };
 use serde_json::Value;
 use std::fs;
@@ -27,7 +26,10 @@ pub fn closeout_programmatic_enforcement_enabled() -> bool {
 }
 
 /// Default location for a task's closeout record.
-pub fn closeout_record_path_for_task(repo_root: &Path, task_id: &str) -> Result<PathBuf, FrameworkError> {
+pub fn closeout_record_path_for_task(
+    repo_root: &Path,
+    task_id: &str,
+) -> Result<PathBuf, FrameworkError> {
     // SECURITY: Validate task_id to prevent path traversal attacks.
     // Only allow alphanumeric characters, hyphens, and underscores.
     let sanitized = task_id.trim();
@@ -84,9 +86,10 @@ pub fn first_task_id_from_registry(repo_root: &Path) -> Option<String> {
             .lock()
             .unwrap_or_else(|e| e.into_inner());
         if let Some(ref cached) = *guard
-            && cached.mtime == mtime {
-                return extract_first_task_id_from_value(&cached.content);
-            }
+            && cached.mtime == mtime
+        {
+            return extract_first_task_id_from_value(&cached.content);
+        }
     }
     let raw = fs::read_to_string(&registry_path).ok()?;
     let data: Value = serde_json::from_str(&raw).ok()?;
@@ -94,7 +97,10 @@ pub fn first_task_id_from_registry(repo_root: &Path) -> Option<String> {
         let mut guard = TASK_REGISTRY_CACHE
             .lock()
             .unwrap_or_else(|e| e.into_inner());
-        *guard = Some(CachedTaskRegistry { content: data.clone(), mtime });
+        *guard = Some(CachedTaskRegistry {
+            content: data.clone(),
+            mtime,
+        });
     }
     extract_first_task_id_from_value(&data)
 }
@@ -189,8 +195,9 @@ pub fn evaluate_closeout_record_file_for_task(
         has_successful_verification: has_success,
         goal_prediction,
     };
-    evaluate_closeout_record_value_with_context(record, &ctx)
-        .map_err(|err| FrameworkError::validation(format!("closeout record evaluation failed: {err}")))
+    evaluate_closeout_record_value_with_context(record, &ctx).map_err(|err| {
+        FrameworkError::validation(format!("closeout record evaluation failed: {err}"))
+    })
 }
 
 fn in_ci_like_environment() -> bool {
@@ -220,4 +227,3 @@ fn closeout_enforcement_disabled_by_env() -> bool {
         Err(_) => !in_ci_like_environment(),
     }
 }
-

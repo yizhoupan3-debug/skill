@@ -24,18 +24,17 @@ const ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE_ENV: &str = "ROUTER_RS_CONTINUITY_P
 const ROUTER_RS_HOOK_TIMING_ENV: &str = "ROUTER_RS_HOOK_TIMING";
 
 pub use core_policy::env_flags::{
-    router_rs_subagent_model_inherit_nudge_enabled,
-    router_rs_review_gate_disabled_for_host, router_rs_review_pending_cycle_max,
-    router_rs_review_spawn_first_nudge_enabled,
-    router_rs_operator_inject_globally_enabled, router_rs_pre_goal_enabled,
-    router_rs_hook_silent_enabled, router_rs_hook_outbound_context_max_bytes,
-    router_rs_pre_goal_strict_disk_enabled, router_rs_hook_state_fail_open_enabled,
-    router_rs_hook_state_lock_retries, router_rs_hook_state_file_sync_enabled,
-    router_rs_hook_state_dir_sync_enabled, router_rs_cargo_check_sync_enabled,
-    router_rs_hook_state_legacy_full_sweep_enabled, router_rs_hook_state_stale_sweep_days,
-    router_rs_hook_legacy_subtracted_events_enabled,
-    env_enabled_default_true as router_rs_env_enabled_default_true,
     env_enabled_default_false as router_rs_env_enabled_default_false,
+    env_enabled_default_true as router_rs_env_enabled_default_true,
+    router_rs_cargo_check_sync_enabled, router_rs_hook_legacy_subtracted_events_enabled,
+    router_rs_hook_outbound_context_max_bytes, router_rs_hook_silent_enabled,
+    router_rs_hook_state_dir_sync_enabled, router_rs_hook_state_fail_open_enabled,
+    router_rs_hook_state_file_sync_enabled, router_rs_hook_state_legacy_full_sweep_enabled,
+    router_rs_hook_state_lock_retries, router_rs_hook_state_stale_sweep_days,
+    router_rs_operator_inject_globally_enabled, router_rs_pre_goal_enabled,
+    router_rs_pre_goal_strict_disk_enabled, router_rs_review_gate_disabled_for_host,
+    router_rs_review_pending_cycle_max, router_rs_review_spawn_first_nudge_enabled,
+    router_rs_subagent_model_inherit_nudge_enabled,
 };
 
 /// Cross-host: missing `fork_context` on countable reviewer lane may infer independent fork.
@@ -113,6 +112,7 @@ pub fn router_rs_qg_max_rounds_cap() -> u64 {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use core_policy::test_env_sync::process_env_lock;
 
@@ -168,9 +168,9 @@ mod tests {
         assert!(super::router_rs_pre_goal_enabled());
         match prev {
             // SAFETY: test-only; process_env_lock() prevents concurrent env access from other tests.
-            Some(v) => unsafe {env::set_var(key, v) },
+            Some(v) => unsafe { env::set_var(key, v) },
             // SAFETY: test-only; process_env_lock() prevents concurrent env access from other tests.
-            None => unsafe {env::remove_var(key) },
+            None => unsafe { env::remove_var(key) },
         }
     }
 
@@ -202,15 +202,15 @@ mod tests {
         // Legacy fallback: legacy "0" disables when canonical unset
         match prev_canon {
             // SAFETY: test-only; process_env_lock() prevents concurrent env access from other tests.
-            Some(v) => unsafe {env::set_var(key_canonical, v) },
+            Some(v) => unsafe { env::set_var(key_canonical, v) },
             // SAFETY: test-only; process_env_lock() prevents concurrent env access from other tests.
-            None => unsafe {env::remove_var(key_canonical) },
+            None => unsafe { env::remove_var(key_canonical) },
         }
         match prev_legacy {
             // SAFETY: test-only; process_env_lock() prevents concurrent env access from other tests.
-            Some(v) => unsafe {env::set_var(key_legacy, v) },
+            Some(v) => unsafe { env::set_var(key_legacy, v) },
             // SAFETY: test-only; process_env_lock() prevents concurrent env access from other tests.
-            None => unsafe {env::remove_var(key_legacy) },
+            None => unsafe { env::remove_var(key_legacy) },
         }
     }
 
@@ -227,9 +227,9 @@ mod tests {
         assert!(super::router_rs_continuity_post_tool_evidence_enabled());
         match prev {
             // SAFETY: test-only; process_env_lock() prevents concurrent env access from other tests.
-            Some(v) => unsafe {env::set_var(key, v) },
+            Some(v) => unsafe { env::set_var(key, v) },
             // SAFETY: test-only; process_env_lock() prevents concurrent env access from other tests.
-            None => unsafe {env::remove_var(key) },
+            None => unsafe { env::remove_var(key) },
         }
     }
 
@@ -243,10 +243,7 @@ mod tests {
         assert!(super::router_rs_review_gate_stop_max_nudges_cap().is_none());
         // SAFETY: test-only; process_env_lock() prevents concurrent env access from other tests.
         unsafe { env::set_var(key, "3") };
-        assert_eq!(
-            super::router_rs_review_gate_stop_max_nudges_cap(),
-            Some(3)
-        );
+        assert_eq!(super::router_rs_review_gate_stop_max_nudges_cap(), Some(3));
         // SAFETY: test-only; process_env_lock() prevents concurrent env access from other tests.
         unsafe { env::set_var(key, "0") };
         assert!(super::router_rs_review_gate_stop_max_nudges_cap().is_none());
@@ -255,17 +252,14 @@ mod tests {
         // Also verify legacy CURSOR_ name is still honored by core-policy
         // SAFETY: test-only; process_env_lock() prevents concurrent env access from other tests.
         unsafe { env::set_var("ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES", "5") };
-        assert_eq!(
-            super::router_rs_review_gate_stop_max_nudges_cap(),
-            Some(5)
-        );
+        assert_eq!(super::router_rs_review_gate_stop_max_nudges_cap(), Some(5));
         // SAFETY: test-only; process_env_lock() prevents concurrent env access from other tests.
         unsafe { env::remove_var("ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES") };
         match prev {
             // SAFETY: test-only; process_env_lock() prevents concurrent env access from other tests.
-            Some(v) => unsafe {env::set_var(key, v) },
+            Some(v) => unsafe { env::set_var(key, v) },
             // SAFETY: test-only; process_env_lock() prevents concurrent env access from other tests.
-            None => unsafe {env::remove_var(key) },
+            None => unsafe { env::remove_var(key) },
         }
     }
 
@@ -284,9 +278,9 @@ mod tests {
         assert_eq!(super::router_rs_qg_max_rounds_cap(), 10000);
         match prev {
             // SAFETY: test-only; process_env_lock() prevents concurrent env access from other tests.
-            Some(v) => unsafe {env::set_var("ROUTER_RS_QG_MAX_ROUNDS_CAP", v) },
+            Some(v) => unsafe { env::set_var("ROUTER_RS_QG_MAX_ROUNDS_CAP", v) },
             // SAFETY: test-only; process_env_lock() prevents concurrent env access from other tests.
-            None => unsafe {env::remove_var("ROUTER_RS_QG_MAX_ROUNDS_CAP") },
+            None => unsafe { env::remove_var("ROUTER_RS_QG_MAX_ROUNDS_CAP") },
         }
     }
 }

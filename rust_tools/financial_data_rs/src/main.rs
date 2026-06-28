@@ -1,10 +1,10 @@
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use serde_json::json;
 use std::fs;
 
 use financial_data_rs::{
-    self as lib, generic_records_to_csv, records_to_csv, FetchResult, GenericResult, HttpClient,
+    self as lib, FetchResult, GenericResult, HttpClient, generic_records_to_csv, records_to_csv,
 };
 
 #[derive(Parser)]
@@ -292,7 +292,14 @@ fn backtest_csv(result: &FetchResult, schema: BacktestSchema) -> Result<String> 
     match schema {
         BacktestSchema::Generic => {
             let mut header = vec![
-                "timestamp", "open", "high", "low", "close", "volume", "symbol", "market",
+                "timestamp",
+                "open",
+                "high",
+                "low",
+                "close",
+                "volume",
+                "symbol",
+                "market",
                 "source",
             ];
             if include_adj_close {
@@ -350,7 +357,13 @@ fn backtest_csv(result: &FetchResult, schema: BacktestSchema) -> Result<String> 
         }
         BacktestSchema::Backtrader => {
             writer.write_record([
-                "datetime", "open", "high", "low", "close", "volume", "openinterest",
+                "datetime",
+                "open",
+                "high",
+                "low",
+                "close",
+                "volume",
+                "openinterest",
             ])?;
             for record in &result.records {
                 writer.write_record([

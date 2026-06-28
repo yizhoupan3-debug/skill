@@ -37,6 +37,7 @@ pub fn list_files(conn: &Connection) -> rusqlite::Result<Vec<FileRecord>> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::{index_stats, list_files};
     use crate::db::schema::init_schema;
 

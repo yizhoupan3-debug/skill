@@ -342,8 +342,7 @@ mod tests {
     #[test]
     fn mock_hook_review_disk_version() {
         let mut mock = MockReviewDiskState::new();
-        mock.expect_disk_version()
-            .returning(|| 42u32);
+        mock.expect_disk_version().returning(|| 42u32);
         assert_eq!(mock.disk_version(), 42);
     }
 

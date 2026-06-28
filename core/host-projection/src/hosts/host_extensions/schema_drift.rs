@@ -83,8 +83,7 @@ const GATE_TIMEOUT_SECS: &[(&str, u64)] = &[
 // ---------------------------------------------------------------------------
 
 fn read_hooks_doc(path: &Path) -> Result<Value, String> {
-    let raw =
-        std::fs::read_to_string(path).map_err(|e| format!("read {}: {e}", path.display()))?;
+    let raw = std::fs::read_to_string(path).map_err(|e| format!("read {}: {e}", path.display()))?;
     serde_json::from_str(&raw).map_err(|e| format!("parse {}: {e}", path.display()))
 }
 
@@ -106,7 +105,11 @@ fn first_hook_entry<'a>(
     hooks.get(event)?.as_array()?.first()
 }
 
-fn audit_hooks_doc(label: &str, doc: &Value, expected_cmd_fragment: &str) -> (Vec<String>, Vec<String>) {
+fn audit_hooks_doc(
+    label: &str,
+    doc: &Value,
+    expected_cmd_fragment: &str,
+) -> (Vec<String>, Vec<String>) {
     let mut command_issues = Vec::new();
     let mut timeout_issues = Vec::new();
     let Some(hooks) = doc.get("hooks").and_then(Value::as_object) else {
@@ -203,8 +206,11 @@ pub fn snapshot_host_hooks(
     let registered = read_hooks_event_keys(&abs_hooks)?;
     let template_keys = read_hooks_event_keys(&abs_template)?;
     let hooks_doc = read_hooks_doc(&abs_hooks)?;
-    let (mut hook_command_issues, mut gate_timeout_issues) =
-        audit_hooks_doc(&hooks_path.display().to_string(), &hooks_doc, expected_cmd_fragment);
+    let (mut hook_command_issues, mut gate_timeout_issues) = audit_hooks_doc(
+        &hooks_path.display().to_string(),
+        &hooks_doc,
+        expected_cmd_fragment,
+    );
     let mut hooks_template_parity_issues = Vec::new();
     if abs_template.is_file() {
         if let Ok(template_doc) = read_hooks_doc(&abs_template) {
@@ -215,14 +221,10 @@ pub fn snapshot_host_hooks(
             );
             hook_command_issues.extend(cmd_i);
             gate_timeout_issues.extend(to_i);
-            hooks_template_parity_issues =
-                compare_hooks_template_parity(&hooks_doc, &template_doc);
+            hooks_template_parity_issues = compare_hooks_template_parity(&hooks_doc, &template_doc);
         }
     } else {
-        hooks_template_parity_issues.push(format!(
-            "missing {}",
-            template_path.display()
-        ));
+        hooks_template_parity_issues.push(format!("missing {}", template_path.display()));
     }
     let missing_required: Vec<String> = expected_events
         .iter()
@@ -255,13 +257,22 @@ pub fn snapshot_host_hooks_json(
     forbidden_events: &[&str],
     expected_cmd_fragment: &str,
 ) -> Result<Value, String> {
-    let snap = snapshot_host_hooks(repo_root, hooks_path, template_path, expected_events, forbidden_events, expected_cmd_fragment)?;
+    let snap = snapshot_host_hooks(
+        repo_root,
+        hooks_path,
+        template_path,
+        expected_events,
+        forbidden_events,
+        expected_cmd_fragment,
+    )?;
     serde_json::to_value(snap).map_err(|e| format!("serialize snapshot: {e}"))
 }
 
 /// Check a host hooks snapshot JSON blob for validity.
 pub fn host_hooks_json_ok(hooks: &Value) -> bool {
-    let Some(s) = hooks.as_object() else { return false };
+    let Some(s) = hooks.as_object() else {
+        return false;
+    };
     s.get("forbidden_still_registered")
         .and_then(Value::as_array)
         .map(|a| a.is_empty())
@@ -307,9 +318,7 @@ pub fn verify_host_projection(repo_root: &Path, host_id: &str) -> Result<(), Str
     if let Some(hooks_rel) = hooks_manifest_path {
         let hooks_path = repo_root.join(hooks_rel);
         if !hooks_path.is_file() {
-            return Err(format!(
-                "verify_{host_id}: missing {hooks_rel}"
-            ));
+            return Err(format!("verify_{host_id}: missing {hooks_rel}"));
         }
 
         let text = std::fs::read_to_string(&hooks_path)
@@ -319,9 +328,7 @@ pub fn verify_host_projection(repo_root: &Path, host_id: &str) -> Result<(), Str
         let hooks = payload
             .get("hooks")
             .and_then(Value::as_object)
-            .ok_or_else(|| {
-                format!("verify_{host_id}: {hooks_rel} must contain a hooks object")
-            })?;
+            .ok_or_else(|| format!("verify_{host_id}: {hooks_rel} must contain a hooks object"))?;
 
         let expected_events = provider.registered_hook_events();
         let launcher_needle = format!("{host_id}-router-rs-hook.sh");

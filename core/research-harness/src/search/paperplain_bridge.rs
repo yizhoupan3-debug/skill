@@ -112,11 +112,14 @@ pub fn parse_fetch_response(json: &serde_json::Value) -> Result<Paper> {
         "papers": [paper_json]
     }))?;
 
-    papers.pop().context("failed to parse paper from fetch response")
+    papers
+        .pop()
+        .context("failed to parse paper from fetch response")
 }
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     #[test]

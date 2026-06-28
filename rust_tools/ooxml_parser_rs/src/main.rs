@@ -1,8 +1,8 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use ooxml_parser_rs::{
-    batch, extract_pptx, inspect_docx, inspect_xlsx, read_docx, read_xlsx, render_docx_cli,
-    render_xlsx_cli, RenderDocxArgs, RenderXlsxArgs,
+    RenderDocxArgs, RenderXlsxArgs, batch, extract_pptx, inspect_docx, inspect_xlsx, read_docx,
+    read_xlsx, render_docx_cli, render_xlsx_cli,
 };
 use std::path::PathBuf;
 

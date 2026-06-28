@@ -21,9 +21,7 @@ pub fn init_hooks() {
         h.maybe_merge_paper_adversarial_before_submit =
             super::paper_adversarial::maybe_merge_paper_adversarial_before_submit;
         h.maybe_record_research_activity = |root, tool, summary| {
-            if let Err(e) =
-                super::activity_log::maybe_log_research_activity(tool, summary, root)
-            {
+            if let Err(e) = super::activity_log::maybe_log_research_activity(tool, summary, root) {
                 tracing::warn!("[research-activity-log] failed: {e}");
             }
         };

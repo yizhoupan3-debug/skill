@@ -68,10 +68,13 @@ impl Parser {
         self.skip_ws();
         match self.next() {
             Some(c) if c == expected => Ok(()),
-            Some(c) => Err(FrameworkError::validation(format!("expected '{expected}', got '{c}'"))),
+            Some(c) => Err(FrameworkError::validation(format!(
+                "expected '{expected}', got '{c}'"
+            ))),
 
-            None => Err(FrameworkError::validation(format!("expected '{expected}', got end of input"))),
-
+            None => Err(FrameworkError::validation(format!(
+                "expected '{expected}', got end of input"
+            ))),
         }
     }
 
@@ -111,7 +114,10 @@ impl Parser {
                 }
                 // Implicit multiplication: number followed by variable/function/paren
                 Some(c) if c == '(' || c.is_alphabetic() => {
-                    if matches!(&left, Expr::Const(_) | Expr::Var(_) | Expr::Fn(..) | Expr::Neg(_) | Expr::Pow(..)) {
+                    if matches!(
+                        &left,
+                        Expr::Const(_) | Expr::Var(_) | Expr::Fn(..) | Expr::Neg(_) | Expr::Pow(..)
+                    ) {
                         left = Expr::Mul(Box::new(left), Box::new(self.parse_power()?));
                     } else {
                         break;
@@ -188,7 +194,9 @@ impl Parser {
                     }
                 }
             }
-            Some(c) => Err(FrameworkError::validation(format!("unexpected character: '{c}'"))),
+            Some(c) => Err(FrameworkError::validation(format!(
+                "unexpected character: '{c}'"
+            ))),
             None => Err(FrameworkError::validation("unexpected end of input")),
         }
     }
@@ -207,7 +215,9 @@ impl Parser {
                 break;
             }
         }
-        let val: f64 = s.parse().map_err(|e| FrameworkError::validation(format!("bad number '{s}': {e}")))?;
+        let val: f64 = s
+            .parse()
+            .map_err(|e| FrameworkError::validation(format!("bad number '{s}': {e}")))?;
         Ok(Expr::Const(val))
     }
 
@@ -231,8 +241,10 @@ pub fn parse(input: &str) -> Result<Expr, FrameworkError> {
     let expr = parser.parse_expr()?;
     parser.skip_ws();
     if parser.peek().is_some() {
-        return Err(FrameworkError::validation(format!("unexpected trailing input at position {}", parser.pos)));
-
+        return Err(FrameworkError::validation(format!(
+            "unexpected trailing input at position {}",
+            parser.pos
+        )));
     }
     Ok(expr)
 }
@@ -245,7 +257,10 @@ pub fn parse(input: &str) -> Result<Expr, FrameworkError> {
 pub fn eval(expr: &Expr, vars: &HashMap<String, f64>) -> Result<f64, FrameworkError> {
     match expr {
         Expr::Const(c) => Ok(*c),
-        Expr::Var(name) => vars.get(name).copied().ok_or_else(|| FrameworkError::validation(format!("undefined variable: {name}"))),
+        Expr::Var(name) => vars
+            .get(name)
+            .copied()
+            .ok_or_else(|| FrameworkError::validation(format!("undefined variable: {name}"))),
         Expr::Neg(x) => Ok(-eval(x, vars)?),
         Expr::Add(a, b) => Ok(eval(a, vars)? + eval(b, vars)?),
         Expr::Sub(a, b) => Ok(eval(a, vars)? - eval(b, vars)?),
@@ -267,39 +282,56 @@ pub fn eval(expr: &Expr, vars: &HashMap<String, f64>) -> Result<f64, FrameworkEr
             let vals = vals?;
             match name.as_str() {
                 "log" | "ln" => {
-                    if vals.len() != 1 { return Err(FrameworkError::validation("log requires 1 argument")); }
+                    if vals.len() != 1 {
+                        return Err(FrameworkError::validation("log requires 1 argument"));
+                    }
                     Ok(vals[0].ln())
                 }
                 "log2" => {
-                    if vals.len() != 1 { return Err(FrameworkError::validation("log2 requires 1 argument")); }
+                    if vals.len() != 1 {
+                        return Err(FrameworkError::validation("log2 requires 1 argument"));
+                    }
                     Ok(vals[0].log2())
                 }
                 "log10" => {
-                    if vals.len() != 1 { return Err(FrameworkError::validation("log10 requires 1 argument")); }
+                    if vals.len() != 1 {
+                        return Err(FrameworkError::validation("log10 requires 1 argument"));
+                    }
                     Ok(vals[0].log10())
                 }
                 "exp" => {
-                    if vals.len() != 1 { return Err(FrameworkError::validation("exp requires 1 argument")); }
+                    if vals.len() != 1 {
+                        return Err(FrameworkError::validation("exp requires 1 argument"));
+                    }
                     Ok(vals[0].exp())
                 }
                 "sin" => {
-                    if vals.len() != 1 { return Err(FrameworkError::validation("sin requires 1 argument")); }
+                    if vals.len() != 1 {
+                        return Err(FrameworkError::validation("sin requires 1 argument"));
+                    }
                     Ok(vals[0].sin())
                 }
                 "cos" => {
-                    if vals.len() != 1 { return Err(FrameworkError::validation("cos requires 1 argument")); }
+                    if vals.len() != 1 {
+                        return Err(FrameworkError::validation("cos requires 1 argument"));
+                    }
                     Ok(vals[0].cos())
                 }
                 "sqrt" => {
-                    if vals.len() != 1 { return Err(FrameworkError::validation("sqrt requires 1 argument")); }
+                    if vals.len() != 1 {
+                        return Err(FrameworkError::validation("sqrt requires 1 argument"));
+                    }
                     Ok(vals[0].sqrt())
                 }
                 "abs" => {
-                    if vals.len() != 1 { return Err(FrameworkError::validation("abs requires 1 argument")); }
+                    if vals.len() != 1 {
+                        return Err(FrameworkError::validation("abs requires 1 argument"));
+                    }
                     Ok(vals[0].abs())
                 }
-                _ => Err(FrameworkError::validation(format!("unknown function: {name}")),)
-
+                _ => Err(FrameworkError::validation(format!(
+                    "unknown function: {name}"
+                ))),
             }
         }
     }
@@ -431,9 +463,13 @@ pub fn simplify(expr: &Expr) -> Expr {
             }
             // a - b = a + (-1)*b, with full simplification of the negated term
             let neg_term = simplify(&Expr::Mul(Box::new(Expr::Const(-1.0)), Box::new(sb)));
-            simplify_add(flatten_add(&sa).into_iter().cloned()
-                .chain(std::iter::once(neg_term))
-                .collect())
+            simplify_add(
+                flatten_add(&sa)
+                    .into_iter()
+                    .cloned()
+                    .chain(std::iter::once(neg_term))
+                    .collect(),
+            )
         }
         Expr::Mul(a, b) => simplify_mul(
             flatten_mul(&simplify(a))
@@ -489,12 +525,18 @@ fn simplify_add(items: Vec<Expr>) -> Expr {
                             if let Expr::Const(ec) = existing_coeff.as_ref() {
                                 let new_coeff = ec + c;
                                 if new_coeff.abs() > 1e-12 {
-                                    var_terms.push((var_part, Expr::Mul(Box::new(Expr::Const(new_coeff)), existing_var)));
+                                    var_terms.push((
+                                        var_part,
+                                        Expr::Mul(Box::new(Expr::Const(new_coeff)), existing_var),
+                                    ));
                                 }
                             }
                         }
                     } else {
-                        var_terms.push((var_part, Expr::Mul(Box::new(Expr::Const(*c)), Box::new((**b).clone()))));
+                        var_terms.push((
+                            var_part,
+                            Expr::Mul(Box::new(Expr::Const(*c)), Box::new((**b).clone())),
+                        ));
                     }
                 }
             }
@@ -505,7 +547,10 @@ fn simplify_add(items: Vec<Expr>) -> Expr {
                     let (_, ref existing) = var_terms[pos];
                     let coeff = coefficient(existing).unwrap_or(1.0) + 1.0;
                     if coeff.abs() > 1e-12 {
-                        var_terms[pos] = (key, make_mul(vec![Expr::Const(coeff), strip_coefficient(existing)]));
+                        var_terms[pos] = (
+                            key,
+                            make_mul(vec![Expr::Const(coeff), strip_coefficient(existing)]),
+                        );
                     } else {
                         var_terms.remove(pos);
                     }
@@ -526,8 +571,12 @@ fn simplify_add(items: Vec<Expr>) -> Expr {
     terms.sort_by(|a, b| {
         let a_is_const = matches!(a, Expr::Const(_));
         let b_is_const = matches!(b, Expr::Const(_));
-        if a_is_const && !b_is_const { return std::cmp::Ordering::Greater; }
-        if !a_is_const && b_is_const { return std::cmp::Ordering::Less; }
+        if a_is_const && !b_is_const {
+            return std::cmp::Ordering::Greater;
+        }
+        if !a_is_const && b_is_const {
+            return std::cmp::Ordering::Less;
+        }
         display(a).cmp(&display(b))
     });
 
@@ -552,12 +601,18 @@ fn simplify_mul(items: Vec<Expr>) -> Expr {
         return Expr::Const(const_prod);
     }
     if (const_prod - 1.0).abs() < 1e-12 && var_terms.len() == 1 {
-        return var_terms.into_iter().next().unwrap();
+        return {
+            #[allow(clippy::unwrap_used, clippy::expect_used)]
+            var_terms.into_iter().next().unwrap()
+        };
     }
 
     let mut vars = var_terms;
     if (const_prod - (-1.0)).abs() < 1e-12 && vars.len() == 1 {
-        return Expr::Neg(Box::new(vars.into_iter().next().unwrap()));
+        return Expr::Neg(Box::new({
+            #[allow(clippy::unwrap_used, clippy::expect_used)]
+            vars.into_iter().next().unwrap()
+        }));
     }
 
     vars.insert(0, Expr::Const(const_prod));
@@ -569,7 +624,11 @@ fn coefficient(expr: &Expr) -> Option<f64> {
     match expr {
         Expr::Const(c) => Some(*c),
         Expr::Mul(a, _) => {
-            if let Expr::Const(c) = a.as_ref() { Some(*c) } else { Some(1.0) }
+            if let Expr::Const(c) = a.as_ref() {
+                Some(*c)
+            } else {
+                Some(1.0)
+            }
         }
         _ => Some(1.0),
     }
@@ -612,13 +671,18 @@ pub fn expand(expr: &Expr) -> Expr {
                 let n = *n;
                 if n.fract() == 0.0 && n >= 0.0 && n <= 10.0 {
                     let n = n as u32;
-                    if n == 0 { return Expr::Const(1.0); }
-                    if n == 1 { return expand(a); }
+                    if n == 0 {
+                        return Expr::Const(1.0);
+                    }
+                    if n == 1 {
+                        return expand(a);
+                    }
                     let base = expand(a);
                     // Repeated squaring
                     let mut result = base.clone();
                     for _ in 1..n {
-                        result = simplify(&Expr::Mul(Box::new(result.clone()), Box::new(base.clone())));
+                        result =
+                            simplify(&Expr::Mul(Box::new(result.clone()), Box::new(base.clone())));
                     }
                     // Re-expand the result
                     return expand(&result);
@@ -626,12 +690,8 @@ pub fn expand(expr: &Expr) -> Expr {
             }
             expr
         }
-        Expr::Add(a, b) => {
-            Expr::Add(Box::new(expand(a)), Box::new(expand(b)))
-        }
-        Expr::Sub(a, b) => {
-            Expr::Sub(Box::new(expand(a)), Box::new(expand(b)))
-        }
+        Expr::Add(a, b) => Expr::Add(Box::new(expand(a)), Box::new(expand(b))),
+        Expr::Sub(a, b) => Expr::Sub(Box::new(expand(a)), Box::new(expand(b))),
         _ => expr,
     }
 }
@@ -646,9 +706,10 @@ fn distribute_add(add_expr: &Expr, other: &Expr) -> Expr {
         let cross: Vec<Expr> = terms
             .iter()
             .flat_map(|t| {
-                other_terms.iter().map(|u| {
-                    simplify(&Expr::Mul(Box::new((*t).clone()), Box::new((*u).clone())))
-                }).collect::<Vec<_>>()
+                other_terms
+                    .iter()
+                    .map(|u| simplify(&Expr::Mul(Box::new((*t).clone()), Box::new((*u).clone()))))
+                    .collect::<Vec<_>>()
             })
             .collect();
         return simplify(&make_add(cross));
@@ -695,7 +756,10 @@ pub fn equivalent(lhs: &str, rhs: &str) -> bool {
     let vars = collect_variables(&lhs_expr, &rhs_expr);
     if vars.is_empty() {
         // Both are constants — compare numerically
-        return match (eval(&lhs_expr, &HashMap::new()), eval(&rhs_expr, &HashMap::new())) {
+        return match (
+            eval(&lhs_expr, &HashMap::new()),
+            eval(&rhs_expr, &HashMap::new()),
+        ) {
             (Ok(l), Ok(r)) => (l - r).abs() < 1e-8,
             _ => false,
         };
@@ -762,7 +826,10 @@ impl SimpleRng {
         Self(seed)
     }
     fn next(&mut self) -> u64 {
-        self.0 = self.0.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        self.0 = self
+            .0
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
         self.0 >> 33
     }
     fn next_range(&mut self, lo: f64, hi: f64) -> f64 {
@@ -834,10 +901,18 @@ pub fn compare_growth_classes(a: &GrowthClass, b: &GrowthClass) -> std::cmp::Ord
 pub fn classify_growth(expr: &Expr, var: &str) -> GrowthClass {
     match expr {
         Expr::Const(c) => {
-            if c.abs() < 1e-12 { GrowthClass::Zero } else { GrowthClass::Constant }
+            if c.abs() < 1e-12 {
+                GrowthClass::Zero
+            } else {
+                GrowthClass::Constant
+            }
         }
         Expr::Var(v) => {
-            if v == var { GrowthClass::Power(1.0) } else { GrowthClass::Constant }
+            if v == var {
+                GrowthClass::Power(1.0)
+            } else {
+                GrowthClass::Constant
+            }
         }
         Expr::Neg(x) => classify_growth(x, var),
         Expr::Add(a, b) => {
@@ -875,7 +950,7 @@ pub fn classify_growth(expr: &Expr, var: &str) -> GrowthClass {
             match compare_growth_classes(&ga, &gb) {
                 std::cmp::Ordering::Less => GrowthClass::Zero, // f/g → 0
                 std::cmp::Ordering::Equal => GrowthClass::Constant, // same order → constant
-                std::cmp::Ordering::Greater => ga, // f dominates
+                std::cmp::Ordering::Greater => ga,             // f dominates
             }
         }
         Expr::Pow(a, b) => {
@@ -907,8 +982,9 @@ pub fn classify_growth(expr: &Expr, var: &str) -> GrowthClass {
                         let inner = classify_growth(arg, var);
                         // log(poly) → Log, log(constant) → Constant
                         match inner {
-                            GrowthClass::Power(_) | GrowthClass::Log(_) | GrowthClass::Exp(_)
-                                => GrowthClass::Log(1.0),
+                            GrowthClass::Power(_) | GrowthClass::Log(_) | GrowthClass::Exp(_) => {
+                                GrowthClass::Log(1.0)
+                            }
                             GrowthClass::Constant => GrowthClass::Constant,
                             _ => GrowthClass::Log(1.0),
                         }
@@ -956,8 +1032,14 @@ fn product_growth(a: &GrowthClass, b: &GrowthClass) -> GrowthClass {
         (GrowthClass::Power(k1), GrowthClass::Power(k2)) => GrowthClass::Power(k1 + k2),
         (GrowthClass::Exp(_), _) | (_, GrowthClass::Exp(_)) => {
             // exp * anything → exp (dominant)
-            let e1 = match a { GrowthClass::Exp(c) => *c, _ => 1.0 };
-            let e2 = match b { GrowthClass::Exp(c) => *c, _ => 1.0 };
+            let e1 = match a {
+                GrowthClass::Exp(c) => *c,
+                _ => 1.0,
+            };
+            let e2 = match b {
+                GrowthClass::Exp(c) => *c,
+                _ => 1.0,
+            };
             GrowthClass::Exp(e1.max(e2))
         }
         (GrowthClass::Factorial, _) | (_, GrowthClass::Factorial) => GrowthClass::Factorial,
@@ -1032,18 +1114,29 @@ fn growth_to_order(class: &GrowthClass, var: &str) -> String {
         GrowthClass::Zero => "o(1)".into(),
         GrowthClass::Constant => "O(1)".into(),
         GrowthClass::Log(k) => {
-            if *k == 1.0 { format!("O(log({var}))") }
-            else { format!("O((log {var})^{k})") }
+            if *k == 1.0 {
+                format!("O(log({var}))")
+            } else {
+                format!("O((log {var})^{k})")
+            }
         }
         GrowthClass::Power(k) => {
-            if *k == 0.0 { "O(1)".into() }
-            else if *k == 1.0 { format!("O({var})") }
-            else if k.fract() == 0.0 { format!("O({var}^{k})") }
-            else { format!("O({var}^{k})") }
+            if *k == 0.0 {
+                "O(1)".into()
+            } else if *k == 1.0 {
+                format!("O({var})")
+            } else if k.fract() == 0.0 {
+                format!("O({var}^{k})")
+            } else {
+                format!("O({var}^{k})")
+            }
         }
         GrowthClass::Exp(c) => {
-            if *c == std::f64::consts::E { format!("O(exp({var}))") }
-            else { format!("O({c}^{var})") }
+            if *c == std::f64::consts::E {
+                format!("O(exp({var}))")
+            } else {
+                format!("O({c}^{var})")
+            }
         }
         GrowthClass::Factorial => format!("O({var}!)"),
         GrowthClass::Inf => "O(?)".into(),
@@ -1065,26 +1158,26 @@ pub fn compare_growth(f: &str, g: &str, var: &str) -> Result<OrderRelation, Fram
     // f ≍ g: same growth rate (limit f/g = finite nonzero)
 
     match compare_growth_classes(&gf, &gg) {
-        std::cmp::Ordering::Less => Ok(OrderRelation::MuchLess),  // f ≪ g
+        std::cmp::Ordering::Less => Ok(OrderRelation::MuchLess), // f ≪ g
         std::cmp::Ordering::Greater => {
             // f grows strictly faster than g (f = ω(g)).
             // None of the OrderRelation variants (≪, ≲, ≍) hold from f to g.
-            Err(FrameworkError::validation(format!("{f} grows faster than {g}, so no finite OrderRelation holds")))
-
+            Err(FrameworkError::validation(format!(
+                "{f} grows faster than {g}, so no finite OrderRelation holds"
+            )))
         }
         std::cmp::Ordering::Equal => {
             // Same growth class — check if parameters match
             if gf == gg {
-                Ok(OrderRelation::Asymp)  // f ≍ g
+                Ok(OrderRelation::Asymp) // f ≍ g
             } else {
                 // Same class, different parameters: e.g. n vs n^2 → n ≪ n^2
                 // Re-compare within the class
                 match compare_growth_classes(&gf, &gg) {
                     std::cmp::Ordering::Less => Ok(OrderRelation::MuchLess),
-                    std::cmp::Ordering::Greater => {
-                        Err(FrameworkError::validation(format!("{f} grows faster than {g} in the same class")))
-
-                    }
+                    std::cmp::Ordering::Greater => Err(FrameworkError::validation(format!(
+                        "{f} grows faster than {g} in the same class"
+                    ))),
                     std::cmp::Ordering::Equal => Ok(OrderRelation::Asymp),
                 }
             }
@@ -1125,6 +1218,7 @@ pub fn simplify_expression(expr_str: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     // ── Parsing ──
@@ -1292,8 +1386,11 @@ mod tests {
         let simplified = simplify(&expanded);
         // x*x + x*2 + 1*x + 1*2 = x^2 + 3x + 2
         // Our expand might not collect terms perfectly but let's check equivalence
-        assert!(equivalent(&display(&simplified), "x^2 + 3*x + 2"),
-            "expected x^2+3x+2, got {}", display(&simplified));
+        assert!(
+            equivalent(&display(&simplified), "x^2 + 3*x + 2"),
+            "expected x^2+3x+2, got {}",
+            display(&simplified)
+        );
     }
 
     // ── Growth classification ──
@@ -1320,7 +1417,11 @@ mod tests {
     fn test_growth_exponential() {
         let e = parse("2^n").unwrap();
         let g = classify_growth(&e, "n");
-        assert!(matches!(g, GrowthClass::Exp(_)), "expected Exp, got {:?}", g);
+        assert!(
+            matches!(g, GrowthClass::Exp(_)),
+            "expected Exp, got {:?}",
+            g
+        );
     }
 
     #[test]
@@ -1333,8 +1434,11 @@ mod tests {
     fn test_growth_product() {
         let e = parse("n * log(n)").unwrap();
         let g = classify_growth(&e, "n");
-        assert!(matches!(g, GrowthClass::Power(k) if (k - 1.0).abs() < 1e-10),
-            "expected Power(1), got {:?}", g);
+        assert!(
+            matches!(g, GrowthClass::Power(k) if (k - 1.0).abs() < 1e-10),
+            "expected Power(1), got {:?}",
+            g
+        );
     }
 
     #[test]
@@ -1363,7 +1467,10 @@ mod tests {
 
         // 2^n grows faster than n^10 — no OrderRelation holds from 2^n to n^10
         let result_fast = compare_growth("2^n", "n^10", "n");
-        assert!(result_fast.is_err(), "2^n grows faster than n^10, no relation should hold");
+        assert!(
+            result_fast.is_err(),
+            "2^n grows faster than n^10, no relation should hold"
+        );
     }
 
     #[test]

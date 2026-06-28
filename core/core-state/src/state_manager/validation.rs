@@ -8,17 +8,27 @@ pub const EXTERNAL_RESEARCH_STRICT_TRACE_MIN_LEN: usize = 40;
 
 fn nonempty_trimmed_string_at(value: &Value, ctx: &str, key: &str) -> Result<(), FrameworkError> {
     let Some(t) = value.as_str() else {
-        return Err(FrameworkError::validation(format!("{ctx}: `{key}` must be string")));
+        return Err(FrameworkError::validation(format!(
+            "{ctx}: `{key}` must be string"
+        )));
     };
     if t.trim().is_empty() {
-        return Err(FrameworkError::validation(format!("{ctx}: `{key}` must be non-empty")));
+        return Err(FrameworkError::validation(format!(
+            "{ctx}: `{key}` must be non-empty"
+        )));
     }
     Ok(())
 }
 
-fn validate_nonempty_string_items(arr: &[Value], ctx: &str, arr_name: &str) -> Result<(), FrameworkError> {
+fn validate_nonempty_string_items(
+    arr: &[Value],
+    ctx: &str,
+    arr_name: &str,
+) -> Result<(), FrameworkError> {
     if arr.is_empty() {
-        return Err(FrameworkError::validation(format!("{ctx}: `{arr_name}` must be non-empty")));
+        return Err(FrameworkError::validation(format!(
+            "{ctx}: `{arr_name}` must be non-empty"
+        )));
     }
     for (idx, elem) in arr.iter().enumerate() {
         let label = format!("{ctx}.{arr_name}[{idx}]");
@@ -91,9 +101,9 @@ fn validate_source_list_traceable(
 /// Stricter checks when `RFV_LOOP_STATE.external_research_strict` is true; run only after
 /// [`validate_external_research_structured`] succeeds.
 pub fn validate_external_research_strict(v: &Value) -> Result<(), FrameworkError> {
-    let obj = v
-        .as_object()
-        .ok_or_else(|| FrameworkError::validation("external_research strict: root must be object"))?;
+    let obj = v.as_object().ok_or_else(|| {
+        FrameworkError::validation("external_research strict: root must be object")
+    })?;
 
     let Some(unk) = obj.get("unknowns") else {
         return Err(FrameworkError::validation(
@@ -101,19 +111,24 @@ pub fn validate_external_research_strict(v: &Value) -> Result<(), FrameworkError
         ));
     };
     if !unk.is_null() && !unk.is_array() {
-        return Err(FrameworkError::validation("external_research strict: `unknowns` must be array or null"));
+        return Err(FrameworkError::validation(
+            "external_research strict: `unknowns` must be array or null",
+        ));
     }
 
-    let claims = obj
-        .get("claims")
-        .and_then(Value::as_array)
-        .ok_or_else(|| FrameworkError::validation("external_research strict: claims must be array"))?;
+    let claims = obj.get("claims").and_then(Value::as_array).ok_or_else(|| {
+        FrameworkError::validation("external_research strict: claims must be array")
+    })?;
     let claims_len = claims.len();
 
     let sweep = obj
         .get("contradiction_sweep")
         .and_then(Value::as_array)
-        .ok_or_else(|| FrameworkError::validation("external_research strict: contradiction_sweep must be array"))?;
+        .ok_or_else(|| {
+            FrameworkError::validation(
+                "external_research strict: contradiction_sweep must be array",
+            )
+        })?;
     let min_sweep = std::cmp::max(2, claims_len / 2);
     if sweep.len() < min_sweep {
         return Err(FrameworkError::validation(format!(
@@ -123,36 +138,50 @@ pub fn validate_external_research_strict(v: &Value) -> Result<(), FrameworkError
     }
     for (i, item) in sweep.iter().enumerate() {
         let ctx = format!("contradiction_sweep[{i}]");
-        let row = item
-            .as_object()
-            .ok_or_else(|| FrameworkError::validation(format!("external_research strict: {ctx} entry must be object")))?;
+        let row = item.as_object().ok_or_else(|| {
+            FrameworkError::validation(format!(
+                "external_research strict: {ctx} entry must be object"
+            ))
+        })?;
         let sources = row
             .get("sources")
             .and_then(Value::as_array)
-            .ok_or_else(|| FrameworkError::validation(format!("external_research strict: {ctx} sources must be array")))?;
+            .ok_or_else(|| {
+                FrameworkError::validation(format!(
+                    "external_research strict: {ctx} sources must be array"
+                ))
+            })?;
         validate_source_list_traceable(sources, &ctx, 1, "sources")?;
     }
 
     for (i, c) in claims.iter().enumerate() {
         let ctx = format!("claims[{i}]");
-        let row = c
-            .as_object()
-            .ok_or_else(|| FrameworkError::validation(format!("external_research strict: {ctx} must be object")))?;
+        let row = c.as_object().ok_or_else(|| {
+            FrameworkError::validation(format!("external_research strict: {ctx} must be object"))
+        })?;
         let sources = row
             .get("sources")
             .and_then(Value::as_array)
-            .ok_or_else(|| FrameworkError::validation(format!("external_research strict: {ctx} sources must be array")))?;
+            .ok_or_else(|| {
+                FrameworkError::validation(format!(
+                    "external_research strict: {ctx} sources must be array"
+                ))
+            })?;
         validate_source_list_traceable(sources, &ctx, 2, "sources")?;
     }
 
     let trace = obj
         .get("retrieval_trace")
         .and_then(Value::as_object)
-        .ok_or_else(|| FrameworkError::validation("external_research strict: retrieval_trace must be object"))?;
+        .ok_or_else(|| {
+            FrameworkError::validation("external_research strict: retrieval_trace must be object")
+        })?;
     let queries = trace
         .get("queries_used")
         .and_then(Value::as_array)
-        .ok_or_else(|| FrameworkError::validation("external_research strict: queries_used must be array"))?;
+        .ok_or_else(|| {
+            FrameworkError::validation("external_research strict: queries_used must be array")
+        })?;
     if queries.len() < 3 {
         return Err(FrameworkError::validation(format!(
             "external_research strict: queries_used must have at least 3 entries, got {}",
@@ -162,7 +191,9 @@ pub fn validate_external_research_strict(v: &Value) -> Result<(), FrameworkError
 
     for key in ["inclusion_rules", "exclusions", "exclusion_rationale"] {
         let field = trace.get(key).and_then(Value::as_str).ok_or_else(|| {
-            FrameworkError::validation(format!("external_research strict: retrieval_trace `{key}` must be string"))
+            FrameworkError::validation(format!(
+                "external_research strict: retrieval_trace `{key}` must be string"
+            ))
         })?;
         if field.trim().len() < EXTERNAL_RESEARCH_STRICT_TRACE_MIN_LEN {
             return Err(FrameworkError::validation(format!(
@@ -190,13 +221,15 @@ pub fn validate_external_research_structured(v: &Value) -> Result<(), FrameworkE
         .as_array()
         .ok_or_else(|| FrameworkError::validation("external_research.claims must be array"))?;
     if claims.is_empty() {
-        return Err(FrameworkError::validation("external_research.claims must be non-empty"));
+        return Err(FrameworkError::validation(
+            "external_research.claims must be non-empty",
+        ));
     }
     for (i, c) in claims.iter().enumerate() {
         let ctx = format!("external_research.claims[{i}]");
-        let row = c
-            .as_object()
-            .ok_or_else(|| FrameworkError::validation(format!("{ctx}: claim entry must be object")))?;
+        let row = c.as_object().ok_or_else(|| {
+            FrameworkError::validation(format!("{ctx}: claim entry must be object"))
+        })?;
         let claim_v = row
             .get("claim")
             .ok_or_else(|| FrameworkError::validation(format!("{ctx}: missing `claim`")))?;
@@ -210,27 +243,33 @@ pub fn validate_external_research_structured(v: &Value) -> Result<(), FrameworkE
         validate_nonempty_string_items(sources, &ctx, "sources")?;
     }
 
-    let sweep_key = obj
-        .get("contradiction_sweep")
-        .ok_or_else(|| FrameworkError::validation("external_research missing `contradiction_sweep`"))?;
-    let sweep = sweep_key
-        .as_array()
-        .ok_or_else(|| FrameworkError::validation("external_research.contradiction_sweep must be array"))?;
+    let sweep_key = obj.get("contradiction_sweep").ok_or_else(|| {
+        FrameworkError::validation("external_research missing `contradiction_sweep`")
+    })?;
+    let sweep = sweep_key.as_array().ok_or_else(|| {
+        FrameworkError::validation("external_research.contradiction_sweep must be array")
+    })?;
     if sweep.is_empty() {
-        return Err(FrameworkError::validation("external_research.contradiction_sweep must be non-empty"));
+        return Err(FrameworkError::validation(
+            "external_research.contradiction_sweep must be non-empty",
+        ));
     }
     for (i, item) in sweep.iter().enumerate() {
         let ctx = format!("external_research.contradiction_sweep[{i}]");
         let row = item
             .as_object()
             .ok_or_else(|| FrameworkError::validation(format!("{ctx}: entry must be object")))?;
-        let rk = row
-            .get("related_claim_or_topic")
-            .ok_or_else(|| FrameworkError::validation(format!("{ctx}: missing `related_claim_or_topic`")))?;
+        let rk = row.get("related_claim_or_topic").ok_or_else(|| {
+            FrameworkError::validation(format!("{ctx}: missing `related_claim_or_topic`"))
+        })?;
         nonempty_trimmed_string_at(rk, &ctx, "related_claim_or_topic")?;
         let contradict = row
             .get("contradicting_or_limiting_evidence")
-            .ok_or_else(|| FrameworkError::validation(format!("{ctx}: missing `contradicting_or_limiting_evidence`")))?;
+            .ok_or_else(|| {
+                FrameworkError::validation(format!(
+                    "{ctx}: missing `contradicting_or_limiting_evidence`"
+                ))
+            })?;
         nonempty_trimmed_string_at(contradict, &ctx, "contradicting_or_limiting_evidence")?;
         let sources = row
             .get("sources")
@@ -245,21 +284,21 @@ pub fn validate_external_research_structured(v: &Value) -> Result<(), FrameworkE
         if u.is_null() {
             // skip unknowns
         } else {
-            let arr = u
-                .as_array()
-                .ok_or_else(|| FrameworkError::validation("external_research.unknowns must be array or null"))?;
+            let arr = u.as_array().ok_or_else(|| {
+                FrameworkError::validation("external_research.unknowns must be array or null")
+            })?;
             for (i, rowv) in arr.iter().enumerate() {
                 let ctx = format!("external_research.unknowns[{i}]");
-                let row = rowv
-                    .as_object()
-                    .ok_or_else(|| FrameworkError::validation(format!("{ctx}: entry must be object")))?;
-                let q = row
-                    .get("question")
-                    .ok_or_else(|| FrameworkError::validation(format!("{ctx}: missing `question`")))?;
+                let row = rowv.as_object().ok_or_else(|| {
+                    FrameworkError::validation(format!("{ctx}: entry must be object"))
+                })?;
+                let q = row.get("question").ok_or_else(|| {
+                    FrameworkError::validation(format!("{ctx}: missing `question`"))
+                })?;
                 nonempty_trimmed_string_at(q, &ctx, "question")?;
-                let why = row
-                    .get("why_insufficient")
-                    .ok_or_else(|| FrameworkError::validation(format!("{ctx}: missing `why_insufficient`")))?;
+                let why = row.get("why_insufficient").ok_or_else(|| {
+                    FrameworkError::validation(format!("{ctx}: missing `why_insufficient`"))
+                })?;
                 nonempty_trimmed_string_at(why, &ctx, "why_insufficient")?;
             }
         }
@@ -275,18 +314,18 @@ pub fn validate_external_research_structured(v: &Value) -> Result<(), FrameworkE
         } else if let Some(entries) = qr.as_array() {
             for (i, rowv) in entries.iter().enumerate() {
                 let ctx = format!("external_research.quantitative_replays[{i}]");
-                let row = rowv
-                    .as_object()
-                    .ok_or_else(|| FrameworkError::validation(format!("{ctx}: entry must be object")))?;
+                let row = rowv.as_object().ok_or_else(|| {
+                    FrameworkError::validation(format!("{ctx}: entry must be object"))
+                })?;
                 for key in [
                     "dataset_or_source_id",
                     "version_or_snapshot",
                     "window",
                     "replay_command",
                 ] {
-                    let f = row
-                        .get(key)
-                        .ok_or_else(|| FrameworkError::validation(format!("{ctx}: missing `{key}`")))?;
+                    let f = row.get(key).ok_or_else(|| {
+                        FrameworkError::validation(format!("{ctx}: missing `{key}`"))
+                    })?;
                     nonempty_trimmed_string_at(f, &ctx, key)?;
                 }
             }
@@ -300,9 +339,9 @@ pub fn validate_external_research_structured(v: &Value) -> Result<(), FrameworkE
     let trace = obj
         .get("retrieval_trace")
         .ok_or_else(|| FrameworkError::validation("external_research missing `retrieval_trace`"))?;
-    let tr = trace
-        .as_object()
-        .ok_or_else(|| FrameworkError::validation("external_research.retrieval_trace must be object"))?;
+    let tr = trace.as_object().ok_or_else(|| {
+        FrameworkError::validation("external_research.retrieval_trace must be object")
+    })?;
     let queries = tr
         .get("queries_used")
         .ok_or_else(|| FrameworkError::validation("retrieval_trace missing `queries_used`"))?;
@@ -311,9 +350,9 @@ pub fn validate_external_research_structured(v: &Value) -> Result<(), FrameworkE
         .ok_or_else(|| FrameworkError::validation("retrieval_trace.queries_used must be array"))?;
     validate_nonempty_string_items(queries, "external_research.retrieval_trace", "queries_used")?;
     for key in ["inclusion_rules", "exclusions", "exclusion_rationale"] {
-        let field = tr
-            .get(key)
-            .ok_or_else(|| FrameworkError::validation(format!("retrieval_trace missing `{key}`")))?;
+        let field = tr.get(key).ok_or_else(|| {
+            FrameworkError::validation(format!("retrieval_trace missing `{key}`"))
+        })?;
         nonempty_trimmed_string_at(field, "external_research.retrieval_trace", key)?;
     }
 

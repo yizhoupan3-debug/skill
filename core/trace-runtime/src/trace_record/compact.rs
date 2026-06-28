@@ -7,17 +7,17 @@ use std::path::{Path, PathBuf};
 
 use rt_storage::runtime_storage::acquire_runtime_path_lock;
 
+use super::util::build_prefixed_id;
+use super::util::{
+    build_trace_cursor, hydrate_trace_event, sha256_hex, trace_event_object,
+    trace_event_string_field, trace_event_usize_field,
+};
 use super::{
     TRACE_COMPACT_SCHEMA_VERSION, TRACE_COMPACTION_ARTIFACT_REF_SCHEMA_VERSION,
     TRACE_COMPACTION_MANIFEST_SCHEMA_VERSION, TRACE_COMPACTION_RESULT_SCHEMA_VERSION,
     TRACE_COMPACTION_SNAPSHOT_SCHEMA_VERSION, TRACE_REPLAY_CURSOR_SCHEMA_VERSION,
     TRACE_STREAM_IO_AUTHORITY, TraceCompactRequestPayload, TraceCompactResponsePayload,
     TraceTextWrite,
-};
-use super::util::build_prefixed_id;
-use super::util::{
-    build_trace_cursor, hydrate_trace_event, sha256_hex, trace_event_object,
-    trace_event_string_field, trace_event_usize_field,
 };
 
 #[tracing::instrument(level = "debug", skip_all)]
@@ -48,8 +48,9 @@ pub fn compact_trace_stream(
     let stream_text = match payload.event_stream_text.as_deref() {
         Some(value) => value.to_string(),
         None => match payload.event_stream_path.as_deref() {
-            Some(path) if Path::new(path).exists() => fs::read_to_string(path)
-                .map_err(|err| TraceError::validation(format!("read trace stream failed for {path}: {err}")))?,
+            Some(path) if Path::new(path).exists() => fs::read_to_string(path).map_err(|err| {
+                TraceError::validation(format!("read trace stream failed for {path}: {err}"))
+            })?,
             _ => String::new(),
         },
     };
@@ -289,10 +290,12 @@ pub fn compact_trace_stream(
     if payload.write_outputs {
         // Cross-process serialisation: prevents two compaction runs from racing
         // on the same stream's manifest + snapshot + state files.
-        let _manifest_lock =
-            acquire_runtime_path_lock(&paths.manifest).map_err(|err| {
-                TraceError::validation(format!("acquire compaction lock for {} failed: {err}", paths.manifest.display()))
-            })?;
+        let _manifest_lock = acquire_runtime_path_lock(&paths.manifest).map_err(|err| {
+            TraceError::validation(format!(
+                "acquire compaction lock for {} failed: {err}",
+                paths.manifest.display()
+            ))
+        })?;
 
         for write in &writes {
             atomic_write_text(Path::new(&write.path), &write.payload_text)?;
@@ -356,8 +359,12 @@ pub(super) fn load_trace_events_streaming(
         if raw_line.trim().is_empty() {
             continue;
         }
-        let payload = serde_json::from_str::<Value>(raw_line)
-            .map_err(|err| TraceError::validation(format!("parse trace stream line {} failed: {err}", line_number + 1)))?;
+        let payload = serde_json::from_str::<Value>(raw_line).map_err(|err| {
+            TraceError::validation(format!(
+                "parse trace stream line {} failed: {err}",
+                line_number + 1
+            ))
+        })?;
         let event = hydrate_trace_event(trace_event_object(payload)?, line_number + 1);
         if !trace_event_matches_scope(&event, run_id, job_id) {
             continue;
@@ -371,13 +378,8 @@ pub(super) fn load_trace_events_streaming(
         entry.last_event = event;
     }
     let active_generation = gens.keys().max().copied().unwrap_or(default_generation);
-    let event_count = gens
-        .get(&active_generation)
-        .map(|g| g.count)
-        .unwrap_or(0);
-    let last_event = gens
-        .remove(&active_generation)
-        .map(|g| g.last_event);
+    let event_count = gens.get(&active_generation).map(|g| g.count).unwrap_or(0);
+    let last_event = gens.remove(&active_generation).map(|g| g.last_event);
     Ok(StreamedTraceEvents {
         active_generation,
         event_count,
@@ -426,8 +428,8 @@ fn latest_cursor_from_event(payload: &Map<String, Value>) -> Option<Value> {
 
 #[allow(clippy::expect_used)]
 pub(super) fn stable_digest(value: &Value) -> String {
-    let serialized = serde_json::to_string(value)
-        .expect("stable_digest: Value is always serializable");
+    let serialized =
+        serde_json::to_string(value).expect("stable_digest: Value is always serializable");
     sha256_hex(serialized.as_bytes())
 }
 
@@ -541,8 +543,12 @@ fn pretty_json_line(value: &Value) -> Result<String, TraceError> {
 
 fn atomic_write_text(path: &Path, payload: &str) -> Result<(), TraceError> {
     if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)
-            .map_err(|err| TraceError::validation(format!("create parent failed for {}: {err}", parent.display())))?;
+        fs::create_dir_all(parent).map_err(|err| {
+            TraceError::validation(format!(
+                "create parent failed for {}: {err}",
+                parent.display()
+            ))
+        })?;
     }
 
     // Atomic write via temp file + fsync + rename.  Without this, a crash
@@ -553,11 +559,7 @@ fn atomic_write_text(path: &Path, payload: &str) -> Result<(), TraceError> {
             .file_name()
             .and_then(|n| n.to_str())
             .unwrap_or("trace-payload");
-        path.with_extension(format!(
-            "{}.compact.tmp-{}",
-            base,
-            std::process::id(),
-        ))
+        path.with_extension(format!("{}.compact.tmp-{}", base, std::process::id(),))
     };
     // Create + write + fsync the temp file.
     {
@@ -566,22 +568,25 @@ fn atomic_write_text(path: &Path, payload: &str) -> Result<(), TraceError> {
             .truncate(true)
             .write(true)
             .open(&tmp_path)
-            .map_err(|err| TraceError::validation(format!("create tmp {} failed: {err}", tmp_path.display())))?;
-        f.write_all(payload.as_bytes())
-            .map_err(|err| TraceError::validation(format!("write tmp {} failed: {err}", tmp_path.display())))?;
-        f.sync_all()
-            .map_err(|err| TraceError::validation(format!("fsync tmp {} failed: {err}", tmp_path.display())))?;
+            .map_err(|err| {
+                TraceError::validation(format!("create tmp {} failed: {err}", tmp_path.display()))
+            })?;
+        f.write_all(payload.as_bytes()).map_err(|err| {
+            TraceError::validation(format!("write tmp {} failed: {err}", tmp_path.display()))
+        })?;
+        f.sync_all().map_err(|err| {
+            TraceError::validation(format!("fsync tmp {} failed: {err}", tmp_path.display()))
+        })?;
     }
     // Atomic rename to target path.
-    fs::rename(&tmp_path, path)
-        .map_err(|err| {
-            let _ = fs::remove_file(&tmp_path);
-            TraceError::validation(format!(
-                "rename {} -> {} failed: {err}",
-                tmp_path.display(),
-                path.display()
-            ))
-        })?;
+    fs::rename(&tmp_path, path).map_err(|err| {
+        let _ = fs::remove_file(&tmp_path);
+        TraceError::validation(format!(
+            "rename {} -> {} failed: {err}",
+            tmp_path.display(),
+            path.display()
+        ))
+    })?;
 
     // Best-effort parent directory fsync so the rename survives a power loss.
     if let Some(parent) = path.parent() {

@@ -6,13 +6,18 @@ use super::HookEvent;
 /// Returns Cow<str> to avoid allocation for already-canonical names.
 pub fn normalize_event_name(name: &str) -> std::borrow::Cow<'_, str> {
     // Fast path: check if already lowercase with no separators (most common case)
-    if name.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit()) {
+    if name
+        .chars()
+        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit())
+    {
         return std::borrow::Cow::Borrowed(name);
     }
     let lower = name.to_lowercase();
     // Map common variants to canonical names
     match lower.as_str() {
-        "sessionstart" | "session-start" | "session.start" => std::borrow::Cow::Borrowed("sessionstart"),
+        "sessionstart" | "session-start" | "session.start" => {
+            std::borrow::Cow::Borrowed("sessionstart")
+        }
         "userpromptsubmit"
         | "user-prompt-submit"
         | "user.prompt.submit"
@@ -25,8 +30,12 @@ pub fn normalize_event_name(name: &str) -> std::borrow::Cow<'_, str> {
             std::borrow::Cow::Borrowed("posttooluse")
         }
         "stop" | "session.idle" => std::borrow::Cow::Borrowed("stop"),
-        "subagentstart" | "subagent-start" | "subagent.start" => std::borrow::Cow::Borrowed("subagentstart"),
-        "subagentstop" | "subagent-stop" | "subagent.end" => std::borrow::Cow::Borrowed("subagentstop"),
+        "subagentstart" | "subagent-start" | "subagent.start" => {
+            std::borrow::Cow::Borrowed("subagentstart")
+        }
+        "subagentstop" | "subagent-stop" | "subagent.end" => {
+            std::borrow::Cow::Borrowed("subagentstop")
+        }
         other => std::borrow::Cow::Owned(other.to_string()),
     }
 }
@@ -58,9 +67,10 @@ pub fn extract_prompt_text(event: &Value) -> String {
     ];
     for key in KEYS {
         if let Some(value) = event.get(*key).and_then(Value::as_str)
-            && !value.trim().is_empty() {
-                return value.to_string();
-            }
+            && !value.trim().is_empty()
+        {
+            return value.to_string();
+        }
     }
     // Fallback: check prompt-like keys inside nested payload objects
     if let Some(obj) = event.as_object() {
@@ -69,9 +79,10 @@ pub fn extract_prompt_text(event: &Value) -> String {
             if let Some(nested) = obj.get(*nest_key).and_then(Value::as_object) {
                 for key in KEYS {
                     if let Some(value) = nested.get(*key).and_then(Value::as_str)
-                        && !value.trim().is_empty() {
-                            return value.to_string();
-                        }
+                        && !value.trim().is_empty()
+                    {
+                        return value.to_string();
+                    }
                 }
             }
         }
@@ -80,9 +91,10 @@ pub fn extract_prompt_text(event: &Value) -> String {
             if let Some(ti) = obj.get(*ti_key).and_then(Value::as_object) {
                 for key in KEYS {
                     if let Some(value) = ti.get(*key).and_then(Value::as_str)
-                        && !value.trim().is_empty() {
-                            return value.to_string();
-                        }
+                        && !value.trim().is_empty()
+                    {
+                        return value.to_string();
+                    }
                 }
             }
         }
@@ -117,9 +129,10 @@ fn extract_prompt_from_nested_messages_inner(event: &Value, depth: usize) -> Str
                 for item in arr.iter().rev() {
                     if let Some(msg) = item.as_object()
                         && is_user_message_role(msg)
-                            && let Some(text) = message_body_text(msg) {
-                                return text;
-                            }
+                        && let Some(text) = message_body_text(msg)
+                    {
+                        return text;
+                    }
                 }
             }
         }
@@ -154,9 +167,10 @@ pub fn message_body_text(msg: &serde_json::Map<String, Value>) -> Option<String>
     for key in &["content", "text", "body", "message", "value"] {
         if let Some(val) = msg.get(*key) {
             if let Some(s) = val.as_str()
-                && !s.trim().is_empty() {
-                    return Some(s.to_string());
-                }
+                && !s.trim().is_empty()
+            {
+                return Some(s.to_string());
+            }
             // Handle content as array of parts (Claude/OpenAI format)
             if let Some(arr) = val.as_array() {
                 let text: String = arr
@@ -193,9 +207,10 @@ pub fn extract_tool_name(event: &Value) -> String {
     if let Some(obj) = event.as_object() {
         for nest_key in &["payload", "hookPayload", "data", "body"] {
             if let Some(nested) = obj.get(*nest_key).and_then(Value::as_object)
-                && let Some(name) = from_obj(nested) {
-                    return name;
-                }
+                && let Some(name) = from_obj(nested)
+            {
+                return name;
+            }
         }
     }
     String::new()
@@ -217,9 +232,10 @@ pub fn extract_tool_input(event: &Value) -> Value {
     if let Some(obj) = event.as_object() {
         for nest_key in &["payload", "hookPayload", "data", "body"] {
             if let Some(nested) = obj.get(*nest_key).and_then(Value::as_object)
-                && let Some(input) = from_obj(nested) {
-                    return input;
-                }
+                && let Some(input) = from_obj(nested)
+            {
+                return input;
+            }
         }
     }
     serde_json::json!({})
@@ -267,10 +283,10 @@ pub fn extract_response_text(payload: &Value) -> String {
     ];
     for key in RESPONSE_KEYS {
         if let Some(value) = payload.get(*key).and_then(Value::as_str)
-            && !value.trim().is_empty() {
-                return value.to_string();
-            }
+            && !value.trim().is_empty()
+        {
+            return value.to_string();
+        }
     }
     String::new()
 }
-

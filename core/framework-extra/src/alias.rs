@@ -1,20 +1,21 @@
 //! Framework command alias envelopes (`deepinterview`, …).
 
+use core_errors::FrameworkError;
 use serde_json::{Map, Value, json};
 use std::fs;
 use std::path::Path;
 use std::sync::{LazyLock, Mutex};
 
+use crate::util::supervisor_contract;
+use fr_exec::runtime_view::{
+    classify_runtime_continuity, load_framework_runtime_view, workspace_name_from_root,
+};
 use fr_utils::constants::{
     FRAMEWORK_ALIAS_SCHEMA_VERSION, FRAMEWORK_ALIAS_STATE_MACHINE_SCHEMA_VERSION,
     FRAMEWORK_RUNTIME_AUTHORITY,
 };
-use fr_utils::types::FrameworkAliasBuildOptions;
-use fr_exec::runtime_view::{
-    classify_runtime_continuity, load_framework_runtime_view, workspace_name_from_root,
-};
 use fr_utils::json_value::{stable_line_items, value_string_list, value_text};
-use crate::util::supervisor_contract;
+use fr_utils::types::FrameworkAliasBuildOptions;
 
 fn string_or_null(value: String) -> Value {
     if value.trim().is_empty() {
@@ -28,7 +29,7 @@ pub fn build_framework_alias_envelope(
     repo_root: &Path,
     alias_name: &str,
     options: FrameworkAliasBuildOptions<'_>,
-) -> Result<Value, String> {
+) -> Result<Value, FrameworkError> {
     let snapshot = load_framework_runtime_view(repo_root, None, None);
     let continuity = classify_runtime_continuity(&snapshot);
     let contract = supervisor_contract(&snapshot.supervisor_state);
@@ -180,23 +181,26 @@ struct RegistryCache {
 static REGISTRY_CACHE: LazyLock<Mutex<Option<RegistryCache>>> = LazyLock::new(|| Mutex::new(None));
 
 /// Load and parse the registry JSON from disk (shared by cache miss paths).
-fn load_and_cache(path: &std::path::Path) -> Result<Value, String> {
-    let raw = fs::read_to_string(path).map_err(|err| {
-        format!(
+fn load_and_cache(path: &std::path::Path) -> Result<Value, FrameworkError> {
+    let raw = fs::read_to_string(path).map_err(|err| FrameworkError::Config {
+        message: format!(
             "framework alias registry unavailable at {}: {err}",
             path.display()
-        )
+        ),
     })?;
-    let parsed: Value = serde_json::from_str(&raw).map_err(|err| {
-        format!(
+    let parsed: Value = serde_json::from_str(&raw).map_err(|err| FrameworkError::Config {
+        message: format!(
             "framework alias registry parse failed at {}: {err}",
             path.display()
-        )
+        ),
     })?;
     Ok(parsed)
 }
 
-fn load_framework_alias_record(repo_root: &Path, alias_name: &str) -> Result<Value, String> {
+fn load_framework_alias_record(
+    repo_root: &Path,
+    alias_name: &str,
+) -> Result<Value, FrameworkError> {
     let registry_path = repo_root
         .join("configs")
         .join("framework")
@@ -233,11 +237,11 @@ fn load_framework_alias_record(repo_root: &Path, alias_name: &str) -> Result<Val
             .and_then(|aliases| aliases.get(alias_name))
             .cloned()
     };
-    result.ok_or_else(|| {
-        format!(
+    result.ok_or_else(|| FrameworkError::Config {
+        message: format!(
             "Unknown framework alias `{alias_name}` in {}",
             registry_path.display()
-        )
+        ),
     })
 }
 
@@ -703,6 +707,7 @@ pub(super) fn estimate_token_count(text: &str) -> usize {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::estimate_token_count;
 
     #[test]

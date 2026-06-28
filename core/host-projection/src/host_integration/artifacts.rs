@@ -338,7 +338,10 @@ pub fn prepare_generated_artifact_temp_root(
     Ok(GeneratedArtifactTempRoot { path: temp_root })
 }
 
-pub fn copy_framework_tree_for_generation(source: &Path, destination: &Path) -> std::result::Result<(), String> {
+pub fn copy_framework_tree_for_generation(
+    source: &Path,
+    destination: &Path,
+) -> std::result::Result<(), String> {
     fs::create_dir_all(destination)
         .map_err(|err| format!("failed to create {}: {err}", destination.display()))?;
     for entry in fs::read_dir(source)
@@ -528,7 +531,9 @@ pub fn undeclared_generated_framework_artifacts(
     Ok(undeclared)
 }
 
-pub fn surface_policy_generated_reports(framework_root: &Path) -> std::result::Result<BTreeSet<String>, String> {
+pub fn surface_policy_generated_reports(
+    framework_root: &Path,
+) -> std::result::Result<BTreeSet<String>, String> {
     let path = framework_root.join("configs/framework/FRAMEWORK_SURFACE_POLICY.json");
     let Some(policy) = read_json_if_exists(&path)? else {
         return Ok(BTreeSet::new());

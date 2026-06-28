@@ -30,10 +30,12 @@ pub fn read_json_strict(path: &Path) -> Result<Value, FrameworkError> {
     if !path.is_file() {
         return Ok(Value::Object(Map::new()));
     }
-    let text = fs::read_to_string(path)
-        .map_err(|err| FrameworkError::validation(format!("read json failed for {}: {err}", path.display())))?;
-    serde_json::from_str(&text)
-        .map_err(|err| FrameworkError::validation(format!("parse json failed for {}: {err}", path.display())))
+    let text = fs::read_to_string(path).map_err(|err| {
+        FrameworkError::validation(format!("read json failed for {}: {err}", path.display()))
+    })?;
+    serde_json::from_str(&text).map_err(|err| {
+        FrameworkError::validation(format!("parse json failed for {}: {err}", path.display()))
+    })
 }
 
 /// Read a text file; returns empty string if missing.
@@ -45,8 +47,9 @@ pub fn read_text_if_exists(path: &Path) -> String {
 pub fn write_json_if_changed(path: &Path, payload: &Value) -> Result<bool, FrameworkError> {
     let serialized = format!(
         "{}\n",
-        serde_json::to_string_pretty(payload)
-            .map_err(|err| FrameworkError::validation(format!("serialize JSON payload failed: {err}")))?
+        serde_json::to_string_pretty(payload).map_err(|err| FrameworkError::validation(
+            format!("serialize JSON payload failed: {err}")
+        ))?
     );
     write_text_if_changed(path, &serialized)
 }
@@ -59,8 +62,9 @@ pub fn write_text_if_changed(path: &Path, content: &str) -> Result<bool, Framewo
         return Ok(false);
     }
     if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)
-            .map_err(|err| FrameworkError::validation(format!("create parent directory failed: {err}")))?;
+        fs::create_dir_all(parent).map_err(|err| {
+            FrameworkError::validation(format!("create parent directory failed: {err}"))
+        })?;
     }
     super::atomic_write::write_atomic_text(path, content)?;
     Ok(true)

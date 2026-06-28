@@ -34,12 +34,12 @@ pub mod proof_dag;
 pub mod proof_dag_serialize;
 pub mod provenance;
 pub mod render;
-pub mod subprocess;
 pub mod review;
 pub mod search;
 #[cfg(feature = "smoke")]
 pub mod smoke;
 pub mod state;
+pub mod subprocess;
 pub mod text;
 pub mod types;
 pub mod util;
@@ -58,20 +58,51 @@ pub use hooks::init::init_hooks;
 /// Call this during application bootstrap (after `init_qg_route()`) to register
 /// RESEARCH-scene checkers from research-harness into the shared CheckerRegistry.
 pub fn register_qg_checkers(registry: &mut quality_gate::CheckerRegistry) {
-    registry.register(quality_gate::scene::RESEARCH, Box::new(verification::asymptotic_gate::Asymptotic));
-    registry.register(quality_gate::scene::RESEARCH, Box::new(verification::formal_gate::DimensionalConsistency));
-    registry.register(quality_gate::scene::RESEARCH, Box::new(verification::inequality_gate::Inequality));
-    registry.register(quality_gate::scene::RESEARCH, Box::new(verification::literature_gate::Literature));
-    registry.register(quality_gate::scene::RESEARCH, Box::new(verification::prose_qc_gate::ProseQCChecker));
-    registry.register(quality_gate::scene::RESEARCH, Box::new(verification::reproducibility_gate::Reproducibility));
-    registry.register(quality_gate::scene::RESEARCH, Box::new(verification::statistical_gate::StatisticalChecker));
-    registry.register(quality_gate::scene::RESEARCH, Box::new(verification::structure_gate::Structure));
-    registry.register(quality_gate::scene::RESEARCH, Box::new(verification::symbolic_gate::Symbolic));
-    registry.register(quality_gate::scene::RESEARCH, Box::new(verification::sympy_bridge_gate::SympyBridge));
+    registry.register(
+        quality_gate::scene::RESEARCH,
+        Box::new(verification::asymptotic_gate::Asymptotic),
+    );
+    registry.register(
+        quality_gate::scene::RESEARCH,
+        Box::new(verification::formal_gate::DimensionalConsistency),
+    );
+    registry.register(
+        quality_gate::scene::RESEARCH,
+        Box::new(verification::inequality_gate::Inequality),
+    );
+    registry.register(
+        quality_gate::scene::RESEARCH,
+        Box::new(verification::literature_gate::Literature),
+    );
+    registry.register(
+        quality_gate::scene::RESEARCH,
+        Box::new(verification::prose_qc_gate::ProseQCChecker),
+    );
+    registry.register(
+        quality_gate::scene::RESEARCH,
+        Box::new(verification::reproducibility_gate::Reproducibility),
+    );
+    registry.register(
+        quality_gate::scene::RESEARCH,
+        Box::new(verification::statistical_gate::StatisticalChecker),
+    );
+    registry.register(
+        quality_gate::scene::RESEARCH,
+        Box::new(verification::structure_gate::Structure),
+    );
+    registry.register(
+        quality_gate::scene::RESEARCH,
+        Box::new(verification::symbolic_gate::Symbolic),
+    );
+    registry.register(
+        quality_gate::scene::RESEARCH,
+        Box::new(verification::sympy_bridge_gate::SympyBridge),
+    );
 }
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     #[test]
     fn smoke() {
         assert!(true);

@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used, clippy::expect_used)]
 //! Search correctness regression fixtures (stable ordering vs baseline slugs).
 
 use super::{

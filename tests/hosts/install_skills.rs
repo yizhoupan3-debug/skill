@@ -1,7 +1,7 @@
 use crate::common;
 use crate::common::{
-    host_integration_json, json_from_output, project_root, read_json, read_text,
-    router_rs_command, router_rs_json, run, seed_framework_markers, write_json, write_text,
+    host_integration_json, json_from_output, project_root, read_json, read_text, router_rs_command,
+    router_rs_json, run, seed_framework_markers, write_json, write_text,
 };
 use serde_json::json;
 use std::process::Command;

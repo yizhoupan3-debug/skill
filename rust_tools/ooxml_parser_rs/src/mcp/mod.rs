@@ -1,45 +1,43 @@
 //! MCP tool definitions and dispatch for ooxml_parser_rs.
 
 use anyhow::Result;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::path::Path;
 
-use crate::{detect_ooxml_kind, OoxmlKind};
+use crate::{OoxmlKind, detect_ooxml_kind};
 
 /// MCP tool definitions exposed by this server.
 pub fn tool_definitions() -> Vec<Value> {
-    vec![
-        json!({
-            "name": "ooxml_parse",
-            "description": "Parse OOXML documents (.docx, .xlsx, .pptx). Auto-detects format by extension. Returns structured text (markdown tables for xlsx, linear text for docx) or JSON. Includes metadata such as sheet names, headings, dimensions, and SHA-256 hash.",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "path": {
-                        "type": "string",
-                        "description": "Absolute path to the .docx, .xlsx, or .pptx file"
-                    },
-                    "format": {
-                        "type": "string",
-                        "enum": ["text", "json", "markdown"],
-                        "default": "text",
-                        "description": "Output format. 'text' and 'markdown' produce human-readable markdown; 'json' returns structured data."
-                    },
-                    "max_rows": {
-                        "type": "integer",
-                        "default": 10000,
-                        "description": "Maximum rows per sheet (xlsx only)"
-                    },
-                    "sheets": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": "Sheet names to include (xlsx only; empty = all)"
-                    }
+    vec![json!({
+        "name": "ooxml_parse",
+        "description": "Parse OOXML documents (.docx, .xlsx, .pptx). Auto-detects format by extension. Returns structured text (markdown tables for xlsx, linear text for docx) or JSON. Includes metadata such as sheet names, headings, dimensions, and SHA-256 hash.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": "Absolute path to the .docx, .xlsx, or .pptx file"
                 },
-                "required": ["path"]
-            }
-        }),
-    ]
+                "format": {
+                    "type": "string",
+                    "enum": ["text", "json", "markdown"],
+                    "default": "text",
+                    "description": "Output format. 'text' and 'markdown' produce human-readable markdown; 'json' returns structured data."
+                },
+                "max_rows": {
+                    "type": "integer",
+                    "default": 10000,
+                    "description": "Maximum rows per sheet (xlsx only)"
+                },
+                "sheets": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Sheet names to include (xlsx only; empty = all)"
+                }
+            },
+            "required": ["path"]
+        }
+    })]
 }
 
 /// Dispatch a tool call by name and arguments.
@@ -56,10 +54,7 @@ fn tool_ooxml_parse(args: &Value) -> Result<Value, anyhow::Error> {
         .and_then(Value::as_str)
         .ok_or_else(|| anyhow::anyhow!("Missing required argument: path"))?;
 
-    let format = args
-        .get("format")
-        .and_then(Value::as_str)
-        .unwrap_or("text");
+    let format = args.get("format").and_then(Value::as_str).unwrap_or("text");
 
     let as_json = format == "json";
 
@@ -75,11 +70,17 @@ fn tool_ooxml_parse(args: &Value) -> Result<Value, anyhow::Error> {
     match kind {
         OoxmlKind::Docx => {
             let output = crate::read_docx_content(file_path)?;
-            let char_count = output.blocks.iter().map(|b| match b {
-                crate::DocxBlock::Paragraph { text, .. } => text.len(),
-                crate::DocxBlock::Table { rows } => rows.iter().flatten().map(|c| c.len()).sum(),
-                crate::DocxBlock::Image => 7,
-            }).sum::<usize>();
+            let char_count = output
+                .blocks
+                .iter()
+                .map(|b| match b {
+                    crate::DocxBlock::Paragraph { text, .. } => text.len(),
+                    crate::DocxBlock::Table { rows } => {
+                        rows.iter().flatten().map(|c| c.len()).sum()
+                    }
+                    crate::DocxBlock::Image => 7,
+                })
+                .sum::<usize>();
 
             if as_json {
                 Ok(json!({
@@ -113,11 +114,18 @@ fn tool_ooxml_parse(args: &Value) -> Result<Value, anyhow::Error> {
             }
         }
         OoxmlKind::Xlsx => {
-            let max_rows = args.get("max_rows").and_then(Value::as_u64).unwrap_or(10000) as usize;
+            let max_rows = args
+                .get("max_rows")
+                .and_then(Value::as_u64)
+                .unwrap_or(10000) as usize;
             let sheets: Vec<String> = args
                 .get("sheets")
                 .and_then(|v| v.as_array())
-                .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|v| v.as_str().map(String::from))
+                        .collect()
+                })
                 .unwrap_or_default();
 
             let output = crate::read_xlsx_content(file_path, max_rows, &sheets)?;

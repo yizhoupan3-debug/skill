@@ -8,13 +8,13 @@
 //!
 //! Without `PDF_BENCH=1` the binary exits immediately (CI-friendly no-op).
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use pdf_tool_rs::batch::{run_batch, BatchOptions};
+use criterion::{Criterion, black_box, criterion_group, criterion_main};
+use pdf_tool_rs::batch::{BatchOptions, run_batch};
 use tempfile::tempdir;
 
 fn hello_pdf_bytes() -> Vec<u8> {
     use lopdf::content::{Content, Operation};
-    use lopdf::{dictionary, Document, Object, Stream};
+    use lopdf::{Document, Object, Stream, dictionary};
     let mut doc = Document::with_version("1.5");
     let pages_id = doc.new_object_id();
     let font_id = doc.add_object(dictionary! {
@@ -74,11 +74,10 @@ fn bench_batch_small(c: &mut Criterion) {
                 out_dir: out,
                 jobs: 2,
                 resume: false,
-                skip_scanned: false,
                 fail_fast: false,
                 max_chars: 8000,
             };
-            black_box(run_batch(paths, &opts).expect("batch"));
+            black_box(run_batch(paths, &opts, false).expect("batch"));
         });
     });
 }

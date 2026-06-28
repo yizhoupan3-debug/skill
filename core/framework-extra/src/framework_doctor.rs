@@ -1,9 +1,9 @@
 //! Human-readable checks for `router-rs framework doctor`.
 
-use core_policy::doc_registry;
 use core_errors::FrameworkError;
-use fr_exec::router_env_flags::router_rs_task_ledger_flock_enabled;
+use core_policy::doc_registry;
 use core_state::task_state::resolve_task_view;
+use fr_exec::router_env_flags::router_rs_task_ledger_flock_enabled;
 use serde_json::{Value, json};
 use std::fs;
 use std::path::Path;
@@ -33,28 +33,42 @@ pub fn run_framework_doctor(repo_root: &Path) -> Result<DoctorResult, FrameworkE
 
     let mut warns: Vec<String> = Vec::new();
 
+    check_symlinks(repo_root);
+    check_paths(repo_root, &mut warns);
+    check_docs_governance(repo_root, &mut warns);
+    check_host_install_projections(repo_root, &mut warns);
+    print_info_reminders();
+    check_hooks(repo_root, &mut warns);
+    check_generated_artifacts(repo_root, &mut warns);
+    check_control_plane(repo_root, &mut warns);
+
+    let warn_count = warns.len();
+    let result = DoctorResult {
+        ok: warn_count == 0,
+        warn_count,
+        warns,
+    };
+    println!(
+        "\n--- doctor result (JSON) ---\n{}",
+        serde_json::to_string_pretty(&result).unwrap_or_default()
+    );
+    Ok(result)
+}
+
+/// Symlink health check (report-only).
+fn check_symlinks(repo_root: &Path) {
     println!("\n--- symlink health check (report-only) ---");
     match report_broken_symlinks(repo_root) {
         Ok(0) => println!("INFO: No broken symlinks detected. Multi-host workspace is healthy."),
-        Ok(n) => println!("WARN: {n} broken symlink(s) found. Run `router-rs framework clean-orphans` to fix."),
+        Ok(n) => println!(
+            "WARN: {n} broken symlink(s) found. Run `router-rs framework clean-orphans` to fix."
+        ),
         Err(e) => tracing::warn!(error = %e, "failed to check broken symlinks"),
     }
+}
 
-    let checks: Vec<(String, std::path::PathBuf)> = vec![
-        ("AGENTS.md".to_string(), repo_root.join("AGENTS.md")),
-        (
-            "skills/SKILL_ROUTING_RUNTIME.json".to_string(),
-            repo_root.join("skills").join("SKILL_ROUTING_RUNTIME.json"),
-        ),
-        (
-            "configs/framework/RUNTIME_REGISTRY.json".to_string(),
-            repo_root
-                .join("configs")
-                .join("framework")
-                .join("RUNTIME_REGISTRY.json"),
-        ),
-    ];
-
+/// Check required framework files exist.
+fn check_paths(repo_root: &Path, warns: &mut Vec<String>) {
     println!("\n--- path checks ---");
     match core_policy::registry_review_gate::check_review_gate_registry_snapshot(repo_root) {
         Ok(()) => println!("RUNTIME_REGISTRY review_gate snapshot: ok"),
@@ -71,6 +85,21 @@ pub fn run_framework_doctor(repo_root: &Path) -> Result<DoctorResult, FrameworkE
     println!(
         "ROUTER_RS_REVIEW_GATE_MODE: {review_mode} (env ROUTER_RS_REVIEW_GATE_MODE; legacy per-host env variants for backward compat)"
     );
+
+    let checks = [
+        ("AGENTS.md", repo_root.join("AGENTS.md")),
+        (
+            "skills/SKILL_ROUTING_RUNTIME.json",
+            repo_root.join("skills").join("SKILL_ROUTING_RUNTIME.json"),
+        ),
+        (
+            "configs/framework/RUNTIME_REGISTRY.json",
+            repo_root
+                .join("configs")
+                .join("framework")
+                .join("RUNTIME_REGISTRY.json"),
+        ),
+    ];
     for (label, path) in &checks {
         let status = if path.is_file() {
             "ok (file)"
@@ -81,7 +110,10 @@ pub fn run_framework_doctor(repo_root: &Path) -> Result<DoctorResult, FrameworkE
         };
         println!("{label}: {status} ({})", path.display());
     }
+}
 
+/// Check docs governance: directories exist and convention {topic}-{YYYY-MM-DD}.md.
+fn check_docs_governance(repo_root: &Path, warns: &mut Vec<String>) {
     println!("\n--- docs governance (reports/plans) ---");
     for dir_key in doc_registry::all_dirs() {
         let dir_path = repo_root.join(dir_key);
@@ -102,78 +134,90 @@ pub fn run_framework_doctor(repo_root: &Path) -> Result<DoctorResult, FrameworkE
         if !dir_path.is_dir() {
             continue;
         }
-        match std::fs::read_dir(&dir_path) {
-            Ok(entries) => {
-                for entry in entries.flatten() {
-                    let fname_str = entry.file_name().to_string_lossy().into_owned();
-                    if !fname_str.ends_with(".md") {
-                        continue;
-                    }
-                    if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
-                        continue;
-                    }
-                    let stem_end = fname_str.len().saturating_sub(3);
-                    if stem_end < 10 {
-                        let msg = format!("{dir_key}/{fname_str}: filename too short for convention {{topic}}-{{YYYY-MM-DD}}.md");
-                        println!("WARN: {msg}");
-                        warns.push(msg);
-                        continue;
-                    }
-                    let suffix = &fname_str[(stem_end - 10)..stem_end];
-                    let is_date = suffix.len() == 10
-                        && suffix.as_bytes()[0].is_ascii_digit()
-                        && suffix.as_bytes()[1].is_ascii_digit()
-                        && suffix.as_bytes()[2].is_ascii_digit()
-                        && suffix.as_bytes()[3].is_ascii_digit()
-                        && suffix.as_bytes()[4] == b'-'
-                        && suffix.as_bytes()[5].is_ascii_digit()
-                        && suffix.as_bytes()[6].is_ascii_digit()
-                        && suffix.as_bytes()[7] == b'-'
-                        && suffix.as_bytes()[8].is_ascii_digit()
-                        && suffix.as_bytes()[9].is_ascii_digit();
-                    if !is_date {
-                        let msg = format!("{dir_key}/{fname_str}: does not follow convention {{topic}}-{{YYYY-MM-DD}}.md");
-                        println!("WARN: {msg}");
-                        warns.push(msg);
+        if let Err(e) = check_md_conventions(dir_key, &dir_path, warns) {
+            let msg = format!("{dir_key}: read error ({e})");
+            println!("WARN: {msg}");
+            warns.push(msg);
+        }
+    }
+}
+
+/// Verify `.md` files under `dir_path` follow the {topic}-{YYYY-MM-DD}.md convention.
+fn check_md_conventions(
+    dir_key: &str,
+    dir_path: &Path,
+    warns: &mut Vec<String>,
+) -> Result<(), std::io::Error> {
+    for entry in std::fs::read_dir(dir_path)?.flatten() {
+        let fname_str = entry.file_name().to_string_lossy().into_owned();
+        if !fname_str.ends_with(".md") {
+            continue;
+        }
+        if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+            continue;
+        }
+        let stem_end = fname_str.len().saturating_sub(3);
+        if stem_end < 10 {
+            let msg = format!(
+                "{dir_key}/{fname_str}: filename too short for convention {{topic}}-{{YYYY-MM-DD}}.md"
+            );
+            println!("WARN: {msg}");
+            warns.push(msg);
+            continue;
+        }
+        let suffix = &fname_str[(stem_end - 10)..stem_end];
+        let is_date = suffix.len() == 10
+            && suffix.as_bytes()[0].is_ascii_digit()
+            && suffix.as_bytes()[1].is_ascii_digit()
+            && suffix.as_bytes()[2].is_ascii_digit()
+            && suffix.as_bytes()[3].is_ascii_digit()
+            && suffix.as_bytes()[4] == b'-'
+            && suffix.as_bytes()[5].is_ascii_digit()
+            && suffix.as_bytes()[6].is_ascii_digit()
+            && suffix.as_bytes()[7] == b'-'
+            && suffix.as_bytes()[8].is_ascii_digit()
+            && suffix.as_bytes()[9].is_ascii_digit();
+        if !is_date {
+            let msg = format!(
+                "{dir_key}/{fname_str}: does not follow convention {{topic}}-{{YYYY-MM-DD}}.md"
+            );
+            println!("WARN: {msg}");
+            warns.push(msg);
+        }
+    }
+    Ok(())
+}
+
+/// Check host install projections against RUNTIME_REGISTRY.
+fn check_host_install_projections(repo_root: &Path, warns: &mut Vec<String>) {
+    println!("\n--- host install projections (optional in framework source repo) ---");
+    let mut host_install_checks: Vec<(String, std::path::PathBuf)> = Vec::new();
+    if let Ok(reg) = framework_kernel::runtime_registry::load_runtime_registry_json(repo_root)
+        && let Ok(supported) =
+            framework_kernel::framework_host_targets::host_targets_supported_host_ids(&reg)
+    {
+        for host_id in &supported {
+            if let Ok(ep_value) =
+                framework_kernel::framework_host_targets::host_entrypoints_value_for_id(
+                    &reg, host_id,
+                )
+            {
+                let paths: Vec<String> = match &ep_value {
+                    Value::Array(arr) => arr
+                        .iter()
+                        .filter_map(|v| v.as_str().map(String::from))
+                        .collect(),
+                    Value::String(s) => vec![s.clone()],
+                    _ => vec![],
+                };
+                for ep in &paths {
+                    if ep.contains('/') || ep.contains('.') {
+                        host_install_checks.push((ep.clone(), repo_root.join(ep)));
                     }
                 }
-            }
-            Err(e) => {
-                let msg = format!("{dir_key}: read error ({e})");
-                println!("WARN: {msg}");
-                warns.push(msg);
             }
         }
     }
-
-    println!("\n--- host install projections (optional in framework source repo) ---");
-    // Build check list dynamically from RUNTIME_REGISTRY.json host_entrypoints.
-    let mut host_install_checks: Vec<(String, std::path::PathBuf)> = Vec::new();
-    // Read host_entrypoints from registry for each supported host
-    if let Ok(reg) = framework_kernel::runtime_registry::load_runtime_registry_json(repo_root)
-        && let Ok(supported) = framework_kernel::framework_host_targets::host_targets_supported_host_ids(&reg)
-        {
-            for host_id in &supported {
-                if let Ok(ep_value) =
-                    framework_kernel::framework_host_targets::host_entrypoints_value_for_id(&reg, host_id)
-                {
-                    let paths: Vec<String> = match &ep_value {
-                        Value::Array(arr) => arr
-                            .iter()
-                            .filter_map(|v| v.as_str().map(String::from))
-                            .collect(),
-                        Value::String(s) => vec![s.clone()],
-                        _ => vec![],
-                    };
-                    for ep in &paths {
-                        // Only check file paths (skip agent policy names like AGENTS.md)
-                        if ep.contains('/') || ep.contains('.') {
-                            host_install_checks.push((ep.clone(), repo_root.join(ep)));
-                        }
-                    }
-                }
-            }
-        }
     let mut host_install_missing = 0usize;
     for (label, path) in &host_install_checks {
         let status = if path.is_file() {
@@ -194,24 +238,31 @@ pub fn run_framework_doctor(repo_root: &Path) -> Result<DoctorResult, FrameworkE
             "hint: router-rs framework host-integration install --to {} --scope project",
             installable.join("|")
         );
-        // Data-driven deprecated shim check across all host directories (ADR §4)
-        for host_dir in framework_kernel::runtime_registry::host_home_dirs().iter() {
-            let deprecated_shim = repo_root
-                .join(host_dir)
-                .join("hooks")
-                .join("router-rs-hook.sh");
-            if deprecated_shim.is_file() {
-                let msg = format!(
-                    "deprecated shim still present at {} — prefer {}/settings.json hooks (see AGENTS.md)",
-                    deprecated_shim.display(),
-                    host_dir,
-                );
-                println!("WARN: {msg}");
-                warns.push(msg);
-            }
+        check_deprecated_shims(repo_root, warns);
+    }
+}
+
+/// Check for deprecated router-rs-hook.sh shims still present in host directories.
+fn check_deprecated_shims(repo_root: &Path, warns: &mut Vec<String>) {
+    for host_dir in framework_kernel::runtime_registry::host_home_dirs().iter() {
+        let deprecated_shim = repo_root
+            .join(host_dir)
+            .join("hooks")
+            .join("router-rs-hook.sh");
+        if deprecated_shim.is_file() {
+            let msg = format!(
+                "deprecated shim still present at {} — prefer {}/settings.json hooks (see AGENTS.md)",
+                deprecated_shim.display(),
+                host_dir,
+            );
+            println!("WARN: {msg}");
+            warns.push(msg);
         }
     }
+}
 
+/// Print informational reminders.
+fn print_info_reminders() {
     println!("\n--- Codex projection reminder ---");
     println!(
         "If you edited repo-root AGENTS.md and rely on Codex hooks that embed policy from router-rs,"
@@ -229,8 +280,7 @@ pub fn run_framework_doctor(repo_root: &Path) -> Result<DoctorResult, FrameworkE
     );
 
     println!("\n--- ephemeral Stop checkpoint rows (operator) ---");
-    const EPHEMERAL_PREFIXES: &[&str] =
-        framework_kernel::runtime_registry::EPHEMERAL_TASK_PREFIXES;
+    const EPHEMERAL_PREFIXES: &[&str] = framework_kernel::runtime_registry::EPHEMERAL_TASK_PREFIXES;
     println!(
         "If task_registry.json lists many \"{}\" rows or focus drifted:",
         EPHEMERAL_PREFIXES.join("\" / \""),
@@ -255,14 +305,19 @@ pub fn run_framework_doctor(repo_root: &Path) -> Result<DoctorResult, FrameworkE
     println!(
         "  Root artifact clutter: router-rs framework maint migrate-current-artifact-clutter --repo-root <repo>"
     );
+}
 
+/// Check for hook duplication.
+fn check_hooks(repo_root: &Path, warns: &mut Vec<String>) {
     println!("\n--- Codex hooks duplication (operator) ---");
     for line in framework_kernel::runtime_hooks::check_hook_duplicates(repo_root) {
         println!("{line}");
-        // Lines from this helper are warnings by convention.
         warns.push(line);
     }
+}
 
+/// Check generated artifacts for manifest drift.
+fn check_generated_artifacts(repo_root: &Path, warns: &mut Vec<String>) {
     println!("\n--- generated artifacts (manifest drift) ---");
     match host_projection::host_integration::generated_artifacts_status_for_repo(repo_root) {
         Ok(summary) => {
@@ -302,10 +357,14 @@ pub fn run_framework_doctor(repo_root: &Path) -> Result<DoctorResult, FrameworkE
         println!("WARN: {msg}");
         warns.push(msg);
     }
+}
 
+/// Check control plane snapshot consistency.
+fn check_control_plane(repo_root: &Path, warns: &mut Vec<String>) {
     println!("\n--- control plane (supervisor / pointers) ---");
-    match crate::snapshot::build_framework_runtime_snapshot_envelope_with_level(repo_root, None, None, "full")
-    {
+    match crate::snapshot::build_framework_runtime_snapshot_envelope_with_level(
+        repo_root, None, None, "full",
+    ) {
         Ok(envelope) => {
             let snapshot = &envelope["runtime_snapshot"];
             let state = snapshot
@@ -338,18 +397,6 @@ pub fn run_framework_doctor(repo_root: &Path) -> Result<DoctorResult, FrameworkE
             warns.push(msg);
         }
     }
-
-    let warn_count = warns.len();
-    let result = DoctorResult {
-        ok: warn_count == 0,
-        warn_count,
-        warns,
-    };
-    println!(
-        "\n--- doctor result (JSON) ---\n{}",
-        serde_json::to_string_pretty(&result).unwrap_or_default()
-    );
-    Ok(result)
 }
 
 /// Read task pointer files directly from `artifacts/current/` (replaces removed `read_task_pointer_pair`).
@@ -360,13 +407,14 @@ fn read_local_task_pointer_pair(repo_root: &Path) -> (Option<String>, Option<Str
     let pointers_path = current.join("TASK_POINTERS.json");
     if pointers_path.is_file()
         && let Ok(raw) = fs::read_to_string(&pointers_path)
-            && let Ok(data) = serde_json::from_str::<Value>(&raw) {
-                let active = parse_pointer_task_id(data.get("active_task_id"));
-                let focus = parse_pointer_task_id(data.get("focus_task_id"));
-                if active.is_some() || focus.is_some() {
-                    return (active, focus);
-                }
-            }
+        && let Ok(data) = serde_json::from_str::<Value>(&raw)
+    {
+        let active = parse_pointer_task_id(data.get("active_task_id"));
+        let focus = parse_pointer_task_id(data.get("focus_task_id"));
+        if active.is_some() || focus.is_some() {
+            return (active, focus);
+        }
+    }
     // Legacy individual files
     let active = read_single_pointer(&current.join("active_task.json"));
     let focus = read_single_pointer(&current.join("focus_task.json"));
@@ -480,31 +528,32 @@ pub fn run_continuity_audit(repo_root: &Path) -> Result<Value, FrameworkError> {
                     }
 
                     if let (Some(active_id), Some(focus_id)) = (&active_task_id, &focus_task_id)
-                        && active_id != focus_id {
-                            let active_goal = core_state::state_manager::read_goal_state(
-                                repo_root,
-                                Some(active_id.as_str()),
-                            )
-                            .ok()
-                            .flatten();
-                            let focus_goal = core_state::state_manager::read_goal_state(
-                                repo_root,
-                                Some(focus_id.as_str()),
-                            )
-                            .ok()
-                            .flatten();
-                            let active_drives = active_goal.as_ref().is_some_and(
-                                core_state::state_manager::goal_state_requests_continuation,
-                            );
-                            let focus_drives = focus_goal.as_ref().is_some_and(
-                                core_state::state_manager::goal_state_requests_continuation,
-                            );
-                            if active_goal.is_some() && !active_drives && focus_drives {
-                                issues.push(format!(
+                        && active_id != focus_id
+                    {
+                        let active_goal = core_state::state_manager::read_goal_state(
+                            repo_root,
+                            Some(active_id.as_str()),
+                        )
+                        .ok()
+                        .flatten();
+                        let focus_goal = core_state::state_manager::read_goal_state(
+                            repo_root,
+                            Some(focus_id.as_str()),
+                        )
+                        .ok()
+                        .flatten();
+                        let active_drives = active_goal.as_ref().is_some_and(
+                            core_state::state_manager::goal_state_requests_continuation,
+                        );
+                        let focus_drives = focus_goal.as_ref().is_some_and(
+                            core_state::state_manager::goal_state_requests_continuation,
+                        );
+                        if active_goal.is_some() && !active_drives && focus_drives {
+                            issues.push(format!(
                                     "ACTIVE_NOT_DRIVING: active '{active_id}' GOAL does not request continuation but focus '{focus_id}' does; align pointers or complete focus GOAL"
                                 ));
-                            }
                         }
+                    }
 
                     // Check for orphan task directories
                     if let Some(tasks) = registry.get("tasks").and_then(|v| v.as_array()) {
@@ -674,6 +723,7 @@ pub fn report_broken_symlinks(repo_root: &Path) -> Result<usize, FrameworkError>
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     // removed: use crate::*
     use std::path::PathBuf;
 

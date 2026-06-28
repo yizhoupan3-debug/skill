@@ -319,11 +319,12 @@ fn merge_route_metadata_payload(
             && !matches!(
                 mode,
                 "eligible-in-runtime" | "explicit-or-fallback" | "explicit-only" | "never"
-            ) {
-                return Err(format!(
-                    "unsupported fallback_policy.mode `{mode}` for skill `{slug}`"
-                ));
-            }
+            )
+        {
+            return Err(format!(
+                "unsupported fallback_policy.mode `{mode}` for skill `{slug}`"
+            ));
+        }
         if positive_triggers.is_empty()
             && negative_triggers.is_empty()
             && primary_allowed.is_none()
@@ -438,8 +439,7 @@ pub fn load_records_from_runtime(path: &Path) -> Result<Vec<SkillRecord>, String
 // ---------------------------------------------------------------------------
 
 fn records_cache_key(runtime_path: Option<&Path>) -> RecordsCacheKey {
-    let metadata_sidecar =
-        runtime_path.and_then(route_metadata_sidecar_for_runtime);
+    let metadata_sidecar = runtime_path.and_then(route_metadata_sidecar_for_runtime);
     RecordsCacheKey {
         runtime_path: runtime_path.map(Path::to_path_buf),
         metadata_sidecar_path: metadata_sidecar,

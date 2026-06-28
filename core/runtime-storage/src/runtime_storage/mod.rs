@@ -11,8 +11,8 @@ pub mod paths;
 mod sqlite;
 
 pub use backend::{
-    runtime_backend_capabilities, runtime_backend_family_catalog_payload,
-    runtime_backend_family_parity_payload, RuntimeBackendCapabilities,
+    RuntimeBackendCapabilities, runtime_backend_capabilities,
+    runtime_backend_family_catalog_payload, runtime_backend_family_parity_payload,
 };
 pub use filesystem::acquire_runtime_path_lock;
 pub use operation::{

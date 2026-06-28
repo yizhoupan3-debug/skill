@@ -19,6 +19,7 @@ pub fn register(h: SessionSupervisorHooks) {
 }
 
 use crate::types::DriverCommandSpec;
+use core_errors::FrameworkError;
 
 /// Hooks into runtime-core for host-provider dependencies.
 pub struct SessionSupervisorHooks {
@@ -37,7 +38,7 @@ pub struct SessionSupervisorHooks {
         resume_only: bool,
         worktree_name: Option<String>,
         worktree_path: Option<String>,
-    ) -> Option<Result<DriverCommandSpec, String>>,
+    ) -> Option<Result<DriverCommandSpec, FrameworkError>>,
 
     /// Look up the driver ID string for a host.
     pub driver_id_for_host: fn(host: &str) -> Option<&'static str>,

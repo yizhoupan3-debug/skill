@@ -25,8 +25,10 @@ pub fn search(client: &Client, query: &str, limit: usize) -> Result<Vec<Value>> 
             Err(e) => {
                 let msg = e.to_string();
                 // Only retry on transient errors
-                let is_transient = msg.contains("503") || msg.contains("502")
-                    || msg.contains("timeout") || msg.contains("connection");
+                let is_transient = msg.contains("503")
+                    || msg.contains("502")
+                    || msg.contains("timeout")
+                    || msg.contains("connection");
                 if is_transient && attempt < 2 {
                     std::thread::sleep(std::time::Duration::from_millis(500 * (1 << attempt)));
                     continue;
@@ -96,7 +98,11 @@ pub fn search_default(query: &str, limit: usize) -> Result<Vec<Value>> {
 // ── Convenience wrapper returning crate::types::Paper ──
 
 /// Search and convert to typed Paper structs.
-pub fn search_papers(client: &Client, query: &str, limit: usize) -> Result<Vec<crate::types::Paper>> {
+pub fn search_papers(
+    client: &Client,
+    query: &str,
+    limit: usize,
+) -> Result<Vec<crate::types::Paper>> {
     let raw = search(client, query, limit)?;
     raw.into_iter().map(json_to_paper).collect()
 }
@@ -105,11 +111,7 @@ fn json_to_paper(v: Value) -> Result<crate::types::Paper> {
     let title = str_field_default(&v, "title", "_untitled_");
     let url = v.get("url").and_then(Value::as_str).unwrap_or("");
     // arXiv URL contains the ID, e.g. http://arxiv.org/abs/2301.07041
-    let id = url
-        .rsplit('/')
-        .next()
-        .unwrap_or("")
-        .to_string();
+    let id = url.rsplit('/').next().unwrap_or("").to_string();
     // Fallback: empty ID → hash-based ID from title (guarantees non-empty)
     let id = if id.is_empty() {
         use std::hash::{Hash, Hasher};
@@ -127,7 +129,10 @@ fn json_to_paper(v: Value) -> Result<crate::types::Paper> {
         .filter(|s| !s.is_empty())
         .map(|s| s.to_string())
         .collect();
-    let year = v.get("year").and_then(Value::as_str).and_then(|y| y.parse::<u32>().ok());
+    let year = v
+        .get("year")
+        .and_then(Value::as_str)
+        .and_then(|y| y.parse::<u32>().ok());
     Ok(crate::types::Paper {
         id,
         title,
@@ -147,6 +152,7 @@ fn json_to_paper(v: Value) -> Result<crate::types::Paper> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use serde_json::json;
 

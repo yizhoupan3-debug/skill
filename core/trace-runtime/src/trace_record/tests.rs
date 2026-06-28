@@ -1,7 +1,8 @@
 #![cfg(test)]
+#![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use super::*;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use super::compact::{
     build_compaction_stream_key, load_trace_events_streaming, stable_digest,
@@ -169,7 +170,10 @@ fn hydrate_trace_event_fills_defaults() {
 fn hydrate_trace_event_preserves_existing_fields() {
     let mut event = Map::new();
     event.insert("seq".to_string(), json!(99));
-    event.insert("event_id".to_string(), Value::String("custom_id".to_string()));
+    event.insert(
+        "event_id".to_string(),
+        Value::String("custom_id".to_string()),
+    );
     event.insert("status".to_string(), Value::String("error".to_string()));
     let hydrated = hydrate_trace_event(event, 1);
     assert_eq!(trace_event_usize_field(&hydrated, "seq"), Some(99));

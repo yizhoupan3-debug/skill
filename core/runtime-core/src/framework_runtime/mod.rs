@@ -1,9 +1,9 @@
 use serde_json::{Value, json};
 use std::path::Path;
 
+use fr_exec::runtime_view;
 use fr_utils::constants::CURRENT_ARTIFACT_DIR;
 use fr_utils::types::FrameworkRuntimeView;
-use fr_exec::runtime_view;
 
 /// Thin wrappers to `runtime_view` kept in `mod.rs` for sibling-module access.
 pub fn load_framework_runtime_view(
@@ -64,9 +64,10 @@ pub fn build_automatic_continuity_checkpoint_payload_with_task_id(
         }
     });
     if let Some(tid) = task_id.filter(|s| !s.is_empty())
-        && let Some(obj) = payload.as_object_mut() {
-            obj.insert("task_id".to_string(), serde_json::json!(tid));
-        }
+        && let Some(obj) = payload.as_object_mut()
+    {
+        obj.insert("task_id".to_string(), serde_json::json!(tid));
+    }
     payload
 }
 

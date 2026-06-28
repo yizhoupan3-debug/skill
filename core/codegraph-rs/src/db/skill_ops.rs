@@ -70,19 +70,21 @@ pub fn ingest_skills(conn: &Connection, manifest: &Value) -> rusqlite::Result<us
         // Build a searchable text blob from description + trigger_hints
         let mut search_text = String::from(slug);
         if let Some(idx) = desc_idx
-            && let Some(desc) = row.get(idx).and_then(Value::as_str) {
-                search_text.push(' ');
-                search_text.push_str(desc);
-            }
+            && let Some(desc) = row.get(idx).and_then(Value::as_str)
+        {
+            search_text.push(' ');
+            search_text.push_str(desc);
+        }
         if let Some(idx) = hints_idx
-            && let Some(hints) = row.get(idx).and_then(Value::as_array) {
-                for hint in hints {
-                    if let Some(s) = hint.as_str() {
-                        search_text.push(' ');
-                        search_text.push_str(s);
-                    }
+            && let Some(hints) = row.get(idx).and_then(Value::as_array)
+        {
+            for hint in hints {
+                if let Some(s) = hint.as_str() {
+                    search_text.push(' ');
+                    search_text.push_str(s);
                 }
             }
+        }
 
         let id = format!("skill://{slug}");
         // Store the search text in file_path so FTS5 can index it
@@ -142,6 +144,7 @@ pub fn list_skills(conn: &Connection) -> rusqlite::Result<Vec<crate::Node>> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use crate::db::schema::init_schema;
     use serde_json::json;

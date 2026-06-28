@@ -19,4 +19,3 @@ fn patch_scripts_pass_bash_syntax_check() {
         assert!(status.success(), "bash -n failed for {name}");
     }
 }
-

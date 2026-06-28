@@ -3,6 +3,7 @@ use super::aliases::{framework_alias_requires_explicit_call, has_explicit_framew
 use super::scoring_config::ScoringWeights;
 use super::signal_cache::cached_signal;
 use super::signals::*;
+use core_errors::FrameworkError;
 
 /// Cheap single-token check: true if phrase contains no space or CJK punctuation separator.
 /// Replaces `tokenize_route_text(phrase).len() == 1` to avoid regex + Vec allocation.
@@ -24,14 +25,12 @@ fn count_single_token_hits(phrase: &str, query_token_list: &[String]) -> usize {
         0
     }
 }
-use tracing::debug;
-use super::text::{
-    common_route_stop_tokens, text_matches_phrase, tokenize_route_text,
-};
+use super::text::{common_route_stop_tokens, text_matches_phrase, tokenize_route_text};
 use super::types::{RouteCandidate, SkillRecord};
 use crate::hooks::is_review_prompt;
 use std::cmp::Ordering;
 use std::collections::HashSet;
+use tracing::debug;
 
 /// Check if a skill record has a specific flag.
 fn has_skill_flag(record: &SkillRecord, flag: &str) -> bool {
@@ -302,7 +301,12 @@ fn score_metadata_trigger_signals(
         );
         reasons.push(format!(
             "Description keywords matched: {}.",
-            shared_keywords.iter().take(8).copied().collect::<Vec<_>>().join(", ")
+            shared_keywords
+                .iter()
+                .take(8)
+                .copied()
+                .collect::<Vec<_>>()
+                .join(", ")
         ));
         matched_count += shared_keywords.len();
     }
@@ -319,7 +323,12 @@ fn score_metadata_trigger_signals(
         delta += w.alias_hits_base + (alias_hits.len() as f64) * w.alias_hits_per_hit;
         reasons.push(format!(
             "Skill alias hints matched: {}.",
-            alias_hits.iter().take(8).copied().collect::<Vec<_>>().join(", ")
+            alias_hits
+                .iter()
+                .take(8)
+                .copied()
+                .collect::<Vec<_>>()
+                .join(", ")
         ));
         matched_count += alias_hits.len();
     }
@@ -403,16 +412,13 @@ fn score_visual_review_signals(
     }
 
     let markers = super::nl_route_adjustments::visual_evidence_markers();
-    if !markers
-        .iter()
-        .any(|marker| {
-            // Short ASCII-only markers (≤2 chars) must only match at token level
-            // to avoid false positives (e.g. "ui" in "guide"/"quick"/"build").
-            let use_contains = marker.len() > 2 || !marker.is_ascii();
-            (use_contains && query_text.contains(marker.as_str()))
-                || text_matches_phrase(query_token_list, marker)
-        })
-    {
+    if !markers.iter().any(|marker| {
+        // Short ASCII-only markers (≤2 chars) must only match at token level
+        // to avoid false positives (e.g. "ui" in "guide"/"quick"/"build").
+        let use_contains = marker.len() > 2 || !marker.is_ascii();
+        (use_contains && query_text.contains(marker.as_str()))
+            || text_matches_phrase(query_token_list, marker)
+    }) {
         // Weak match: reduce the entire score (applied as delta to the running total).
         let previous = current_score + delta;
         let reduced = previous * w.visual_review_weak_factor;
@@ -551,8 +557,14 @@ pub fn score_route_candidate<'a>(
     }
 
     // --- gate / name-token / trigger-hint signals ---
-    let (gate_delta, gate_count) =
-        score_gate_name_token_signals(record, query_text, query_token_list, query_tokens, w, &mut reasons);
+    let (gate_delta, gate_count) = score_gate_name_token_signals(
+        record,
+        query_text,
+        query_token_list,
+        query_tokens,
+        w,
+        &mut reasons,
+    );
     score += gate_delta;
     matched_token_count += gate_count;
 
@@ -574,17 +586,34 @@ pub fn score_route_candidate<'a>(
     matched_token_count += meta_count;
 
     // --- session-start / code-review-deep signals ---
-    score += score_session_start_signals(record, query_text, query_token_list, first_turn, score, w, &mut reasons);
+    score += score_session_start_signals(
+        record,
+        query_text,
+        query_token_list,
+        first_turn,
+        score,
+        w,
+        &mut reasons,
+    );
 
     if record.owner_lower == "gate" && score > 0.0 {
         score += w.gate_owner_boost;
     }
 
     // --- visual-review signals ---
-    score += score_visual_review_signals(record, query_text, query_token_list, first_turn, score, w, &mut reasons);
+    score += score_visual_review_signals(
+        record,
+        query_text,
+        query_token_list,
+        first_turn,
+        score,
+        w,
+        &mut reasons,
+    );
 
     // --- design contract override: suppress artifact-gate skills when design contract context ---
-    let has_slides_design_contract_flag = has_skill_flag(record, "artifact_exception:slides_design_contract");
+    let has_slides_design_contract_flag =
+        has_skill_flag(record, "artifact_exception:slides_design_contract");
     let has_design_ctx = has_design_contract_context(query_text, query_token_list);
     let has_design_neg = has_design_contract_negation_context(query_text, query_token_list);
     if has_slides_design_contract_flag && has_design_ctx && !has_design_neg {
@@ -613,7 +642,12 @@ pub fn score_route_candidate<'a>(
             score = f64::max(0.0, score - penalty);
             reasons.push(format!(
                 "Do-not-use penalty applied: {}.",
-                negative_hits.iter().take(5).copied().collect::<Vec<_>>().join(", ")
+                negative_hits
+                    .iter()
+                    .take(5)
+                    .copied()
+                    .collect::<Vec<_>>()
+                    .join(", ")
             ));
         }
     }
@@ -664,10 +698,12 @@ pub fn pick_owner<'a>(
     query_text: &str,
     query_token_list: &[String],
     w: &ScoringWeights,
-) -> Result<RouteCandidate<'a>, String> {
+) -> Result<RouteCandidate<'a>, FrameworkError> {
     let n = candidates.len();
     if n == 0 {
-        return Err("pick_owner: no candidates provided".to_string());
+        return Err(FrameworkError::Validation {
+            message: "pick_owner: no candidates provided".to_string(),
+        });
     }
 
     // Owner candidate indices
@@ -684,8 +720,7 @@ pub fn pick_owner<'a>(
     // Gate index
     let gate_idx: Option<usize> = (0..n)
         .filter(|&i| {
-            candidates[i].record.owner_lower == "gate"
-                || candidates[i].record.gate_lower != "none"
+            candidates[i].record.owner_lower == "gate" || candidates[i].record.gate_lower != "none"
         })
         .min_by(|&a, &b| route_candidate_cmp(&candidates[a], &candidates[b]));
 
@@ -780,7 +815,9 @@ pub fn pick_owner<'a>(
                     });
                     let idx = match fallback_pool.first() {
                         Some(&idx) => idx,
-                        None => return Err("pick_owner: fallback_pool empty after exhaustive fallbacks".to_string()),
+                        None => return Err(FrameworkError::validation(
+                            "pick_owner: fallback_pool empty after exhaustive fallbacks",
+                        )),
                     };
                     (idx, None)
                 }
@@ -914,7 +951,10 @@ pub fn compact_route_reasons(reasons: &[&str]) -> Vec<String> {
         }
         // Reasons from signal checks are already unique per record; skip
         // normalize_text allocation for dedup — direct string comparison suffices.
-        if compact.iter().any(|existing: &String| existing.as_str() == *reason) {
+        if compact
+            .iter()
+            .any(|existing: &String| existing.as_str() == *reason)
+        {
             continue;
         }
         compact.push((*reason).to_string());
@@ -972,6 +1012,7 @@ pub fn priority_rank(priority: &str) -> i32 {
 
 #[cfg(test)]
 mod paper_prose_routing_score_tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use crate::route::load_records;
     use crate::route::scoring_config::scoring_weights;
@@ -1053,6 +1094,7 @@ mod paper_prose_routing_score_tests {
 
 #[cfg(test)]
 mod framework_review_overlay_typo_tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::has_framework_review_overlay_context;
     use super::tokenize_route_text;
 
@@ -1083,6 +1125,7 @@ mod framework_review_overlay_typo_tests {
 
 #[cfg(test)]
 mod snapshot_scoring_edge_cases {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use crate::route::load_records;
     use crate::route::scoring_config::scoring_weights;
@@ -1125,7 +1168,10 @@ mod snapshot_scoring_edge_cases {
             .filter(|(_, score, _)| *score > 0.0)
             .collect();
         scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
-        insta::assert_json_snapshot!("scoring_chinese_query", scores.into_iter().take(3).collect::<Vec<_>>());
+        insta::assert_json_snapshot!(
+            "scoring_chinese_query",
+            scores.into_iter().take(3).collect::<Vec<_>>()
+        );
     }
 
     #[test]
@@ -1153,7 +1199,9 @@ mod snapshot_scoring_edge_cases {
                 assert!(
                     (r.score - r_plain.score) >= min_delta,
                     "codegraph boost missing for {}: codegraph={:.1} plain={:.1}",
-                    rec.slug, r.score, r_plain.score
+                    rec.slug,
+                    r.score,
+                    r_plain.score
                 );
             }
         }

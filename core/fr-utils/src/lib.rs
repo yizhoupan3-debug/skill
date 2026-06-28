@@ -10,9 +10,9 @@ pub mod stdio_op_registry;
 pub mod types;
 pub mod util;
 
-
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     #[test]
     fn smoke() {
         assert!(true);

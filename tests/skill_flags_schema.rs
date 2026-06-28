@@ -37,9 +37,7 @@ fn all_referenced_skill_flags_are_defined() {
         .get("keys")
         .and_then(|k| k.as_array())
         .expect("missing keys array");
-    let flags_idx = keys
-        .iter()
-        .position(|k| k.as_str() == Some("skill_flags"));
+    let flags_idx = keys.iter().position(|k| k.as_str() == Some("skill_flags"));
 
     let records = runtime
         .get("skills")
@@ -60,7 +58,7 @@ fn all_referenced_skill_flags_are_defined() {
                 }
             }
         }
-        }
+    }
 
     // Validate: each referenced flag must be defined
     // (or be a parameterized variant of a defined flag like "behavior:low_score_override:20.0")

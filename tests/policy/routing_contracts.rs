@@ -2,8 +2,7 @@
 
 use crate::common::{
     CANONICAL_HOST_IDS, RETIRED_HOST_IDS, assert_canonical_closed_set_host_ids, output_text,
-    project_root, read_json, read_text, router_rs_command, run,
-    seed_framework_markers,
+    project_root, read_json, read_text, router_rs_command, run, seed_framework_markers,
 };
 use crate::host_platforms;
 use crate::policy::policy_helpers::{
@@ -252,7 +251,7 @@ fn project_host_skill_projection_is_generated_outside_host_entrypoints() {
     std::fs::create_dir_all(&repo_root).unwrap();
     seed_framework_markers(&repo_root);
     let root = project_root();
-    let mut command = router_rs_command(&[
+    let mut command = router_rs_command([
         "framework",
         "sync-entrypoints",
         "--host-id",
@@ -284,7 +283,7 @@ fn codex_sync_does_not_write_root_agents_md() {
     std::fs::write(repo_root.join("AGENTS.md"), policy).unwrap();
 
     let root = project_root();
-    let mut command = router_rs_command(&[
+    let mut command = router_rs_command([
         "framework",
         "sync-entrypoints",
         "--host-id",
@@ -313,7 +312,7 @@ fn codex_sync_preserves_existing_agents_codex_delta_file() {
     std::fs::write(repo_root.join("AGENTS.md"), delta).unwrap();
 
     let root = project_root();
-    let mut command = router_rs_command(&[
+    let mut command = router_rs_command([
         "framework",
         "sync-entrypoints",
         "--host-id",
@@ -369,10 +368,7 @@ fn runtime_hot_index_is_minimal() {
     let keys = runtime_obj.keys().cloned().collect::<HashSet<_>>();
     assert_eq!(
         keys,
-        HashSet::from([
-            "keys".to_string(),
-            "skills".to_string(),
-        ])
+        HashSet::from(["keys".to_string(), "skills".to_string(),])
     );
     assert!(runtime["keys"].as_array().expect("keys").len() >= 10);
     assert!(runtime["skills"].as_array().expect("skills").len() >= 20);
@@ -633,11 +629,11 @@ fn plugin_catalog_routing_metadata_and_health_manifest_form_closed_loop() {
     let runtime = read_json(&project_root().join("skills/SKILL_ROUTING_RUNTIME.json"));
     let health = read_json(&project_root().join("skills/SKILL_HEALTH_MANIFEST.json"));
 
-    assert!(runtime["keys"].as_array().expect("keys").len() > 0);
+    assert!(!runtime["keys"].as_array().expect("keys").is_empty());
     assert_eq!(health["schema_version"], "skill-health-manifest-v1");
     assert_eq!(health["source_of_truth"], false);
     assert!(health["skills"].is_object());
-    assert!(runtime["keys"].as_array().expect("keys").len() > 0);
+    assert!(!runtime["keys"].as_array().expect("keys").is_empty());
 
     let runtime_slugs: HashSet<String> = runtime["skills"]
         .as_array()
@@ -940,9 +936,7 @@ fn document_only_provider_lanes_do_not_become_installable_hosts() {
 
 #[test]
 fn manifest_and_runtime_skill_paths_are_loadable() {
-    for relative in [
-        "skills/SKILL_ROUTING_RUNTIME.json",
-    ] {
+    for relative in ["skills/SKILL_ROUTING_RUNTIME.json"] {
         let payload = read_json(&project_root().join(relative));
         let keys = payload["keys"].as_array().expect("keys");
         let slug_idx = key_index(keys, "slug");

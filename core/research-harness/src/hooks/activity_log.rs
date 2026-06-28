@@ -22,11 +22,7 @@ fn detect_research_workspace(repo_root: &Path) -> bool {
 /// - 先检测 repo_root 是否有科研标记（research-state.yaml / .research.toml）
 /// - 若无标记，直接返回（零成本）
 /// - 若有标记，以 JSONL 格式追加到 `artifacts/research-log/auto/YYYY-MM-DD.jsonl`
-pub fn maybe_log_research_activity(
-    tool_name: &str,
-    args: &str,
-    repo_root: &Path,
-) -> Result<()> {
+pub fn maybe_log_research_activity(tool_name: &str, args: &str, repo_root: &Path) -> Result<()> {
     if !detect_research_workspace(repo_root) {
         return Ok(());
     }
@@ -58,6 +54,7 @@ pub fn maybe_log_research_activity(
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     #[test]

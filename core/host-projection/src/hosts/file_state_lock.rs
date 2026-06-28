@@ -107,10 +107,11 @@ impl HookStateConfig {
     pub fn load_state<T: Default + serde::de::DeserializeOwned>(&self, repo_root: &Path) -> T {
         let path = self.state_path(repo_root);
         if let Ok(content) = fs::read_to_string(&path)
-            && let Ok(state) = serde_json::from_str::<T>(&content) {
-                debug!(host = %self.host_id, "hook state loaded");
-                return state;
-            }
+            && let Ok(state) = serde_json::from_str::<T>(&content)
+        {
+            debug!(host = %self.host_id, "hook state loaded");
+            return state;
+        }
         debug!(host = %self.host_id, "hook state default (missing or corrupt)");
         T::default()
     }
@@ -119,10 +120,11 @@ impl HookStateConfig {
     pub fn save_state<T: serde::Serialize>(&self, repo_root: &Path, state: &T) {
         let path = self.state_path(repo_root);
         if let Some(parent) = path.parent()
-            && let Err(e) = fs::create_dir_all(parent) {
-                tracing::warn!(host = %self.host_id, "failed to create hook state dir: {e}");
-                return;
-            }
+            && let Err(e) = fs::create_dir_all(parent)
+        {
+            tracing::warn!(host = %self.host_id, "failed to create hook state dir: {e}");
+            return;
+        }
         match serde_json::to_string_pretty(state) {
             Ok(json) => {
                 if let Err(e) = write_atomic_text(&path, &json) {
@@ -248,7 +250,9 @@ pub fn acquire_file_lock_with_config(
                     config.stale_lock_age_secs
                 );
                 // Force release and retry once
-                unsafe { libc::flock(fd, libc::LOCK_UN); }
+                unsafe {
+                    libc::flock(fd, libc::LOCK_UN);
+                }
                 let rc2 = unsafe { libc::flock(fd, libc::LOCK_EX | libc::LOCK_NB) };
                 if rc2 == 0 {
                     return Ok(FileStateLockGuard {

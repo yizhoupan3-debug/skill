@@ -80,10 +80,7 @@ impl GateChecker for SecurityChecker {
                 }
                 // Command::new(var) — var is not a string literal
                 if trimmed.contains("Command::new(") {
-                    let after = trimmed
-                        .split("Command::new(")
-                        .nth(1)
-                        .unwrap_or("");
+                    let after = trimmed.split("Command::new(").nth(1).unwrap_or("");
                     // If the argument doesn't start with a quote, it's a variable
                     if let Some(first_char) = after.chars().next() {
                         if first_char != '"' && first_char != '\'' {
@@ -186,4 +183,3 @@ impl GateChecker for SecurityChecker {
         }
     }
 }
-

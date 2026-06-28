@@ -30,8 +30,7 @@ fn team_registry_artifact_exists() {
     let value: serde_json::Value =
         serde_json::from_str(&raw).expect("team registry must be valid JSON");
     assert_eq!(
-        value["schema_version"],
-        "v1",
+        value["schema_version"], "v1",
         "team registry schema_version must be v1"
     );
     assert!(
@@ -73,10 +72,7 @@ fn team_manager_module_linked() {
 #[test]
 fn team_artifacts_directory_structure() {
     let teams_dir = framework_repo_root().join("artifacts/teams");
-    assert!(
-        teams_dir.is_dir(),
-        "artifacts/teams/ directory must exist"
-    );
+    assert!(teams_dir.is_dir(), "artifacts/teams/ directory must exist");
     assert!(
         teams_dir.join("registry.json").is_file(),
         "artifacts/teams/registry.json must exist"

@@ -68,11 +68,13 @@ pub fn validate_research_state(path: &Path) -> Result<Vec<ValidationIssue>> {
     if let Some(stage) = value.get("stage").and_then(Value::as_str) {
         let known_stages = [
             "bootstrap",
-            "inner-loop", "inner_loop",
+            "inner-loop",
+            "inner_loop",
             "inner_loop_design",
             "inner_loop_code",
             "inner_loop_eval",
-            "outer-loop", "outer_loop",
+            "outer-loop",
+            "outer_loop",
             "barrier_escalation",
             "finalize",
             "reflect",
@@ -133,6 +135,7 @@ pub fn validate_research_state(path: &Path) -> Result<Vec<ValidationIssue>> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     #[test]
@@ -169,7 +172,10 @@ novelty_gate:
         std::fs::write(&path, r#"schema_version: 4"#).unwrap();
         let issues = validate_research_state(&path).unwrap();
         let errors: Vec<_> = issues.iter().filter(|i| i.severity == "error").collect();
-        assert!(errors.len() >= 3, "should have errors for missing required keys");
+        assert!(
+            errors.len() >= 3,
+            "should have errors for missing required keys"
+        );
     }
 
     #[test]
@@ -207,8 +213,6 @@ stage: bootstrap
         )
         .unwrap();
         let issues = validate_research_state(&path).unwrap();
-        assert!(issues
-            .iter()
-            .any(|i| i.message.contains("Unknown status")));
+        assert!(issues.iter().any(|i| i.message.contains("Unknown status")));
     }
 }

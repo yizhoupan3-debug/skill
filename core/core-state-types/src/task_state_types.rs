@@ -79,4 +79,3 @@ pub struct GoalCompletionGates {
     pub min_goal_checkpoints: Option<u64>,
     pub block_on_rfv_pass_without_evidence: bool,
 }
-

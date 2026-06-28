@@ -2,7 +2,7 @@
 //! Payload construction + core_state state_manager call.
 
 use core_errors::FrameworkError;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::path::Path;
 
 /// goal_state_manage: payload construction + core_state state_manager call.
@@ -35,7 +35,9 @@ pub fn goal_state_manage_dispatch(
             let goal = arguments
                 .get("goal")
                 .and_then(Value::as_str)
-                .ok_or_else(|| FrameworkError::validation("start requires 'goal' argument (string)"))?;
+                .ok_or_else(|| {
+                    FrameworkError::validation("start requires 'goal' argument (string)")
+                })?;
             payload["goal"] = json!(goal);
 
             let drive_until_done = arguments
@@ -56,7 +58,8 @@ pub fn goal_state_manage_dispatch(
                     ]);
                 }
                 if arguments.get("validation_commands").is_none() {
-                    payload["validation_commands"] = json!(["cargo check --workspace", "cargo test --workspace"]);
+                    payload["validation_commands"] =
+                        json!(["cargo check --workspace", "cargo test --workspace"]);
                 }
             }
 
@@ -66,7 +69,10 @@ pub fn goal_state_manage_dispatch(
             if let Some(dw) = arguments.get("done_when").and_then(Value::as_array) {
                 payload["done_when"] = json!(dw);
             }
-            if let Some(vc) = arguments.get("validation_commands").and_then(Value::as_array) {
+            if let Some(vc) = arguments
+                .get("validation_commands")
+                .and_then(Value::as_array)
+            {
                 payload["validation_commands"] = json!(vc);
             }
 
@@ -82,10 +88,12 @@ pub fn goal_state_manage_dispatch(
                     payload["goal_type"] = json!("loop");
                 } else if gt == "linear" {
                     return Err(FrameworkError::validation(
-                        "goal_type=linear was removed in v10 — all goals follow loop semantics. Remove goal_type or set goal_type=loop."
+                        "goal_type=linear was removed in v10 — all goals follow loop semantics. Remove goal_type or set goal_type=loop.",
                     ));
                 } else {
-                    return Err(FrameworkError::validation(format!("Invalid goal_type: {gt}. Only goal_type=loop is supported in v10.")));
+                    return Err(FrameworkError::validation(format!(
+                        "Invalid goal_type: {gt}. Only goal_type=loop is supported in v10."
+                    )));
                 }
             }
             // lifecycle_profile was removed in Wave 2a (v10). Runtime behavior is now
@@ -111,7 +119,9 @@ pub fn goal_state_manage_dispatch(
             let note = arguments
                 .get("note")
                 .and_then(Value::as_str)
-                .ok_or_else(|| FrameworkError::validation("checkpoint requires 'note' argument (string)"))?;
+                .ok_or_else(|| {
+                    FrameworkError::validation("checkpoint requires 'note' argument (string)")
+                })?;
             payload["note"] = json!(note);
         }
         "block" => {
@@ -119,7 +129,9 @@ pub fn goal_state_manage_dispatch(
                 .get("blocker")
                 .and_then(Value::as_str)
                 .filter(|s| !s.trim().is_empty())
-                .ok_or_else(|| FrameworkError::validation("block requires 'blocker' argument (string)"))?;
+                .ok_or_else(|| {
+                    FrameworkError::validation("block requires 'blocker' argument (string)")
+                })?;
             payload["blocker"] = json!(blocker);
         }
         "append_round" => {
@@ -136,19 +148,28 @@ pub fn goal_state_manage_dispatch(
             if let Some(dw) = arguments.get("done_when").and_then(Value::as_array) {
                 payload["done_when"] = json!(dw);
             }
-            if let Some(vc) = arguments.get("validation_commands").and_then(Value::as_array) {
+            if let Some(vc) = arguments
+                .get("validation_commands")
+                .and_then(Value::as_array)
+            {
                 payload["validation_commands"] = json!(vc);
             }
-            if let Some(g) = arguments.get("goal").and_then(Value::as_str).filter(|s| !s.trim().is_empty()) {
+            if let Some(g) = arguments
+                .get("goal")
+                .and_then(Value::as_str)
+                .filter(|s| !s.trim().is_empty())
+            {
                 payload["goal"] = json!(g);
             }
             if let Some(kp) = arguments.get("keep_progress").and_then(Value::as_bool) {
                 payload["keep_progress"] = json!(kp);
             }
         }
-        _ => return Err(FrameworkError::validation(format!(
-            "Unknown goal operation: {operation}. Valid operations: start, checkpoint, pause, resume, complete, clear, block, amend"
-        ))),
+        _ => {
+            return Err(FrameworkError::validation(format!(
+                "Unknown goal operation: {operation}. Valid operations: start, checkpoint, pause, resume, complete, clear, block, amend"
+            )));
+        }
     }
 
     let result = core_state::state_manager::framework_goal_drive(payload)?;
@@ -157,6 +178,7 @@ pub fn goal_state_manage_dispatch(
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     /// goal_type=loop is the only valid type in v10

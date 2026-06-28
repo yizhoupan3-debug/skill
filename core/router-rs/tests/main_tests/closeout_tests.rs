@@ -3,7 +3,6 @@ use super::*;
 
 use serde_json::json;
 
-
 #[test]
 fn framework_session_artifact_write_blocks_completion_without_closeout_record() {
     let _strict = CloseoutStrictEnvGuard::new();
@@ -22,12 +21,11 @@ fn framework_session_artifact_write_blocks_completion_without_closeout_record() 
     }))
     .expect_err("missing closeout_record must block completion claim");
     assert!(
-        err.contains("closeout_record"),
+        err.to_string().contains("closeout_record"),
         "error must reference missing closeout_record, got: {err}"
     );
     let _ = fs::remove_dir_all(&repo_root);
 }
-
 
 #[test]
 fn framework_session_artifact_write_blocks_completion_without_closeout_when_ci_unsets_env() {
@@ -48,16 +46,15 @@ fn framework_session_artifact_write_blocks_completion_without_closeout_when_ci_u
     }))
     .expect_err("missing closeout_record must block completion claim when CI without explicit env");
     assert!(
-        err.contains("closeout_record"),
+        err.to_string().contains("closeout_record"),
         "error must reference missing closeout_record, got: {err}"
     );
     let _ = fs::remove_dir_all(&repo_root);
 }
 
-
 #[test]
-fn framework_session_artifact_write_blocks_completion_without_closeout_when_github_actions_unsets_env(
-) {
+fn framework_session_artifact_write_blocks_completion_without_closeout_when_github_actions_unsets_env()
+ {
     let _lock = crate::test_env_sync::process_env_lock();
     let _ga = GithubActionsHardUnsetCloseoutEnvGuard::new();
     let repo_root = temp_dir_path("framework-session-closeout-gha-unset-env");
@@ -77,16 +74,15 @@ fn framework_session_artifact_write_blocks_completion_without_closeout_when_gith
         "missing closeout_record must block completion claim when GITHUB_ACTIONS without explicit env",
     );
     assert!(
-        err.contains("closeout_record"),
+        err.to_string().contains("closeout_record"),
         "error must reference missing closeout_record, got: {err}"
     );
     let _ = fs::remove_dir_all(&repo_root);
 }
 
-
 #[test]
-fn framework_session_artifact_write_allows_completion_without_closeout_when_ci_and_closeout_env_off(
-) {
+fn framework_session_artifact_write_allows_completion_without_closeout_when_ci_and_closeout_env_off()
+ {
     let _lock = crate::test_env_sync::process_env_lock();
     let _ci_off = CiWithCloseoutDisabledEnvGuard::new();
     let repo_root = temp_dir_path("framework-session-closeout-ci-with-env-off");
@@ -112,10 +108,9 @@ fn framework_session_artifact_write_allows_completion_without_closeout_when_ci_a
     let _ = fs::remove_dir_all(&repo_root);
 }
 
-
 #[test]
-fn framework_session_artifact_write_blocks_completion_without_closeout_when_closeout_env_empty_string(
-) {
+fn framework_session_artifact_write_blocks_completion_without_closeout_when_closeout_env_empty_string()
+ {
     let _lock = crate::test_env_sync::process_env_lock();
     let _empty = LocalNonCiEmptyCloseoutEnvGuard::new();
     let repo_root = temp_dir_path("framework-session-closeout-empty-env");
@@ -133,12 +128,11 @@ fn framework_session_artifact_write_blocks_completion_without_closeout_when_clos
     }))
     .expect_err("empty ROUTER_RS_CLOSEOUT_ENFORCEMENT must not be treated as unset/local-soft");
     assert!(
-        err.contains("closeout_record"),
+        err.to_string().contains("closeout_record"),
         "error must reference missing closeout_record, got: {err}"
     );
     let _ = fs::remove_dir_all(&repo_root);
 }
-
 
 #[test]
 fn framework_session_artifact_write_allows_completion_without_closeout_when_env_disables() {
@@ -155,8 +149,12 @@ fn framework_session_artifact_write_allows_completion_without_closeout_when_env_
     impl Drop for EnvCloseoutGuard {
         fn drop(&mut self) {
             match &self.prior {
-                Some(v) => unsafe { core_state_utils::env_sync::set_env("ROUTER_RS_CLOSEOUT_ENFORCEMENT", v) },
-                None => unsafe { core_state_utils::env_sync::remove_env("ROUTER_RS_CLOSEOUT_ENFORCEMENT") },
+                Some(v) => unsafe {
+                    core_state_utils::env_sync::set_env("ROUTER_RS_CLOSEOUT_ENFORCEMENT", v)
+                },
+                None => unsafe {
+                    core_state_utils::env_sync::remove_env("ROUTER_RS_CLOSEOUT_ENFORCEMENT")
+                },
             }
         }
     }
@@ -183,7 +181,6 @@ fn framework_session_artifact_write_allows_completion_without_closeout_when_env_
     );
     let _ = fs::remove_dir_all(&repo_root);
 }
-
 
 #[test]
 fn framework_session_artifact_write_in_progress_ignores_malformed_closeout_record() {
@@ -221,7 +218,6 @@ fn framework_session_artifact_write_in_progress_ignores_malformed_closeout_recor
     let _ = fs::remove_dir_all(&repo_root);
 }
 
-
 #[test]
 fn framework_session_artifact_write_blocks_completion_with_failed_command() {
     let _strict = CloseoutStrictEnvGuard::new();
@@ -251,10 +247,8 @@ fn framework_session_artifact_write_blocks_completion_with_failed_command() {
     }))
     .expect_err("failed command in passed record must block completion");
     assert!(
-        err.contains("closeout_enforcement blocked"),
+        err.to_string().contains("closeout_enforcement blocked"),
         "error must reference closeout enforcement block, got: {err}"
     );
     let _ = fs::remove_dir_all(&repo_root);
 }
-
-

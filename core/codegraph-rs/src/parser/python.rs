@@ -36,31 +36,32 @@ fn collect_all(
     match node.kind() {
         "function_definition" | "class_definition" => {
             if let Some(name) = node.child_by_field_name("name")
-                && let Ok(text) = name.utf8_text(source) {
-                    symbols.push(ParsedSymbol {
-                        symbol: text.to_string(),
-                        kind: node.kind().trim_end_matches("_definition").to_string(),
-                        line: node.start_position().row as u32 + 1,
-                        start_col: node.start_position().column as u32 + 1,
-                        end_line: node.end_position().row as u32 + 1,
-                        end_col: node.end_position().column as u32 + 1,
-                    });
-                }
+                && let Ok(text) = name.utf8_text(source)
+            {
+                symbols.push(ParsedSymbol {
+                    symbol: text.to_string(),
+                    kind: node.kind().trim_end_matches("_definition").to_string(),
+                    line: node.start_position().row as u32 + 1,
+                    start_col: node.start_position().column as u32 + 1,
+                    end_line: node.end_position().row as u32 + 1,
+                    end_col: node.end_position().column as u32 + 1,
+                });
+            }
         }
         _ => {}
     }
     // Collect call edges at this node
     if node.kind() == "call"
         && let Some(func) = node.child_by_field_name("function")
-            && let (Some(caller), Some(callee)) =
-                (enclosing_symbol(node, source), callee_name(func, source))
-            {
-                edges.push(ParsedEdge {
-                    caller_symbol: caller,
-                    callee_symbol: callee,
-                    line: node.start_position().row as u32 + 1,
-                });
-            }
+        && let (Some(caller), Some(callee)) =
+            (enclosing_symbol(node, source), callee_name(func, source))
+    {
+        edges.push(ParsedEdge {
+            caller_symbol: caller,
+            callee_symbol: callee,
+            line: node.start_position().row as u32 + 1,
+        });
+    }
     // Recurse into children
     for i in 0..node.named_child_count() {
         if let Some(child) = node.named_child(i) {
@@ -90,9 +91,10 @@ fn enclosing_symbol(node: Node<'_>, source: &[u8]) -> Option<String> {
         match ancestor.kind() {
             "function_definition" | "class_definition" => {
                 if let Some(name) = ancestor.child_by_field_name("name")
-                    && let Ok(text) = name.utf8_text(source) {
-                        return Some(text.to_string());
-                    }
+                    && let Ok(text) = name.utf8_text(source)
+                {
+                    return Some(text.to_string());
+                }
             }
             _ => {}
         }
@@ -103,6 +105,7 @@ fn enclosing_symbol(node: Node<'_>, source: &[u8]) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::parse;
 
     #[test]
@@ -115,10 +118,26 @@ class MyClass:
         self.method()
 "#;
         let out = parse(src);
-        let symbols: Vec<_> = out.symbols.iter().map(|s| (s.symbol.as_str(), s.kind.as_str())).collect();
-        assert!(symbols.contains(&("MyClass", "class")), "should find class: {:?}", symbols);
-        assert!(symbols.contains(&("method", "function")), "should find method: {:?}", symbols);
-        assert!(symbols.contains(&("other", "function")), "should find other: {:?}", symbols);
+        let symbols: Vec<_> = out
+            .symbols
+            .iter()
+            .map(|s| (s.symbol.as_str(), s.kind.as_str()))
+            .collect();
+        assert!(
+            symbols.contains(&("MyClass", "class")),
+            "should find class: {:?}",
+            symbols
+        );
+        assert!(
+            symbols.contains(&("method", "function")),
+            "should find method: {:?}",
+            symbols
+        );
+        assert!(
+            symbols.contains(&("other", "function")),
+            "should find other: {:?}",
+            symbols
+        );
     }
 
     #[test]
@@ -131,8 +150,15 @@ class Service:
         pass
 "#;
         let out = parse(src);
-        let edge = out.edges.iter().find(|e| e.callee_symbol == "helper").expect("helper edge");
-        assert_eq!(edge.caller_symbol, "run", "self.method() attributed to enclosing fn");
+        let edge = out
+            .edges
+            .iter()
+            .find(|e| e.callee_symbol == "helper")
+            .expect("helper edge");
+        assert_eq!(
+            edge.caller_symbol, "run",
+            "self.method() attributed to enclosing fn"
+        );
     }
 
     #[test]
@@ -144,12 +170,20 @@ class MyClass:
         pass
 "#;
         let out = parse(src);
-        let decorated_syms: Vec<_> = out.symbols.iter()
+        let decorated_syms: Vec<_> = out
+            .symbols
+            .iter()
             .filter(|s| s.symbol.contains("decorator") || s.kind == "decorator")
             .collect();
-        assert!(decorated_syms.is_empty(), "decorators should not produce symbols");
+        assert!(
+            decorated_syms.is_empty(),
+            "decorators should not produce symbols"
+        );
         let symbols: Vec<_> = out.symbols.iter().map(|s| s.symbol.as_str()).collect();
-        assert!(symbols.contains(&"decorated"), "decorated fn should still be extracted");
+        assert!(
+            symbols.contains(&"decorated"),
+            "decorated fn should still be extracted"
+        );
     }
 
     #[test]
@@ -164,7 +198,11 @@ def outer():
         let symbols: Vec<_> = out.symbols.iter().map(|s| s.symbol.as_str()).collect();
         assert!(symbols.contains(&"outer"));
         assert!(symbols.contains(&"inner"));
-        let edge = out.edges.iter().find(|e| e.callee_symbol == "inner").expect("inner edge");
+        let edge = out
+            .edges
+            .iter()
+            .find(|e| e.callee_symbol == "inner")
+            .expect("inner edge");
         assert_eq!(edge.caller_symbol, "outer");
     }
 }

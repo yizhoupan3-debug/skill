@@ -112,10 +112,7 @@ fn collect_policy_markdown_files(root: &Path) -> Vec<PathBuf> {
             files.push(ent);
         }
     }
-    for name in [
-        "AGENTS.md",
-        "README.md",
-    ] {
+    for name in ["AGENTS.md", "README.md"] {
         let p = root.join(name);
         if p.is_file() {
             files.push(p);

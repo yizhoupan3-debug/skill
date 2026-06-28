@@ -15,10 +15,10 @@ mod four_host_stdio_e2e {
     use crate::framework_host_targets::{
         host_targets_supported_host_ids, skills_install_tool_for_host_id,
     };
-    use crate::host_integration::{
+    use crate::runtime_registry::load_runtime_registry_json;
+    use runtime_core::host_integration::{
         ResolvedProjectionRoots, install_projection_tool, projection_scope_for_tool,
     };
-    use crate::runtime_registry::load_runtime_registry_json;
 
     const CODEGRAPH_TOOLS: &[&str] = &[
         "codegraph_search",
@@ -98,21 +98,23 @@ mod four_host_stdio_e2e {
         let text = fs::read_to_string(path)
             .unwrap_or_else(|err| panic!("missing codex config {}: {err}", path.display()));
         let section_header = format!("[mcp_servers.{}]", server_id);
-        let section_start = text.find(&section_header)
+        let section_start = text
+            .find(&section_header)
             .unwrap_or_else(|| panic!("section {section_header} not found in {}", path.display()));
         let section = &text[section_start..];
         let section_end = section.find("\n# managed_by:").unwrap_or(section.len());
         let section_body = &section[..section_end];
 
-        let command = section_body.lines()
+        let command = section_body
+            .lines()
             .find_map(|l| l.strip_prefix("command = "))
             .map(|v| v.trim_matches('"').to_string())
             .unwrap_or_else(|| panic!("{server_id}: command not found in {}", path.display()));
-        let args_line = section_body.lines()
+        let args_line = section_body
+            .lines()
             .find_map(|l| l.strip_prefix("args = "))
             .unwrap_or_default();
-        let args: Vec<String> = serde_json::from_str(args_line)
-            .unwrap_or_else(|_| Vec::new());
+        let args: Vec<String> = serde_json::from_str(args_line).unwrap_or_else(|_| Vec::new());
         (command, args)
     }
 
@@ -122,15 +124,13 @@ mod four_host_stdio_e2e {
     ) -> (PathBuf, &'static str) {
         match host_id {
             "cursor" => {
-                let cursor_home = roots.host_home_root("cursor")
+                let cursor_home = roots
+                    .host_home_root("cursor")
                     .unwrap_or_else(|| panic!("cursor host home not found"));
                 (cursor_home.join("mcp.json"), "mcp_servers")
             }
             "claude" => (roots.project_root.join(".mcp.json"), "mcpServers"),
-            "codex" => (
-                roots.project_root.join(".codex/config.toml"),
-                "mcp_servers",
-            ),
+            "codex" => (roots.project_root.join(".codex/config.toml"), "mcp_servers"),
             "opencode" => (
                 roots.project_root.join(".opencode/opencode.json"),
                 "mcpServers",
@@ -276,7 +276,11 @@ mod four_host_stdio_e2e {
 
         let registry = load_runtime_registry_json(&framework_root).expect("load RUNTIME_REGISTRY");
         let host_ids = host_targets_supported_host_ids(&registry).expect("supported host ids");
-        assert_eq!(host_ids.len(), 4, "closed-set must remain four hosts (codex, claude, cursor, opencode)");
+        assert_eq!(
+            host_ids.len(),
+            4,
+            "closed-set must remain four hosts (codex, claude, cursor, opencode)"
+        );
 
         let (cleanup_root, roots) = test_roots(&framework_root);
         let prior_home = std::env::var_os("HOME");

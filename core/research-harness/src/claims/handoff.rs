@@ -183,9 +183,7 @@ fn build_entries(state: &Value) -> Vec<HandoffEntry> {
                                         .to_string(),
                                     claim_text,
                                     evidence: Vec::new(),
-                                    novelty_score: c
-                                        .get("novelty_score")
-                                        .and_then(Value::as_f64),
+                                    novelty_score: c.get("novelty_score").and_then(Value::as_f64),
                                     novelty_verdict: c
                                         .get("verdict")
                                         .and_then(Value::as_str)
@@ -218,24 +216,22 @@ fn build_entries(state: &Value) -> Vec<HandoffEntry> {
                 .and_then(Value::as_array)
                 .map(|arr| {
                     arr.iter()
-                        .map(|e| {
-                            EvidenceEntry {
-                                source: e
-                                    .get("source")
-                                    .and_then(Value::as_str)
-                                    .unwrap_or("")
-                                    .to_string(),
-                                location: e
-                                    .get("location")
-                                    .and_then(Value::as_str)
-                                    .unwrap_or("")
-                                    .to_string(),
-                                strength: e
-                                    .get("strength")
-                                    .and_then(Value::as_str)
-                                    .unwrap_or("missing")
-                                    .to_string(),
-                            }
+                        .map(|e| EvidenceEntry {
+                            source: e
+                                .get("source")
+                                .and_then(Value::as_str)
+                                .unwrap_or("")
+                                .to_string(),
+                            location: e
+                                .get("location")
+                                .and_then(Value::as_str)
+                                .unwrap_or("")
+                                .to_string(),
+                            strength: e
+                                .get("strength")
+                                .and_then(Value::as_str)
+                                .unwrap_or("missing")
+                                .to_string(),
                         })
                         .collect()
                 })
@@ -269,7 +265,10 @@ fn build_entries(state: &Value) -> Vec<HandoffEntry> {
 
     for claim_val in &claims {
         let name = claim_val.as_str().unwrap_or("");
-        if !entries.iter().any(|e| e.claim_text == name || e.claim_id == name) {
+        if !entries
+            .iter()
+            .any(|e| e.claim_text == name || e.claim_id == name)
+        {
             entries.push(HandoffEntry {
                 claim_id: name.chars().take(12).collect(),
                 claim_text: name.to_string(),
@@ -326,10 +325,7 @@ fn build_review_rounds(state: &Value) -> Vec<ReviewRoundSnapshot> {
 
     if rounds.is_empty() {
         if let Some(cs) = state.get("convergence_state") {
-            let round = cs
-                .get("current_round")
-                .and_then(Value::as_u64)
-                .unwrap_or(0);
+            let round = cs.get("current_round").and_then(Value::as_u64).unwrap_or(0);
             if round > 0 {
                 rounds.push(ReviewRoundSnapshot {
                     round,
@@ -461,6 +457,7 @@ pub fn format_resume_context(handoff: &HandoffArtifact) -> String {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use serde_json::json;
 
@@ -487,10 +484,7 @@ mod tests {
         });
         let handoff = build_handoff(&state);
         assert_eq!(handoff.project.as_deref(), Some("test-project"));
-        assert_eq!(
-            handoff.metadata.novelty_verdict.as_deref(),
-            Some("novel")
-        );
+        assert_eq!(handoff.metadata.novelty_verdict.as_deref(), Some("novel"));
         assert_eq!(handoff.entries.len(), 2);
     }
 

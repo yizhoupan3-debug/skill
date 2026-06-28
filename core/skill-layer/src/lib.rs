@@ -22,9 +22,10 @@ pub use frontmatter::{
 };
 pub use frontmatter_parser::{FrontmatterError, FrontmatterWarning, parse_and_validate};
 
-
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
+
     #[test]
     fn smoke() {
         assert!(true);

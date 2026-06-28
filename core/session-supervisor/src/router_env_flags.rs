@@ -7,11 +7,14 @@ const ROUTER_RS_SESSION_SUPERVISOR_REAL_PROCESS_SMOKE_ENV: &str =
 
 /// §6.4 cat.1 real-process spawn/terminate smoke (`sleep 1` via `smoke-shell` host). Opt-in for CI.
 pub fn router_rs_session_supervisor_real_process_smoke_enabled() -> bool {
-    core_policy::env_flags::env_enabled_default_false(ROUTER_RS_SESSION_SUPERVISOR_REAL_PROCESS_SMOKE_ENV)
+    core_policy::env_flags::env_enabled_default_false(
+        ROUTER_RS_SESSION_SUPERVISOR_REAL_PROCESS_SMOKE_ENV,
+    )
 }
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
 
     #[test]
     fn unset_means_disabled_for_default_false() {

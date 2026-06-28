@@ -5,7 +5,6 @@ use serde_json::json;
 use std::fs;
 use std::path::Path;
 
-
 #[test]
 fn runtime_storage_operation_round_trips_filesystem_payload() {
     let nonce = SystemTime::now()
@@ -101,7 +100,6 @@ fn runtime_storage_operation_round_trips_filesystem_payload() {
     let _ = fs::remove_file(path);
 }
 
-
 #[test]
 fn runtime_storage_operation_round_trips_sqlite_payload() {
     let nonce = SystemTime::now()
@@ -157,7 +155,6 @@ fn runtime_storage_operation_round_trips_sqlite_payload() {
 
     let _ = fs::remove_dir_all(root);
 }
-
 
 #[test]
 fn runtime_checkpoint_control_plane_normalizes_backend_family_catalog() {
@@ -225,7 +222,6 @@ fn runtime_checkpoint_control_plane_normalizes_backend_family_catalog() {
     );
 }
 
-
 #[test]
 fn runtime_checkpoint_control_plane_rejects_mixed_backend_families() {
     let root = temp_dir_path("checkpoint-control-plane-mismatch");
@@ -241,7 +237,7 @@ fn runtime_checkpoint_control_plane_rejects_mixed_backend_families() {
         }))
         .expect_err("mixed backend families should fail closed");
 
-    assert!(err.contains("backend family mismatch"));
+    assert!(err.to_string().contains("backend family mismatch"));
 }
 
 #[test]
@@ -254,7 +250,7 @@ fn write_text_payload_rejects_path_traversal_with_dotdot() {
     );
     let err = result.unwrap_err();
     assert!(
-        err.contains("must not contain '..' traversal segments"),
+        err.to_string().contains("must not contain '..' traversal segments"),
         "error should mention traversal rejection, got: {err}"
     );
 }
@@ -286,7 +282,7 @@ fn write_text_payload_rejects_symlink_write_target() {
         );
         let err = result.unwrap_err();
         assert!(
-            err.contains("must not be a symlink"),
+            err.to_string().contains("must not be a symlink"),
             "error should mention symlink rejection, got: {err}"
         );
     }
@@ -303,4 +299,3 @@ fn write_text_payload_allows_valid_paths() {
     assert_eq!(persisted, payload);
     fs::remove_file(&output_path).expect("cleanup");
 }
-

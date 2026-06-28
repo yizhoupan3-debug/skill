@@ -1,41 +1,39 @@
 //! MCP tool definitions and dispatch for pptx_tool_rs.
 
 use anyhow::Result;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::path::Path;
 
-use crate::{extract_pptx_structure, format_read_full_text, ZipBundle};
+use crate::{ZipBundle, extract_pptx_structure, format_read_full_text};
 
 /// Maximum slides per single MCP request before pagination kicks in.
 const MAX_SLIDES_PER_REQUEST: u64 = 50;
 
 /// MCP tool definitions exposed by this server.
 pub fn tool_definitions() -> Vec<Value> {
-    vec![
-        json!({
-            "name": "pptx_parse",
-            "description": "Parse a PowerPoint (.pptx) file and extract slide content. Supports slide-range selection and pagination for large decks (max 50 slides per request).",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "path": {
-                        "type": "string",
-                        "description": "Absolute path to the .pptx file"
-                    },
-                    "slides": {
-                        "type": "string",
-                        "description": "Slide range: '1-5', '3', '1,3,7-10', or 'all' (default). 1-indexed."
-                    },
-                    "format": {
-                        "type": "string",
-                        "enum": ["text", "json", "markdown"],
-                        "description": "Output format: 'text' (linear text, default), 'json' (full structure), 'markdown' (markdown with headings)"
-                    }
+    vec![json!({
+        "name": "pptx_parse",
+        "description": "Parse a PowerPoint (.pptx) file and extract slide content. Supports slide-range selection and pagination for large decks (max 50 slides per request).",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": "Absolute path to the .pptx file"
                 },
-                "required": ["path"]
-            }
-        }),
-    ]
+                "slides": {
+                    "type": "string",
+                    "description": "Slide range: '1-5', '3', '1,3,7-10', or 'all' (default). 1-indexed."
+                },
+                "format": {
+                    "type": "string",
+                    "enum": ["text", "json", "markdown"],
+                    "description": "Output format: 'text' (linear text, default), 'json' (full structure), 'markdown' (markdown with headings)"
+                }
+            },
+            "required": ["path"]
+        }
+    })]
 }
 
 /// Dispatch a tool call by name and arguments.
@@ -51,14 +49,8 @@ fn tool_pptx_parse(args: &Value) -> Result<Value, anyhow::Error> {
         .get("path")
         .and_then(Value::as_str)
         .ok_or_else(|| anyhow::anyhow!("Missing required argument: path"))?;
-    let format = args
-        .get("format")
-        .and_then(Value::as_str)
-        .unwrap_or("text");
-    let slides_spec = args
-        .get("slides")
-        .and_then(Value::as_str)
-        .unwrap_or("all");
+    let format = args.get("format").and_then(Value::as_str).unwrap_or("text");
+    let slides_spec = args.get("slides").and_then(Value::as_str).unwrap_or("all");
 
     let input = Path::new(path);
     let bundle = ZipBundle::from_path(input)?;

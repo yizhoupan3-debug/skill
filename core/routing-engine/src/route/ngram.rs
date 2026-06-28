@@ -8,12 +8,12 @@
 //! keyword matching misses, especially for CJK cross-language queries
 //! where the same concept is expressed in different writing systems.
 
-use std::collections::HashMap;
 use routing_core::fuzzy::{character_ngrams, cosine_similarity};
+use std::collections::HashMap;
 
 use super::scoring_config::ScoringWeights;
-use super::types::SkillRecord;
 use super::text::normalize_text;
+use super::types::SkillRecord;
 
 /// Pre-computed n-gram vectors for a single query.
 ///
@@ -84,13 +84,17 @@ pub(crate) fn score_ngram_signal(
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     #[test]
     fn ngram_cache_similar_english() {
         let cache = NgramCache::new("code review");
         let sim = cache.similarity_to("review code");
-        assert!(sim > 0.3, "expected >0.3 for 'review code' vs 'code review', got {sim}");
+        assert!(
+            sim > 0.3,
+            "expected >0.3 for 'review code' vs 'code review', got {sim}"
+        );
     }
 
     #[test]

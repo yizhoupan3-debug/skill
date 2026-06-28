@@ -10,9 +10,9 @@
 //! Dependency direction: 宿主 hook 模块 → `hook_common`；
 //! `hook_posttool_normalize` 不在此链上（其依赖 `cursor_hooks` 的字段 helper）。
 
-pub mod tool_origin;
-pub mod review_signals;
 pub mod goal_signals;
+pub mod review_signals;
+pub mod tool_origin;
 
 use regex::Regex;
 use std::cell::Cell;
@@ -24,8 +24,8 @@ use std::sync::OnceLock;
 
 // Tool origin
 pub use tool_origin::{
-    ToolOrigin, classify_tool_origin, is_mcp_tool_name,
-    normalize_tool_name, parse_mcp_tool_fqn, tool_input_value_from_map,
+    ToolOrigin, classify_tool_origin, is_mcp_tool_name, normalize_tool_name, parse_mcp_tool_fqn,
+    tool_input_value_from_map,
 };
 
 // Review signals
@@ -44,8 +44,8 @@ pub(crate) use review_signals::install_review_prompt_test_deps;
 // Goal signals
 pub use goal_signals::{
     COMPLETION_DETECT_EN, COMPLETION_DETECT_ZH_PHRASES, GOAL_CHAT_VERIFY_ZH_PHRASES,
-    completion_claim_keywords_export, contains_completion_claim_token,
-    has_goal_progress_signal, has_goal_verify_or_block_signal, has_structured_goal_contract,
+    completion_claim_keywords_export, contains_completion_claim_token, has_goal_progress_signal,
+    has_goal_verify_or_block_signal, has_structured_goal_contract,
 };
 
 // ────────────────────────────────────────────────────────────────
@@ -70,7 +70,9 @@ pub fn strip_quoted_or_codeblock_or_url(text: &str) -> String {
     static RE_QUOTED: OnceLock<Regex> = OnceLock::new();
     let mut cleaned = text.to_string();
     cleaned = RE_FENCED
-        .get_or_init(|| Regex::new(r"(?s)```.*?```").unwrap_or_else(|e| panic!("invalid regex: {e}")))
+        .get_or_init(|| {
+            Regex::new(r"(?s)```.*?```").unwrap_or_else(|e| panic!("invalid regex: {e}"))
+        })
         .replace_all(&cleaned, " ")
         .into_owned();
     cleaned = RE_INLINE
@@ -78,15 +80,21 @@ pub fn strip_quoted_or_codeblock_or_url(text: &str) -> String {
         .replace_all(&cleaned, " ")
         .into_owned();
     cleaned = RE_URL
-        .get_or_init(|| Regex::new(r"https?://\S+").unwrap_or_else(|e| panic!("invalid regex: {e}")))
+        .get_or_init(|| {
+            Regex::new(r"https?://\S+").unwrap_or_else(|e| panic!("invalid regex: {e}"))
+        })
         .replace_all(&cleaned, " ")
         .into_owned();
     cleaned = RE_BLOCKQUOTE
-        .get_or_init(|| Regex::new(r"(?m)^\s*>\s.*$").unwrap_or_else(|e| panic!("invalid regex: {e}")))
+        .get_or_init(|| {
+            Regex::new(r"(?m)^\s*>\s.*$").unwrap_or_else(|e| panic!("invalid regex: {e}"))
+        })
         .replace_all(&cleaned, " ")
         .into_owned();
     RE_QUOTED
-        .get_or_init(|| Regex::new("\"[^\"\\n]*\"").unwrap_or_else(|e| panic!("invalid regex: {e}")))
+        .get_or_init(|| {
+            Regex::new("\"[^\"\\n]*\"").unwrap_or_else(|e| panic!("invalid regex: {e}"))
+        })
         .replace_all(&cleaned, " ")
         .into_owned()
 }
@@ -137,7 +145,7 @@ pub fn hook_assistant_tail_window(raw: &str, max_chars: usize) -> String {
 ///
 /// Detection (in priority order):
 /// 1. Thread-local `TEST_TASK_OVERRIDE` (testing only)
-/// 2. (Future) GOAL_STATE.lifecycle_profile == "task" via repo_root
+/// 2. RUNTIME_REGISTRY.json context/lifecycle_profiles config (via repo_root)
 ///
 /// Cf. docs/architecture.md §1.2 (hook model)
 pub fn is_task_profile(repo_root: Option<&std::path::Path>, _text: &str) -> bool {

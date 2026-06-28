@@ -1,7 +1,7 @@
 use super::common::*;
 use super::*;
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 #[test]
 fn hook_evidence_append_cli_writes_cursor_cargo_check() {
@@ -43,7 +43,6 @@ fn hook_evidence_append_cli_writes_cursor_cargo_check() {
 
     let _ = fs::remove_dir_all(&repo_root);
 }
-
 
 #[test]
 fn stdio_framework_hook_evidence_append_dispatches() {
@@ -92,7 +91,6 @@ fn stdio_framework_hook_evidence_append_dispatches() {
     let _ = fs::remove_dir_all(&repo_root);
 }
 
-
 #[test]
 fn hook_evidence_append_allows_goal_drive_complete() {
     let repo_root = temp_dir_path("hook-evidence-goal-drive-complete");
@@ -129,11 +127,13 @@ fn hook_evidence_append_allows_goal_drive_complete() {
         "task_id": "hook-goal",
     }))
     .expect("goal complete should see task-local hook evidence");
-    assert_eq!(done["operation"], json!("completed"),
-        "goal complete should return operation=completed; got: {done}");
+    assert_eq!(
+        done["operation"],
+        json!("completed"),
+        "goal complete should return operation=completed; got: {done}"
+    );
     let _ = fs::remove_dir_all(&repo_root);
 }
-
 
 #[test]
 fn hook_evidence_append_feeds_closeout_context() {
@@ -181,5 +181,3 @@ fn hook_evidence_append_feeds_closeout_context() {
     assert_eq!(eval["closeout_allowed"], json!(true));
     let _ = fs::remove_dir_all(&repo_root);
 }
-
-

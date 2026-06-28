@@ -209,9 +209,9 @@ pub fn install_native_integration(
         .parent()
         .map(Path::to_path_buf)
         .unwrap_or_else(|| {
-            default_home_dir().join(
-                framework_kernel::runtime_registry::host_private_config_dir(host_id),
-            )
+            default_home_dir().join(framework_kernel::runtime_registry::host_private_config_dir(
+                host_id,
+            ))
         });
     let prompt_entrypoints = prompt_entrypoints_disabled(&home_config_dir);
     let default_bootstrap = if install_default_bootstrap {
@@ -400,9 +400,11 @@ pub fn resolved_roots_payload(
             continue;
         }
         let _ = tool; // tool not needed for home_root; host_id suffices
-        let home = roots.host_home_root(host_id)
+        let home = roots
+            .host_home_root(host_id)
             .ok_or_else(|| format!("host_home_root: host_id {host_id:?} not found"))?
-            .to_string_lossy().into_owned();
+            .to_string_lossy()
+            .into_owned();
         host_home_roots.insert(host_id.clone(), json!(home));
     }
     Ok(json!({
@@ -442,7 +444,8 @@ pub fn selected_projection_tools(
         return Err(format!(
             "projection command requires --to <tool> or --to all. Supported tools: {}",
             known.join(", ")
-        ).into());
+        )
+        .into());
     }
     Ok(selected)
 }
@@ -458,8 +461,6 @@ pub fn default_projection_tools_for_scope(
     }
     Ok(tools)
 }
-
-
 
 /// Shared browser-mcp stdio payload (all hosts). Uses framework_root as repo-root.
 pub fn browser_mcp_server_payload(roots: &ResolvedProjectionRoots) -> Value {
@@ -487,7 +488,6 @@ pub fn browser_mcp_server_payload(roots: &ResolvedProjectionRoots) -> Value {
         }),
     }
 }
-
 
 // ── Projection ops — generated HostProjectionOps impls call unified functions ──
 // `install_projection` / `projection_status` / `remove_projection` dispatch on host_id internally.
@@ -517,9 +517,7 @@ pub fn canonical_scope(scope: &str) -> Result<&'static str> {
     match scope.trim().to_lowercase().as_str() {
         "" | "project" | "project-local" => Ok("project"),
         "user" => Ok("user"),
-        other => Err(format!(
-            "Unsupported scope: {other}. Supported scopes: project user"
-        ).into()),
+        other => Err(format!("Unsupported scope: {other}. Supported scopes: project user").into()),
     }
 }
 
@@ -554,10 +552,7 @@ pub fn install_projection_tool(
         .install(roots, effective_scope)?)
 }
 
-pub fn projection_tool_status(
-    roots: &ResolvedProjectionRoots,
-    tool: &str,
-) -> Result<Value> {
+pub fn projection_tool_status(roots: &ResolvedProjectionRoots, tool: &str) -> Result<Value> {
     Ok(projection_ops_trait::projection_ops_for_tool(tool)
         .ok_or_else(|| format!("No projection ops registered for tool: {tool}"))?
         .status(roots)?)
@@ -605,9 +600,7 @@ pub fn lifecycle_paragraph_for_host(
         .unwrap_or_else(|| narrative.default_lifecycle_paragraph.clone())
 }
 
-pub fn load_host_projection_narrative(
-    framework_root: &Path,
-) -> Result<HostProjectionNarrative> {
+pub fn load_host_projection_narrative(framework_root: &Path) -> Result<HostProjectionNarrative> {
     let path = framework_root.join("configs/framework/host_projection_narrative.json");
     let raw = fs::read_to_string(&path)
         .map_err(|err| format!("read host projection narrative {}: {err}", path.display()))?;
@@ -623,7 +616,8 @@ pub fn load_host_projection_narrative(
             narrative.schema_version,
             path.display(),
             HOST_PROJECTION_NARRATIVE_SCHEMA_VERSION
-        ).into());
+        )
+        .into());
     }
     Ok(narrative)
 }
@@ -656,7 +650,7 @@ pub fn render_project_narrative(roots: &ResolvedProjectionRoots, host_id: &str) 
 
 - 四事件：`PreToolUse`、`UserPromptSubmit`、`PostToolUse`、`Stop`（`.claude/settings.json` + `router-rs claude hook`）。
 - Goal/Quality Gate：`framework_goal_drive` / `framework_quality_gate` stdio + `artifacts/current/<task_id>/`。
-- 默认 **`lifecycle_profile: interactive`**：closeout/complete 为 advisory，suppress review Stop nudge；非 interactive 时 closeout 可 fail-closed（与 REVIEW_GATE advisory 分层，见 `docs/architecture.md` §6）。
+- 默认 **交互式模式**：closeout/complete 为 advisory，suppress review Stop nudge；非交互式时 closeout 可 fail-closed（与 REVIEW_GATE advisory 分层，见 `docs/architecture.md` §6）。
 - 检查点：`session_checkpoint`（非自动）。
 - Goal 自动触发：`UserPromptSubmit` 检测复杂任务（自然语言+启发式）→ 注入 goal 建议上下文；`has_structured_goal_contract` 已扩展为在 regex 失败时回退到复杂度分析。
 - Goal amend：`goal_state_manage(operation="amend")` 更新 goal 字段，保留 checkpoints；scope change 检测自动触发 `[Goal Amendment]` 上下文注入。
@@ -673,7 +667,6 @@ pub fn render_project_narrative(roots: &ResolvedProjectionRoots, host_id: &str) 
     ))
 }
 
-
 pub fn projection_manifest_file_ref(roots: &ResolvedProjectionRoots, path: &Path) -> String {
     path.strip_prefix(&roots.project_root)
         .map(|rel| rel.to_string_lossy().trim_start_matches('/').to_string())
@@ -684,17 +677,18 @@ pub fn settings_hook_status(path: &Path, host_id: &str) -> Result<Value> {
     let payload = read_json_if_exists(path)?;
     let mut managed_events = Vec::new();
     if let Some(Value::Object(root)) = payload.as_ref()
-        && let Some(Value::Object(hooks)) = root.get("hooks") {
-            for event in ALL_HOOK_EVENTS {
-                if hooks
-                    .get(*event)
-                    .map(|v| value_contains_router_rs_hook(v, host_id))
-                    .unwrap_or(false)
-                {
-                    managed_events.push(*event);
-                }
+        && let Some(Value::Object(hooks)) = root.get("hooks")
+    {
+        for event in ALL_HOOK_EVENTS {
+            if hooks
+                .get(*event)
+                .map(|v| value_contains_router_rs_hook(v, host_id))
+                .unwrap_or(false)
+            {
+                managed_events.push(*event);
             }
         }
+    }
     // Core events are mandatory; optional events are advisory.
     // At minimum all core events must be present for "managed" status.
     let managed_set: std::collections::HashSet<&str> = managed_events.iter().copied().collect();
@@ -743,17 +737,29 @@ pub fn codegraph_mcp_server_payload(roots: &ResolvedProjectionRoots) -> Value {
 }
 
 /// Project-root `.mcp.json` with all four shared MCP servers (gitignored; materialized on host install).
-pub fn ensure_project_research_mcp_json(roots: &ResolvedProjectionRoots, host_id: &str) -> Result<bool> {
+pub fn ensure_project_research_mcp_json(
+    roots: &ResolvedProjectionRoots,
+    host_id: &str,
+) -> Result<bool> {
     let path = roots.project_root.join(".mcp.json");
     let mut payload = read_json_if_exists(&path)?.unwrap_or_else(|| json!({}));
     let entries = projection_manifest::mcp_servers_mut(&mut payload, "mcpServers", host_id)?;
     let mut changed = false;
     for (id, val) in [
-        ("router-rs-framework", host_router_rs_framework_payload(roots, host_id, "Framework snapshot, skill routing, goal/closeout gating")),
+        (
+            "router-rs-framework",
+            host_router_rs_framework_payload(
+                roots,
+                host_id,
+                "Framework snapshot, skill routing, goal/closeout gating",
+            ),
+        ),
         ("browser-mcp", browser_mcp_server_payload(roots)),
         ("paperplain", paperplain_mcp_server_payload()),
     ] {
-        if entries.get(id) != Some(&val) { changed = true; }
+        if entries.get(id) != Some(&val) {
+            changed = true;
+        }
         entries.insert(id.to_string(), val);
     }
     let codegraph_changed = merge_codegraph_into_mcp_servers_map(entries, roots, "mcp-codegraph");
@@ -764,7 +770,11 @@ pub fn ensure_project_research_mcp_json(roots: &ResolvedProjectionRoots, host_id
 /// Remove all managed MCP entries from project-root `.mcp.json`.
 pub fn remove_project_mcp_json_entries(roots: &ResolvedProjectionRoots) -> Result<bool> {
     let path = roots.project_root.join(".mcp.json");
-    Ok(mcp_json_remove_servers(&path, &roots.framework_root, McpConfigFormat::JSON_CAMEL_CASE)?)
+    Ok(mcp_json_remove_servers(
+        &path,
+        &roots.framework_root,
+        McpConfigFormat::JSON_CAMEL_CASE,
+    )?)
 }
 
 fn merge_codegraph_into_mcp_servers_map(
@@ -848,21 +858,20 @@ fn upsert_mcp_toml_section(
 }
 
 /// Ensure MCP tool research sections exist in the project-scope TOML config.
-pub fn ensure_research_mcp_toml(
-    roots: &ResolvedProjectionRoots,
-    host_id: &str,
-) -> Result<bool> {
+pub fn ensure_research_mcp_toml(roots: &ResolvedProjectionRoots, host_id: &str) -> Result<bool> {
     let rel = framework_kernel::runtime_registry::host_projection_mcp_relative(host_id, "project");
     let path = roots.project_root.join(rel);
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
-    let fw_description = format!(
-        "Framework snapshot, skill routing, goal/closeout gating ({host_id})"
-    );
+    let fw_description =
+        format!("Framework snapshot, skill routing, goal/closeout gating ({host_id})");
     let mut changed = false;
     for (id, payload) in [
-        ("router-rs-framework", host_router_rs_framework_payload(roots, host_id, &fw_description)),
+        (
+            "router-rs-framework",
+            host_router_rs_framework_payload(roots, host_id, &fw_description),
+        ),
         ("browser-mcp", browser_mcp_server_payload(roots)),
         ("mcp-codegraph", codegraph_mcp_server_payload(roots)),
     ] {
@@ -873,7 +882,12 @@ pub fn ensure_research_mcp_toml(
         let args: Vec<String> = payload
             .get("args")
             .and_then(Value::as_array)
-            .map(|a| a.iter().filter_map(Value::as_str).map(str::to_string).collect())
+            .map(|a| {
+                a.iter()
+                    .filter_map(Value::as_str)
+                    .map(str::to_string)
+                    .collect()
+            })
             .unwrap_or_default();
         let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
         changed |= upsert_mcp_toml_section(&path, id, cmd, &arg_refs)?;

@@ -20,13 +20,13 @@
 
 use crate::alias;
 use crate::content_store::ContentStore;
-use serde_json::{json, Value};
+use core_errors::FrameworkError;
+use serde_json::{Value, json};
 use std::path::Path;
 use std::time::Duration;
 
 use fr_utils::constants::{
-    FRAMEWORK_PROMPT_COMPRESSION_AUTHORITY,
-    FRAMEWORK_PROMPT_COMPRESSION_SCHEMA_VERSION,
+    FRAMEWORK_PROMPT_COMPRESSION_AUTHORITY, FRAMEWORK_PROMPT_COMPRESSION_SCHEMA_VERSION,
 };
 use fr_utils::json_value::value_text;
 
@@ -35,10 +35,12 @@ use fr_utils::json_value::value_text;
 pub fn build_framework_prompt_compression_envelope(
     payload: Value,
     context_window_size: Option<usize>,
-) -> Result<Value, String> {
+) -> Result<Value, FrameworkError> {
     let text = value_text(payload.get("prompt").or_else(|| payload.get("text")));
     if text.is_empty() {
-        return Err("framework prompt compression requires prompt or text field".to_string());
+        return Err(FrameworkError::validation(
+            "framework prompt compression requires prompt or text field",
+        ));
     }
     let token_budget = payload
         .get("token_budget")
@@ -47,8 +49,9 @@ pub fn build_framework_prompt_compression_envelope(
         .and_then(|v| usize::try_from(v).ok())
         .or_else(|| context_window_size.filter(|&s| s > 0).map(|s| s / 4))
         .ok_or_else(|| {
-            "framework prompt compression requires token_budget or budget, or context_window_size"
-                .to_string()
+            FrameworkError::validation(
+                "framework prompt compression requires token_budget or budget, or context_window_size",
+            )
         })?;
 
     // Check the lossless-mode env flag (default on).
@@ -75,12 +78,12 @@ pub fn build_framework_prompt_compression_envelope(
         .and_then(Value::as_str)
         .map(Path::new)
         .ok_or_else(|| {
-            format!(
+            FrameworkError::validation(format!(
                 "artifact_root is required when input exceeds token budget \
                  (input={input_estimate}, budget={token_budget}); \
                  set in payload or via RUNTIME_REGISTRY.json::{field}",
                 field = "runtime_artifact_root",
-            )
+            ))
         })?;
 
     compress_lossless(&text, token_budget, artifact_root)
@@ -92,7 +95,7 @@ fn compress_lossless(
     text: &str,
     token_budget: usize,
     artifact_root: &Path,
-) -> Result<Value, String> {
+) -> Result<Value, FrameworkError> {
     let input_estimate = alias::estimate_token_count(text);
 
     let store = ContentStore::new(artifact_root);
@@ -291,7 +294,6 @@ fn truncate_hint(text: &str, max: usize) -> String {
     }
 }
 
-
 // ── Zero-budget / full-output helpers ──────────────────────────────────────────
 
 fn zero_budget_output(input_estimate: usize) -> Value {
@@ -345,7 +347,7 @@ fn full_output(text: &str, estimate: usize) -> Value {
 // sole compression strategy going forward; the env flag was a rollout safety
 // valve and is no longer needed.
 
-fn compress_legacy(prompt: &str, token_budget: usize) -> Result<Value, String> {
+fn compress_legacy(prompt: &str, token_budget: usize) -> Result<Value, FrameworkError> {
     let input_token_estimate = alias::estimate_token_count(prompt);
     if token_budget == 0 {
         let output = "[omitted: token budget is zero]".to_string();
@@ -468,6 +470,7 @@ fn legacy_payload(
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     #[test]
@@ -528,7 +531,9 @@ mod tests {
         for oref in refs {
             let hash = oref["hash"].as_str().unwrap();
             let store = ContentStore::new(dir.path());
-            let content = store.get(hash).expect("offloaded content must be retrievable");
+            let content = store
+                .get(hash)
+                .expect("offloaded content must be retrievable");
             assert!(!content.is_empty(), "retrieved content must not be empty");
         }
     }
@@ -540,7 +545,10 @@ mod tests {
             json!({"prompt": text, "token_budget": 10}),
             None,
         );
-        assert!(result.is_err(), "should error when artifact_root is missing");
+        assert!(
+            result.is_err(),
+            "should error when artifact_root is missing"
+        );
         let err = result.unwrap_err();
         assert!(
             err.contains("artifact_root"),
@@ -618,13 +626,17 @@ mod tests {
 
         // 2. Call compression with a minimal GC threshold via env var.
         // SAFETY: env var manipulation is single-threaded in tests.
-        unsafe { std::env::set_var("FRAMEWORK_CONTENT_STORE_MAX_AGE_DAYS", "0"); }
+        unsafe {
+            std::env::set_var("FRAMEWORK_CONTENT_STORE_MAX_AGE_DAYS", "0");
+        }
         let text = "A\n\nB\n\nC\n\nD\n\nE\n\nF\n\nG\n\nH\n\nI\n\nJ";
         let result = build_framework_prompt_compression_envelope(
             json!({"prompt": text, "token_budget": 5, "artifact_root": dir.path()}),
             None,
         );
-        unsafe { std::env::remove_var("FRAMEWORK_CONTENT_STORE_MAX_AGE_DAYS"); }
+        unsafe {
+            std::env::remove_var("FRAMEWORK_CONTENT_STORE_MAX_AGE_DAYS");
+        }
         assert!(result.is_ok(), "compression should succeed");
 
         // 3. The pre-existing content should be gone (GC runs before new puts).
@@ -637,8 +649,7 @@ mod tests {
         );
 
         // 4. Newly stored content (from the compression) should still exist.
-        let refs = result
-            .unwrap()["compression"]["offloaded_refs"]
+        let refs = result.unwrap()["compression"]["offloaded_refs"]
             .as_array()
             .unwrap()
             .clone();

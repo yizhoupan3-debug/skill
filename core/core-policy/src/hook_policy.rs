@@ -1,7 +1,7 @@
+use core_errors::FrameworkError;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use core_errors::FrameworkError;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
@@ -115,7 +115,7 @@ fn dev_exempt_fast_tunnel(path: Option<&str>, repo_root: Option<&Path>) -> bool 
 /// operation should be blocked and why.
 pub fn evaluate_hook_policy(
     request: HookPolicyEvaluateRequest,
-) -> Result<HookPolicyEvaluateResponse, String> {
+) -> Result<HookPolicyEvaluateResponse, FrameworkError> {
     let mut response = HookPolicyEvaluateResponse::base(&request.operation);
     let repo_root = request.repo_root.as_deref().map(Path::new);
     if dev_exempt_fast_tunnel(request.path.as_deref(), repo_root)
@@ -192,7 +192,11 @@ pub fn evaluate_hook_policy(
                 response.categories = vec!["mcp-safety".to_string()];
             }
         }
-        other => return Err(format!("unsupported hook policy operation: {other}")),
+        other => {
+            return Err(FrameworkError::validation(format!(
+                "unsupported hook policy operation: {other}"
+            )));
+        }
     }
     Ok(response)
 }
@@ -201,12 +205,13 @@ pub fn evaluate_hook_policy(
 /// Deserializes a `Value` into a `HookPolicyEvaluateRequest`, runs
 /// `evaluate_hook_policy`, and serializes the response back to `Value`.
 pub fn evaluate_hook_policy_value(payload: Value) -> Result<Value, FrameworkError> {
-    let request = serde_json::from_value::<HookPolicyEvaluateRequest>(payload)
-        .map_err(|err| FrameworkError::validation(format!("parse hook policy input failed: {err}")))?;
-    let response = evaluate_hook_policy(request)
-        .map_err(FrameworkError::validation)?;
-    serde_json::to_value(response)
-        .map_err(|err| FrameworkError::validation(format!("serialize hook policy output failed: {err}")))
+    let request = serde_json::from_value::<HookPolicyEvaluateRequest>(payload).map_err(|err| {
+        FrameworkError::validation(format!("parse hook policy input failed: {err}"))
+    })?;
+    let response = evaluate_hook_policy(request)?;
+    serde_json::to_value(response).map_err(|err| {
+        FrameworkError::validation(format!("serialize hook policy output failed: {err}"))
+    })
 }
 
 /// Check a shell command against the dangerous-bash rule set.
@@ -309,13 +314,14 @@ pub fn classify_protected_path<'a>(
 pub fn relative_candidate_path(path: &str, repo_root: Option<&Path>) -> String {
     let candidate = PathBuf::from(path);
     if candidate.is_absolute()
-        && let Some(root) = repo_root {
-            let normalized_candidate = candidate.canonicalize().unwrap_or(candidate.clone());
-            let normalized_root = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
-            if let Ok(rel) = normalized_candidate.strip_prefix(normalized_root) {
-                return normalize_repo_relative_path(&rel.to_string_lossy());
-            }
+        && let Some(root) = repo_root
+    {
+        let normalized_candidate = candidate.canonicalize().unwrap_or(candidate.clone());
+        let normalized_root = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
+        if let Ok(rel) = normalized_candidate.strip_prefix(normalized_root) {
+            return normalize_repo_relative_path(&rel.to_string_lossy());
         }
+    }
     normalize_repo_relative_path(path)
 }
 
@@ -946,7 +952,10 @@ mod tests {
             tool_args: None,
         };
         let err = evaluate_hook_policy(request).expect_err("provider rank must not execute");
-        assert!(err.contains("unsupported hook policy operation"));
+        assert!(
+            err.to_string()
+                .contains("unsupported hook policy operation")
+        );
     }
 
     #[test]
@@ -1386,7 +1395,13 @@ mod tests {
 
     #[tokio::test]
     async fn hook_policy_evaluate_concurrent_safety_tools() {
-        let tool_names = ["list-directory", "read-file", "bash", "write-file", "web-fetch"];
+        let tool_names = [
+            "list-directory",
+            "read-file",
+            "bash",
+            "write-file",
+            "web-fetch",
+        ];
         let handles: Vec<_> = tool_names
             .iter()
             .map(|name| {

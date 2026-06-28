@@ -41,7 +41,11 @@ use std::time::{Duration, Instant};
 /// Delegates to host_extensions::host_log_label(); falls back to "MCP Host" for unknown hosts.
 fn mcp_host_display_label(host_id: &str) -> String {
     let label = crate::hosts::host_extensions::host_log_label(host_id);
-    if label == host_id { "MCP Host".to_string() } else { label }
+    if label == host_id {
+        "MCP Host".to_string()
+    } else {
+        label
+    }
 }
 
 fn list_known_task_ids(repo_root: &Path) -> Vec<String> {
@@ -89,13 +93,14 @@ impl RateLimiter {
     pub fn check_and_record(&mut self, tool_name: &str) -> Result<(), String> {
         let now = Instant::now();
         if let Some(last) = self.last_call.get(tool_name)
-            && now.duration_since(*last) < self.min_interval {
-                return Err(format!(
-                    "Rate limit exceeded for {}. Wait {}ms between calls.",
-                    tool_name,
-                    self.min_interval.as_millis()
-                ));
-            }
+            && now.duration_since(*last) < self.min_interval
+        {
+            return Err(format!(
+                "Rate limit exceeded for {}. Wait {}ms between calls.",
+                tool_name,
+                self.min_interval.as_millis()
+            ));
+        }
         self.last_call.insert(tool_name.to_string(), now);
         Ok(())
     }
@@ -116,9 +121,7 @@ macro_rules! poison_safe_lock {
         match $mutex.lock() {
             Ok(guard) => Some(guard),
             Err(poisoned) => {
-                tracing::warn!(
-                    "mutex poisoned, recovering (thread panicked while holding lock)"
-                );
+                tracing::warn!("mutex poisoned, recovering (thread panicked while holding lock)");
                 Some(poisoned.into_inner())
             }
         }
@@ -157,17 +160,16 @@ impl ToolDispatchTable {
     /// Build the dispatch table from the tool registry.
     /// Only includes tools handled by this MCP server process (router-rs, research-harness, router-rs-cli).
     fn from_registry() -> Self {
-        let registry_path = mcp_tool_registry::resolve_tool_registry_path()
-            .unwrap_or_else(|| {
-                std::path::PathBuf::from(
-                    framework_kernel::constants::MCP_TOOL_REGISTRY_RELATIVE_PATH,
-                )
-            });
+        let registry_path = mcp_tool_registry::resolve_tool_registry_path().unwrap_or_else(|| {
+            std::path::PathBuf::from(framework_kernel::constants::MCP_TOOL_REGISTRY_RELATIVE_PATH)
+        });
         let records = match mcp_tool_registry::load_tool_records_cached(&registry_path) {
             Ok(records) => records,
             Err(e) => {
                 tracing::warn!("ToolDispatchTable: failed to load registry: {e}");
-                return Self { targets: HashMap::new() };
+                return Self {
+                    targets: HashMap::new(),
+                };
             }
         };
 
@@ -266,7 +268,6 @@ pub(super) fn dispatch_tool(
         Err(format!("Unknown tool: {tool_name}"))
     }
 }
-
 
 const PROTOCOL_VERSION: &str = "2024-11-05";
 const SERVER_NAME: &str = "router-rs-framework";
@@ -505,10 +506,9 @@ pub fn handle_tools_list(id: Option<Value>) -> Value {
 /// from MCP_TOOL_REGISTRY.json. Includes tools with dispatch_domain starting
 /// with `domain:` or equal to `research`, excluding deprecated tools.
 fn build_tools_from_registry() -> Vec<Value> {
-    let registry_path = mcp_tool_registry::resolve_tool_registry_path()
-        .unwrap_or_else(|| {
-            std::path::PathBuf::from(framework_kernel::constants::MCP_TOOL_REGISTRY_RELATIVE_PATH)
-        });
+    let registry_path = mcp_tool_registry::resolve_tool_registry_path().unwrap_or_else(|| {
+        std::path::PathBuf::from(framework_kernel::constants::MCP_TOOL_REGISTRY_RELATIVE_PATH)
+    });
 
     // Use cached loader for performance
     let records = match mcp_tool_registry::load_tool_records_cached(&registry_path) {
@@ -667,7 +667,8 @@ fn handle_prompts_get(
         "review_gate" => {
             let host_name = mcp_host_display_label(host_id);
             let gate_mode =
-                "task: MCP hard block disabled — closeout_gate reports findings only (advisory).".to_string();
+                "task: MCP hard block disabled — closeout_gate reports findings only (advisory)."
+                    .to_string();
             {
                 let lane_lines =
                     core_policy::registry_review_gate::reviewer_lanes_prompt_lines(Some(repo_root));
@@ -796,8 +797,7 @@ fn handle_resources_read(id: Option<Value>, request: &Value, repo_root: &Path) -
             )
         }
         "framework://goal_state" => {
-            let state = core_state::state_manager::read_goal_state(repo_root, None)
-                .unwrap_or(None);
+            let state = core_state::state_manager::read_goal_state(repo_root, None).unwrap_or(None);
             (
                 serde_json::to_string_pretty(&state).unwrap_or_default(),
                 "application/json",
@@ -877,7 +877,6 @@ pub fn tool_closeout_record_write_for_test(
     tool_closeout_record_write(arguments, repo_path, "opencode")
 }
 
-
 // ── CLI subprocess dispatch ──
 
 /// Map MCP tool name and JSON arguments to `router-rs-cli` subcommand arguments.
@@ -886,7 +885,8 @@ pub fn tool_closeout_record_write_for_test(
 fn map_tool_to_cli_args(tool_name: &str, args: &Value) -> Result<Vec<String>, String> {
     match tool_name {
         "web_fetch" => {
-            let url = args.get("url")
+            let url = args
+                .get("url")
                 .and_then(Value::as_str)
                 .ok_or("Missing required argument: url")?;
             let mut cmd = vec!["web".to_string(), "fetch".to_string(), url.to_string()];
@@ -897,12 +897,15 @@ fn map_tool_to_cli_args(tool_name: &str, args: &Value) -> Result<Vec<String>, St
             Ok(cmd)
         }
         "research_aigc_check" => {
-            let text = args.get("text")
+            let text = args
+                .get("text")
                 .and_then(Value::as_str)
                 .ok_or("Missing required argument: text")?;
             let mut cmd = vec![
-                "research".to_string(), "aigc-check".to_string(),
-                "--text".to_string(), text.to_string(),
+                "research".to_string(),
+                "aigc-check".to_string(),
+                "--text".to_string(),
+                text.to_string(),
             ];
             if let Some(lang) = args.get("language").and_then(Value::as_str) {
                 cmd.push("--language".to_string());
@@ -927,12 +930,16 @@ fn map_tool_to_cli_args(tool_name: &str, args: &Value) -> Result<Vec<String>, St
             Ok(cmd)
         }
         "research_verification_literature" => {
-            let check = args.get("check")
+            let check = args
+                .get("check")
                 .and_then(Value::as_str)
                 .ok_or("Missing required argument: check")?;
             let mut cmd = vec![
-                "research".to_string(), "verify".to_string(), "literature".to_string(),
-                "--check".to_string(), check.to_string(),
+                "research".to_string(),
+                "verify".to_string(),
+                "literature".to_string(),
+                "--check".to_string(),
+                check.to_string(),
             ];
             if let Some(doi) = args.get("doi").and_then(Value::as_str) {
                 cmd.push("--doi".to_string());
@@ -940,45 +947,61 @@ fn map_tool_to_cli_args(tool_name: &str, args: &Value) -> Result<Vec<String>, St
             }
             if let Some(claims) = args.get("claims").and_then(Value::as_array) {
                 cmd.push("--claims".to_string());
-                cmd.push(serde_json::to_string(claims)
-                    .map_err(|e| format!("claims serialization failed: {e}"))?);
+                cmd.push(
+                    serde_json::to_string(claims)
+                        .map_err(|e| format!("claims serialization failed: {e}"))?,
+                );
             }
             if let Some(references) = args.get("references").and_then(Value::as_array) {
                 cmd.push("--references".to_string());
-                cmd.push(serde_json::to_string(references)
-                    .map_err(|e| format!("references serialization failed: {e}"))?);
+                cmd.push(
+                    serde_json::to_string(references)
+                        .map_err(|e| format!("references serialization failed: {e}"))?,
+                );
             }
             Ok(cmd)
         }
         "research_verification_structure" => {
-            let check = args.get("check")
+            let check = args
+                .get("check")
                 .and_then(Value::as_str)
                 .ok_or("Missing required argument: check")?;
-            let path = args.get("path")
+            let path = args
+                .get("path")
                 .and_then(Value::as_str)
                 .ok_or("Missing required argument: path")?;
             Ok(vec![
-                "research".to_string(), "verify".to_string(), "structure".to_string(),
-                path.to_string(), "--check".to_string(), check.to_string(),
+                "research".to_string(),
+                "verify".to_string(),
+                "structure".to_string(),
+                path.to_string(),
+                "--check".to_string(),
+                check.to_string(),
             ])
         }
         "research_verification_reproducibility" => {
-            let dir = args.get("experiment_dir")
+            let dir = args
+                .get("experiment_dir")
                 .and_then(Value::as_str)
                 .ok_or("Missing required argument: experiment_dir")?;
             let mut cmd = vec![
-                "research".to_string(), "verify".to_string(), "reproducibility".to_string(),
+                "research".to_string(),
+                "verify".to_string(),
+                "reproducibility".to_string(),
                 dir.to_string(),
             ];
             if let Some(run_paths) = args.get("run_paths").and_then(Value::as_array) {
                 cmd.push("--run-paths".to_string());
-                cmd.push(serde_json::to_string(run_paths)
-                    .map_err(|e| format!("run_paths serialization failed: {e}"))?);
+                cmd.push(
+                    serde_json::to_string(run_paths)
+                        .map_err(|e| format!("run_paths serialization failed: {e}"))?,
+                );
             }
             Ok(cmd)
         }
         "math_prove_inequality" => {
-            let expr = args.get("expression")
+            let expr = args
+                .get("expression")
                 .and_then(Value::as_str)
                 .ok_or("Missing required argument: expression")?;
             let mut cmd = vec!["math".to_string(), "prove".to_string(), expr.to_string()];
@@ -988,15 +1011,15 @@ fn map_tool_to_cli_args(tool_name: &str, args: &Value) -> Result<Vec<String>, St
             }
             Ok(cmd)
         }
-        "math_backend_available" => {
-            Ok(vec!["math".to_string(), "backend".to_string()])
-        }
+        "math_backend_available" => Ok(vec!["math".to_string(), "backend".to_string()]),
         "math_asymptotic_chain" => {
-            let steps = args.get("steps")
+            let steps = args
+                .get("steps")
                 .and_then(Value::as_array)
                 .ok_or("Missing required argument: steps")?;
             let mut cmd = vec![
-                "math".to_string(), "asymptotic-chain".to_string(),
+                "math".to_string(),
+                "asymptotic-chain".to_string(),
                 "--steps".to_string(),
                 serde_json::to_string(steps)
                     .map_err(|e| format!("steps serialization failed: {e}"))?,
@@ -1017,15 +1040,17 @@ fn map_tool_to_cli_args(tool_name: &str, args: &Value) -> Result<Vec<String>, St
             Ok(cmd)
         }
         "math_lean_verify" => {
-            let script = args.get("script")
+            let script = args
+                .get("script")
                 .and_then(Value::as_str)
                 .ok_or("Missing required argument: script")?;
-            let tmp_path = std::env::temp_dir()
-                .join(format!("router_rs_lean_{}.lean", std::process::id()));
+            let tmp_path =
+                std::env::temp_dir().join(format!("router_rs_lean_{}.lean", std::process::id()));
             std::fs::write(&tmp_path, script)
                 .map_err(|e| format!("failed to write lean script to temp file: {e}"))?;
             Ok(vec![
-                "math".to_string(), "lean-verify".to_string(),
+                "math".to_string(),
+                "lean-verify".to_string(),
                 tmp_path.to_string_lossy().to_string(),
             ])
         }
@@ -1050,11 +1075,7 @@ fn spawn_cli_tool(tool_name: &str, args: &Value, repo_root: &Path) -> Result<Str
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .spawn()
-        .map_err(|e| {
-            format!(
-                "router-rs-cli subprocess failed (is it in PATH or built?): {e}"
-            )
-        })?;
+        .map_err(|e| format!("router-rs-cli subprocess failed (is it in PATH or built?): {e}"))?;
 
     let start = std::time::Instant::now();
     let status = loop {
@@ -1085,8 +1106,8 @@ fn spawn_cli_tool(tool_name: &str, args: &Value, repo_root: &Path) -> Result<Str
 
     // Clean up temp file created for lean-verify
     if tool_name == "math_lean_verify" {
-        let tmp_path = std::env::temp_dir()
-            .join(format!("router_rs_lean_{}.lean", std::process::id()));
+        let tmp_path =
+            std::env::temp_dir().join(format!("router_rs_lean_{}.lean", std::process::id()));
         let _ = std::fs::remove_file(&tmp_path);
     }
 
@@ -1102,7 +1123,6 @@ fn spawn_cli_tool(tool_name: &str, args: &Value, repo_root: &Path) -> Result<Str
     Ok(stdout)
 }
 
-
 #[cfg(any(test, feature = "test-support"))]
 pub fn read_mcp_message_test_helper<R: std::io::BufRead>(
     input: &mut R,
@@ -1113,6 +1133,7 @@ pub fn read_mcp_message_test_helper<R: std::io::BufRead>(
 
 #[cfg(any(test, feature = "test-support"))]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     #[cfg(test)]
     use std::path::PathBuf;
 
@@ -1146,7 +1167,12 @@ mod tests {
         let names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
         // Minimum built-in tools (task CRUD). Composite tools from registry
         // may not load in test mode without hooks.
-        assert!(names.len() >= 5, "expected at least 5 tools, got {}: {:?}", names.len(), names);
+        assert!(
+            names.len() >= 5,
+            "expected at least 5 tools, got {}: {:?}",
+            names.len(),
+            names
+        );
         let always_present = &[
             "task_create",
             "task_list",
@@ -1288,18 +1314,21 @@ mod tests {
     // ── E2E chain tests: JSON-RPC tools/call → dispatch → research handler ──
 
     #[cfg(test)]
-    use std::sync::Once;
-    #[cfg(test)]
     use core_errors::FrameworkError;
     #[cfg(test)]
-    use serde_json::{json, Value};
+    use serde_json::{Value, json};
+    #[cfg(test)]
+    use std::sync::Once;
 
     /// Test research tool dispatch that mimics the real handler at a high level.
     #[cfg(test)]
     fn test_research_dispatch(name: &str, arguments: &Value) -> Result<String, FrameworkError> {
         match name {
             "research_review_loop" => {
-                let max_rounds = arguments.get("max_rounds").and_then(Value::as_u64).unwrap_or(10);
+                let max_rounds = arguments
+                    .get("max_rounds")
+                    .and_then(Value::as_u64)
+                    .unwrap_or(10);
                 Ok(serde_json::to_string(&json!({
                     "quality_gate_config": {
                         "min_rounds": 5,
@@ -1311,29 +1340,38 @@ mod tests {
                         "dimension": "逻辑与证据",
                     },
                     "workflow": "test workflow stub",
-                })).unwrap())
+                }))
+                .unwrap())
             }
             "research_aigc_check" => {
-                let _text = arguments.get("text").and_then(Value::as_str)
+                let _text = arguments
+                    .get("text")
+                    .and_then(Value::as_str)
                     .ok_or(FrameworkError::validation("requires 'text'"))?;
                 Ok(serde_json::to_string(&json!({
                     "score": 42.0,
                     "ai_probability": 0.42,
                     "segments_analyzed": 1,
                     "results": [],
-                })).unwrap())
+                }))
+                .unwrap())
             }
             "research_review_dimensions" => {
-                let _round = arguments.get("round").and_then(Value::as_u64)
+                let _round = arguments
+                    .get("round")
+                    .and_then(Value::as_u64)
                     .ok_or(FrameworkError::validation("requires 'round'"))?;
                 Ok(serde_json::to_string(&json!({
                     "round": 1,
                     "dimension": "逻辑与证据",
                     "prompt": "test prompt",
                     "checklist": [],
-                })).unwrap())
+                }))
+                .unwrap())
             }
-            _ => Err(FrameworkError::validation(format!("unknown research tool: {name}"))),
+            _ => Err(FrameworkError::validation(format!(
+                "unknown research tool: {name}"
+            ))),
         }
     }
 
@@ -1360,7 +1398,10 @@ mod tests {
         assert_eq!(response["id"], 1);
         let content = response["result"]["content"][0]["text"].as_str().unwrap();
         let parsed: Value = serde_json::from_str(content).unwrap();
-        assert!(parsed.get("quality_gate_config").is_some(), "missing quality_gate_config");
+        assert!(
+            parsed.get("quality_gate_config").is_some(),
+            "missing quality_gate_config"
+        );
     }
 
     #[test]
@@ -1374,7 +1415,10 @@ mod tests {
         let content_text = response["result"]["content"][0]["text"].as_str().unwrap();
         let parsed: Value = serde_json::from_str(content_text).unwrap();
         assert!(parsed.get("score").is_some(), "missing score");
-        assert_eq!(parsed.get("ai_probability").and_then(Value::as_f64), Some(0.42));
+        assert_eq!(
+            parsed.get("ai_probability").and_then(Value::as_f64),
+            Some(0.42)
+        );
     }
 
     #[test]
@@ -1397,6 +1441,9 @@ mod tests {
         let response = handle_mcp_request(request, &repo, "test", "test-session").unwrap();
         let content_text = response["result"]["content"][0]["text"].as_str().unwrap();
         let parsed: Value = serde_json::from_str(content_text).unwrap();
-        assert_eq!(parsed.get("dimension").and_then(Value::as_str), Some("逻辑与证据"));
+        assert_eq!(
+            parsed.get("dimension").and_then(Value::as_str),
+            Some("逻辑与证据")
+        );
     }
 }

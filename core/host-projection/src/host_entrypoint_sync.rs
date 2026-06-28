@@ -124,10 +124,9 @@ pub fn sync_host_entrypoints(
     sort_report_array(&mut report, "created_dirs")?;
     sort_report_array(&mut report, "synced_worktrees")?;
     sort_report_array(&mut report, "skipped_worktrees")?;
-    if apply
-        && let Some(after_apply) = desired_files.provider.after_apply {
-            after_apply(&root)?;
-        }
+    if apply && let Some(after_apply) = desired_files.provider.after_apply {
+        after_apply(&root)?;
+    }
     Ok(report)
 }
 
@@ -400,6 +399,7 @@ fn describe_host_entrypoint_path(report_root: &Path, target_root: &Path, path: &
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use serial_test::serial;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -427,10 +427,7 @@ mod tests {
         );
 
         let mut files = BTreeMap::new();
-        files.insert(
-            "AGENTS.md".to_string(),
-            b"fake codex delta\n".to_vec(),
-        );
+        files.insert("AGENTS.md".to_string(), b"fake codex delta\n".to_vec());
         files.insert(".fake/hooks.json".to_string(), b"{\"hooks\":{}}\n".to_vec());
         let provider = HostEntrypointPayloadProvider {
             files,
@@ -502,17 +499,10 @@ mod tests {
             r#"{"schema_version":"framework-runtime-registry-v2","host_targets":{"supported":["codex","cursor","claude","opencode"],"metadata":{"codex":{"install_tool":"codex","projection_status":"implemented","installable":true,"host_entrypoints":"AGENTS.md"},"cursor":{"install_tool":"cursor","projection_status":"implemented","installable":true,"host_entrypoints":["AGENTS.md",".cursor/rules/*.mdc"]},"claude":{"install_tool":"claude","projection_status":"implemented","installable":true,"host_entrypoints":["AGENTS.md",".claude/rules/framework.md",".claude/settings.json"]},"opencode":{"install_tool":"opencode","projection_status":"implemented","installable":true,"host_entrypoints":".opencode/opencode.json"}}}}"#,
         )
         .unwrap();
-        fs::write(
-            sibling.join("AGENTS.md"),
-            "local sibling codex delta\n",
-        )
-        .unwrap();
+        fs::write(sibling.join("AGENTS.md"), "local sibling codex delta\n").unwrap();
 
         let mut files = BTreeMap::new();
-        files.insert(
-            "AGENTS.md".to_string(),
-            b"generated codex delta\n".to_vec(),
-        );
+        files.insert("AGENTS.md".to_string(), b"generated codex delta\n".to_vec());
         files.insert(".fake/hooks.json".to_string(), b"{\"hooks\":{}}\n".to_vec());
         let provider = HostEntrypointPayloadProvider {
             files,

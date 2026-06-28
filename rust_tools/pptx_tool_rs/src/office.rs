@@ -1,14 +1,13 @@
-use anyhow::{anyhow, bail, Context, Result};
-use serde::Serialize;
-use serde_json::{json, Value};
-use std::fs;
-use regex::Regex;
 use crate::{
-    ZipBundle, extract_pptx_structure, extract_structure_payload, expand_path,
-    EmitFormat, emit_value, xml_escape, element_overflows,
-    OfficeArgs, OfficeCommands, OfficeProbeArgs, OfficeDoctorArgs,
-    OfficeGetArgs, OfficeQueryArgs, OfficeWatchArgs, OfficeBatchArgs,
+    EmitFormat, OfficeArgs, OfficeBatchArgs, OfficeCommands, OfficeDoctorArgs, OfficeGetArgs,
+    OfficeProbeArgs, OfficeQueryArgs, OfficeWatchArgs, ZipBundle, element_overflows, emit_value,
+    expand_path, extract_pptx_structure, extract_structure_payload, xml_escape,
 };
+use anyhow::{Context, Result, anyhow, bail};
+use regex::Regex;
+use serde::Serialize;
+use serde_json::{Value, json};
+use std::fs;
 
 #[derive(Debug, Serialize)]
 pub struct OfficeProbeSummary {

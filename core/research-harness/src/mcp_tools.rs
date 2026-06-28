@@ -20,7 +20,9 @@ pub fn handle_research_tool(name: &str, arguments: &Value) -> Result<String, Fra
         _ if name.starts_with("research_verification_") => {
             verification_tool_dispatch(name, arguments)
         }
-        _ => Err(FrameworkError::validation(format!("unknown research tool: {name}"))),
+        _ => Err(FrameworkError::validation(format!(
+            "unknown research tool: {name}"
+        ))),
     }
 }
 
@@ -39,7 +41,9 @@ fn math_tool_dispatch(name: &str, arguments: &Value) -> Result<String, Framework
         "math_sympy_verify" => tool_math_sympy_verify(arguments),
         "math_sympy_simplify" => tool_math_sympy_simplify(arguments),
         "math_lean_verify" => tool_math_lean_verify(arguments),
-        _ => Err(FrameworkError::validation(format!("unknown math tool: {name}"))),
+        _ => Err(FrameworkError::validation(format!(
+            "unknown math tool: {name}"
+        ))),
     }
 }
 
@@ -52,67 +56,125 @@ fn verification_tool_dispatch(name: &str, arguments: &Value) -> Result<String, F
         "research_verification_reproducibility" => tool_verification_reproducibility(arguments),
         "research_verification_statistical" => tool_verification_statistical(arguments),
         "research_verification_structure" => tool_verification_structure(arguments),
-        _ => Err(FrameworkError::validation(format!("unknown verification tool: {name}"))),
+        _ => Err(FrameworkError::validation(format!(
+            "unknown verification tool: {name}"
+        ))),
     }
 }
 
 // ── Literature verification ──
 
 fn tool_verification_literature(arguments: &Value) -> Result<String, FrameworkError> {
-    let check = arguments.get("check").and_then(Value::as_str)
-        .ok_or(FrameworkError::validation("literature verification requires 'check' (doi|claim_coverage)"))?;
+    let check =
+        arguments
+            .get("check")
+            .and_then(Value::as_str)
+            .ok_or(FrameworkError::validation(
+                "literature verification requires 'check' (doi|claim_coverage)",
+            ))?;
     match check {
         "doi" => {
-            let doi = arguments.get("doi").and_then(Value::as_str)
-                .ok_or(FrameworkError::validation("doi check requires 'doi' (string)"))?;
+            let doi =
+                arguments
+                    .get("doi")
+                    .and_then(Value::as_str)
+                    .ok_or(FrameworkError::validation(
+                        "doi check requires 'doi' (string)",
+                    ))?;
             let reachable = tokio::runtime::Handle::current()
                 .block_on(crate::verification::literature::verify_doi_reachable(doi))
                 .map_err(|e| FrameworkError::validation(format!("DOI check failed: {e}")))?;
             serde_json::to_string_pretty(&json!({
                 "check": "doi_reachability", "doi": doi, "reachable": reachable,
-            })).map_err(FrameworkError::Json)
+            }))
+            .map_err(FrameworkError::Json)
         }
         "claim_coverage" => {
-            let claims: Vec<String> = arguments.get("claims").and_then(Value::as_array)
-                .ok_or(FrameworkError::validation("claim_coverage requires 'claims' array"))?
-                .iter().filter_map(|v| v.as_str().map(String::from)).collect();
-            let references: Vec<String> = arguments.get("references").and_then(Value::as_array)
-                .ok_or(FrameworkError::validation("claim_coverage requires 'references' array"))?
-                .iter().filter_map(|v| v.as_str().map(String::from)).collect();
-            let score = crate::verification::literature::verify_claim_coverage(&claims, &references)
-                .map_err(|e| FrameworkError::validation(format!("claim coverage failed: {e}")))?;
+            let claims: Vec<String> = arguments
+                .get("claims")
+                .and_then(Value::as_array)
+                .ok_or(FrameworkError::validation(
+                    "claim_coverage requires 'claims' array",
+                ))?
+                .iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect();
+            let references: Vec<String> = arguments
+                .get("references")
+                .and_then(Value::as_array)
+                .ok_or(FrameworkError::validation(
+                    "claim_coverage requires 'references' array",
+                ))?
+                .iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect();
+            let score =
+                crate::verification::literature::verify_claim_coverage(&claims, &references)
+                    .map_err(|e| {
+                        FrameworkError::validation(format!("claim coverage failed: {e}"))
+                    })?;
             serde_json::to_string_pretty(&json!({
                 "check": "claim_coverage", "claims_analyzed": claims.len(),
                 "coverage_score": format!("{:.2}", score), "covered_pct": (score * 100.0).round() as u64,
             })).map_err(FrameworkError::Json)
         }
-        _ => Err(FrameworkError::validation(format!("unknown literature check: {check}"))),
+        _ => Err(FrameworkError::validation(format!(
+            "unknown literature check: {check}"
+        ))),
     }
 }
 
 // ── Prose QC ──
 
 fn tool_verification_prose(arguments: &Value) -> Result<String, FrameworkError> {
-    let check = arguments.get("check").and_then(Value::as_str)
-        .ok_or(FrameworkError::validation("prose verification requires 'check' (terminology|slop|hedging)"))?;
+    let check =
+        arguments
+            .get("check")
+            .and_then(Value::as_str)
+            .ok_or(FrameworkError::validation(
+                "prose verification requires 'check' (terminology|slop|hedging)",
+            ))?;
     match check {
         "terminology" => {
-            let text = arguments.get("text").and_then(Value::as_str)
-                .ok_or(FrameworkError::validation("terminology check requires 'text' (string)"))?;
-            let glossary = arguments.get("glossary").and_then(Value::as_object)
-                .map(|obj| obj.iter().map(|(k, v)| (k.clone(), v.as_str().unwrap_or("").to_string())).collect())
+            let text =
+                arguments
+                    .get("text")
+                    .and_then(Value::as_str)
+                    .ok_or(FrameworkError::validation(
+                        "terminology check requires 'text' (string)",
+                    ))?;
+            let glossary = arguments
+                .get("glossary")
+                .and_then(Value::as_object)
+                .map(|obj| {
+                    obj.iter()
+                        .map(|(k, v)| (k.clone(), v.as_str().unwrap_or("").to_string()))
+                        .collect()
+                })
                 .unwrap_or_default();
-            let violations = crate::verification::prose_qc::check_terminology_consistency(text, &glossary)
-                .map_err(|e| FrameworkError::validation(format!("terminology check failed: {e}")))?;
+            let violations =
+                crate::verification::prose_qc::check_terminology_consistency(text, &glossary)
+                    .map_err(|e| {
+                        FrameworkError::validation(format!("terminology check failed: {e}"))
+                    })?;
             serde_json::to_string_pretty(&json!({
                 "check": "terminology_consistency", "violations": violations,
                 "has_violations": !violations.is_empty(),
-            })).map_err(FrameworkError::Json)
+            }))
+            .map_err(FrameworkError::Json)
         }
         "slop" => {
-            let text = arguments.get("text").and_then(Value::as_str)
-                .ok_or(FrameworkError::validation("slop check requires 'text' (string)"))?;
-            let language = arguments.get("language").and_then(Value::as_str).unwrap_or("en");
+            let text =
+                arguments
+                    .get("text")
+                    .and_then(Value::as_str)
+                    .ok_or(FrameworkError::validation(
+                        "slop check requires 'text' (string)",
+                    ))?;
+            let language = arguments
+                .get("language")
+                .and_then(Value::as_str)
+                .unwrap_or("en");
             let hits = match language {
                 "zh" | "chinese" => crate::verification::prose_qc::detect_zh_slop(text),
                 _ => crate::verification::prose_qc::detect_en_slop(text),
@@ -120,11 +182,17 @@ fn tool_verification_prose(arguments: &Value) -> Result<String, FrameworkError> 
             serde_json::to_string_pretty(&json!({
                 "check": "slop_detection", "language": language,
                 "hits_found": hits.len(), "hits": hits,
-            })).map_err(FrameworkError::Json)
+            }))
+            .map_err(FrameworkError::Json)
         }
         "hedging" => {
-            let text = arguments.get("text").and_then(Value::as_str)
-                .ok_or(FrameworkError::validation("hedging check requires 'text' (string)"))?;
+            let text =
+                arguments
+                    .get("text")
+                    .and_then(Value::as_str)
+                    .ok_or(FrameworkError::validation(
+                        "hedging check requires 'text' (string)",
+                    ))?;
             let count = crate::verification::prose_qc::count_hedging_words(text);
             serde_json::to_string_pretty(&json!({
                 "check": "hedging_analysis", "hedging_word_count": count,
@@ -133,37 +201,58 @@ fn tool_verification_prose(arguments: &Value) -> Result<String, FrameworkError> 
                     else { "Hedging count is acceptable".to_string() },
             })).map_err(FrameworkError::Json)
         }
-        _ => Err(FrameworkError::validation(format!("unknown prose check: {check}"))),
+        _ => Err(FrameworkError::validation(format!(
+            "unknown prose check: {check}"
+        ))),
     }
 }
 
 // ── Reproducibility verification ──
 
 fn tool_verification_reproducibility(arguments: &Value) -> Result<String, FrameworkError> {
-    let experiment_dir = arguments.get("experiment_dir").and_then(Value::as_str)
-        .ok_or(FrameworkError::validation("reproducibility audit requires 'experiment_dir' (string path)"))?;
+    let experiment_dir = arguments
+        .get("experiment_dir")
+        .and_then(Value::as_str)
+        .ok_or(FrameworkError::validation(
+            "reproducibility audit requires 'experiment_dir' (string path)",
+        ))?;
     let dir = Path::new(experiment_dir);
 
-    let run_paths: Option<Vec<&Path>> = arguments.get("run_paths").and_then(Value::as_array)
-        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(Path::new)).collect());
+    let run_paths: Option<Vec<&Path>> =
+        arguments
+            .get("run_paths")
+            .and_then(Value::as_array)
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str().map(Path::new))
+                    .collect()
+            });
 
-    let report = crate::verification::reproducibility::run_reproducibility_audit(
-        dir, run_paths.as_deref(),
-    ).map_err(|e| FrameworkError::validation(format!("reproducibility audit failed: {e}")))?;
+    let report =
+        crate::verification::reproducibility::run_reproducibility_audit(dir, run_paths.as_deref())
+            .map_err(|e| {
+                FrameworkError::validation(format!("reproducibility audit failed: {e}"))
+            })?;
 
-    let checks: Vec<Value> = report.checks.iter().map(|c| {
-        let (status, detail) = match &c.status {
-            crate::verification::reproducibility::CheckStatus::Pass =>
-                ("PASS", String::new()),
-            crate::verification::reproducibility::CheckStatus::Fail(msg) =>
-                ("FAIL", msg.clone()),
-            crate::verification::reproducibility::CheckStatus::Warn(msg) =>
-                ("WARN", msg.clone()),
-            crate::verification::reproducibility::CheckStatus::Skip(msg) =>
-                ("SKIP", msg.clone()),
-        };
-        json!({"name": c.name, "status": status, "detail": detail})
-    }).collect();
+    let checks: Vec<Value> = report
+        .checks
+        .iter()
+        .map(|c| {
+            let (status, detail) = match &c.status {
+                crate::verification::reproducibility::CheckStatus::Pass => ("PASS", String::new()),
+                crate::verification::reproducibility::CheckStatus::Fail(msg) => {
+                    ("FAIL", msg.clone())
+                }
+                crate::verification::reproducibility::CheckStatus::Warn(msg) => {
+                    ("WARN", msg.clone())
+                }
+                crate::verification::reproducibility::CheckStatus::Skip(msg) => {
+                    ("SKIP", msg.clone())
+                }
+            };
+            json!({"name": c.name, "status": status, "detail": detail})
+        })
+        .collect();
 
     serde_json::to_string_pretty(&json!({
         "module": "reproducibility", "checks": checks,
@@ -174,15 +263,33 @@ fn tool_verification_reproducibility(arguments: &Value) -> Result<String, Framew
 // ── Statistical verification ──
 
 fn tool_verification_statistical(arguments: &Value) -> Result<String, FrameworkError> {
-    let check = arguments.get("check").and_then(Value::as_str)
-        .ok_or(FrameworkError::validation("statistical verification requires 'check' (grim|p_value|multiple_comparison)"))?;
+    let check =
+        arguments
+            .get("check")
+            .and_then(Value::as_str)
+            .ok_or(FrameworkError::validation(
+                "statistical verification requires 'check' (grim|p_value|multiple_comparison)",
+            ))?;
     match check {
         "grim" => {
-            let mean = arguments.get("mean").and_then(Value::as_f64)
-                .ok_or(FrameworkError::validation("grim test requires 'mean' (f64)"))?;
-            let n = arguments.get("n").and_then(Value::as_u64)
-                .ok_or(FrameworkError::validation("grim test requires 'n' (u64 sample size)"))?;
-            let decimals = arguments.get("decimals").and_then(Value::as_u64).unwrap_or(2) as usize;
+            let mean =
+                arguments
+                    .get("mean")
+                    .and_then(Value::as_f64)
+                    .ok_or(FrameworkError::validation(
+                        "grim test requires 'mean' (f64)",
+                    ))?;
+            let n =
+                arguments
+                    .get("n")
+                    .and_then(Value::as_u64)
+                    .ok_or(FrameworkError::validation(
+                        "grim test requires 'n' (u64 sample size)",
+                    ))?;
+            let decimals = arguments
+                .get("decimals")
+                .and_then(Value::as_u64)
+                .unwrap_or(2) as usize;
             let passed = crate::verification::statistical::grim_test(mean, n as usize, decimals)
                 .map_err(|e| FrameworkError::validation(format!("GRIM test failed: {e}")))?;
             serde_json::to_string_pretty(&json!({
@@ -193,22 +300,36 @@ fn tool_verification_statistical(arguments: &Value) -> Result<String, FrameworkE
             })).map_err(FrameworkError::Json)
         }
         "p_value" => {
-            let observed = arguments.get("observed").and_then(Value::as_f64)
-                .ok_or(FrameworkError::validation("p_value check requires 'observed' (f64)"))?;
-            let expected = arguments.get("expected").and_then(Value::as_f64)
-                .ok_or(FrameworkError::validation("p_value check requires 'expected' (f64)"))?;
-            let tolerance = arguments.get("tolerance").and_then(Value::as_f64).unwrap_or(0.01);
-            let passed = crate::verification::statistical::verify_p_value(observed, expected, tolerance);
+            let observed = arguments.get("observed").and_then(Value::as_f64).ok_or(
+                FrameworkError::validation("p_value check requires 'observed' (f64)"),
+            )?;
+            let expected = arguments.get("expected").and_then(Value::as_f64).ok_or(
+                FrameworkError::validation("p_value check requires 'expected' (f64)"),
+            )?;
+            let tolerance = arguments
+                .get("tolerance")
+                .and_then(Value::as_f64)
+                .unwrap_or(0.01);
+            let passed =
+                crate::verification::statistical::verify_p_value(observed, expected, tolerance);
             serde_json::to_string_pretty(&json!({
                 "check": "p_value", "observed": observed, "expected": expected,
                 "tolerance": tolerance, "passed": passed,
-            })).map_err(FrameworkError::Json)
+            }))
+            .map_err(FrameworkError::Json)
         }
         "multiple_comparison" => {
-            let num_tests = arguments.get("num_tests").and_then(Value::as_u64)
-                .ok_or(FrameworkError::validation("multiple_comparison requires 'num_tests' (u64)"))?;
-            let correction_applied = arguments.get("correction_applied").and_then(Value::as_bool).unwrap_or(false);
-            let passed = crate::verification::statistical::check_multiple_comparison_correction(num_tests as usize, correction_applied);
+            let num_tests = arguments.get("num_tests").and_then(Value::as_u64).ok_or(
+                FrameworkError::validation("multiple_comparison requires 'num_tests' (u64)"),
+            )?;
+            let correction_applied = arguments
+                .get("correction_applied")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            let passed = crate::verification::statistical::check_multiple_comparison_correction(
+                num_tests as usize,
+                correction_applied,
+            );
             serde_json::to_string_pretty(&json!({
                 "check": "multiple_comparison", "num_tests": num_tests,
                 "correction_applied": correction_applied, "passed": passed,
@@ -216,23 +337,37 @@ fn tool_verification_statistical(arguments: &Value) -> Result<String, FrameworkE
                     else { format!("WARNING: {num_tests} tests performed without multiple comparison correction") },
             })).map_err(FrameworkError::Json)
         }
-        _ => Err(FrameworkError::validation(format!("unknown statistical check: {check}"))),
+        _ => Err(FrameworkError::validation(format!(
+            "unknown statistical check: {check}"
+        ))),
     }
 }
 
 // ── Structure verification ──
 
 fn tool_verification_structure(arguments: &Value) -> Result<String, FrameworkError> {
-    let check = arguments.get("check").and_then(Value::as_str)
-        .ok_or(FrameworkError::validation("structure verification requires 'check' (latex|figures)"))?;
+    let check =
+        arguments
+            .get("check")
+            .and_then(Value::as_str)
+            .ok_or(FrameworkError::validation(
+                "structure verification requires 'check' (latex|figures)",
+            ))?;
     match check {
         "latex" => {
-            let path = arguments.get("path").and_then(Value::as_str)
-                .ok_or(FrameworkError::validation("latex check requires 'path' (string path to .tex file)"))?;
+            let path =
+                arguments
+                    .get("path")
+                    .and_then(Value::as_str)
+                    .ok_or(FrameworkError::validation(
+                        "latex check requires 'path' (string path to .tex file)",
+                    ))?;
             core_state_utils::path_guard::reject_unsafe_path(Path::new(path))
                 .map_err(|e| FrameworkError::validation(format!("path rejected: {e}")))?;
             let passed = crate::verification::structure::check_latex_compilable(Path::new(path))
-                .map_err(|e| FrameworkError::validation(format!("LaTeX compilation check failed: {e}")))?;
+                .map_err(|e| {
+                    FrameworkError::validation(format!("LaTeX compilation check failed: {e}"))
+                })?;
             serde_json::to_string_pretty(&json!({
                 "check": "latex_compilation", "path": path, "passed": passed,
                 "detail": if passed { "LaTeX syntax check passed (balanced braces + environments)".to_string() }
@@ -240,33 +375,49 @@ fn tool_verification_structure(arguments: &Value) -> Result<String, FrameworkErr
             })).map_err(FrameworkError::Json)
         }
         "figures" => {
-            let path = arguments.get("path").and_then(Value::as_str)
-                .ok_or(FrameworkError::validation("figures check requires 'path' (string path to .tex file)"))?;
+            let path =
+                arguments
+                    .get("path")
+                    .and_then(Value::as_str)
+                    .ok_or(FrameworkError::validation(
+                        "figures check requires 'path' (string path to .tex file)",
+                    ))?;
             core_state_utils::path_guard::reject_unsafe_path(Path::new(path))
                 .map_err(|e| FrameworkError::validation(format!("path rejected: {e}")))?;
             let missing = crate::verification::structure::check_figure_references(Path::new(path))
-                .map_err(|e| FrameworkError::validation(format!("figure reference check failed: {e}")))?;
+                .map_err(|e| {
+                    FrameworkError::validation(format!("figure reference check failed: {e}"))
+                })?;
             serde_json::to_string_pretty(&json!({
                 "check": "figure_references", "path": path,
                 "missing_refs": missing, "has_missing": !missing.is_empty(),
                 "total_missing": missing.len(),
-            })).map_err(FrameworkError::Json)
+            }))
+            .map_err(FrameworkError::Json)
         }
-        _ => Err(FrameworkError::validation(format!("unknown structure check: {check}"))),
+        _ => Err(FrameworkError::validation(format!(
+            "unknown structure check: {check}"
+        ))),
     }
 }
 
 // ── Inequality tool functions ──
 
 fn tool_math_prove_inequality(arguments: &Value) -> Result<String, FrameworkError> {
-    let expr = arguments.get("expression").and_then(Value::as_str)
-        .ok_or(FrameworkError::validation("math_prove_inequality requires 'expression' (string)"))?;
+    let expr =
+        arguments
+            .get("expression")
+            .and_then(Value::as_str)
+            .ok_or(FrameworkError::validation(
+                "math_prove_inequality requires 'expression' (string)",
+            ))?;
     let timeout = arguments.get("timeout_ms").and_then(Value::as_u64);
     let vr = crate::verification::inequality::check_inequality(expr, timeout);
     serde_json::to_string_pretty(&json!({
         "check_name": vr.check_name, "status": format!("{:?}", vr.status),
         "details": vr.details, "expression": expr,
-    })).map_err(FrameworkError::Json)
+    }))
+    .map_err(FrameworkError::Json)
 }
 
 fn tool_math_backend_available(_arguments: &Value) -> Result<String, FrameworkError> {
@@ -275,9 +426,10 @@ fn tool_math_backend_available(_arguments: &Value) -> Result<String, FrameworkEr
         crate::verification::lean_bridge::LeanStatus::Available => {
             (true, "Lean 4 theorem prover is installed".to_string())
         }
-        crate::verification::lean_bridge::LeanStatus::NotFound { install_guide, .. } => {
-            (false, format!("Lean 4 — not found. Install guide: {install_guide}"))
-        }
+        crate::verification::lean_bridge::LeanStatus::NotFound { install_guide, .. } => (
+            false,
+            format!("Lean 4 — not found. Install guide: {install_guide}"),
+        ),
     };
     serde_json::to_string_pretty(&json!({
         "inequality_engine": {
@@ -290,37 +442,76 @@ fn tool_math_backend_available(_arguments: &Value) -> Result<String, FrameworkEr
         },
         "lean": { "available": lean_available, "description": lean_desc },
         "install_hint": "All math tools are pure Rust — no Python dependencies required.",
-    })).map_err(FrameworkError::Json)
+    }))
+    .map_err(FrameworkError::Json)
 }
 
 // ── Asymptotic tool functions ──
 
 fn tool_math_asymptotic_estimate(arguments: &Value) -> Result<String, FrameworkError> {
-    let expr = arguments.get("expression").and_then(Value::as_str)
-        .ok_or(FrameworkError::validation("math_asymptotic_estimate requires 'expression' (string)"))?;
-    let var = arguments.get("variable").and_then(Value::as_str).unwrap_or("x");
-    let regime = arguments.get("regime").and_then(Value::as_str).unwrap_or("oo");
-    let vr = crate::verification::asymptotic::magnitude_estimate_with_name(expr, var, regime, "math_asymptotic_estimate");
+    let expr =
+        arguments
+            .get("expression")
+            .and_then(Value::as_str)
+            .ok_or(FrameworkError::validation(
+                "math_asymptotic_estimate requires 'expression' (string)",
+            ))?;
+    let var = arguments
+        .get("variable")
+        .and_then(Value::as_str)
+        .unwrap_or("x");
+    let regime = arguments
+        .get("regime")
+        .and_then(Value::as_str)
+        .unwrap_or("oo");
+    let vr = crate::verification::asymptotic::magnitude_estimate_with_name(
+        expr,
+        var,
+        regime,
+        "math_asymptotic_estimate",
+    );
     serde_json::to_string_pretty(&json!({
         "check_name": vr.check_name, "status": format!("{:?}", vr.status),
         "details": vr.details, "expression": expr,
-    })).map_err(FrameworkError::Json)
+    }))
+    .map_err(FrameworkError::Json)
 }
 
 fn tool_math_asymptotic_chain(arguments: &Value) -> Result<String, FrameworkError> {
-    let steps_val = arguments.get("steps").and_then(Value::as_array)
-        .ok_or(FrameworkError::validation("math_asymptotic_chain requires 'steps' array"))?;
-    let var = arguments.get("variable").and_then(Value::as_str).unwrap_or("x");
-    let regime = arguments.get("regime").and_then(Value::as_str).unwrap_or("oo");
-    let sympy_check = arguments.get("sympy_check").and_then(Value::as_bool).unwrap_or(true);
+    let steps_val =
+        arguments
+            .get("steps")
+            .and_then(Value::as_array)
+            .ok_or(FrameworkError::validation(
+                "math_asymptotic_chain requires 'steps' array",
+            ))?;
+    let var = arguments
+        .get("variable")
+        .and_then(Value::as_str)
+        .unwrap_or("x");
+    let regime = arguments
+        .get("regime")
+        .and_then(Value::as_str)
+        .unwrap_or("oo");
+    let sympy_check = arguments
+        .get("sympy_check")
+        .and_then(Value::as_bool)
+        .unwrap_or(true);
     let steps: Vec<crate::verification::asymptotic::AsymptoticStep> =
         serde_json::from_value(serde_json::Value::Array(steps_val.clone()))
             .map_err(|e| FrameworkError::Json(e))?;
-    let vr = crate::verification::asymptotic::verify_asymptotic_chain_with_name(&steps, var, regime, sympy_check, "math_asymptotic_chain");
+    let vr = crate::verification::asymptotic::verify_asymptotic_chain_with_name(
+        &steps,
+        var,
+        regime,
+        sympy_check,
+        "math_asymptotic_chain",
+    );
     serde_json::to_string_pretty(&json!({
         "check_name": vr.check_name, "status": format!("{:?}", vr.status),
         "details": vr.details, "steps": steps_val,
-    })).map_err(FrameworkError::Json)
+    }))
+    .map_err(FrameworkError::Json)
 }
 
 // ── Proof DAG tool functions ──
@@ -329,12 +520,11 @@ fn tool_math_asymptotic_chain(arguments: &Value) -> Result<String, FrameworkErro
 // Each tool accepts an optional `name` argument (defaults to "default").
 // Callers that may run concurrent proof sessions MUST pass distinct names.
 
-fn get_or_create_dag_store(
-) -> &'static std::sync::Mutex<HashMap<String, crate::proof_dag::Blueprint>> {
+fn get_or_create_dag_store()
+-> &'static std::sync::Mutex<HashMap<String, crate::proof_dag::Blueprint>> {
     use std::sync::OnceLock;
-    static STORE: OnceLock<
-        std::sync::Mutex<HashMap<String, crate::proof_dag::Blueprint>>,
-    > = OnceLock::new();
+    static STORE: OnceLock<std::sync::Mutex<HashMap<String, crate::proof_dag::Blueprint>>> =
+        OnceLock::new();
     STORE.get_or_init(|| std::sync::Mutex::new(HashMap::new()))
 }
 
@@ -354,7 +544,10 @@ fn tool_math_proof_dag_init(arguments: &Value) -> Result<String, FrameworkError>
         .ok_or(FrameworkError::validation(
             "math_proof_dag_init requires 'goal' (string)",
         ))?;
-    let name = arguments.get("name").and_then(Value::as_str).unwrap_or("proof");
+    let name = arguments
+        .get("name")
+        .and_then(Value::as_str)
+        .unwrap_or("proof");
     let dag_id = dag_name(arguments);
     let bp = crate::proof_dag::Blueprint::new(goal, name);
     let serialized = crate::proof_dag_serialize::serialize_blueprint(&bp)?;
@@ -365,19 +558,24 @@ fn tool_math_proof_dag_init(arguments: &Value) -> Result<String, FrameworkError>
 }
 
 fn tool_math_proof_dag_decompose(arguments: &Value) -> Result<String, FrameworkError> {
-    let parent_id = arguments
-        .get("parent_id")
-        .and_then(Value::as_str)
-        .ok_or(FrameworkError::validation(
-            "math_proof_dag_decompose requires 'parent_id'",
-        ))?;
-    let and = arguments.get("and").and_then(Value::as_bool).unwrap_or(false);
-    let children_val = arguments
-        .get("children")
-        .and_then(Value::as_array)
-        .ok_or(FrameworkError::validation(
-            "math_proof_dag_decompose requires 'children' array",
-        ))?;
+    let parent_id =
+        arguments
+            .get("parent_id")
+            .and_then(Value::as_str)
+            .ok_or(FrameworkError::validation(
+                "math_proof_dag_decompose requires 'parent_id'",
+            ))?;
+    let and = arguments
+        .get("and")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let children_val =
+        arguments
+            .get("children")
+            .and_then(Value::as_array)
+            .ok_or(FrameworkError::validation(
+                "math_proof_dag_decompose requires 'children' array",
+            ))?;
     let children: Vec<crate::proof_dag::DagNode> =
         serde_json::from_value(Value::Array(children_val.clone()))
             .map_err(|e| FrameworkError::Json(e))?;
@@ -427,12 +625,21 @@ fn tool_math_proof_dag_status(arguments: &Value) -> Result<String, FrameworkErro
 // ── SymPy bridge tool functions ──
 
 fn tool_math_sympy_verify(arguments: &Value) -> Result<String, FrameworkError> {
-    let lhs = arguments.get("lhs").and_then(Value::as_str)
-        .ok_or(FrameworkError::validation("math_sympy_verify requires 'lhs' (string)"))?;
-    let rhs = arguments.get("rhs").and_then(Value::as_str)
-        .ok_or(FrameworkError::validation("math_sympy_verify requires 'rhs' (string)"))?;
+    let lhs = arguments
+        .get("lhs")
+        .and_then(Value::as_str)
+        .ok_or(FrameworkError::validation(
+            "math_sympy_verify requires 'lhs' (string)",
+        ))?;
+    let rhs = arguments
+        .get("rhs")
+        .and_then(Value::as_str)
+        .ok_or(FrameworkError::validation(
+            "math_sympy_verify requires 'rhs' (string)",
+        ))?;
     // assumptions are accepted for backward compat but ignored (pure Rust)
-    let _assumptions: Vec<&str> = arguments.get("assumptions")
+    let _assumptions: Vec<&str> = arguments
+        .get("assumptions")
         .and_then(Value::as_array)
         .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect())
         .unwrap_or_default();
@@ -440,27 +647,40 @@ fn tool_math_sympy_verify(arguments: &Value) -> Result<String, FrameworkError> {
     serde_json::to_string_pretty(&json!({
         "check_name": vr.check_name, "status": format!("{:?}", vr.status),
         "details": vr.details, "lhs": lhs, "rhs": rhs,
-    })).map_err(FrameworkError::Json)
+    }))
+    .map_err(FrameworkError::Json)
 }
 
 fn tool_math_sympy_simplify(arguments: &Value) -> Result<String, FrameworkError> {
-    let expr = arguments.get("expression").and_then(Value::as_str)
-        .ok_or(FrameworkError::validation("math_sympy_simplify requires 'expression' (string)"))?;
+    let expr =
+        arguments
+            .get("expression")
+            .and_then(Value::as_str)
+            .ok_or(FrameworkError::validation(
+                "math_sympy_simplify requires 'expression' (string)",
+            ))?;
     let vr = crate::verification::sympy_bridge::simplify_expression(expr);
     serde_json::to_string_pretty(&json!({
         "check_name": vr.check_name, "status": format!("{:?}", vr.status),
         "details": vr.details, "expression": expr,
-    })).map_err(FrameworkError::Json)
+    }))
+    .map_err(FrameworkError::Json)
 }
 
 fn tool_math_lean_verify(arguments: &Value) -> Result<String, FrameworkError> {
-    let script = arguments.get("script").and_then(Value::as_str)
-        .ok_or(FrameworkError::validation("math_lean_verify requires 'script' (string)"))?;
+    let script =
+        arguments
+            .get("script")
+            .and_then(Value::as_str)
+            .ok_or(FrameworkError::validation(
+                "math_lean_verify requires 'script' (string)",
+            ))?;
     let vr = crate::verification::lean_bridge::verify_lean_theorem(script);
     serde_json::to_string_pretty(&json!({
         "check_name": vr.check_name, "status": format!("{:?}", vr.status),
         "details": vr.details,
-    })).map_err(FrameworkError::Json)
+    }))
+    .map_err(FrameworkError::Json)
 }
 
 fn parse_language(value: &Value, key: &str) -> crate::aigc::Language {
@@ -474,7 +694,9 @@ fn tool_research_aigc_check(arguments: &Value) -> Result<String, FrameworkError>
     let text = arguments
         .get("text")
         .and_then(Value::as_str)
-        .ok_or(FrameworkError::validation("research_aigc_check requires 'text' parameter"))?;
+        .ok_or(FrameworkError::validation(
+            "research_aigc_check requires 'text' parameter",
+        ))?;
     let language = parse_language(arguments, "language");
 
     let config = crate::aigc::detector::DetectionConfig {
@@ -495,10 +717,13 @@ fn tool_research_aigc_check(arguments: &Value) -> Result<String, FrameworkError>
 }
 
 fn tool_research_review_dimensions(arguments: &Value) -> Result<String, FrameworkError> {
-    let round = arguments
-        .get("round")
-        .and_then(Value::as_u64)
-        .ok_or(FrameworkError::validation("research_review_dimensions requires 'round' parameter"))?;
+    let round =
+        arguments
+            .get("round")
+            .and_then(Value::as_u64)
+            .ok_or(FrameworkError::validation(
+                "research_review_dimensions requires 'round' parameter",
+            ))?;
     let manuscript_summary = arguments
         .get("manuscript_summary")
         .and_then(Value::as_str)
@@ -507,11 +732,8 @@ fn tool_research_review_dimensions(arguments: &Value) -> Result<String, Framewor
     let dim = crate::types::ReviewDimension::for_round(round);
     let prompt = crate::review::dimensions::dimension_prompt(&dim);
     let checklist = crate::review::dimensions::dimension_checklist(&dim);
-    let full_prompt = crate::review::orchestrator::build_reviewer_prompt(
-        round,
-        &dim,
-        manuscript_summary,
-    );
+    let full_prompt =
+        crate::review::orchestrator::build_reviewer_prompt(round, &dim, manuscript_summary);
 
     serde_json::to_string_pretty(&json!({
         "round": round,
@@ -567,19 +789,35 @@ fn tool_research_claim_drift(arguments: &Value) -> Result<String, FrameworkError
     let original_claims = arguments
         .get("original_claims")
         .and_then(Value::as_array)
-        .ok_or(FrameworkError::validation("research_claim_drift requires 'original_claims' array"))?;
+        .ok_or(FrameworkError::validation(
+            "research_claim_drift requires 'original_claims' array",
+        ))?;
     let current_claims = arguments
         .get("current_claims")
         .and_then(Value::as_array)
-        .ok_or(FrameworkError::validation("research_claim_drift requires 'current_claims' array"))?;
+        .ok_or(FrameworkError::validation(
+            "research_claim_drift requires 'current_claims' array",
+        ))?;
 
     let parse_claims = |arr: &[Value]| -> Vec<crate::types::Claim> {
         arr.iter()
             .map(|v| {
-                let id = v.get("id").and_then(Value::as_str).unwrap_or("").to_string();
-                let text = v.get("text").and_then(Value::as_str).unwrap_or("").to_string();
+                let id = v
+                    .get("id")
+                    .and_then(Value::as_str)
+                    .unwrap_or("")
+                    .to_string();
+                let text = v
+                    .get("text")
+                    .and_then(Value::as_str)
+                    .unwrap_or("")
+                    .to_string();
                 let ceiling = parse_claim_ceiling(v.get("ceiling").and_then(Value::as_str));
-                let evidence = parse_evidence_anchors(v.get("evidence").and_then(Value::as_array).map(|v| v.as_slice()));
+                let evidence = parse_evidence_anchors(
+                    v.get("evidence")
+                        .and_then(Value::as_array)
+                        .map(|v| v.as_slice()),
+                );
                 crate::types::Claim {
                     id,
                     text,
@@ -660,12 +898,13 @@ fn review_loop_start(arguments: &Value) -> Result<String, FrameworkError> {
 /// Operation `submit_round`: accept round + findings, return next-round dimension or completion.
 /// Stateless — convergence is managed by research_review_loop at the runtime layer.
 fn review_loop_submit_round(arguments: &Value) -> Result<String, FrameworkError> {
-    let round = arguments
-        .get("round")
-        .and_then(Value::as_u64)
-        .ok_or(FrameworkError::validation(
-            "research_review_loop submit_round requires 'round' (u64)",
-        ))?;
+    let round =
+        arguments
+            .get("round")
+            .and_then(Value::as_u64)
+            .ok_or(FrameworkError::validation(
+                "research_review_loop submit_round requires 'round' (u64)",
+            ))?;
 
     let max_rounds = arguments.get("max_rounds").and_then(Value::as_u64);
 
@@ -765,6 +1004,7 @@ fn tool_research_smoke(arguments: &Value) -> Result<String, FrameworkError> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use serde_json::json;
 
@@ -772,7 +1012,12 @@ mod tests {
     fn handle_research_tool_unknown() {
         let result = handle_research_tool("nonexistent_tool", &json!({}));
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("unknown research tool"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("unknown research tool")
+        );
     }
 
     #[test]
@@ -822,21 +1067,26 @@ mod tests {
 
     #[test]
     fn research_review_dimensions_round_1() {
-        let result = handle_research_tool(
-            "research_review_dimensions",
-            &json!({"round": 1}),
-        );
+        let result = handle_research_tool("research_review_dimensions", &json!({"round": 1}));
         assert!(result.is_ok());
         let parsed: Value = serde_json::from_str(&result.unwrap()).unwrap();
         assert_eq!(parsed.get("round").and_then(Value::as_u64), Some(1));
-        assert_eq!(parsed.get("dimension").and_then(Value::as_str), Some("逻辑与证据"));
+        assert_eq!(
+            parsed.get("dimension").and_then(Value::as_str),
+            Some("逻辑与证据")
+        );
     }
 
     #[test]
     fn research_claim_drift_missing_required() {
         let result = handle_research_tool("research_claim_drift", &json!({}));
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("requires 'original_claims'"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("requires 'original_claims'")
+        );
     }
 
     #[test]
@@ -881,7 +1131,10 @@ mod tests {
         );
         assert!(result.is_ok());
         let parsed: Value = serde_json::from_str(&result.unwrap()).unwrap();
-        assert_eq!(parsed.get("total_claims_analyzed").and_then(Value::as_u64), Some(0));
+        assert_eq!(
+            parsed.get("total_claims_analyzed").and_then(Value::as_u64),
+            Some(0)
+        );
     }
 
     #[test]
@@ -889,11 +1142,19 @@ mod tests {
         let result = handle_research_tool("research_review_loop", &json!({}));
         assert!(result.is_ok());
         let parsed: Value = serde_json::from_str(&result.unwrap()).unwrap();
-        assert_eq!(parsed.get("operation").and_then(Value::as_str), Some("started"));
+        assert_eq!(
+            parsed.get("operation").and_then(Value::as_str),
+            Some("started")
+        );
         let config = parsed.get("quality_gate_config").unwrap();
         assert_eq!(config.get("min_rounds").and_then(Value::as_u64), Some(5));
         assert_eq!(config.get("max_rounds").and_then(Value::as_u64), Some(10));
-        assert_eq!(config.get("consecutive_stable_required").and_then(Value::as_u64), Some(2));
+        assert_eq!(
+            config
+                .get("consecutive_stable_required")
+                .and_then(Value::as_u64),
+            Some(2)
+        );
         assert!(parsed.get("current_round").is_some());
     }
 
@@ -905,7 +1166,10 @@ mod tests {
         );
         assert!(result.is_ok());
         let parsed: Value = serde_json::from_str(&result.unwrap()).unwrap();
-        assert_eq!(parsed.get("operation").and_then(Value::as_str), Some("started"));
+        assert_eq!(
+            parsed.get("operation").and_then(Value::as_str),
+            Some("started")
+        );
         let config = parsed.get("quality_gate_config").unwrap();
         assert_eq!(config.get("max_rounds").and_then(Value::as_u64), Some(3));
         assert_eq!(config.get("min_rounds").and_then(Value::as_u64), Some(1));
@@ -914,14 +1178,14 @@ mod tests {
 
     #[test]
     fn research_review_loop_status_round_1() {
-        let result = handle_research_tool(
-            "research_review_loop",
-            &json!({"operation": "status"}),
-        );
+        let result = handle_research_tool("research_review_loop", &json!({"operation": "status"}));
         assert!(result.is_ok());
         let parsed: Value = serde_json::from_str(&result.unwrap()).unwrap();
         assert_eq!(parsed.get("round").and_then(Value::as_u64), Some(1));
-        assert_eq!(parsed.get("dimension").and_then(Value::as_str), Some("逻辑与证据"));
+        assert_eq!(
+            parsed.get("dimension").and_then(Value::as_str),
+            Some("逻辑与证据")
+        );
     }
 
     #[test]
@@ -933,7 +1197,10 @@ mod tests {
         assert!(result.is_ok());
         let parsed: Value = serde_json::from_str(&result.unwrap()).unwrap();
         assert_eq!(parsed.get("round").and_then(Value::as_u64), Some(3));
-        assert_eq!(parsed.get("dimension").and_then(Value::as_str), Some("数学与符号"));
+        assert_eq!(
+            parsed.get("dimension").and_then(Value::as_str),
+            Some("数学与符号")
+        );
     }
 
     #[test]
@@ -954,9 +1221,18 @@ mod tests {
         );
         assert!(result.is_ok());
         let parsed: Value = serde_json::from_str(&result.unwrap()).unwrap();
-        assert_eq!(parsed.get("operation").and_then(Value::as_str), Some("continue"));
-        assert_eq!(parsed.get("round_completed").and_then(Value::as_u64), Some(1));
-        assert_eq!(parsed.get("has_blocking").and_then(Value::as_bool), Some(false));
+        assert_eq!(
+            parsed.get("operation").and_then(Value::as_str),
+            Some("continue")
+        );
+        assert_eq!(
+            parsed.get("round_completed").and_then(Value::as_u64),
+            Some(1)
+        );
+        assert_eq!(
+            parsed.get("has_blocking").and_then(Value::as_bool),
+            Some(false)
+        );
         let next = parsed.get("next_round").unwrap();
         assert_eq!(next.get("round").and_then(Value::as_u64), Some(2));
     }
@@ -973,17 +1249,22 @@ mod tests {
         );
         assert!(result.is_ok());
         let parsed: Value = serde_json::from_str(&result.unwrap()).unwrap();
-        assert_eq!(parsed.get("has_blocking").and_then(Value::as_bool), Some(true));
+        assert_eq!(
+            parsed.get("has_blocking").and_then(Value::as_bool),
+            Some(true)
+        );
     }
 
     #[test]
     fn research_review_loop_unknown_operation() {
-        let result = handle_research_tool(
-            "research_review_loop",
-            &json!({"operation": "unknown"}),
-        );
+        let result = handle_research_tool("research_review_loop", &json!({"operation": "unknown"}));
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("unknown operation"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("unknown operation")
+        );
     }
 
     #[test]
@@ -994,10 +1275,16 @@ mod tests {
         );
         assert!(result.is_ok());
         let parsed: Value = serde_json::from_str(&result.unwrap()).unwrap();
-        assert_eq!(parsed.get("round_completed").and_then(Value::as_u64), Some(3));
+        assert_eq!(
+            parsed.get("round_completed").and_then(Value::as_u64),
+            Some(3)
+        );
         let next = parsed.get("next_round").unwrap();
         assert_eq!(next.get("round").and_then(Value::as_u64), Some(4));
-        assert_eq!(next.get("dimension").and_then(Value::as_str), Some("图表与可读性"));
+        assert_eq!(
+            next.get("dimension").and_then(Value::as_str),
+            Some("图表与可读性")
+        );
     }
 
     #[test]
@@ -1009,9 +1296,17 @@ mod tests {
         );
         assert!(result.is_ok());
         let parsed: Value = serde_json::from_str(&result.unwrap()).unwrap();
-        assert_eq!(parsed.get("operation").and_then(Value::as_str), Some("completed"));
-        assert!(parsed.get("reason").and_then(Value::as_str)
-            .unwrap_or("").contains("max_rounds"));
+        assert_eq!(
+            parsed.get("operation").and_then(Value::as_str),
+            Some("completed")
+        );
+        assert!(
+            parsed
+                .get("reason")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .contains("max_rounds")
+        );
 
         // round > max_rounds → also completed
         let result = handle_research_tool(
@@ -1020,7 +1315,10 @@ mod tests {
         );
         assert!(result.is_ok());
         let parsed: Value = serde_json::from_str(&result.unwrap()).unwrap();
-        assert_eq!(parsed.get("operation").and_then(Value::as_str), Some("completed"));
+        assert_eq!(
+            parsed.get("operation").and_then(Value::as_str),
+            Some("completed")
+        );
 
         // no max_rounds → proceeds normally (backward compat)
         let result = handle_research_tool(
@@ -1029,38 +1327,68 @@ mod tests {
         );
         assert!(result.is_ok());
         let parsed: Value = serde_json::from_str(&result.unwrap()).unwrap();
-        assert_eq!(parsed.get("operation").and_then(Value::as_str), Some("continue"));
+        assert_eq!(
+            parsed.get("operation").and_then(Value::as_str),
+            Some("continue")
+        );
     }
 
     #[test]
     fn parse_language_defaults_to_english() {
         let value = json!({});
-        assert_eq!(parse_language(&value, "language"), crate::aigc::Language::English);
+        assert_eq!(
+            parse_language(&value, "language"),
+            crate::aigc::Language::English
+        );
     }
 
     #[test]
     fn parse_language_zh() {
         let value = json!({"language": "zh"});
-        assert_eq!(parse_language(&value, "language"), crate::aigc::Language::Chinese);
+        assert_eq!(
+            parse_language(&value, "language"),
+            crate::aigc::Language::Chinese
+        );
     }
 
     #[test]
     fn parse_language_en() {
         let value = json!({"language": "en"});
-        assert_eq!(parse_language(&value, "language"), crate::aigc::Language::English);
+        assert_eq!(
+            parse_language(&value, "language"),
+            crate::aigc::Language::English
+        );
     }
 
     #[test]
     fn parse_claim_ceiling_variants() {
         use crate::types::ClaimCeiling;
         assert_eq!(parse_claim_ceiling(Some("no-claim")), ClaimCeiling::NoClaim);
-        assert_eq!(parse_claim_ceiling(Some("local-only")), ClaimCeiling::LocalOnly);
-        assert_eq!(parse_claim_ceiling(Some("conference-ready")), ClaimCeiling::ConferenceReady);
-        assert_eq!(parse_claim_ceiling(Some("conference_ready")), ClaimCeiling::ConferenceReady);
-        assert_eq!(parse_claim_ceiling(Some("top-venue")), ClaimCeiling::TopVenue);
-        assert_eq!(parse_claim_ceiling(Some("top_venue")), ClaimCeiling::TopVenue);
+        assert_eq!(
+            parse_claim_ceiling(Some("local-only")),
+            ClaimCeiling::LocalOnly
+        );
+        assert_eq!(
+            parse_claim_ceiling(Some("conference-ready")),
+            ClaimCeiling::ConferenceReady
+        );
+        assert_eq!(
+            parse_claim_ceiling(Some("conference_ready")),
+            ClaimCeiling::ConferenceReady
+        );
+        assert_eq!(
+            parse_claim_ceiling(Some("top-venue")),
+            ClaimCeiling::TopVenue
+        );
+        assert_eq!(
+            parse_claim_ceiling(Some("top_venue")),
+            ClaimCeiling::TopVenue
+        );
         assert_eq!(parse_claim_ceiling(None), ClaimCeiling::ConferenceReady);
-        assert_eq!(parse_claim_ceiling(Some("unknown")), ClaimCeiling::ConferenceReady);
+        assert_eq!(
+            parse_claim_ceiling(Some("unknown")),
+            ClaimCeiling::ConferenceReady
+        );
     }
 
     #[test]
@@ -1089,7 +1417,12 @@ mod tests {
     fn test_math_prove_inequality_missing_expression() {
         let result = handle_research_tool("math_prove_inequality", &json!({}));
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("requires 'expression'"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("requires 'expression'")
+        );
     }
 
     #[test]
@@ -1102,7 +1435,12 @@ mod tests {
     fn test_math_asymptotic_estimate_missing_expression() {
         let result = handle_research_tool("math_asymptotic_estimate", &json!({}));
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("requires 'expression'"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("requires 'expression'")
+        );
     }
 
     #[test]
@@ -1114,10 +1452,13 @@ mod tests {
 
     #[test]
     fn test_math_asymptotic_chain_invalid_step_format() {
-        let result = handle_research_tool("math_asymptotic_chain", &json!({
-            "steps": [{"premise": "n", "relation": "InvalidOp"}],
-            "variable": "n", "regime": "oo",
-        }));
+        let result = handle_research_tool(
+            "math_asymptotic_chain",
+            &json!({
+                "steps": [{"premise": "n", "relation": "InvalidOp"}],
+                "variable": "n", "regime": "oo",
+            }),
+        );
         assert!(result.is_err());
     }
 
@@ -1132,21 +1473,36 @@ mod tests {
     fn test_math_proof_dag_decompose_missing_parent_id() {
         let result = handle_research_tool("math_proof_dag_decompose", &json!({}));
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("requires 'parent_id'"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("requires 'parent_id'")
+        );
     }
 
     #[test]
     fn test_math_proof_dag_verify_without_init() {
         let result = handle_research_tool("math_proof_dag_verify", &json!({}));
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("no proof DAG for this name"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("no proof DAG for this name")
+        );
     }
 
     #[test]
     fn test_math_proof_dag_status_without_init() {
         let result = handle_research_tool("math_proof_dag_status", &json!({}));
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("no proof DAG for this name"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("no proof DAG for this name")
+        );
     }
 
     #[test]
@@ -1167,14 +1523,24 @@ mod tests {
     fn test_math_sympy_simplify_missing_expression() {
         let result = handle_research_tool("math_sympy_simplify", &json!({}));
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("requires 'expression'"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("requires 'expression'")
+        );
     }
 
     #[test]
     fn test_math_lean_verify_missing_script() {
         let result = handle_research_tool("math_lean_verify", &json!({}));
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("requires 'script'"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("requires 'script'")
+        );
     }
 
     #[test]
@@ -1187,7 +1553,12 @@ mod tests {
     fn test_math_unknown_tool() {
         let result = handle_research_tool("math_nonexistent", &json!({}));
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("unknown math tool"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("unknown math tool")
+        );
     }
 
     #[test]
@@ -1195,6 +1566,9 @@ mod tests {
         let result = handle_research_tool("math_future_tool", &json!({}));
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();
-        assert!(err.contains("unknown") || err.contains("requires"), "wrong routing: {err}");
+        assert!(
+            err.contains("unknown") || err.contains("requires"),
+            "wrong routing: {err}"
+        );
     }
 }

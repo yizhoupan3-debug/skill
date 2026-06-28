@@ -2,7 +2,7 @@
 //!
 //! 从 autoresearch-rs/search.rs 迁入策略层逻辑。
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use super::helpers::compact_words;
 use crate::util::{novelty_gate, novelty_gate_mut, str_field, str_field_default};
@@ -19,7 +19,10 @@ pub fn default_required_evidence(axis: &str) -> Vec<String> {
             "Claims about what is structurally different".into(),
         ];
     }
-    if axis_lower.contains("setting") || axis_lower.contains("domain") || axis_lower.contains("task") {
+    if axis_lower.contains("setting")
+        || axis_lower.contains("domain")
+        || axis_lower.contains("task")
+    {
         return vec![
             "Prior work in the same domain or task".into(),
             "Recent competitors in the last 3 years".into(),
@@ -36,12 +39,43 @@ pub fn default_required_evidence(axis: &str) -> Vec<String> {
 /// 为 claim 生成 4 种搜索查询变体（broad/focused/recent/combination）。
 pub fn build_search_queries(claim: &str, axis: &str) -> Vec<Value> {
     let keywords = compact_words(claim, 6);
-    let broad_terms = if keywords.is_empty() { claim.to_string() } else { keywords.iter().take(3).cloned().collect::<Vec<_>>().join(" ") };
-    let focused_terms = if keywords.is_empty() { claim.to_string() } else { keywords.iter().take(5).cloned().collect::<Vec<_>>().join(" ") };
+    let broad_terms = if keywords.is_empty() {
+        claim.to_string()
+    } else {
+        keywords
+            .iter()
+            .take(3)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join(" ")
+    };
+    let focused_terms = if keywords.is_empty() {
+        claim.to_string()
+    } else {
+        keywords
+            .iter()
+            .take(5)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join(" ")
+    };
     let combination_terms = if keywords.len() >= 4 {
-        format!("{} {} {} {}", keywords[0], keywords[1], keywords[keywords.len() - 2], keywords[keywords.len() - 1])
-    } else { focused_terms.clone() };
-    let axis_hint = if axis.trim().is_empty() { "claim" } else { axis.trim() }.to_lowercase();
+        format!(
+            "{} {} {} {}",
+            keywords[0],
+            keywords[1],
+            keywords[keywords.len() - 2],
+            keywords[keywords.len() - 1]
+        )
+    } else {
+        focused_terms.clone()
+    };
+    let axis_hint = if axis.trim().is_empty() {
+        "claim"
+    } else {
+        axis.trim()
+    }
+    .to_lowercase();
     vec![
         json!({"label": "broad", "query": broad_terms}),
         json!({"label": "focused", "query": format!("{focused_terms} {axis_hint}").trim()}),
@@ -69,7 +103,10 @@ pub fn score_claim_priority(record: &Value) -> Value {
     match record.get("overlap").and_then(Value::as_str) {
         Some("low") => novelty += 2,
         Some("medium") => novelty += 1,
-        Some("high") => { novelty -= 1; reviewer += 1; }
+        Some("high") => {
+            novelty -= 1;
+            reviewer += 1;
+        }
         _ => {}
     }
     match record.get("confidence").and_then(Value::as_str) {
@@ -80,16 +117,33 @@ pub fn score_claim_priority(record: &Value) -> Value {
     match record.get("verdict").and_then(Value::as_str) {
         Some("novel") => novelty += 2,
         Some("defensible") => novelty += 1,
-        Some("risky") => { reviewer += 1; cost += 1; }
-        Some("not-novel") => { novelty -= 2; cost += 1; }
+        Some("risky") => {
+            reviewer += 1;
+            cost += 1;
+        }
+        Some("not-novel") => {
+            novelty -= 2;
+            cost += 1;
+        }
         _ => {}
     }
     let score = novelty * 3 + reviewer * 2 - cost * 2;
-    let label = if score >= 18 { "first" } else if score >= 13 { "next" } else { "later" };
-    let reason = if novelty >= reviewer && cost <= 2 { "high novelty upside with cheap verification" }
-        else if reviewer >= novelty && cost <= 3 { "reviewer pressure is high" }
-        else if cost >= 4 { "verification is expensive" }
-        else { "worth checking, but not the best first target" };
+    let label = if score >= 18 {
+        "first"
+    } else if score >= 13 {
+        "next"
+    } else {
+        "later"
+    };
+    let reason = if novelty >= reviewer && cost <= 2 {
+        "high novelty upside with cheap verification"
+    } else if reviewer >= novelty && cost <= 3 {
+        "reviewer pressure is high"
+    } else if cost >= 4 {
+        "verification is expensive"
+    } else {
+        "worth checking, but not the best first target"
+    };
     let mut out = record.clone();
     #[allow(clippy::expect_used)]
     let map = out.as_object_mut().expect("claim record must be object");
@@ -118,17 +172,35 @@ pub fn prioritize_claims(records: &[Value]) -> Vec<Value> {
 /// 为 axis 生成预期 baselines 列表。
 pub fn expected_baselines_for_axis(axis: &str) -> Vec<String> {
     match axis {
-        "method" => vec!["Random baseline".into(), "Previous SOTA".into(), "Ablation without key component".into()],
-        "task" => vec!["Same task, different method".into(), "Same method, different task".into(), "Transfer baseline".into()],
-        "setting" => vec!["In-domain baseline".into(), "Out-of-domain baseline".into(), "Zero-shot baseline".into()],
-        _ => vec!["Naive baseline".into(), "Prior work baseline".into(), "Oracle baseline".into()],
+        "method" => vec![
+            "Random baseline".into(),
+            "Previous SOTA".into(),
+            "Ablation without key component".into(),
+        ],
+        "task" => vec![
+            "Same task, different method".into(),
+            "Same method, different task".into(),
+            "Transfer baseline".into(),
+        ],
+        "setting" => vec![
+            "In-domain baseline".into(),
+            "Out-of-domain baseline".into(),
+            "Zero-shot baseline".into(),
+        ],
+        _ => vec![
+            "Naive baseline".into(),
+            "Prior work baseline".into(),
+            "Oracle baseline".into(),
+        ],
     }
 }
 
 /// 验证标准描述。
 pub fn verification_standard_for_priority(priority: &str) -> &'static str {
     match priority {
-        "first" => "Must have at least one direct overlap paper and one structural difference claim.",
+        "first" => {
+            "Must have at least one direct overlap paper and one structural difference claim."
+        }
         "next" => "Needs either a closest-prior-work comparison or a recent competitor.",
         "later" => "Can proceed with weaker evidence if the claim is narrow and low-risk.",
         _ => "Standard verification.",
@@ -206,10 +278,7 @@ pub fn current_search_plan(state: &Value) -> Vec<Value> {
     } else {
         novelty_arr(state, "draft_claims").to_vec()
     };
-    let mut plan: Vec<Value> = source_records
-        .iter()
-        .map(build_search_plan_entry)
-        .collect();
+    let mut plan: Vec<Value> = source_records.iter().map(build_search_plan_entry).collect();
     plan.sort_by(|a, b| {
         let order_a = a
             .get("recommended_order")
@@ -281,13 +350,17 @@ pub fn refresh_novelty_views(state: &mut Value) {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     #[test]
     fn build_search_queries_returns_four() {
         let queries = build_search_queries("neural architecture search efficiency", "method");
         assert_eq!(queries.len(), 4);
-        let labels: Vec<&str> = queries.iter().filter_map(|q| q.get("label").and_then(Value::as_str)).collect();
+        let labels: Vec<&str> = queries
+            .iter()
+            .filter_map(|q| q.get("label").and_then(Value::as_str))
+            .collect();
         assert!(labels.contains(&"broad"));
         assert!(labels.contains(&"focused"));
         assert!(labels.contains(&"recent"));
@@ -302,18 +375,28 @@ mod tests {
 
     #[test]
     fn score_claim_priority_novel_low_overlap() {
-        let record = json!({"axis": "method", "overlap": "low", "confidence": "high", "verdict": "novel"});
+        let record =
+            json!({"axis": "method", "overlap": "low", "confidence": "high", "verdict": "novel"});
         let scored = score_claim_priority(&record);
-        let score = scored.get("priority_score").and_then(Value::as_i64).unwrap();
+        let score = scored
+            .get("priority_score")
+            .and_then(Value::as_i64)
+            .unwrap();
         assert!(score > 15, "expected high score, got {score}");
-        assert_eq!(scored.get("priority_label").and_then(Value::as_str), Some("first"));
+        assert_eq!(
+            scored.get("priority_label").and_then(Value::as_str),
+            Some("first")
+        );
     }
 
     #[test]
     fn score_claim_priority_not_novel_high_overlap() {
         let record = json!({"axis": "method", "overlap": "high", "confidence": "low", "verdict": "not-novel"});
         let scored = score_claim_priority(&record);
-        let score = scored.get("priority_score").and_then(Value::as_i64).unwrap();
+        let score = scored
+            .get("priority_score")
+            .and_then(Value::as_i64)
+            .unwrap();
         assert!(score < 13, "expected low score, got {score}");
     }
 
@@ -324,8 +407,16 @@ mod tests {
             json!({"claim_id": "C1", "axis": "method", "overlap": "low", "verdict": "novel", "confidence": "high"}),
         ];
         let prioritized = prioritize_claims(&claims);
-        assert_eq!(prioritized[0].get("claim_id").and_then(Value::as_str), Some("C1"));
-        assert_eq!(prioritized[0].get("recommended_order").and_then(Value::as_i64), Some(1));
+        assert_eq!(
+            prioritized[0].get("claim_id").and_then(Value::as_str),
+            Some("C1")
+        );
+        assert_eq!(
+            prioritized[0]
+                .get("recommended_order")
+                .and_then(Value::as_i64),
+            Some(1)
+        );
     }
 
     #[test]
@@ -353,7 +444,10 @@ mod tests {
         });
         let claim = top_priority_claim(&state);
         assert!(claim.is_some());
-        assert_eq!(claim.unwrap().get("claim_id").and_then(Value::as_str), Some("C1"));
+        assert_eq!(
+            claim.unwrap().get("claim_id").and_then(Value::as_str),
+            Some("C1")
+        );
     }
 
     #[test]

@@ -48,7 +48,9 @@ pub fn compute_ceiling(claims: &[Claim]) -> ClaimCeiling {
         return ClaimCeiling::NoClaim;
     }
 
-    let has_top = claims.iter().any(|c| matches!(c.ceiling, ClaimCeiling::TopVenue));
+    let has_top = claims
+        .iter()
+        .any(|c| matches!(c.ceiling, ClaimCeiling::TopVenue));
     let has_conf = claims
         .iter()
         .any(|c| matches!(c.ceiling, ClaimCeiling::ConferenceReady));
@@ -191,6 +193,7 @@ fn render_ledger_markdown(claims: &[Claim]) -> String {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     #[test]
@@ -235,7 +238,10 @@ mod tests {
         assert_eq!(loaded[0].id, "C1");
         assert_eq!(loaded[0].text, "Method X improves accuracy by 5%");
         assert_eq!(loaded[0].evidence.len(), 2);
-        assert!(matches!(loaded[0].evidence[0].strength, EvidenceStrength::Strong));
+        assert!(matches!(
+            loaded[0].evidence[0].strength,
+            EvidenceStrength::Strong
+        ));
         assert!(matches!(loaded[0].ceiling, ClaimCeiling::ConferenceReady));
         assert!(matches!(loaded[1].ceiling, ClaimCeiling::NoClaim));
     }

@@ -3,11 +3,8 @@ use serde_json::{Value, json};
 pub(crate) const HARNESS_CONTRACT_SCHEMA_VERSION: &str = "router-rs-harness-contract-v1";
 
 pub use framework_kernel::skill_lint::{
-    lint_skill_contracts,
-    HARNESS_CONTRACT_AUTHORITY,
-    HARNESS_SKILL_LINT_SCHEMA_VERSION,
-    FAILURE_TAXONOMY,
-    failure_taxonomy_values,
+    FAILURE_TAXONOMY, HARNESS_CONTRACT_AUTHORITY, HARNESS_SKILL_LINT_SCHEMA_VERSION,
+    failure_taxonomy_values, lint_skill_contracts,
 };
 
 pub fn harness_contract() -> Value {
@@ -53,6 +50,7 @@ pub fn harness_contract() -> Value {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use std::path::PathBuf;
 

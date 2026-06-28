@@ -34,8 +34,8 @@ pub fn dispatch_browser_command(
             ),
         ),
         BrowserSubcommand::ResolveAttachArtifact(command) => {
-            let repo_root = resolve_repo_root_arg(command.repo_root.as_deref())
-                .map_err(anyhow::Error::msg)?;
+            let repo_root =
+                resolve_repo_root_arg(command.repo_root.as_deref()).map_err(anyhow::Error::msg)?;
             let Some(path) =
                 resolve_browser_mcp_attach_artifact(&repo_root, command.search_root.as_deref())
             else {

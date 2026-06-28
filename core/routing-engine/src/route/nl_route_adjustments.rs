@@ -149,7 +149,8 @@ pub fn embedded_schema_version() -> &'static str {
 pub fn nl_route_signal_registry_names_json() -> String {
     let mut names: Vec<&'static str> = NL_SIGNAL_REGISTRY.iter().map(|e| e.name).collect();
     names.sort_unstable();
-    serde_json::to_string(&names).expect("Vec<&str> serialization is infallible")
+    serde_json::to_string(&names)
+        .unwrap_or_else(|_| panic!("Vec<&str> serialization is infallible"))
 }
 
 fn nl_registry_find(name: &str) -> Option<NlSignalEvalFn> {
@@ -478,9 +479,10 @@ pub fn visual_evidence_markers() -> &'static [String] {
 
 fn matches_record_filter(filter: &RecordFilter, record: &SkillRecord) -> bool {
     if let Some(s) = &filter.slug
-        && record.slug != *s {
-            return false;
-        }
+        && record.slug != *s
+    {
+        return false;
+    }
     if let Some(arr) = &filter.slugs {
         let ok = arr.iter().any(|s| s == record.slug.as_str());
         if !ok {
@@ -488,9 +490,10 @@ fn matches_record_filter(filter: &RecordFilter, record: &SkillRecord) -> bool {
         }
     }
     if let Some(g) = &filter.gate_lower
-        && record.gate_lower != *g {
-            return false;
-        }
+        && record.gate_lower != *g
+    {
+        return false;
+    }
     true
 }
 
@@ -660,7 +663,7 @@ pub fn apply_nl_post_framework_alias_rules<'a>(
 
 #[cfg(test)]
 mod tests {
-    
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     #[test]
@@ -776,7 +779,8 @@ mod tests {
     fn nl_boost_cap_cross_reference() {
         let nl = compiled_nl();
         for (phase_name, rules) in [("pre", &nl.pre), ("post", &nl.post)] {
-            let mut slug_totals: std::collections::HashMap<String, f64> = std::collections::HashMap::new();
+            let mut slug_totals: std::collections::HashMap<String, f64> =
+                std::collections::HashMap::new();
             for rule in rules {
                 if let CompiledAction::Boost { delta, .. } = &rule.action {
                     assert!(

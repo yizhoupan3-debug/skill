@@ -3,7 +3,6 @@
 //! These are small helpers used across multiple framework_runtime submodules.
 //! They do not depend on any other framework_runtime submodule.
 
-
 use core_errors::FrameworkError;
 
 use crate::constants::TASK_REGISTRY_SCHEMA_VERSION;
@@ -35,7 +34,10 @@ pub fn hash_file_for_test(path: &Path) -> Result<String, FrameworkError> {
 
 /// Write a JSON value to a path, serializing to pretty-printed text first.
 /// Delegates to core_state_utils::json_io (ADR §9 canonical).
-pub fn write_json_if_changed_unlocked(path: &Path, payload: &Value) -> Result<bool, FrameworkError> {
+pub fn write_json_if_changed_unlocked(
+    path: &Path,
+    payload: &Value,
+) -> Result<bool, FrameworkError> {
     core_state_utils::json_io::write_json_if_changed(path, payload)
 }
 
@@ -43,13 +45,21 @@ pub fn write_json_if_changed_unlocked(path: &Path, payload: &Value) -> Result<bo
 pub use framework_kernel::time::current_local_timestamp;
 
 /// Extract and validate a required text field from a JSON payload.
-pub fn required_payload_text(payload: &Value, key: &str, context: &str) -> Result<String, FrameworkError> {
+pub fn required_payload_text(
+    payload: &Value,
+    key: &str,
+    context: &str,
+) -> Result<String, FrameworkError> {
     let Some(v) = payload.get(key) else {
-        return Err(FrameworkError::Validation { message: format!("{context}: missing required field {key:?}") });
+        return Err(FrameworkError::Validation {
+            message: format!("{context}: missing required field {key:?}"),
+        });
     };
     let s = value_text(Some(v));
     if s.trim().is_empty() {
-        return Err(FrameworkError::Validation { message: format!("{context}: required field {key:?} is empty") });
+        return Err(FrameworkError::Validation {
+            message: format!("{context}: required field {key:?} is empty"),
+        });
     }
     Ok(s)
 }

@@ -11,9 +11,9 @@ use std::path::Path;
 #[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum CheckStatus {
     Pass,
-    Fail(String),   // blocker message
-    Warn(String),   // advisory note
-    Skip(String),   // skipped with reason
+    Fail(String), // blocker message
+    Warn(String), // advisory note
+    Skip(String), // skipped with reason
 }
 
 /// 可复现性验证报告。
@@ -30,16 +30,28 @@ pub struct CheckResult {
 
 /// 种子关键词集合（常见随机种子设置模式）。
 const SEED_KEYWORDS: &[&str] = &[
-    "seed", "random_state", "set_seed", "torch.manual_seed",
-    "numpy.random.seed", "tf.random.set_seed", "random.seed",
-    "deterministic", "CUBLAS_WORKSPACE_CONFIG",
+    "seed",
+    "random_state",
+    "set_seed",
+    "torch.manual_seed",
+    "numpy.random.seed",
+    "tf.random.set_seed",
+    "random.seed",
+    "deterministic",
+    "CUBLAS_WORKSPACE_CONFIG",
 ];
 
 /// Lockfile 文件名集合。
 const LOCKFILES: &[&str] = &[
-    "Cargo.lock", "uv.lock", "poetry.lock", "Pipfile.lock",
-    "package-lock.json", "yarn.lock", "pnpm-lock.yaml",
-    "Gemfile.lock", "mix.lock",
+    "Cargo.lock",
+    "uv.lock",
+    "poetry.lock",
+    "Pipfile.lock",
+    "package-lock.json",
+    "yarn.lock",
+    "pnpm-lock.yaml",
+    "Gemfile.lock",
+    "mix.lock",
 ];
 
 /// DVC / Git LFS 标记文件。
@@ -47,8 +59,13 @@ const DVC_MARKERS: &[&str] = &[".dvc", "dvc.lock", "dvc.yaml"];
 
 /// Checkpoint 文件名模式。
 const CHECKPOINT_PATTERNS: &[&str] = &[
-    "checkpoint", "checkpoint.pt", "checkpoint.pth", "model.ckpt",
-    "checkpoint.ckpt", "best_model.pt", "last.ckpt",
+    "checkpoint",
+    "checkpoint.pt",
+    "checkpoint.pth",
+    "model.ckpt",
+    "checkpoint.ckpt",
+    "best_model.pt",
+    "last.ckpt",
 ];
 
 /// 检查 #1: 种子已设置。
@@ -64,7 +81,11 @@ pub fn check_seed_set(experiment_dir: &Path) -> Result<CheckResult> {
             if path.is_dir() {
                 // 跳过隐藏目录和 artifacts
                 let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
-                if name.starts_with('.') || name == "artifacts" || name == "target" || name == "node_modules" {
+                if name.starts_with('.')
+                    || name == "artifacts"
+                    || name == "target"
+                    || name == "node_modules"
+                {
                     continue;
                 }
                 // 递归检查子目录（深度限制为 3）
@@ -75,9 +96,27 @@ pub fn check_seed_set(experiment_dir: &Path) -> Result<CheckResult> {
                 }
                 continue;
             }
-            if path.extension().and_then(|e| e.to_str()).map_or(false, |e| {
-                matches!(e, "py" | "rs" | "js" | "ts" | "java" | "cpp" | "h" | "hpp" | "cu" | "yaml" | "yml" | "toml" | "json")
-            }) {
+            if path
+                .extension()
+                .and_then(|e| e.to_str())
+                .map_or(false, |e| {
+                    matches!(
+                        e,
+                        "py" | "rs"
+                            | "js"
+                            | "ts"
+                            | "java"
+                            | "cpp"
+                            | "h"
+                            | "hpp"
+                            | "cu"
+                            | "yaml"
+                            | "yml"
+                            | "toml"
+                            | "json"
+                    )
+                })
+            {
                 if let Ok(content) = std::fs::read_to_string(&path) {
                     let lower = content.to_lowercase();
                     for kw in SEED_KEYWORDS {
@@ -126,7 +165,10 @@ fn sha256_hash(path: &Path) -> Result<String> {
     }
 
     let result = hasher.finalize();
-    Ok(result.iter().map(|b| format!("{b:02x}")).collect::<String>())
+    Ok(result
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect::<String>())
 }
 
 /// 检查 #2: 确定性重跑。
@@ -162,7 +204,9 @@ pub fn check_deterministic_rerun(run_paths: &[&Path]) -> Result<CheckResult> {
     } else {
         Ok(CheckResult {
             name: "deterministic_rerun",
-            status: CheckStatus::Fail("Rerun output hashes differ. Non-deterministic result detected.".into()),
+            status: CheckStatus::Fail(
+                "Rerun output hashes differ. Non-deterministic result detected.".into(),
+            ),
         })
     }
 }
@@ -257,7 +301,10 @@ pub fn check_checkpoint_recoverable(experiment_dir: &Path) -> Result<CheckResult
 
     if let Ok(entries) = walk_dir(experiment_dir, 2) {
         for entry in entries {
-            let fname = entry.file_name().map(|n| n.to_string_lossy().to_lowercase()).unwrap_or_default();
+            let fname = entry
+                .file_name()
+                .map(|n| n.to_string_lossy().to_lowercase())
+                .unwrap_or_default();
             if CHECKPOINT_PATTERNS.iter().any(|p| fname.contains(p)) {
                 match std::fs::metadata(&entry) {
                     Ok(meta) if meta.len() > 0 => {
@@ -287,7 +334,9 @@ pub fn check_checkpoint_recoverable(experiment_dir: &Path) -> Result<CheckResult
     } else {
         Ok(CheckResult {
             name: "checkpoint_recoverable",
-            status: CheckStatus::Skip("No checkpoint files found; skip if experiment is short-lived or stateless.".into()),
+            status: CheckStatus::Skip(
+                "No checkpoint files found; skip if experiment is short-lived or stateless.".into(),
+            ),
         })
     }
 }
@@ -341,6 +390,7 @@ fn walk_dir(dir: &Path, max_depth: usize) -> Result<Vec<std::path::PathBuf>> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use std::fs;
     use std::io::Write;
@@ -353,7 +403,11 @@ mod tests {
         writeln!(f, "import torch\nseed = 42\ntorch.manual_seed(seed)").unwrap();
 
         let result = check_seed_set(dir.path()).unwrap();
-        assert!(matches!(result.status, CheckStatus::Pass), "{:?}", result.status);
+        assert!(
+            matches!(result.status, CheckStatus::Pass),
+            "{:?}",
+            result.status
+        );
     }
 
     #[test]
@@ -372,7 +426,11 @@ mod tests {
         fs::write(dir.path().join("Cargo.lock"), "locked contents").unwrap();
 
         let result = check_environment_reproducible(dir.path()).unwrap();
-        assert!(matches!(result.status, CheckStatus::Pass), "{:?}", result.status);
+        assert!(
+            matches!(result.status, CheckStatus::Pass),
+            "{:?}",
+            result.status
+        );
     }
 
     #[test]
@@ -391,7 +449,11 @@ mod tests {
 
         let paths = &[dir1.path(), dir2.path()];
         let result = check_deterministic_rerun(paths).unwrap();
-        assert!(matches!(result.status, CheckStatus::Pass), "{:?}", result.status);
+        assert!(
+            matches!(result.status, CheckStatus::Pass),
+            "{:?}",
+            result.status
+        );
     }
 
     #[test]
@@ -431,9 +493,6 @@ mod tests {
         let report = run_reproducibility_audit(dir.path(), None).unwrap();
         assert_eq!(report.checks.len(), 5);
         // Cargo.lock is empty → lockfile check fails
-        assert!(matches!(
-            report.checks[2].status,
-            CheckStatus::Fail(_)
-        ));
+        assert!(matches!(report.checks[2].status, CheckStatus::Fail(_)));
     }
 }

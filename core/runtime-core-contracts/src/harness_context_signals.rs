@@ -10,11 +10,10 @@ use regex::Regex;
 use serde_json::Value;
 use std::sync::LazyLock;
 
-static PROOF_ASCII_WORD: LazyLock<Regex> =
-    LazyLock::new(|| {
-        #[allow(clippy::expect_used)]
-        Regex::new(r"(?-u)\bproof\b").expect("proof ascii word regex")
-    });
+static PROOF_ASCII_WORD: LazyLock<Regex> = LazyLock::new(|| {
+    #[allow(clippy::expect_used)]
+    Regex::new(r"(?-u)\bproof\b").expect("proof ascii word regex")
+});
 
 /// True when natural language or shell-like text suggests math / formal checker work.
 pub fn text_signals_math_or_formal_checker(s: &str) -> bool {
@@ -103,6 +102,7 @@ pub fn quality_gate_state_signals_math(state: &Value) -> bool {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     #[test]

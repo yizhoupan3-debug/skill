@@ -1,8 +1,7 @@
 use super::common::*;
 use super::*;
 
-use serde_json::{json, Map, Value};
-
+use serde_json::{Map, Value, json};
 
 #[test]
 fn trace_stream_replay_unwraps_wrapped_events_and_supports_resume() {
@@ -55,7 +54,6 @@ fn trace_stream_replay_unwraps_wrapped_events_and_supports_resume() {
     fs::remove_file(&trace_path).expect("cleanup trace stream");
 }
 
-
 #[test]
 fn trace_stream_inspect_reports_latest_event_metadata() {
     let trace_path = temp_trace_path("trace-inspect");
@@ -96,7 +94,6 @@ fn trace_stream_inspect_reports_latest_event_metadata() {
 
     fs::remove_file(&trace_path).expect("cleanup trace stream");
 }
-
 
 #[test]
 fn trace_stream_replay_filters_by_scope_and_hydrates_cursor_fields() {
@@ -145,7 +142,6 @@ fn trace_stream_replay_filters_by_scope_and_hydrates_cursor_fields() {
 
     fs::remove_file(&trace_path).expect("cleanup trace stream");
 }
-
 
 #[test]
 fn attach_runtime_event_transport_preserves_resume_manifest_resolution_on_descriptor_roundtrip() {
@@ -220,7 +216,6 @@ fn attach_runtime_event_transport_preserves_resume_manifest_resolution_on_descri
     fs::remove_file(&resume_manifest_path).expect("cleanup resume manifest");
     fs::remove_file(&trace_stream_path).expect("cleanup trace stream");
 }
-
 
 #[test]
 fn attach_runtime_event_transport_reads_sqlite_resume_manifest_trace_stream() {
@@ -327,7 +322,6 @@ fn attach_runtime_event_transport_reads_sqlite_resume_manifest_trace_stream() {
 
     fs::remove_dir_all(root.parent().expect("fixture parent")).expect("cleanup sqlite fixture");
 }
-
 
 #[test]
 fn trace_compaction_inspect_and_replay_read_snapshot_plus_deltas() {
@@ -479,7 +473,6 @@ fn trace_compaction_inspect_and_replay_read_snapshot_plus_deltas() {
     fs::remove_dir_all(&trace_root).expect("cleanup compaction root");
 }
 
-
 #[test]
 fn trace_compaction_recovery_fails_closed_on_artifact_digest_mismatch() {
     let temp_root = temp_trace_path("trace-compaction-digest-mismatch");
@@ -574,7 +567,6 @@ fn trace_compaction_recovery_fails_closed_on_artifact_digest_mismatch() {
     fs::remove_dir_all(&trace_root).expect("cleanup digest mismatch compaction root");
 }
 
-
 #[test]
 fn write_trace_compaction_delta_appends_one_jsonl_line() {
     let delta_path = temp_trace_path("trace-delta-write");
@@ -600,7 +592,6 @@ fn write_trace_compaction_delta_appends_one_jsonl_line() {
 
     fs::remove_file(&delta_path).expect("cleanup delta path");
 }
-
 
 #[test]
 fn trace_append_preserves_jsonl_records_under_concurrency() {
@@ -645,14 +636,13 @@ fn trace_append_preserves_jsonl_records_under_concurrency() {
     fs::remove_file(&trace_path).expect("cleanup trace path");
 }
 
-
 #[test]
 fn stdio_request_dispatches_write_trace_compaction_delta_payload() {
     let delta_path = temp_trace_path("trace-delta-write-stdio");
     let response = handle_stdio_json_line(&format!(
-            "{{\"id\":2,\"op\":\"write_trace_compaction_delta\",\"payload\":{{\"path\":\"{}\",\"delta\":{{\"schema_version\":\"runtime-trace-compaction-delta-v1\",\"delta_id\":\"delta-stdio\",\"seq\":2}}}}}}",
-            delta_path.display()
-        ));
+        "{{\"id\":2,\"op\":\"write_trace_compaction_delta\",\"payload\":{{\"path\":\"{}\",\"delta\":{{\"schema_version\":\"runtime-trace-compaction-delta-v1\",\"delta_id\":\"delta-stdio\",\"seq\":2}}}}}}",
+        delta_path.display()
+    ));
     assert!(response.ok);
     assert_eq!(response.id, json!(2));
     assert_eq!(
@@ -663,7 +653,6 @@ fn stdio_request_dispatches_write_trace_compaction_delta_payload() {
     assert!(persisted.contains("\"delta_id\":\"delta-stdio\""));
     fs::remove_file(&delta_path).expect("cleanup stdio delta path");
 }
-
 
 #[test]
 fn write_trace_metadata_persists_primary_and_mirror_outputs() {
@@ -734,14 +723,13 @@ fn write_trace_metadata_persists_primary_and_mirror_outputs() {
     .expect("cleanup mirror directories");
 }
 
-
 #[test]
 fn stdio_request_dispatches_write_trace_metadata_payload() {
     let output_path = temp_json_path("trace-metadata-write-stdio");
     let response = handle_stdio_json_line(&format!(
-            "{{\"id\":3,\"op\":\"write_trace_metadata\",\"payload\":{{\"output_path\":\"{}\",\"task\":\"trace metadata stdio\",\"matched_skills\":[\"goal_drive\"],\"owner\":\"goal_drive\",\"gate\":\"none\",\"overlay\":null,\"reroute_count\":0,\"retry_count\":0,\"artifact_paths\":[],\"verification_status\":\"passed\",\"metadata_schema_version\":\"trace-metadata-v2\",\"routing_runtime_version\":11}}}}",
-            output_path.display()
-        ));
+        "{{\"id\":3,\"op\":\"write_trace_metadata\",\"payload\":{{\"output_path\":\"{}\",\"task\":\"trace metadata stdio\",\"matched_skills\":[\"goal_drive\"],\"owner\":\"goal_drive\",\"gate\":\"none\",\"overlay\":null,\"reroute_count\":0,\"retry_count\":0,\"artifact_paths\":[],\"verification_status\":\"passed\",\"metadata_schema_version\":\"trace-metadata-v2\",\"routing_runtime_version\":11}}}}",
+        output_path.display()
+    ));
     assert!(response.ok);
     assert_eq!(response.id, json!(3));
     assert_eq!(
@@ -752,7 +740,6 @@ fn stdio_request_dispatches_write_trace_metadata_payload() {
     assert!(persisted.contains("\"routing_runtime_version\": 11"));
     fs::remove_file(&output_path).expect("cleanup stdio trace metadata");
 }
-
 
 #[test]
 fn write_trace_metadata_fails_closed_for_explicit_bad_trace_source() {
@@ -798,7 +785,6 @@ fn write_trace_metadata_fails_closed_for_explicit_bad_trace_source() {
     assert!(response.is_err());
     assert!(!output_path.exists());
 }
-
 
 #[test]
 fn subscribe_attached_runtime_events_returns_cursor_not_event_payload() {
@@ -858,5 +844,3 @@ fn subscribe_attached_runtime_events_returns_cursor_not_event_payload() {
     fs::remove_file(&resume_manifest_path).expect("cleanup resume manifest");
     fs::remove_file(&trace_stream_path).expect("cleanup trace stream");
 }
-
-

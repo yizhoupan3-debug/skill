@@ -1,8 +1,8 @@
 //! Disk-primary `RUNTIME_REGISTRY.json` review_gate subset for hook policy (B0).
 
 use crate::lane_normalize::normalize_subagent_lane;
-use serde_json::Value;
 use core_errors::FrameworkError;
+use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -204,14 +204,22 @@ fn snapshot(repo_root: Option<&Path>) -> Result<ReviewGateSnapshot, FrameworkErr
     let key = repo_cache_key(&path);
     let file_mtime = fs::metadata(&path).ok().and_then(|m| m.modified().ok());
     if let Some(mtime) = file_mtime {
-        let guard = cache().lock().map_err(|e| FrameworkError::lock(format!("registry cache lock poisoned: {e}")))?;
-        if let Some((cached, cached_mtime)) = guard.get(&key) {
-            if *cached_mtime == mtime { return Ok(cached.clone()); }
+        let guard = cache()
+            .lock()
+            .map_err(|e| FrameworkError::lock(format!("registry cache lock poisoned: {e}")))?;
+        if let Some((cached, cached_mtime)) = guard.get(&key)
+            && *cached_mtime == mtime
+        {
+            return Ok(cached.clone());
         }
     }
     let loaded = load_snapshot_from_disk(&path)?;
-    let mut guard = cache().lock().map_err(|e| FrameworkError::lock(format!("registry cache lock poisoned: {e}")))?;
-    if guard.len() >= 64 { guard.clear(); }
+    let mut guard = cache()
+        .lock()
+        .map_err(|e| FrameworkError::lock(format!("registry cache lock poisoned: {e}")))?;
+    if guard.len() >= 64 {
+        guard.clear();
+    }
     let stamp = file_mtime.unwrap_or_else(SystemTime::now);
     guard.insert(key, (loaded.clone(), stamp));
     Ok(loaded)

@@ -81,11 +81,7 @@ pub fn build_reviewer_prompt(
 /// Build the orchestrator's initialization prompt for the loop.
 ///
 /// This is passed to the orchestrator subagent that manages the multi-round loop.
-pub fn build_orchestrator_prompt(
-    goal: &str,
-    target_venue: &str,
-    manuscript_path: &str,
-) -> String {
+pub fn build_orchestrator_prompt(goal: &str, target_venue: &str, manuscript_path: &str) -> String {
     format!(
         r#"# Paper Revision Orchestrator
 
@@ -143,7 +139,8 @@ mod tests {
 
     #[test]
     fn test_build_reviewer_prompt_contains_dimension() {
-        let prompt = build_reviewer_prompt(1, &ReviewDimension::LogicAndEvidence, "Test paper about X");
+        let prompt =
+            build_reviewer_prompt(1, &ReviewDimension::LogicAndEvidence, "Test paper about X");
         assert!(prompt.contains("逻辑与证据"));
         assert!(prompt.contains("Round 1"));
         assert!(prompt.contains("Claim Ceiling"));

@@ -7,9 +7,9 @@ pub mod kernel_bootstrap;
 pub mod kernel_utils;
 pub mod stdio_transport;
 
-
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     #[test]
     fn smoke() {
         assert!(true);

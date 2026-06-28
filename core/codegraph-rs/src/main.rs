@@ -25,7 +25,9 @@ fn main() -> anyhow::Result<()> {
         let report = codegraph_rs::graph::build_full_index(&index, &cli.repo_root)?;
         tracing::info!(
             "codegraph: force rebuild complete — {} files, {} nodes, {} edges",
-            report.files_updated, report.nodes_added, report.edges_added
+            report.files_updated,
+            report.nodes_added,
+            report.edges_added
         );
         return Ok(());
     }

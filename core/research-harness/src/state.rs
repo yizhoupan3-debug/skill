@@ -10,7 +10,7 @@ use serde_json::{Value, json};
 use std::fs;
 use std::path::Path;
 
-use crate::util::{obj_mut, arr_mut, set_key, novelty_gate_mut, str_field};
+use crate::util::{arr_mut, novelty_gate_mut, obj_mut, set_key, str_field};
 
 // ── Local helpers ──
 
@@ -93,11 +93,27 @@ pub fn migrate_state(state: &Value) -> Result<Value> {
     }
     // Warn about unrecognized top-level fields that will be dropped.
     let known_fields: &[&str] = &[
-        "schema_version", "project", "question", "mode", "status", "stage",
-        "created_at", "updated_at", "hypotheses", "hypothesis_backlog",
-        "run_history", "decisions", "external_research", "evidence_index",
-        "blockers", "next_actions", "environment", "git",
-        "active_hypothesis", "current_direction", "novelty_gate",
+        "schema_version",
+        "project",
+        "question",
+        "mode",
+        "status",
+        "stage",
+        "created_at",
+        "updated_at",
+        "hypotheses",
+        "hypothesis_backlog",
+        "run_history",
+        "decisions",
+        "external_research",
+        "evidence_index",
+        "blockers",
+        "next_actions",
+        "environment",
+        "git",
+        "active_hypothesis",
+        "current_direction",
+        "novelty_gate",
     ];
     if let Some(obj) = migrated.as_object() {
         for key in obj.keys() {
@@ -277,7 +293,11 @@ pub fn load_state(path: &Path) -> Result<Value> {
 pub fn dump_state(path: &Path, state: &Value) -> Result<()> {
     let mut state_to_write = hydrate_state(state)?;
     set_key(&mut state_to_write, "schema_version", json!(SCHEMA_VERSION));
-    set_key(&mut state_to_write, "updated_at", json!(framework_kernel::time::now_iso()));
+    set_key(
+        &mut state_to_write,
+        "updated_at",
+        json!(framework_kernel::time::now_iso()),
+    );
     let actions = crate::claims::lifecycle::recommend_next_actions(&state_to_write);
     set_key(&mut state_to_write, "next_actions", json!(actions));
     let rendered = serde_yml::to_string(&state_to_write)?;
@@ -292,6 +312,7 @@ pub fn dump_state(path: &Path, state: &Value) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     #[test]

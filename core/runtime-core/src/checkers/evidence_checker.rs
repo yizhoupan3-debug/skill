@@ -7,8 +7,8 @@
 //! core-state evidence APIs into a `GateChecker`.
 
 use quality_gate::checker::GateChecker;
-use quality_gate::types::{CheckContext, CheckResult, Finding, Severity};
 use quality_gate::scene;
+use quality_gate::types::{CheckContext, CheckResult, Finding, Severity};
 
 /// Checker that verifies task evidence exists and is valid.
 pub struct EvidenceChecker;
@@ -43,7 +43,9 @@ impl GateChecker for EvidenceChecker {
                     "task '{task_id}' has no evidence artifacts — no evidence of completion"
                 ),
                 location: None,
-                suggestion: Some("record evidence via append_evidence before completing".to_string()),
+                suggestion: Some(
+                    "record evidence via append_evidence before completing".to_string(),
+                ),
             });
         } else if !evidence_ok {
             findings.push(Finding {
@@ -60,9 +62,9 @@ impl GateChecker for EvidenceChecker {
         }
 
         let passed = findings.is_empty()
-            || findings.iter().all(|f| {
-                !matches!(f.severity, Severity::P0 | Severity::A | Severity::B)
-            });
+            || findings
+                .iter()
+                .all(|f| !matches!(f.severity, Severity::P0 | Severity::A | Severity::B));
 
         CheckResult {
             checker_id: self.id().to_string(),

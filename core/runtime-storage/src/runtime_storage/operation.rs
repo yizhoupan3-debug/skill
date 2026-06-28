@@ -1,8 +1,3 @@
-use core_errors::FrameworkError;
-use crate::runtime_envelope_ids::{
-    RUNTIME_CONTROL_PLANE_AUTHORITY, RUNTIME_STORAGE_AUTHORITY, RUNTIME_STORAGE_SCHEMA_VERSION,
-};
-use framework_kernel::json_value::required_non_empty_string;
 use super::backend::{
     RUNTIME_CHECKPOINT_CONTROL_PLANE_COMPILER_AUTHORITY, normalized_backend_family,
     runtime_backend_capabilities, runtime_backend_capabilities_payload,
@@ -23,6 +18,11 @@ use super::{
     DEFAULT_STATE_SERVICE_AUTHORITY, DEFAULT_STATE_SERVICE_PROJECTION, DEFAULT_STATE_SERVICE_ROLE,
     ResolvedStorageBackend, RuntimeStorageRequestPayload, RuntimeStorageResponsePayload,
 };
+use crate::runtime_envelope_ids::{
+    RUNTIME_CONTROL_PLANE_AUTHORITY, RUNTIME_STORAGE_AUTHORITY, RUNTIME_STORAGE_SCHEMA_VERSION,
+};
+use core_errors::FrameworkError;
+use framework_kernel::json_value::required_non_empty_string;
 use serde_json::{Map, Value, json};
 use std::collections::HashSet;
 use std::fs;
@@ -229,9 +229,10 @@ pub fn resolve_storage_backend(paths: &[PathBuf]) -> Option<ResolvedStorageBacke
             }
         }
         if grandparent_name == Some("trace_compaction")
-            && let Some(root) = grandparent.and_then(Path::parent) {
-                candidates.push(root.to_path_buf());
-            }
+            && let Some(root) = grandparent.and_then(Path::parent)
+        {
+            candidates.push(root.to_path_buf());
+        }
         if let Some(parent) = path.parent() {
             candidates.push(parent.to_path_buf());
         }

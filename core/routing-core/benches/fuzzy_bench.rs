@@ -8,7 +8,9 @@
 //! No env-var gate — runs unconditionally as a CI performance gate.
 
 use criterion::{Criterion, black_box, criterion_group, criterion_main};
-use routing_core::fuzzy::{best_fuzzy_jaccard, extract_trigrams, jaccard_similarity, trigram_similarity};
+use routing_core::fuzzy::{
+    best_fuzzy_jaccard, extract_trigrams, jaccard_similarity, trigram_similarity,
+};
 use std::collections::HashSet;
 
 // ── extract_trigrams ──────────────────────────────────────────────────────────
@@ -38,8 +40,14 @@ fn bench_extract_trigrams(c: &mut Criterion) {
 // ── jaccard_similarity ────────────────────────────────────────────────────────
 
 fn bench_jaccard(c: &mut Criterion) {
-    let small_a: HashSet<String> = ["hel", "ell", "llo"].into_iter().map(String::from).collect();
-    let small_b: HashSet<String> = ["hel", "ell", "xyz"].into_iter().map(String::from).collect();
+    let small_a: HashSet<String> = ["hel", "ell", "llo"]
+        .into_iter()
+        .map(String::from)
+        .collect();
+    let small_b: HashSet<String> = ["hel", "ell", "xyz"]
+        .into_iter()
+        .map(String::from)
+        .collect();
 
     let med_a: HashSet<String> = (0..50).map(|i| format!("tri{:03}", i)).collect();
     let med_b: HashSet<String> = (25..75).map(|i| format!("tri{:03}", i)).collect();
@@ -68,9 +76,7 @@ fn bench_jaccard(c: &mut Criterion) {
 // ── best_fuzzy_jaccard ────────────────────────────────────────────────────────
 
 fn bench_best_fuzzy(c: &mut Criterion) {
-    let few_candidates: Vec<String> = (0..10)
-        .map(|i| format!("skill-{}-match", i))
-        .collect();
+    let few_candidates: Vec<String> = (0..10).map(|i| format!("skill-{}-match", i)).collect();
     let many_candidates: Vec<String> = (0..200)
         .map(|i| format!("tool-{}-handler-{}", i, i % 5))
         .collect();
@@ -78,13 +84,28 @@ fn bench_best_fuzzy(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("best_fuzzy_jaccard");
     group.bench_function("10_candidates", |b| {
-        b.iter(|| black_box(best_fuzzy_jaccard(black_box(query), black_box(&few_candidates))));
+        b.iter(|| {
+            black_box(best_fuzzy_jaccard(
+                black_box(query),
+                black_box(&few_candidates),
+            ))
+        });
     });
     group.bench_function("200_candidates", |b| {
-        b.iter(|| black_box(best_fuzzy_jaccard(black_box(query), black_box(&many_candidates))));
+        b.iter(|| {
+            black_box(best_fuzzy_jaccard(
+                black_box(query),
+                black_box(&many_candidates),
+            ))
+        });
     });
     group.bench_function("empty_candidates", |b| {
-        b.iter(|| black_box(best_fuzzy_jaccard(black_box("anything"), black_box(&[] as &[String]))));
+        b.iter(|| {
+            black_box(best_fuzzy_jaccard(
+                black_box("anything"),
+                black_box(&[] as &[String]),
+            ))
+        });
     });
     group.finish();
 }
@@ -104,7 +125,12 @@ fn bench_trigram_similarity(c: &mut Criterion) {
         b.iter(|| black_box(trigram_similarity(black_box("abcdef"), black_box("ghijkl"))));
     });
     group.bench_function("partial_match_cjk", |b| {
-        b.iter(|| black_box(trigram_similarity(black_box("代码审查工具"), black_box("代码生成工具"))));
+        b.iter(|| {
+            black_box(trigram_similarity(
+                black_box("代码审查工具"),
+                black_box("代码生成工具"),
+            ))
+        });
     });
     group.finish();
 }

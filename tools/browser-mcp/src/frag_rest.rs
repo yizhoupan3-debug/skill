@@ -5,6 +5,7 @@ use framework_kernel::json_value::optional_bool;
 
 /// Shared HTTP client for CDP requests with a 30-second timeout.
 static CDP_HTTP_CLIENT: LazyLock<reqwest::blocking::Client> = LazyLock::new(|| {
+    #[allow(clippy::expect_used)]
     reqwest::blocking::Client::builder()
         .timeout(Duration::from_secs(30))
         .build()
@@ -1064,6 +1065,7 @@ fn decode_base64(input: &str) -> Result<Vec<u8>, String> {
 
 #[cfg(test)]
 mod frag_rest_tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     // --- fingerprint ---

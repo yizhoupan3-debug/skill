@@ -44,10 +44,7 @@ pub fn verify_p_value(observed: f64, expected: f64, tolerance: f64) -> bool {
 }
 
 /// 多重比较校正检查：如果进行了 k >= 3 次检验，是否应用了校正。
-pub fn check_multiple_comparison_correction(
-    num_tests: usize,
-    correction_applied: bool,
-) -> bool {
+pub fn check_multiple_comparison_correction(num_tests: usize, correction_applied: bool) -> bool {
     if num_tests >= 3 && !correction_applied {
         return false; // 应该校正但没有
     }
@@ -55,10 +52,7 @@ pub fn check_multiple_comparison_correction(
 }
 
 /// 效应量检查：是否报告了效应量。
-pub fn check_effect_size_reported(
-    effect_size: Option<f64>,
-    test_type: &str,
-) -> bool {
+pub fn check_effect_size_reported(effect_size: Option<f64>, test_type: &str) -> bool {
     match test_type {
         "t-test" | "anova" | "regression" | "chi-square" => effect_size.is_some(),
         _ => true, // 其他检验类型不强制
@@ -67,6 +61,7 @@ pub fn check_effect_size_reported(
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     #[test]

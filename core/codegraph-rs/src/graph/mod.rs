@@ -161,6 +161,7 @@ fn map_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Node> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::{find_callees, find_callers, impact_radius};
     use crate::db::node_ops::SymbolFilter;
     use crate::db::schema::init_schema;

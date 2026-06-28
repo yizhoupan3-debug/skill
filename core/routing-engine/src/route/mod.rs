@@ -8,8 +8,8 @@ mod aliases;
 mod constants;
 mod eval;
 pub mod gate_hints;
-pub mod nl_route_adjustments;
 pub(crate) mod ngram;
+pub mod nl_route_adjustments;
 mod policy;
 pub mod records;
 pub mod routing;
@@ -44,9 +44,7 @@ pub use routing::{
     build_search_results_payload, filter_record_indices_for_host, search_skills_subset,
 };
 // Crate-internal re-exports
-pub use records::{
-    invalidate_records_cache, load_inline_records, load_records,
-};
+pub use records::{invalidate_records_cache, load_inline_records, load_records};
 pub use routing::{
     build_route_snapshot, filter_records_for_host, literal_framework_alias_decision, route_task,
     search_skills,

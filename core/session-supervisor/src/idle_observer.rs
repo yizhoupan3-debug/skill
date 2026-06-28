@@ -1,6 +1,7 @@
 //! Idle-window side-effect: observer checks when no workers are running (EV-5).
 
 use crate::types::WorkerSessionRecord;
+use core_errors::FrameworkError;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::Path;
@@ -72,23 +73,23 @@ fn cooldown_elapsed(repo_cwd: &Path) -> bool {
     epoch_seconds().saturating_sub(stamp) >= COOLDOWN_SECS
 }
 
-fn stamp_cooldown(repo_cwd: &Path) -> Result<(), String> {
+fn stamp_cooldown(repo_cwd: &Path) -> Result<(), FrameworkError> {
     let path = cooldown_path(repo_cwd);
     if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).map_err(|e| format!("create observer cooldown dir: {e}"))?;
+        fs::create_dir_all(parent)?;
     }
     let now = epoch_seconds();
     let mut file = OpenOptions::new()
         .create(true)
         .truncate(true)
         .write(true)
-        .open(&path)
-        .map_err(|e| format!("open cooldown stamp {}: {e}", path.display()))?;
-    writeln!(file, "{now}").map_err(|e| format!("write cooldown stamp: {e}"))?;
+        .open(&path)?;
+    writeln!(file, "{now}")?;
     Ok(())
 }
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use crate::driver::build_driver_command;
     use serde_json::json;

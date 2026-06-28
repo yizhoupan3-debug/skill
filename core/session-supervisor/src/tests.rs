@@ -1,3 +1,5 @@
+#![allow(clippy::unwrap_used, clippy::expect_used)]
+
 use crate::driver::{build_driver_command, is_safe_worktree_slug, resolve_worktree_cwd};
 use crate::handle_session_supervisor_operation;
 use crate::types::WorkerSessionRecord;
@@ -632,7 +634,10 @@ fn list_with_running_worker_skips_idle_observation_trigger() {
         .as_object()
         .expect("observation_idle");
     assert_eq!(observation_idle.get("triggered"), Some(&json!(false)));
-    assert_eq!(observation_idle.get("status"), Some(&json!("workers_active")));
+    assert_eq!(
+        observation_idle.get("status"),
+        Some(&json!("workers_active"))
+    );
 
     let _ = fs::remove_file(state_path);
 }
@@ -1198,7 +1203,10 @@ fn inspect_unknown_worker_returns_error() {
         "now": "2026-06-06T10:00:00Z",
     }))
     .expect_err("should reject unknown worker_id");
-    assert!(err.to_string().contains("Unknown supervisor worker_id"), "error: {err}");
+    assert!(
+        err.to_string().contains("Unknown supervisor worker_id"),
+        "error: {err}"
+    );
     let _ = fs::remove_file(state_path);
 }
 
@@ -1217,7 +1225,10 @@ fn terminate_unknown_worker_returns_error() {
         "now": "2026-06-06T10:00:00Z",
     }))
     .expect_err("should reject unknown worker_id");
-    assert!(err.to_string().contains("Unknown supervisor worker_id"), "error: {err}");
+    assert!(
+        err.to_string().contains("Unknown supervisor worker_id"),
+        "error: {err}"
+    );
     let _ = fs::remove_file(state_path);
 }
 
@@ -1237,7 +1248,10 @@ fn mark_blocked_unknown_worker_returns_error() {
         "now": "2026-06-06T10:00:00Z",
     }))
     .expect_err("should reject unknown worker_id");
-    assert!(err.to_string().contains("Unknown supervisor worker_id"), "error: {err}");
+    assert!(
+        err.to_string().contains("Unknown supervisor worker_id"),
+        "error: {err}"
+    );
     let _ = fs::remove_file(state_path);
 }
 

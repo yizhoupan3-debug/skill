@@ -90,7 +90,6 @@ fn sync_skills_uses_router_rs_directly() {
 #[test]
 fn prompt_policy_is_rust_owned() {
     let root = project_root();
-    let compression =
-        read_text(&root.join("core/framework-extra/src/prompt_compression.rs"));
+    let compression = read_text(&root.join("core/framework-extra/src/prompt_compression.rs"));
     assert!(compression.contains("prompt_policy_owner"));
 }

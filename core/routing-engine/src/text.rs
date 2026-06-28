@@ -69,7 +69,10 @@ pub fn normalize_text(text: &str) -> String {
     let mut prev_cjk_flag: Option<bool> = None;
     for ch in result.chars() {
         let is_cjk = core_state_utils::text_utils::is_cjk(ch);
-        if let Some(prev) = prev_cjk_flag && prev != is_cjk && ch != ' ' {
+        if let Some(prev) = prev_cjk_flag
+            && prev != is_cjk
+            && ch != ' '
+        {
             spaced.push(' ');
         }
         spaced.push(ch);
@@ -147,8 +150,9 @@ pub fn common_route_stop_tokens() -> &'static [&'static str] {
 
 fn wordlike_token_regex() -> &'static Regex {
     static WORDLIKE_TOKEN_REGEX: OnceLock<Regex> = OnceLock::new();
-    WORDLIKE_TOKEN_REGEX
-        .get_or_init(|| Regex::new(r"^[a-z0-9.+#/_-]+$").unwrap_or_else(|e| panic!("wordlike token regex: {e}")))
+    WORDLIKE_TOKEN_REGEX.get_or_init(|| {
+        Regex::new(r"^[a-z0-9.+#/_-]+$").unwrap_or_else(|e| panic!("wordlike token regex: {e}"))
+    })
 }
 
 pub fn tokenize_route_text(text: &str) -> Vec<String> {
@@ -219,6 +223,7 @@ pub fn text_matches_phrase(task_tokens: &[String], phrase: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     #[tokio::test]
@@ -234,9 +239,7 @@ mod tests {
 
     #[tokio::test]
     async fn token_regex_is_send_safe() {
-        let result = tokio::task::spawn_blocking(|| {
-            token_regex().is_match("hello")
-        })
+        let result = tokio::task::spawn_blocking(|| token_regex().is_match("hello"))
             .await
             .expect("spawn_blocking");
         assert!(result);

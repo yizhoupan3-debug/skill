@@ -185,7 +185,9 @@ pub trait HostProvider: HostLifecycle + HostToolExecutor + HostTelemetry {
     /// configured from RUNTIME_REGISTRY.json fields.
     /// Used by CLI dispatch to avoid hardcoded host match arms.
     fn dispatcher(&self) -> Box<dyn crate::hosts::hook_dispatch::HostHookDispatcher> {
-        Box::new(NullHostDispatcher { host_id: self.host_id() })
+        Box::new(NullHostDispatcher {
+            host_id: self.host_id(),
+        })
     }
 }
 
@@ -197,11 +199,21 @@ pub(crate) struct NullHostDispatcher {
 }
 
 impl crate::hosts::hook_dispatch::HostHookConfig for NullHostDispatcher {
-    fn host_id(&self) -> &'static str { self.host_id }
-    fn state_dir_leaf(&self) -> &'static str { "" }
-    fn hook_state_unreadable_tag(&self) -> &'static str { "null" }
-    fn session_namespace_env(&self) -> &'static str { "" }
-    fn log_label(&self) -> &'static str { self.host_id }
+    fn host_id(&self) -> &'static str {
+        self.host_id
+    }
+    fn state_dir_leaf(&self) -> &'static str {
+        ""
+    }
+    fn hook_state_unreadable_tag(&self) -> &'static str {
+        "null"
+    }
+    fn session_namespace_env(&self) -> &'static str {
+        ""
+    }
+    fn log_label(&self) -> &'static str {
+        self.host_id
+    }
 }
 
 impl crate::hosts::hook_dispatch::HostHookDispatcher for NullHostDispatcher {}
@@ -218,8 +230,11 @@ include!(concat!(env!("OUT_DIR"), "/generated_host_providers.rs"));
 
 /// Generic hook dispatch function signature.
 /// Each host's CLI hook handler conforms to `fn(host_id, event, repo_root) -> Result<(), String>`.
-pub type HookDispatchFn =
-    fn(host_id: &str, event: &str, repo_root: Option<&std::path::Path>) -> std::result::Result<(), String>;
+pub type HookDispatchFn = fn(
+    host_id: &str,
+    event: &str,
+    repo_root: Option<&std::path::Path>,
+) -> std::result::Result<(), String>;
 
 /// Generic agent dispatch function signature.
 /// Matches host_id (from registration) + repo_root to run the agent MCP loop.
@@ -302,8 +317,7 @@ pub fn host_provider_for_install_tool(tool: &str) -> Option<&'static dyn HostPro
 /// Resolve a routing `host_id` spelling (canonical id or install tool).
 pub fn host_provider_for_routing_spelling(host_id: &str) -> Option<&'static dyn HostProvider> {
     let needle = host_id.trim();
-    host_provider_for_id(needle)
-        .or_else(|| host_provider_for_install_tool(needle))
+    host_provider_for_id(needle).or_else(|| host_provider_for_install_tool(needle))
 }
 
 /// Host-filter alias expansion for B1 routing (`host_platforms` matching).
@@ -327,6 +341,7 @@ pub fn host_telemetry_for_id(host_id: &str) -> Option<&'static dyn HostTelemetry
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use serial_test::serial;
 
@@ -443,15 +458,24 @@ mod tests {
             let lifecycle = host_lifecycle_for_id(host_id)
                 .unwrap_or_else(|| panic!("{host_id}: lifecycle upcast"));
             assert!(!lifecycle.profile_id().is_empty(), "{host_id}: profile_id");
-            assert!(!lifecycle.session_supervisor_driver().is_empty(), "{host_id}: supervisor");
+            assert!(
+                !lifecycle.session_supervisor_driver().is_empty(),
+                "{host_id}: supervisor"
+            );
 
             let tool_exec = host_tool_executor_for_id(host_id)
                 .unwrap_or_else(|| panic!("{host_id}: tool_exec upcast"));
-            assert!(!tool_exec.requires_strict_pre_tool_fallback_default(), "{host_id}: strict_fallback");
+            assert!(
+                !tool_exec.requires_strict_pre_tool_fallback_default(),
+                "{host_id}: strict_fallback"
+            );
 
             let telemetry = host_telemetry_for_id(host_id)
                 .unwrap_or_else(|| panic!("{host_id}: telemetry upcast"));
-            assert!(telemetry.review_gate_router_observable(), "{host_id}: review_gate");
+            assert!(
+                telemetry.review_gate_router_observable(),
+                "{host_id}: review_gate"
+            );
         }
     }
 
@@ -466,10 +490,13 @@ mod tests {
                     "{host_id}: hooks_manifest_path ({manifest}) but no registered_hook_events"
                 );
                 for event in events {
-                    assert!(!event.is_empty(), "{host_id}: empty event in registered_hook_events");
+                    assert!(
+                        !event.is_empty(),
+                        "{host_id}: empty event in registered_hook_events"
+                    );
                 }
-                let telemetry = host_telemetry_for_id(host_id)
-                    .unwrap_or_else(|| panic!("{host_id} telemetry"));
+                let telemetry =
+                    host_telemetry_for_id(host_id).unwrap_or_else(|| panic!("{host_id} telemetry"));
                 assert_eq!(
                     telemetry.observation_host_id(),
                     Some(*host_id),

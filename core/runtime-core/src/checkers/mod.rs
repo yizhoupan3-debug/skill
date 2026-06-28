@@ -62,18 +62,12 @@ fn find_rust_files_recursive(dir: &Path, files: &mut Vec<std::path::PathBuf>) {
 pub fn register_checkers(registry: &mut quality_gate::CheckerRegistry) {
     // EvidenceChecker is registered under all scenes it declares via scenes()
     // (GENERAL, CODE_REVIEW, RESEARCH) so it runs for every scene evaluation.
-    registry.register(
-        scene::GENERAL,
-        Box::new(evidence_checker::EvidenceChecker),
-    );
+    registry.register(scene::GENERAL, Box::new(evidence_checker::EvidenceChecker));
     registry.register(
         scene::CODE_REVIEW,
         Box::new(evidence_checker::EvidenceChecker),
     );
-    registry.register(
-        scene::RESEARCH,
-        Box::new(evidence_checker::EvidenceChecker),
-    );
+    registry.register(scene::RESEARCH, Box::new(evidence_checker::EvidenceChecker));
     registry.register(
         scene::GENERAL,
         Box::new(adversarial_checker::AdversarialChecker),
@@ -90,8 +84,5 @@ pub fn register_checkers(registry: &mut quality_gate::CheckerRegistry) {
         scene::VISUAL,
         Box::new(screenshot_layout_checker::ScreenshotLayoutChecker),
     );
-    registry.register(
-        scene::SLIDES,
-        Box::new(overflow_checker::OverflowChecker),
-    );
+    registry.register(scene::SLIDES, Box::new(overflow_checker::OverflowChecker));
 }

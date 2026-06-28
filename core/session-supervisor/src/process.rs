@@ -27,8 +27,7 @@ pub fn launch_process(
         .create(true)
         .append(true)
         .open(log_path)?;
-    let stderr_log = log_file
-        .try_clone()?;
+    let stderr_log = log_file.try_clone()?;
 
     let mut cmd = Command::new(&command.binary);
     cmd.args(&command.args)
@@ -63,7 +62,6 @@ pub fn launch_process(
         log_path: log_path.display().to_string(),
     })
 }
-
 
 #[cfg(unix)]
 pub fn process_is_alive(pid: u32) -> bool {
@@ -133,10 +131,9 @@ pub fn terminate_process(pid: u32) -> Result<(), FrameworkError> {
         // Phase 1: SIGTERM with 500ms budget (5 × 100ms)
         send_signal_to_pgrp(pid, libc::SIGTERM)?;
         for _ in 0..5 {
-            if (!kill_pid_alive(pid) || reap_child_if_exited(pid))
-                && !kill_pid_alive(pid) {
-                    return Ok(());
-                }
+            if (!kill_pid_alive(pid) || reap_child_if_exited(pid)) && !kill_pid_alive(pid) {
+                return Ok(());
+            }
             thread::sleep(Duration::from_millis(100));
         }
         if !kill_pid_alive(pid) {
@@ -145,10 +142,9 @@ pub fn terminate_process(pid: u32) -> Result<(), FrameworkError> {
         // Phase 2: SIGKILL with 1.5s budget (15 × 100ms)
         send_signal_to_pgrp(pid, libc::SIGKILL)?;
         for _ in 0..15 {
-            if (!kill_pid_alive(pid) || reap_child_if_exited(pid))
-                && !kill_pid_alive(pid) {
-                    return Ok(());
-                }
+            if (!kill_pid_alive(pid) || reap_child_if_exited(pid)) && !kill_pid_alive(pid) {
+                return Ok(());
+            }
             thread::sleep(Duration::from_millis(100));
         }
         // Last resort: non-blocking reap attempt so kill(0) won't see a zombie.
@@ -352,9 +348,10 @@ pub fn reap_stale_agents(
                 && let (Ok(c_dt), Ok(d_dt)) = (
                     chrono::DateTime::parse_from_rfc3339(completed),
                     chrono::DateTime::parse_from_rfc3339(&deadline),
-                ) {
-                    return d_dt.signed_duration_since(c_dt).num_seconds() < retention_seconds;
-                }
+                )
+            {
+                return d_dt.signed_duration_since(c_dt).num_seconds() < retention_seconds;
+            }
             false
         });
         let reaped = before - store.agents.len();
@@ -365,7 +362,12 @@ pub fn reap_stale_agents(
 /// List all currently running agents.
 pub fn list_running_agents(repo_root: &Path) -> Result<Vec<AgentHealthEntry>, FrameworkError> {
     with_agent_health(repo_root, |store| {
-        let mut running: Vec<_> = store.agents.iter().filter(|a| a.is_alive()).cloned().collect();
+        let mut running: Vec<_> = store
+            .agents
+            .iter()
+            .filter(|a| a.is_alive())
+            .cloned()
+            .collect();
         running.sort_by(|a, b| b.spawned_at.cmp(&a.spawned_at));
         Ok(running)
     })

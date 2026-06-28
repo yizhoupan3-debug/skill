@@ -9,6 +9,7 @@
 //!
 //! No hardcoded host ID list — all host identity is resolved via registry capabilities.
 
+use core_errors::FrameworkError;
 use core_policy::hook_policy::{
     HookPolicyEvaluateRequest, dangerous_bash_reason, dangerous_mcp_tool_reason,
     evaluate_hook_policy,
@@ -17,7 +18,6 @@ use core_policy::tool_safety_rules;
 use framework_kernel::runtime_registry::load_runtime_registry_json;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use core_errors::FrameworkError;
 use sha2::{Digest, Sha256};
 use std::path::{Component, Path};
 
@@ -132,7 +132,9 @@ pub fn host_requires_strict_pre_tool_fallback(
 ) -> Result<bool> {
     let id = host_id.trim();
     // 1. HostProvider hint (highest priority after explicit overrides)
-    if let Some(strict) = framework_kernel::runtime_hooks::hooks().host_provider_strict_pre_tool_fallback_hint(id) {
+    if let Some(strict) =
+        framework_kernel::runtime_hooks::hooks().host_provider_strict_pre_tool_fallback_hint(id)
+    {
         return Ok(strict);
     }
     if has_native_hook_override == Some(true) {
@@ -186,8 +188,7 @@ pub fn host_requires_strict_pre_tool_fallback(
     if closeout_unsupported {
         return Ok(true);
     }
-    if harness_caps.contains(&"closeout_evidence_hooks")
-    {
+    if harness_caps.contains(&"closeout_evidence_hooks") {
         return Ok(false);
     }
     Ok(true)
@@ -366,48 +367,51 @@ fn classify_high_risk(
     let lowered = tool_name.to_ascii_lowercase();
     if is_shell_tool(&lowered)
         && let Some(command) = extract_shell_command(tool_input)
-            && let Some(reason) = dangerous_bash_reason(&command) {
-                // M9: warn if shell command targets auxiliary files
-                check_auxiliary_file_reference(&command);
-                return Ok((
-                    PreToolUseGuardVerdict::RequiresStdioApproval,
-                    Some(reason),
-                    vec!["shell".to_string()],
-                ));
-            }
+        && let Some(reason) = dangerous_bash_reason(&command)
+    {
+        // M9: warn if shell command targets auxiliary files
+        check_auxiliary_file_reference(&command);
+        return Ok((
+            PreToolUseGuardVerdict::RequiresStdioApproval,
+            Some(reason),
+            vec!["shell".to_string()],
+        ));
+    }
     if is_shell_tool(&lowered)
-        && let Some(command) = extract_shell_command(tool_input) {
-            // M9: warn if shell command targets auxiliary files (no dangerous_bash_reason match)
-            check_auxiliary_file_reference(&command);
-        }
+        && let Some(command) = extract_shell_command(tool_input)
+    {
+        // M9: warn if shell command targets auxiliary files (no dangerous_bash_reason match)
+        check_auxiliary_file_reference(&command);
+    }
     if is_file_write_tool(&lowered)
-        && let Some(path) = extract_file_path(tool_input) {
-            // Block path traversal attempts before protected-path check
-            if has_path_traversal(tool_input) {
-                return Ok((
-                    PreToolUseGuardVerdict::Block,
-                    Some(format!("path traversal detected in file path: {path}")),
-                    vec!["file_write".to_string(), "path_traversal".to_string()],
-                ));
-            }
-            let repo_root_str = repo_root.display().to_string();
-            let response = evaluate_hook_policy(HookPolicyEvaluateRequest {
-                operation: "protected-path".to_string(),
-                command: None,
-                path: Some(path.clone()),
-                repo_root: Some(repo_root_str.clone()),
-                runtime_root: Some(repo_root_str),
-                tool_name: None,
-                tool_args: None,
-            })?;
-            if response.blocked {
-                return Ok((
-                    PreToolUseGuardVerdict::RequiresStdioApproval,
-                    response.reason,
-                    vec!["file_write".to_string(), "protected_path".to_string()],
-                ));
-            }
+        && let Some(path) = extract_file_path(tool_input)
+    {
+        // Block path traversal attempts before protected-path check
+        if has_path_traversal(tool_input) {
+            return Ok((
+                PreToolUseGuardVerdict::Block,
+                Some(format!("path traversal detected in file path: {path}")),
+                vec!["file_write".to_string(), "path_traversal".to_string()],
+            ));
         }
+        let repo_root_str = repo_root.display().to_string();
+        let response = evaluate_hook_policy(HookPolicyEvaluateRequest {
+            operation: "protected-path".to_string(),
+            command: None,
+            path: Some(path.clone()),
+            repo_root: Some(repo_root_str.clone()),
+            runtime_root: Some(repo_root_str),
+            tool_name: None,
+            tool_args: None,
+        })?;
+        if response.blocked {
+            return Ok((
+                PreToolUseGuardVerdict::RequiresStdioApproval,
+                response.reason,
+                vec!["file_write".to_string(), "protected_path".to_string()],
+            ));
+        }
+    }
     if let Some(reason) = dangerous_mcp_tool_reason(tool_name, Some(tool_input)) {
         return Ok((
             PreToolUseGuardVerdict::RequiresStdioApproval,
@@ -481,7 +485,13 @@ fn extract_shell_command(tool_input: &Value) -> Option<String> {
 }
 
 fn extract_file_path(tool_input: &Value) -> Option<String> {
-    for key in ["path", "file_path", "target_file", "filePath", "notebook_path"] {
+    for key in [
+        "path",
+        "file_path",
+        "target_file",
+        "filePath",
+        "notebook_path",
+    ] {
         if let Some(text) = tool_input.get(key).and_then(Value::as_str) {
             let trimmed = text.trim();
             if !trimmed.is_empty() {
@@ -494,7 +504,13 @@ fn extract_file_path(tool_input: &Value) -> Option<String> {
 
 /// Check if tool_input contains a path with `..` traversal components.
 fn has_path_traversal(tool_input: &Value) -> bool {
-    for key in ["path", "file_path", "target_file", "filePath", "notebook_path"] {
+    for key in [
+        "path",
+        "file_path",
+        "target_file",
+        "filePath",
+        "notebook_path",
+    ] {
         if let Some(text) = tool_input.get(key).and_then(Value::as_str) {
             let p = Path::new(text.trim());
             if p.components().any(|c| c == Component::ParentDir) {
@@ -509,7 +525,7 @@ fn has_path_traversal(tool_input: &Value) -> bool {
 #[cfg(test)]
 #[ctor::ctor]
 fn register_test_hooks() {
-    use framework_kernel::runtime_hooks::{RuntimeCoreHooks, HostProviderHooks};
+    use framework_kernel::runtime_hooks::{HostProviderHooks, RuntimeCoreHooks};
     framework_kernel::runtime_hooks::register(RuntimeCoreHooks {
         host_provider: HostProviderHooks {
             for_routing_spelling: |_| None,
@@ -558,7 +574,9 @@ mod tests {
 
     #[test]
     fn path_traversal_detects_dotdot_in_target_file() {
-        assert!(has_path_traversal(&json!({"target_file": "output/../../../tmp/foo"})));
+        assert!(has_path_traversal(
+            &json!({"target_file": "output/../../../tmp/foo"})
+        ));
     }
 
     #[test]
@@ -568,7 +586,9 @@ mod tests {
 
     #[test]
     fn path_traversal_detects_dotdot_in_notebook_path() {
-        assert!(has_path_traversal(&json!({"notebook_path": "notebooks/../../etc/hacks"})));
+        assert!(has_path_traversal(
+            &json!({"notebook_path": "notebooks/../../etc/hacks"})
+        ));
     }
 
     #[test]
@@ -747,7 +767,11 @@ mod tests {
         });
         // Dispatch goes through runtime-core; test the guard directly.
         let result = evaluate_pre_tool_use_guard_value(payload);
-        assert!(result.is_ok(), "pre_tool_use_guard should succeed: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "pre_tool_use_guard should succeed: {:?}",
+            result.err()
+        );
     }
 
     #[test]

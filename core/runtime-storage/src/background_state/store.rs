@@ -1,4 +1,3 @@
-use core_errors::FrameworkError;
 use super::control_plane::{build_state_control_plane, normalized_backend_family};
 use super::persist::{read_persisted_state, write_persisted_state};
 use super::status::{
@@ -7,6 +6,7 @@ use super::status::{
 use super::types::*;
 use super::types::{BackgroundJobStatusMutation, BackgroundRunStatus};
 use chrono::{DateTime, Utc};
+use core_errors::FrameworkError;
 use serde_json::{Map, Value, json};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -16,7 +16,9 @@ impl BackgroundStateStore {
         let state_path = request
             .state_path
             .as_ref()
-            .ok_or_else(|| FrameworkError::validation("Background state request is missing state_path."))
+            .ok_or_else(|| {
+                FrameworkError::validation("Background state request is missing state_path.")
+            })
             .map(PathBuf::from)?;
         let backend_family = request
             .backend_family
@@ -206,13 +208,14 @@ impl BackgroundStateStore {
         persisted: PersistedBackgroundState,
     ) -> Result<(), String> {
         if let Some(Value::Object(persisted_control_plane)) = persisted.control_plane
-            && let Value::Object(ref mut current) = self.control_plane {
-                for (key, value) in persisted_control_plane {
-                    if !value.is_null() {
-                        current.insert(key, value);
-                    }
+            && let Value::Object(ref mut current) = self.control_plane
+        {
+            for (key, value) in persisted_control_plane {
+                if !value.is_null() {
+                    current.insert(key, value);
                 }
             }
+        }
         self.jobs = persisted
             .jobs
             .into_iter()
@@ -378,11 +381,12 @@ impl BackgroundStateStore {
             return Ok(());
         }
         if let Some(owner) = self.active_sessions.get(session_id)
-            && owner != job_id {
-                return Err(format!(
-                    "Session {session_id:?} is already active in job {owner:?}."
-                ));
-            }
+            && owner != job_id
+        {
+            return Err(format!(
+                "Session {session_id:?} is already active in job {owner:?}."
+            ));
+        }
         self.active_sessions
             .insert(session_id.to_string(), job_id.to_string());
         Ok(())
@@ -549,11 +553,12 @@ impl BackgroundStateStore {
         let outcome = match operation {
             "reserve" => {
                 if let Some(previous_pending) = previous_pending_job_id.as_deref()
-                    && previous_pending != incoming_job_id {
-                        return Err(format!(
-                            "Session {session_id:?} already has a pending takeover for job {previous_pending:?}."
-                        ));
-                    }
+                    && previous_pending != incoming_job_id
+                {
+                    return Err(format!(
+                        "Session {session_id:?} already has a pending takeover for job {previous_pending:?}."
+                    ));
+                }
                 match previous_active_job_id.as_deref() {
                     None => {
                         if previous_pending_job_id.as_deref() == Some(incoming_job_id) {
@@ -580,11 +585,12 @@ impl BackgroundStateStore {
                     ));
                 }
                 if let Some(active_job_id) = previous_active_job_id.as_deref()
-                    && active_job_id != incoming_job_id {
-                        return Err(format!(
-                            "Session {session_id:?} is still active in job {active_job_id:?}."
-                        ));
-                    }
+                    && active_job_id != incoming_job_id
+                {
+                    return Err(format!(
+                        "Session {session_id:?} is still active in job {active_job_id:?}."
+                    ));
+                }
                 if previous_active_job_id.as_deref() != Some(incoming_job_id) {
                     self.active_sessions
                         .insert(session_id.to_string(), incoming_job_id.to_string());

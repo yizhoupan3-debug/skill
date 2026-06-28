@@ -73,11 +73,7 @@ pub const RETIRED_RUNTIME_OWNED_SKILL_SLUGS: &[&str] = &[
 ];
 
 /// IDs for framework commands that map to runtime-only slugs (not regular skills).
-pub const FRAMEWORK_COMMAND_IDS: &[&str] = &[
-    "deepinterview",
-    "gitx",
-    "update",
-];
+pub const FRAMEWORK_COMMAND_IDS: &[&str] = &["deepinterview", "gitx", "update"];
 
 /// Host-agnostic hot-route skills exempt from closed-set host coverage checks.
 /// These are Codex-installer-only skills that should not list extra hosts beyond their frontmatter.

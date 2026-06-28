@@ -17,10 +17,7 @@ use std::path::{Path, PathBuf};
 
 use core_errors::FrameworkError;
 
-use crate::process::{
-    register_agent_alive,
-    unregister_agent,
-};
+use crate::process::{register_agent_alive, unregister_agent};
 
 pub const TEAM_SCHEMA_VERSION: &str = "v1";
 pub const TEAM_ARTIFACTS_DIR: &str = "artifacts/teams";
@@ -39,7 +36,9 @@ fn sanitize_path_segment_inner(raw: &str, allow_dots: bool) -> Result<String, Fr
         sanitized
     };
     if trimmed.is_empty() {
-        return Err(FrameworkError::validation(format!("invalid (empty after sanitization): {raw:?}")));
+        return Err(FrameworkError::validation(format!(
+            "invalid (empty after sanitization): {raw:?}"
+        )));
     }
     Ok(trimmed)
 }
@@ -181,7 +180,9 @@ pub fn create_team(
 
     with_team_registry(repo_root, |registry| {
         if registry.teams.iter().any(|t| t.team_id == team_id) {
-            return Err(FrameworkError::registry(format!("team already exists: {team_id}")));
+            return Err(FrameworkError::registry(format!(
+                "team already exists: {team_id}"
+            )));
         }
 
         let member_meta_path = team_dir_safe(repo_root, &safe_team).join("members");
@@ -236,7 +237,9 @@ pub fn add_team_member(
             .ok_or_else(|| FrameworkError::not_found(format!("team not found: {team_id}")))?;
 
         if team.members.iter().any(|m| m.agent_id == agent_id) {
-            return Err(FrameworkError::registry(format!("agent {agent_id} already in team {team_id}")));
+            return Err(FrameworkError::registry(format!(
+                "agent {agent_id} already in team {team_id}"
+            )));
         }
 
         // Register in agent health (under the team lock)
@@ -390,8 +393,8 @@ pub fn send_message(
         if let Some(sender) = team.members.iter_mut().find(|m| m.agent_id == from_agent) {
             sender.messages_sent += 1;
         }
-        if let Some(recipient) = to_agent
-            .and_then(|id| team.members.iter_mut().find(|m| m.agent_id == id))
+        if let Some(recipient) =
+            to_agent.and_then(|id| team.members.iter_mut().find(|m| m.agent_id == id))
         {
             recipient.messages_received += 1;
         }
@@ -422,7 +425,9 @@ pub fn read_my_messages(
 
     with_team_registry_ro(repo_root, |registry| {
         if registry.teams.iter().all(|t| t.team_id != team_id) {
-            return Err(FrameworkError::not_found(format!("team not found: {team_id}")));
+            return Err(FrameworkError::not_found(format!(
+                "team not found: {team_id}"
+            )));
         }
         Ok(())
     })?;
@@ -465,16 +470,17 @@ pub fn read_my_messages(
         for entry in entries {
             let raw = fs::read_to_string(entry.path())?;
             if let Ok(mut msg) = serde_json::from_str::<InterAgentMessage>(&raw)
-                && !messages.iter().any(|m| m.message_id == msg.message_id) {
-                    // Mark broadcast as read too
-                    if !msg.read {
-                        msg.read = true;
-                        if let Ok(updated) = serde_json::to_string_pretty(&msg) {
-                            let _ = fs::write(entry.path(), &updated);
-                        }
+                && !messages.iter().any(|m| m.message_id == msg.message_id)
+            {
+                // Mark broadcast as read too
+                if !msg.read {
+                    msg.read = true;
+                    if let Ok(updated) = serde_json::to_string_pretty(&msg) {
+                        let _ = fs::write(entry.path(), &updated);
                     }
-                    messages.push(msg);
                 }
+                messages.push(msg);
+            }
         }
     }
 
@@ -483,12 +489,11 @@ pub fn read_my_messages(
 }
 
 /// Get agent health (running member IDs) for a team.
-pub fn team_alive_members(
-    repo_root: &Path,
-    team_id: &str,
-) -> Result<Vec<String>, FrameworkError> {
+pub fn team_alive_members(repo_root: &Path, team_id: &str) -> Result<Vec<String>, FrameworkError> {
     with_team_registry_ro(repo_root, |registry| {
-        let team = registry.teams.iter()
+        let team = registry
+            .teams
+            .iter()
             .find(|t| t.team_id == team_id)
             .ok_or_else(|| FrameworkError::not_found(format!("team not found: {team_id}")))?;
         Ok(team
@@ -507,7 +512,12 @@ pub fn team_list(
 ) -> Result<Vec<TeamDescriptor>, FrameworkError> {
     with_team_registry_ro(repo_root, |registry| {
         let teams: Vec<TeamDescriptor> = if let Some(filter) = team_id_filter {
-            registry.teams.iter().filter(|t| t.team_id == filter).cloned().collect()
+            registry
+                .teams
+                .iter()
+                .filter(|t| t.team_id == filter)
+                .cloned()
+                .collect()
         } else {
             registry.teams.clone()
         };
@@ -516,10 +526,7 @@ pub fn team_list(
 }
 
 /// Clean up stale teams (completed beyond `retention_seconds`).
-pub fn reap_stale_teams(
-    repo_root: &Path,
-    retention_seconds: i64,
-) -> Result<usize, FrameworkError> {
+pub fn reap_stale_teams(repo_root: &Path, retention_seconds: i64) -> Result<usize, FrameworkError> {
     if retention_seconds <= 0 {
         return Ok(0);
     }

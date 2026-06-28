@@ -1,8 +1,8 @@
-use core_errors::FrameworkError;
 use crate::utils::path_guard::{safe_task_id_component, validate_task_id_component};
+use core_errors::FrameworkError;
 
+use framework_kernel::json_value::{optional_non_empty_string, required_non_empty_string};
 use serde_json::{Map, Value, json};
-use framework_kernel::json_value::{required_non_empty_string, optional_non_empty_string};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::fs::{self, OpenOptions};
@@ -29,7 +29,9 @@ pub fn handle_step_ledger_operation(payload: Value) -> Result<Value, FrameworkEr
         "append" => append_step_ledger_entry(payload),
         "summary" => summarize_step_ledger_operation(payload),
         "contract" => Ok(step_ledger_contract()),
-        other => Err(FrameworkError::Validation { message: format!("unknown step ledger operation: {other}") }),
+        other => Err(FrameworkError::Validation {
+            message: format!("unknown step ledger operation: {other}"),
+        }),
     }
 }
 
@@ -247,27 +249,19 @@ fn append_jsonl_entry(
     path: &Path,
     entry: &Value,
     idempotency_key: Option<&str>,
-) -> Result<bool, String> {
+) -> Result<bool, FrameworkError> {
     if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)
-            .map_err(|err| format!("create step ledger parent failed: {err}"))?;
+        fs::create_dir_all(parent)?;
     }
     if let Some(key) = idempotency_key
-        && step_ledger_contains_idempotency_key(path, key)? {
-            return Ok(false);
-        }
-    let mut file = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(path)
-        .map_err(|err| format!("open step ledger {} failed: {err}", path.display()))?;
-    let line = serde_json::to_string(entry)
-        .map_err(|err| format!("serialize step ledger entry failed: {err}"))?
-        + "\n";
-    file.write_all(line.as_bytes())
-        .map_err(|err| format!("append step ledger {} failed: {err}", path.display()))?;
-    file.sync_all()
-        .map_err(|err| format!("sync step ledger {} failed: {err}", path.display()))?;
+        && step_ledger_contains_idempotency_key(path, key)?
+    {
+        return Ok(false);
+    }
+    let mut file = OpenOptions::new().create(true).append(true).open(path)?;
+    let line = serde_json::to_string(entry)? + "\n";
+    file.write_all(line.as_bytes())?;
+    file.sync_all()?;
 
     // Auto-compact when the file grows past 300 lines.
     if let Err(e) = crate::utils::jsonl_maintenance::truncate_and_compact(path, 300) {
@@ -280,7 +274,7 @@ fn append_jsonl_entry(
 fn step_ledger_contains_idempotency_key(
     path: &Path,
     idempotency_key: &str,
-) -> Result<bool, String> {
+) -> Result<bool, FrameworkError> {
     if idempotency_key.trim().is_empty() {
         return Ok(false);
     }
@@ -288,7 +282,7 @@ fn step_ledger_contains_idempotency_key(
     let file = match fs::File::open(path) {
         Ok(f) => f,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(false),
-        Err(err) => return Err(format!("open step ledger {} failed: {err}", path.display())),
+        Err(err) => return Err(FrameworkError::Io(err)),
     };
     // Repair corrupt tail before scanning.
     if let Err(e) = crate::utils::jsonl_maintenance::truncate_corrupt_tail(path) {
@@ -516,12 +510,15 @@ fn resolve_repo_root_from_payload(payload: &Value) -> Result<PathBuf, FrameworkE
     Ok(explicit.unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))))
 }
 
-fn resolve_task_id_from_payload(repo_root: &Path, payload: &Value) -> Result<String, FrameworkError> {
+fn resolve_task_id_from_payload(
+    repo_root: &Path,
+    payload: &Value,
+) -> Result<String, FrameworkError> {
     let task_id = optional_non_empty_string(payload, "task_id")
         .or_else(|| crate::state_manager::read_active_task_id(repo_root))
         .or_else(|| crate::state_manager::read_focus_task_id(repo_root))
-        .ok_or_else(|| {
-            FrameworkError::Validation { message: "step ledger requires task_id or active_task.json/focus_task.json".to_string() }
+        .ok_or_else(|| FrameworkError::Validation {
+            message: "step ledger requires task_id or active_task.json/focus_task.json".to_string(),
         })?;
     validate_task_id_component(&task_id).map(str::to_string)
 }
@@ -543,7 +540,7 @@ fn sha256_text(text: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used)]
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use crate::utils::test_helpers::unique_repo;
 

@@ -92,8 +92,7 @@ pub fn detect(text: &str, config: &DetectionConfig) -> Result<Vec<AigcDetectionR
         });
 
         // Weighted ai_probability
-        let ai_probability =
-            ngram_score * 0.3 + burst_score * 0.4 + pattern_score * 0.3;
+        let ai_probability = ngram_score * 0.3 + burst_score * 0.4 + pattern_score * 0.3;
         let ai_probability = ai_probability.clamp(0.0, 1.0);
 
         results.push(AigcDetectionResult {
@@ -301,8 +300,7 @@ fn detect_vocabulary_repetition(text: &str, language: Language) -> f64 {
         return 0.0;
     }
 
-    let unique: std::collections::HashSet<&str> =
-        words.iter().map(|w| w.as_str()).collect();
+    let unique: std::collections::HashSet<&str> = words.iter().map(|w| w.as_str()).collect();
 
     let type_token_ratio = unique.len() as f64 / words.len() as f64;
     // Low TTR = repetitive. Natural: 0.5-0.7, AI: 0.3-0.5.
@@ -366,11 +364,10 @@ fn is_cjk(ch: char) -> bool {
 
 /// Common English abbreviations ending with '.' that should not be treated as sentence boundaries.
 const ENGLISH_ABBREVIATIONS: &[&str] = &[
-    "dr", "mr", "mrs", "ms", "prof", "sr", "jr", "st", "vs", "etc",
-    "e.g", "i.e", "cf", "al", "dept", "est", "govt", "inc", "ltd", "co",
-    "ave", "blvd", "rd", "pl", "u.s", "u.k", "no", "vol", "pp", "ch",
-    "ed", "rev", "gen", "col", "capt", "sgt", "lt", "maj", "sir",
-    "approx", "appt", "dept", "asso", "univ",
+    "dr", "mr", "mrs", "ms", "prof", "sr", "jr", "st", "vs", "etc", "e.g", "i.e", "cf", "al",
+    "dept", "est", "govt", "inc", "ltd", "co", "ave", "blvd", "rd", "pl", "u.s", "u.k", "no",
+    "vol", "pp", "ch", "ed", "rev", "gen", "col", "capt", "sgt", "lt", "maj", "sir", "approx",
+    "appt", "dept", "asso", "univ",
 ];
 
 /// Check if a word (lowercased) is a known English abbreviation.
@@ -444,12 +441,11 @@ pub(super) fn split_sentences(text: &str, language: Language) -> Vec<String> {
 
             sentences
         }
-        Language::Chinese => {
-            text.split(['。', '！', '？', '.', '!', '?'])
-                .map(|s| s.trim().to_string())
-                .filter(|s| !s.is_empty())
-                .collect()
-        }
+        Language::Chinese => text
+            .split(['。', '！', '？', '.', '!', '?'])
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect(),
     }
 }
 
@@ -457,7 +453,8 @@ pub(super) fn split_sentences(text: &str, language: Language) -> Vec<String> {
 fn has_preceding_abbreviation(text: &str, dot_pos: usize) -> bool {
     let before = &text[..dot_pos];
     // Find the last word boundary before the dot
-    let word_start = before.rfind(|c: char| c.is_whitespace() || c == ',' || c == '(')
+    let word_start = before
+        .rfind(|c: char| c.is_whitespace() || c == ',' || c == '(')
         .map(|p| p + 1)
         .unwrap_or(0);
     let candidate = before[word_start..].to_lowercase();
@@ -472,19 +469,31 @@ fn english_ai_patterns() -> Vec<(&'static str, String)> {
         ("moreover,", "AI phrase: Moreover".into()),
         ("furthermore,", "AI phrase: Furthermore".into()),
         ("in conclusion,", "AI phrase: In conclusion".into()),
-        ("it is worth noting that", "AI phrase: It is worth noting that".into()),
-        ("it is important to note", "AI phrase: It is important to note".into()),
+        (
+            "it is worth noting that",
+            "AI phrase: It is worth noting that".into(),
+        ),
+        (
+            "it is important to note",
+            "AI phrase: It is important to note".into(),
+        ),
         ("delve into", "AI phrase: delve into".into()),
         ("tapestry of", "AI phrase: tapestry of".into()),
         ("rich tapestry", "AI phrase: rich tapestry".into()),
         ("landscape of", "AI phrase: landscape of".into()),
         ("multifaceted", "AI word: multifaceted".into()),
-        ("comprehensive overview", "AI phrase: comprehensive overview".into()),
+        (
+            "comprehensive overview",
+            "AI phrase: comprehensive overview".into(),
+        ),
         ("it should be noted", "AI phrase: it should be noted".into()),
         ("in summary,", "AI phrase: In summary".into()),
         ("this underscores", "AI phrase: this underscores".into()),
         ("pivotal role", "AI phrase: pivotal role".into()),
-        ("nuanced understanding", "AI phrase: nuanced understanding".into()),
+        (
+            "nuanced understanding",
+            "AI phrase: nuanced understanding".into(),
+        ),
     ]
 }
 
@@ -510,9 +519,7 @@ fn chinese_ai_patterns() -> Vec<(&'static str, String)> {
 ///
 /// Looks for "is/are/was/were/been/being + past participle" patterns.
 fn count_passive_voice(text: &str) -> usize {
-    let passive_markers = [
-        " is ", " are ", " was ", " were ", " been ", " being ",
-    ];
+    let passive_markers = [" is ", " are ", " was ", " were ", " been ", " being "];
     let mut count = 0;
     for marker in &passive_markers {
         for (pos, _) in text.match_indices(marker) {
@@ -534,6 +541,7 @@ fn count_passive_voice(text: &str) -> usize {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     #[test]

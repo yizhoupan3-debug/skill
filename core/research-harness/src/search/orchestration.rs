@@ -5,7 +5,7 @@
 //! Coordinates searches across Semantic Scholar, arXiv, and paperplain MCP,
 //! deduplicates results, and ranks by relevance.
 
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use serde_json::{Value, json};
 
 use crate::search::helpers::*;
@@ -129,7 +129,10 @@ mod tests {
     #[test]
     fn external_source_arg_display() {
         assert_eq!(ExternalSourceArg::All.as_str(), "all");
-        assert_eq!(ExternalSourceArg::SemanticScholar.as_str(), "semantic-scholar");
+        assert_eq!(
+            ExternalSourceArg::SemanticScholar.as_str(),
+            "semantic-scholar"
+        );
         assert_eq!(ExternalSourceArg::Arxiv.as_str(), "arxiv");
     }
 }

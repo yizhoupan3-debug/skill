@@ -814,14 +814,8 @@ mod tests {
             "--json",
         ])
         .unwrap();
-        assert_eq!(
-            cli.repo_root,
-            Some(PathBuf::from("/tmp/repo"))
-        );
-        assert_eq!(
-            cli.query,
-            Some("test query".to_string())
-        );
+        assert_eq!(cli.repo_root, Some(PathBuf::from("/tmp/repo")));
+        assert_eq!(cli.query, Some("test query".to_string()));
         assert_eq!(cli.limit, 10);
         assert!(cli.json);
     }
@@ -842,8 +836,7 @@ mod tests {
 
     #[test]
     fn route_command_default_session_id() {
-        let cli =
-            Cli::try_parse_from(["router-rs-cli", "route", "q"]).unwrap();
+        let cli = Cli::try_parse_from(["router-rs-cli", "route", "q"]).unwrap();
         match cli.command {
             Some(RouterCommand::Route(cmd)) => {
                 assert_eq!(cmd.session_id, "route-cli");
@@ -886,8 +879,7 @@ mod tests {
 
     #[test]
     fn search_command_defaults() {
-        let cli =
-            Cli::try_parse_from(["router-rs-cli", "search", "find me"]).unwrap();
+        let cli = Cli::try_parse_from(["router-rs-cli", "search", "find me"]).unwrap();
         match cli.command {
             Some(RouterCommand::Search(cmd)) => {
                 assert_eq!(cmd.query, "find me");
@@ -945,9 +937,7 @@ mod tests {
 
     #[test]
     fn framework_sync_entrypoints_default() {
-        let cli =
-            Cli::try_parse_from(["router-rs-cli", "framework", "sync-entrypoints"])
-                .unwrap();
+        let cli = Cli::try_parse_from(["router-rs-cli", "framework", "sync-entrypoints"]).unwrap();
         match cli.command {
             Some(RouterCommand::Framework {
                 command: FrameworkCommand::SyncEntrypoints(cmd),
@@ -1021,10 +1011,7 @@ mod tests {
                 command: HostCommand::Agent { host_id, command },
             }) => {
                 assert_eq!(host_id, "opencode");
-                assert_eq!(
-                    command.repo_root,
-                    Some(PathBuf::from("/tmp"))
-                );
+                assert_eq!(command.repo_root, Some(PathBuf::from("/tmp")));
             }
             other => panic!("expected Host::Agent, got {:?}", other),
         }
@@ -1034,14 +1021,8 @@ mod tests {
 
     #[test]
     fn trace_compact_parses() {
-        let cli = Cli::try_parse_from([
-            "router-rs-cli",
-            "trace",
-            "compact",
-            "--input-json",
-            "{}",
-        ])
-        .unwrap();
+        let cli = Cli::try_parse_from(["router-rs-cli", "trace", "compact", "--input-json", "{}"])
+            .unwrap();
         match cli.command {
             Some(RouterCommand::Trace {
                 command: TraceCommand::Compact(cmd),
@@ -1056,9 +1037,7 @@ mod tests {
 
     #[test]
     fn storage_backend_catalog_parses() {
-        let cli =
-            Cli::try_parse_from(["router-rs-cli", "storage", "backend-catalog"])
-                .unwrap();
+        let cli = Cli::try_parse_from(["router-rs-cli", "storage", "backend-catalog"]).unwrap();
         match cli.command {
             Some(RouterCommand::Storage {
                 command: StorageCommand::BackendCatalog,
@@ -1071,14 +1050,8 @@ mod tests {
 
     #[test]
     fn loop_run_defaults() {
-        let cli = Cli::try_parse_from([
-            "router-rs-cli",
-            "loop",
-            "run",
-            "--loop-id",
-            "my-loop",
-        ])
-        .unwrap();
+        let cli =
+            Cli::try_parse_from(["router-rs-cli", "loop", "run", "--loop-id", "my-loop"]).unwrap();
         match cli.command {
             Some(RouterCommand::Loop {
                 command: LoopCommand::Run(cmd),
@@ -1093,15 +1066,9 @@ mod tests {
 
     #[test]
     fn loop_kill_with_all_flag() {
-        let cli = Cli::try_parse_from([
-            "router-rs-cli",
-            "loop",
-            "kill",
-            "--loop-id",
-            "l1",
-            "--all",
-        ])
-        .unwrap();
+        let cli =
+            Cli::try_parse_from(["router-rs-cli", "loop", "kill", "--loop-id", "l1", "--all"])
+                .unwrap();
         match cli.command {
             Some(RouterCommand::Loop {
                 command: LoopCommand::Kill(cmd),
@@ -1117,12 +1084,7 @@ mod tests {
 
     #[test]
     fn eval_route_contract_parses() {
-        let cli = Cli::try_parse_from([
-            "router-rs-cli",
-            "eval",
-            "route-contract",
-        ])
-        .unwrap();
+        let cli = Cli::try_parse_from(["router-rs-cli", "eval", "route-contract"]).unwrap();
         match cli.command {
             Some(RouterCommand::Eval {
                 command: EvalCommand::RouteContract,
@@ -1135,12 +1097,7 @@ mod tests {
 
     #[test]
     fn schema_drift_contract_parses() {
-        let cli = Cli::try_parse_from([
-            "router-rs-cli",
-            "schema-drift",
-            "contract",
-        ])
-        .unwrap();
+        let cli = Cli::try_parse_from(["router-rs-cli", "schema-drift", "contract"]).unwrap();
         match cli.command {
             Some(RouterCommand::SchemaDrift {
                 command: SchemaDriftCommand::Contract,
@@ -1153,12 +1110,7 @@ mod tests {
 
     #[test]
     fn closeout_contract_parses() {
-        let cli = Cli::try_parse_from([
-            "router-rs-cli",
-            "closeout",
-            "contract",
-        ])
-        .unwrap();
+        let cli = Cli::try_parse_from(["router-rs-cli", "closeout", "contract"]).unwrap();
         match cli.command {
             Some(RouterCommand::Closeout {
                 command: CloseoutCommand::Contract,
@@ -1184,14 +1136,10 @@ mod tests {
             Some(RouterCommand::Framework {
                 command:
                     FrameworkCommand::Maint {
-                        command:
-                            MaintSubcommand::RefreshHostProjections(args),
+                        command: MaintSubcommand::RefreshHostProjections(args),
                     },
             }) => {
-                assert_eq!(
-                    args.framework_root,
-                    Some(PathBuf::from("/fw"))
-                );
+                assert_eq!(args.framework_root, Some(PathBuf::from("/fw")));
             }
             other => panic!("expected RefreshHostProjections, got {:?}", other),
         }
@@ -1213,8 +1161,7 @@ mod tests {
             Some(RouterCommand::Framework {
                 command:
                     FrameworkCommand::Maint {
-                        command:
-                            MaintSubcommand::CleanHookState(args),
+                        command: MaintSubcommand::CleanHookState(args),
                     },
             }) => {
                 assert!(args.dry_run);
@@ -1244,10 +1191,7 @@ mod tests {
                         command: ProfileSubcommand::Emit(cmd),
                     },
             }) => {
-                assert_eq!(
-                    cmd.framework_profile,
-                    PathBuf::from("/tmp/profile.json")
-                );
+                assert_eq!(cmd.framework_profile, PathBuf::from("/tmp/profile.json"));
                 assert!(!cmd.full);
             }
             other => panic!("expected Profile::Emit, got {:?}", other),
@@ -1258,13 +1202,8 @@ mod tests {
 
     #[test]
     fn skills_validate_parses() {
-        let cli = Cli::try_parse_from([
-            "router-rs-cli",
-            "framework",
-            "skills",
-            "validate",
-        ])
-        .unwrap();
+        let cli =
+            Cli::try_parse_from(["router-rs-cli", "framework", "skills", "validate"]).unwrap();
         match cli.command {
             Some(RouterCommand::Framework {
                 command: FrameworkCommand::Skills { command },
@@ -1279,12 +1218,7 @@ mod tests {
 
     #[test]
     fn hook_policy_contract() {
-        let cli = Cli::try_parse_from([
-            "router-rs-cli",
-            "hook-policy",
-            "contract",
-        ])
-        .unwrap();
+        let cli = Cli::try_parse_from(["router-rs-cli", "hook-policy", "contract"]).unwrap();
         match cli.command {
             Some(RouterCommand::HookPolicy {
                 command: HookPolicyCommand::Contract,
@@ -1313,10 +1247,7 @@ mod tests {
             Some(RouterCommand::Framework {
                 command: FrameworkCommand::HostIntegration(cmd),
             }) => {
-                assert_eq!(
-                    cmd.args,
-                    vec!["--host-id", "claude", "--extra-flag"]
-                );
+                assert_eq!(cmd.args, vec!["--host-id", "claude", "--extra-flag"]);
             }
             other => panic!("expected HostIntegration, got {:?}", other),
         }
@@ -1365,8 +1296,7 @@ mod tests {
             Some(RouterCommand::Framework {
                 command:
                     FrameworkCommand::Maint {
-                        command:
-                            MaintSubcommand::RefreshHostProjections(args),
+                        command: MaintSubcommand::RefreshHostProjections(args),
                     },
             }) => {
                 assert_eq!(args.framework_root, Some(PathBuf::from("/fw")));
@@ -1397,11 +1327,7 @@ mod tests {
             Some(RouterCommand::Framework {
                 command:
                     FrameworkCommand::Maint {
-                        command:
-                            MaintSubcommand::VerifyHostHooks {
-                                host_id,
-                                args,
-                            },
+                        command: MaintSubcommand::VerifyHostHooks { host_id, args },
                     },
             }) => {
                 assert_eq!(host_id, "cursor");
@@ -1462,14 +1388,8 @@ mod tests {
 
     #[test]
     fn loop_status_via_cli() {
-        let cli = Cli::try_parse_from([
-            "router-rs-cli",
-            "loop",
-            "status",
-            "--loop-id",
-            "abc",
-        ])
-        .unwrap();
+        let cli =
+            Cli::try_parse_from(["router-rs-cli", "loop", "status", "--loop-id", "abc"]).unwrap();
         match cli.command {
             Some(RouterCommand::Loop {
                 command: LoopCommand::Status(cmd),
@@ -1755,8 +1675,7 @@ mod tests {
         .unwrap();
         match cli.command {
             Some(RouterCommand::Migrate {
-                command:
-                    MigrateCommand::CurrentArtifactClutter(cmd),
+                command: MigrateCommand::CurrentArtifactClutter(cmd),
             }) => {
                 assert_eq!(cmd.active_task_id, "task-123");
                 assert_eq!(cmd.repo_root, Some(PathBuf::from("/tmp")));

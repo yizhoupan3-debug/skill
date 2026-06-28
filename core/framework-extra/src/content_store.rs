@@ -82,8 +82,8 @@ impl ContentStore {
         if value.is_null() {
             return Err(ContentNotFound(hash.to_string()));
         }
-        let entry: ContentEntry =
-            serde_json::from_value(value).map_err(|e| ContentNotFound(format!("deserialize: {e}")))?;
+        let entry: ContentEntry = serde_json::from_value(value)
+            .map_err(|e| ContentNotFound(format!("deserialize: {e}")))?;
         if entry.hash == hash {
             Ok(entry.content)
         } else {
@@ -147,6 +147,7 @@ pub fn hex_hash(input: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use std::time::Duration;
 

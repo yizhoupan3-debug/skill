@@ -4,8 +4,9 @@
 //! `EVIDENCE_INDEX.json`, and heuristics for detecting verification commands.
 
 use fr_utils::constants::{
-    EVIDENCE_INDEX_FILENAME, EVIDENCE_INDEX_SCHEMA_VERSION, FRAMEWORK_SESSION_ARTIFACT_WRITE_AUTHORITY,
-    HOOK_EVIDENCE_APPEND_SCHEMA_VERSION, TASK_POINTERS_FILENAME,
+    EVIDENCE_INDEX_FILENAME, EVIDENCE_INDEX_SCHEMA_VERSION,
+    FRAMEWORK_SESSION_ARTIFACT_WRITE_AUTHORITY, HOOK_EVIDENCE_APPEND_SCHEMA_VERSION,
+    TASK_POINTERS_FILENAME,
 };
 use fr_utils::json_io::read_json_strict;
 use fr_utils::json_value::value_text;
@@ -159,12 +160,10 @@ fn resolve_evidence_append_task_id(
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .and_then(core_state_utils::path_guard::safe_task_id_component);
-    validated_override
-        .map(ToString::to_string)
-        .or_else(|| {
-            let view = core_state::task_state::resolve_task_view(repo_root, None);
-            view.task_id.filter(|s| !s.is_empty())
-        })
+    validated_override.map(ToString::to_string).or_else(|| {
+        let view = core_state::task_state::resolve_task_view(repo_root, None);
+        view.task_id.filter(|s| !s.is_empty())
+    })
 }
 
 pub fn append_evidence_index_merged_row(
@@ -289,7 +288,9 @@ pub fn framework_hook_evidence_append(payload: Value) -> Result<Value> {
     let preview = required_payload_text(&payload, "command_preview", "hook evidence append")?;
     let preview_trim = preview.trim();
     if preview_trim.is_empty() {
-        return Err(FrameworkError::validation("hook evidence append requires non-empty command_preview"));
+        return Err(FrameworkError::validation(
+            "hook evidence append requires non-empty command_preview",
+        ));
     }
     let source = defaulted_payload_text(&payload, "source", "external_hook");
     let task_id = payload
@@ -514,15 +515,16 @@ pub(super) fn detect_and_verify_physical_artifact(repo_root: &Path, command_lowe
 fn is_modified_recently(path: &std::path::Path, max_delta_secs: u64) -> bool {
     use std::time::SystemTime;
     if let Ok(metadata) = std::fs::metadata(path)
-        && let Ok(modified) = metadata.modified() {
-            let now = SystemTime::now();
-            if let Ok(elapsed) = now.duration_since(modified) {
-                return elapsed.as_secs() <= max_delta_secs;
-            }
-            if let Ok(elapsed) = modified.duration_since(now) {
-                return elapsed.as_secs() <= max_delta_secs;
-            }
+        && let Ok(modified) = metadata.modified()
+    {
+        let now = SystemTime::now();
+        if let Ok(elapsed) = now.duration_since(modified) {
+            return elapsed.as_secs() <= max_delta_secs;
         }
+        if let Ok(elapsed) = modified.duration_since(now) {
+            return elapsed.as_secs() <= max_delta_secs;
+        }
+    }
     false
 }
 
@@ -548,6 +550,7 @@ pub(super) fn normalize_evidence_index(payload: &Value) -> Vec<Map<String, Value
 
 #[cfg(test)]
 mod shell_command_verification_heuristic_tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::shell_command_looks_like_verification;
 
     fn check(cmd: &str) -> bool {

@@ -42,11 +42,9 @@ fn disk_dollar_schema(path: &std::path::Path) -> String {
 
 #[test]
 fn nl_route_adjustments_embedded_matches_disk() {
-    let embedded =
-        routing_engine::route::nl_route_adjustments::embedded_schema_version();
-    let disk = disk_schema_version(
-        &repo_root().join("configs/framework/NL_ROUTE_ADJUSTMENTS.json"),
-    );
+    let embedded = routing_engine::route::nl_route_adjustments::embedded_schema_version();
+    let disk =
+        disk_schema_version(&repo_root().join("configs/framework/NL_ROUTE_ADJUSTMENTS.json"));
     assert_eq!(
         embedded, disk,
         "NL_ROUTE_ADJUSTMENTS.json schema_version mismatch: embedded={embedded}, disk={disk}"
@@ -55,11 +53,9 @@ fn nl_route_adjustments_embedded_matches_disk() {
 
 #[test]
 fn hook_observation_rules_embedded_matches_disk() {
-    let embedded =
-        rt_core_contracts::hook_observation_rules::embedded_schema_version();
+    let embedded = rt_core_contracts::hook_observation_rules::embedded_schema_version();
     let disk = disk_schema_version(
-        &repo_root()
-            .join("configs/framework/ROUTER_RS_HOOK_OBSERVATION_RULES.json"),
+        &repo_root().join("configs/framework/ROUTER_RS_HOOK_OBSERVATION_RULES.json"),
     );
     assert_eq!(
         embedded, disk,
@@ -71,9 +67,7 @@ fn hook_observation_rules_embedded_matches_disk() {
 fn scoring_weights_embedded_matches_disk() {
     let embedded = routing_engine::scoring_config::embedded_schema_version();
     // scoring_weights.json uses "$schema" rather than "schema_version".
-    let disk = disk_dollar_schema(
-        &repo_root().join("configs/scoring_weights.json"),
-    );
+    let disk = disk_dollar_schema(&repo_root().join("configs/scoring_weights.json"));
     assert_eq!(
         embedded, disk,
         "scoring_weights.json $schema mismatch: embedded={embedded}, disk={disk}"
@@ -82,11 +76,8 @@ fn scoring_weights_embedded_matches_disk() {
 
 #[test]
 fn gate_hint_phrases_embedded_matches_disk() {
-    let embedded =
-        routing_engine::route::gate_hints::embedded_schema_version();
-    let disk = disk_schema_version(
-        &repo_root().join("configs/gate_hint_phrases.json"),
-    );
+    let embedded = routing_engine::route::gate_hints::embedded_schema_version();
+    let disk = disk_schema_version(&repo_root().join("configs/gate_hint_phrases.json"));
     assert_eq!(
         embedded, disk,
         "gate_hint_phrases.json schema_version mismatch: embedded={embedded}, disk={disk}"

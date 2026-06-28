@@ -10,8 +10,8 @@
 
 use criterion::{BenchmarkId, Criterion, black_box};
 use mcp_tool_registry::McpToolRecord;
-use tool_routing_engine::{route_tool_from_records, search_tools};
 use std::time::{Duration, Instant};
+use tool_routing_engine::{route_tool_from_records, search_tools};
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -36,8 +36,20 @@ fn report_latency(label: &str, samples: &mut [Duration]) {
 }
 
 fn make_tool_records(count: usize) -> Vec<McpToolRecord> {
-    let domains = ["composite", "research", "browser", "codegraph", "stdio-binary"];
-    let owners = ["framework", "research", "browser", "codegraph", "rust-tools"];
+    let domains = [
+        "composite",
+        "research",
+        "browser",
+        "codegraph",
+        "stdio-binary",
+    ];
+    let owners = [
+        "framework",
+        "research",
+        "browser",
+        "codegraph",
+        "rust-tools",
+    ];
     let descriptions = [
         "Search and retrieve documents from the knowledge base using full-text search",
         "Analyze code patterns and detect potential bugs via static analysis",
@@ -57,8 +69,16 @@ fn make_tool_records(count: usize) -> Vec<McpToolRecord> {
         .map(|i| {
             let cat = i % 5;
             McpToolRecord {
-                slug: format!("tool_{}_{}", ["search", "analyze", "screenshot", "codegraph", "exec"][cat], i),
-                display_name: format!("{} Tool #{}", ["Search", "Analyze", "Screenshot", "CodeGraph", "Execute"][cat], i),
+                slug: format!(
+                    "tool_{}_{}",
+                    ["search", "analyze", "screenshot", "codegraph", "exec"][cat],
+                    i
+                ),
+                display_name: format!(
+                    "{} Tool #{}",
+                    ["Search", "Analyze", "Screenshot", "CodeGraph", "Execute"][cat],
+                    i
+                ),
                 description: descriptions[cat].to_string(),
                 layer: "builtin".to_string(),
                 dispatch_domain: domains[cat].to_string(),
@@ -83,7 +103,10 @@ fn bench_search_tools(c: &mut Criterion) {
     let queries: &[(&str, &str)] = &[
         ("short", "search"),
         ("medium", "find browser screenshot"),
-        ("long", "I need a tool that can search the codebase for symbol definitions and display them"),
+        (
+            "long",
+            "I need a tool that can search the codebase for symbol definitions and display them",
+        ),
     ];
 
     let mut group = c.benchmark_group("search_tools");
@@ -95,7 +118,14 @@ fn bench_search_tools(c: &mut Criterion) {
             b.iter(|| black_box(search_tools(black_box(q), black_box(&records_50), 10, None)));
         });
         group.bench_with_input(BenchmarkId::new("100_tools", label), query, |b, q| {
-            b.iter(|| black_box(search_tools(black_box(q), black_box(&records_100), 10, None)));
+            b.iter(|| {
+                black_box(search_tools(
+                    black_box(q),
+                    black_box(&records_100),
+                    10,
+                    None,
+                ))
+            });
         });
     }
     group.finish();
@@ -111,19 +141,40 @@ fn bench_route_tool(c: &mut Criterion) {
     let queries: &[(&str, &str)] = &[
         ("short", "search"),
         ("medium", "capture browser screenshot"),
-        ("long", "I need to use the codegraph tool to find the callers of a function in the codebase"),
+        (
+            "long",
+            "I need to use the codegraph tool to find the callers of a function in the codebase",
+        ),
     ];
 
     let mut group = c.benchmark_group("route_tool");
     for (label, query) in queries {
         group.bench_with_input(BenchmarkId::new("20_tools", label), query, |b, q| {
-            b.iter(|| black_box(route_tool_from_records(black_box(q), black_box(&records_20), None)));
+            b.iter(|| {
+                black_box(route_tool_from_records(
+                    black_box(q),
+                    black_box(&records_20),
+                    None,
+                ))
+            });
         });
         group.bench_with_input(BenchmarkId::new("50_tools", label), query, |b, q| {
-            b.iter(|| black_box(route_tool_from_records(black_box(q), black_box(&records_50), None)));
+            b.iter(|| {
+                black_box(route_tool_from_records(
+                    black_box(q),
+                    black_box(&records_50),
+                    None,
+                ))
+            });
         });
         group.bench_with_input(BenchmarkId::new("100_tools", label), query, |b, q| {
-            b.iter(|| black_box(route_tool_from_records(black_box(q), black_box(&records_100), None)));
+            b.iter(|| {
+                black_box(route_tool_from_records(
+                    black_box(q),
+                    black_box(&records_100),
+                    None,
+                ))
+            });
         });
     }
     group.finish();

@@ -36,7 +36,9 @@ pub fn default_review_types() -> &'static [&'static str] {
 
 /// Compute review lane and parallel lane bits using a provided review type set.
 pub fn subagent_lane_bits_with_types(kind: Option<&str>, review_types: &[&str]) -> (bool, bool) {
-    let Some(k) = kind else { return (false, false); };
+    let Some(k) = kind else {
+        return (false, false);
+    };
     let review_lane = review_types.contains(&k);
     let parallel_types = subagent_review_types();
     let parallel_lane = parallel_types.contains(&k);
@@ -93,10 +95,19 @@ pub fn is_verification_command(tool_name: &str, command: &str) -> bool {
     }
     let cmd_lower = command.to_ascii_lowercase();
     const VERIFY_CMDS: &[&str] = &[
-        "cargo test", "cargo check", "cargo build", "cargo clippy", "cargo fmt",
-        "npm test", "npm run test",
-        "pytest", "make test", "make check",
-        "go test", "git diff", "git log",
+        "cargo test",
+        "cargo check",
+        "cargo build",
+        "cargo clippy",
+        "cargo fmt",
+        "npm test",
+        "npm run test",
+        "pytest",
+        "make test",
+        "make check",
+        "go test",
+        "git diff",
+        "git log",
     ];
     VERIFY_CMDS.iter().any(|cmd| cmd_lower.contains(cmd))
 }
@@ -111,8 +122,7 @@ pub const REVIEW_GATE_FOLLOWUP_NEED_SEGMENT: &str =
     "need=deep_reviewer_cycle general-purpose|best-of-n|deep-reviewer fork_context=false";
 
 /// Stable hint suffix for REVIEW_GATE incomplete lines.
-pub const REVIEW_GATE_FOLLOWUP_HINT_SEGMENT: &str =
-    "hint=fork_context_json_false_not_omitted";
+pub const REVIEW_GATE_FOLLOWUP_HINT_SEGMENT: &str = "hint=fork_context_json_false_not_omitted";
 
 /// `merge_hook_nudge_paragraph` dedup prefix for REVIEW_GATE detail.
 pub const REVIEW_GATE_DETAIL_PARAGRAPH_PREFIX: &str = "router-rs REVIEW_GATE detail";
@@ -161,7 +171,14 @@ pub fn update_goal_gate(
     response_text: &str,
     goal_drive_entrypoint: bool,
 ) {
-    update_goal_gate_with_disk(core, prompt, response_text, goal_drive_entrypoint, None, None)
+    update_goal_gate_with_disk(
+        core,
+        prompt,
+        response_text,
+        goal_drive_entrypoint,
+        None,
+        None,
+    )
 }
 
 /// Extended goal gate update with optional disk-based readiness evaluation.
@@ -204,7 +221,6 @@ pub fn update_goal_gate_with_disk(
     }
 }
 
-
 // ════════════════════════════════════════════════════════════════════
 // Shared handler logic (4-host unification)
 // ════════════════════════════════════════════════════════════════════
@@ -234,11 +250,25 @@ pub fn apply_override_and_reject(
 fn is_plan_keyword_in_prompt(text: &str) -> bool {
     let lower = text.to_ascii_lowercase();
     const PLAN_KWS: &[&str] = &[
-        "plan mode", "写plan", "给plan", "做计划", "制定计划",
-        "先规划", "先计划", "let's plan", "lets plan",
-        "create a plan", "make a plan", "write a plan",
-        "draft a plan", "draw up a plan", "design a plan",
-        "做个计划", "写个计划", "草拟计划", "规划方案",
+        "plan mode",
+        "写plan",
+        "给plan",
+        "做计划",
+        "制定计划",
+        "先规划",
+        "先计划",
+        "let's plan",
+        "lets plan",
+        "create a plan",
+        "make a plan",
+        "write a plan",
+        "draft a plan",
+        "draw up a plan",
+        "design a plan",
+        "做个计划",
+        "写个计划",
+        "草拟计划",
+        "规划方案",
         "我需要一个计划",
     ];
     PLAN_KWS.iter().any(|kw| lower.contains(kw))
@@ -252,12 +282,25 @@ fn extract_scope_change_constraint(text: &str) -> String {
 
     // Strip whole-phrase scope-change markers (ZH), longest-first
     const ZH_MARKERS: &[&str] = &[
-        "另外还需要", "另外还要", "另外需要", "另外要",
-        "顺便说一下", "顺便提一下", "顺便优化", "顺便修复",
-        "补充一下", "补充说明",
-        "等一下", "对了",
-        "追加要求", "增加约束",
-        "另外", "顺便", "补充", "追加", "额外",
+        "另外还需要",
+        "另外还要",
+        "另外需要",
+        "另外要",
+        "顺便说一下",
+        "顺便提一下",
+        "顺便优化",
+        "顺便修复",
+        "补充一下",
+        "补充说明",
+        "等一下",
+        "对了",
+        "追加要求",
+        "增加约束",
+        "另外",
+        "顺便",
+        "补充",
+        "追加",
+        "额外",
     ];
     let mut stripped = trimmed;
     for marker in ZH_MARKERS {
@@ -269,8 +312,12 @@ fn extract_scope_change_constraint(text: &str) -> String {
 
     // Strip English markers, longest-first
     const EN_MARKERS: &[&str] = &[
-        "one more thing", "apart from that", "by the way",
-        "additionally", "also need", "also want",
+        "one more thing",
+        "apart from that",
+        "by the way",
+        "additionally",
+        "also need",
+        "also want",
     ];
     for marker in EN_MARKERS {
         if let Some(rest) = stripped.strip_prefix(marker) {
@@ -280,13 +327,18 @@ fn extract_scope_change_constraint(text: &str) -> String {
     }
 
     // Strip leading punctuation and whitespace
-    let stripped = stripped
-        .trim_start_matches(|c: char| c.is_ascii_whitespace() || c == '：' || c == ':' || c == '，' || c == ',' || c == '。' || c == '.');
+    let stripped = stripped.trim_start_matches(|c: char| {
+        c.is_ascii_whitespace()
+            || c == '：'
+            || c == ':'
+            || c == '，'
+            || c == ','
+            || c == '。'
+            || c == '.'
+    });
 
     // Take first sentence or 120 chars, whichever is shorter
-    let end = stripped
-        .find(['。', '.', '\n'])
-        .unwrap_or(stripped.len());
+    let end = stripped.find(['。', '.', '\n']).unwrap_or(stripped.len());
     let end = end.min(120);
     // Use floor_char_boundary to avoid splitting UTF-8 multi-byte characters
     let safe_end = stripped.floor_char_boundary(end);
@@ -307,16 +359,25 @@ pub fn build_user_prompt_context_injection(
     let mut contexts = Vec::new();
 
     // Spawn-first review nudge
-    if review_required && !review_override
-        && core_policy::hook_common::should_inject_spawn_first_review_nudge(Some(repo_root), prompt) {
-            contexts.push(core_policy::registry_review_gate::review_spawn_first_nudge_line(
+    if review_required
+        && !review_override
+        && core_policy::hook_common::should_inject_spawn_first_review_nudge(Some(repo_root), prompt)
+    {
+        contexts.push(
+            core_policy::registry_review_gate::review_spawn_first_nudge_line(
                 Some(repo_root),
                 host_id,
-            ));
-        }
+            ),
+        );
+    }
 
     // Paper context injection
-    crate::hooks::maybe_append_paper_adversarial_context(repo_root, prompt, &mut contexts, paper_host);
+    crate::hooks::maybe_append_paper_adversarial_context(
+        repo_root,
+        prompt,
+        &mut contexts,
+        paper_host,
+    );
     crate::hooks::maybe_append_paper_prose_context(repo_root, prompt, &mut contexts, paper_host);
 
     // Auto-amend: when scope change is detected and there's an active goal,
@@ -427,4 +488,3 @@ pub fn build_user_prompt_context_injection(
 
     contexts
 }
-

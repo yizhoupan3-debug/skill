@@ -94,7 +94,8 @@ pub fn humanize_with_config(text: &str, config: &HumanizeConfig) -> Result<Human
                 }
             }
             HumanizeStrategy::SentenceVariation => {
-                let (new_text, count) = sentence_variation(&current, config.language, config.preserve_academic_tone);
+                let (new_text, count) =
+                    sentence_variation(&current, config.language, config.preserve_academic_tone);
                 if count > 0 {
                     current = new_text;
                     applied.push(format!("sentence_variation({count} adjustments)"));
@@ -176,10 +177,7 @@ fn vocabulary_swap(text: &str, language: Language) -> (String, usize) {
 
     // Chinese direct-statement strips
     if language == Language::Chinese {
-        let patterns = [
-            ("值得注意的是，", ""),
-            ("需要指出的是，", ""),
-        ];
+        let patterns = [("值得注意的是，", ""), ("需要指出的是，", "")];
         for (from, to) in &patterns {
             if result.contains(from) {
                 result = result.replace(from, to);
@@ -193,7 +191,7 @@ fn vocabulary_swap(text: &str, language: Language) -> (String, usize) {
 
 /// English AI-word replacement table (sorted by key length descending to prevent
 /// substring overlap — e.g. "delve" must not match inside "delve into").
-fn english_replacement_table() -> &'static [( &'static str,  &'static str)] {
+fn english_replacement_table() -> &'static [(&'static str, &'static str)] {
     use std::sync::LazyLock;
     static TABLE: LazyLock<Vec<(&str, &str)>> = LazyLock::new(|| {
         let mut table = vec![
@@ -223,7 +221,7 @@ fn english_replacement_table() -> &'static [( &'static str,  &'static str)] {
 
 /// Chinese AI-word replacement table (ordered by length descending to prevent
 /// substring overlap — e.g. "此外" must not match inside "与此同时").
-fn chinese_replacement_table() -> &'static [( &'static str,  &'static str)] {
+fn chinese_replacement_table() -> &'static [(&'static str, &'static str)] {
     use std::sync::LazyLock;
     static TABLE: LazyLock<Vec<(&str, &str)>> = LazyLock::new(|| {
         vec![
@@ -259,25 +257,22 @@ static RE_PASSIVE_BY: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?i)The (\w+) was (\w+) by the (\w+)\.").expect("invalid PASSIVE_BY regex")
 });
 #[allow(clippy::expect_used)]
-static RE_BEI_SOU_ZH: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"被(\w+)所(\w+)").expect("invalid BEI_SOU regex")
-});
+static RE_BEI_SOU_ZH: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"被(\w+)所(\w+)").expect("invalid BEI_SOU regex"));
 #[allow(clippy::expect_used)]
-static RE_WHICH_CLAUSE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r",\s+which ([^,]+),\s+").expect("invalid WHICH_CLAUSE regex")
-});
+static RE_WHICH_CLAUSE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r",\s+which ([^,]+),\s+").expect("invalid WHICH_CLAUSE regex"));
 #[allow(clippy::expect_used)]
 static RE_SEMICOLON_CONNECTORS: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r";\s+(moreover|furthermore|however|nevertheless),\s+").expect("invalid SEMICOLON regex")
+    Regex::new(r";\s+(moreover|furthermore|however|nevertheless),\s+")
+        .expect("invalid SEMICOLON regex")
 });
 #[allow(clippy::expect_used)]
-static RE_AND_CONNECTOR: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"^(.{40,}?), and (.+)$").expect("invalid AND_CONNECTOR regex")
-});
+static RE_AND_CONNECTOR: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^(.{40,}?), and (.+)$").expect("invalid AND_CONNECTOR regex"));
 #[allow(clippy::expect_used)]
-static RE_BINGQIE_ZH: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(.{20,}?)，并且(.+?)(。|$)").expect("invalid BINGQIE regex")
-});
+static RE_BINGQIE_ZH: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(.{20,}?)，并且(.+?)(。|$)").expect("invalid BINGQIE regex"));
 
 /// Apply syntactic transforms: passive→active reordering, clause reordering.
 fn syntactic_rewrite(text: &str, language: Language) -> (String, usize) {
@@ -296,7 +291,10 @@ fn syntactic_rewrite(text: &str, language: Language) -> (String, usize) {
                 let clause = &caps[2];
                 // Capitalize first letter of clause.
                 let mut chars = clause.chars();
-                let first = chars.next().map(|c| c.to_uppercase().to_string()).unwrap_or_default();
+                let first = chars
+                    .next()
+                    .map(|c| c.to_uppercase().to_string())
+                    .unwrap_or_default();
                 let rest: String = chars.collect();
                 format!("{first}{rest} is {adj}.")
             })
@@ -314,7 +312,10 @@ fn syntactic_rewrite(text: &str, language: Language) -> (String, usize) {
                 let agent = &caps[3];
                 let v = conjugate_passive_participle(verb);
                 let mut a_chars = agent.chars();
-                let a_first = a_chars.next().map(|c| c.to_uppercase().to_string()).unwrap_or_default();
+                let a_first = a_chars
+                    .next()
+                    .map(|c| c.to_uppercase().to_string())
+                    .unwrap_or_default();
                 let a_rest: String = a_chars.collect();
                 format!("{a_first}{a_rest} {v} the {noun}.")
             })
@@ -366,11 +367,7 @@ fn syntactic_rewrite_zh(text: &str) -> (String, usize) {
 // ── Strategy 3: Sentence Variation ──
 
 /// Break uniform sentence patterns by injecting length variation.
-fn sentence_variation(
-    text: &str,
-    language: Language,
-    preserve_academic: bool,
-) -> (String, usize) {
+fn sentence_variation(text: &str, language: Language, preserve_academic: bool) -> (String, usize) {
     let sentences = split_sentences(text, language);
     if sentences.len() < 3 {
         return (text.to_string(), 0);
@@ -500,14 +497,26 @@ fn estimate_improvement(original: &str, rewritten: &str, language: Language) -> 
     // Count AI-pattern occurrences before and after.
     let patterns = match language {
         Language::English => vec![
-            "moreover", "furthermore", "in conclusion",
-            "it is worth noting", "delve", "tapestry", "multifaceted",
-            "landscape", "underscore", "pivotal",
+            "moreover",
+            "furthermore",
+            "in conclusion",
+            "it is worth noting",
+            "delve",
+            "tapestry",
+            "multifaceted",
+            "landscape",
+            "underscore",
+            "pivotal",
         ],
         Language::Chinese => vec![
-            "值得注意的是", "此外", "综上所述",
-            "总而言之", "不可否认", "毋庸置疑",
-            "不可或缺", "日益凸显",
+            "值得注意的是",
+            "此外",
+            "综上所述",
+            "总而言之",
+            "不可否认",
+            "毋庸置疑",
+            "不可或缺",
+            "日益凸显",
         ],
     };
 
@@ -563,6 +572,7 @@ fn ensure_ending(s: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     #[test]
@@ -613,7 +623,10 @@ mod tests {
         let text = "It is worth noting that the model performs well.";
         let result = humanize(text, &[HumanizeStrategy::VocabularySwap]).unwrap();
         assert!(
-            !result.rewritten.to_lowercase().contains("it is worth noting"),
+            !result
+                .rewritten
+                .to_lowercase()
+                .contains("it is worth noting"),
             "Filler phrase should be stripped"
         );
     }

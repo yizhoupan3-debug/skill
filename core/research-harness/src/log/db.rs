@@ -9,7 +9,7 @@
 //! - 统一的 findings 表替代膨胀的 key_findings
 
 use anyhow::{Context, Result};
-use rusqlite::{params, Connection};
+use rusqlite::{Connection, params};
 use std::path::Path;
 
 use crate::log::models::*;
@@ -17,12 +17,18 @@ use crate::log::models::*;
 /// 转义 FTS5 查询中的特殊字符，防止语法错误。
 /// FTS5 将 - " ( ) * ^ 解析为语法 token。
 pub fn sanitize_fts_query(query: &str) -> String {
-    let sanitized: String = query.chars().map(|c| match c {
-        '-' | '"' | '(' | ')' | '*' | '^' => ' ',
-        _ => c,
-    }).collect();
+    let sanitized: String = query
+        .chars()
+        .map(|c| match c {
+            '-' | '"' | '(' | ')' | '*' | '^' => ' ',
+            _ => c,
+        })
+        .collect();
     // 合并连续空格
-    sanitized.split_whitespace().collect::<Vec<&str>>().join(" ")
+    sanitized
+        .split_whitespace()
+        .collect::<Vec<&str>>()
+        .join(" ")
 }
 
 /// Schema version number, bumped for each migration.
@@ -34,9 +40,7 @@ type MigrationFn = fn(&Connection) -> Result<()>;
 /// Migration registry: (from_version, migration_fn).
 /// Each function must be idempotent (safe to retry on partial failure).
 /// **Must be sorted by from_version ascending with no gaps** — validated by test.
-const MIGRATIONS: &[(i32, MigrationFn)] = &[
-    (2, migrate_v2_to_v3),
-];
+const MIGRATIONS: &[(i32, MigrationFn)] = &[(2, migrate_v2_to_v3)];
 
 fn run_migrations(conn: &Connection, existing_version: i32) -> Result<()> {
     // 运行时防御：验证 MIGRATIONS 已排序
@@ -44,7 +48,9 @@ fn run_migrations(conn: &Connection, existing_version: i32) -> Result<()> {
         if MIGRATIONS[i].0 <= MIGRATIONS[i - 1].0 {
             anyhow::bail!(
                 "MIGRATIONS ordering violation at index {}: v{} <= v{}",
-                i, MIGRATIONS[i].0, MIGRATIONS[i - 1].0
+                i,
+                MIGRATIONS[i].0,
+                MIGRATIONS[i - 1].0
             );
         }
     }
@@ -62,11 +68,13 @@ fn run_migrations(conn: &Connection, existing_version: i32) -> Result<()> {
 fn migrate_v2_to_v3(conn: &Connection) -> Result<()> {
     conn.execute_batch("BEGIN IMMEDIATE")?;
     // 幂等检查：只有列不存在时才 ALTER
-    let has_weight: bool = conn.query_row(
-        "SELECT COUNT(*) > 0 FROM pragma_table_info('connections') WHERE name='weight'",
-        [],
-        |row| row.get(0),
-    ).unwrap_or(false);
+    let has_weight: bool = conn
+        .query_row(
+            "SELECT COUNT(*) > 0 FROM pragma_table_info('connections') WHERE name='weight'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or(false);
     if !has_weight {
         conn.execute_batch(SCHEMA_ALTER_V2_TO_V3)?;
     }
@@ -108,15 +116,18 @@ pub fn init_database(db_path: &Path) -> Result<Connection> {
 
     if existing_version == 0 {
         // 首次创建或从旧版迁移 — 新版 schema 不兼容旧版
-        conn.execute_batch(SCHEMA_SQL).context("init: execute SCHEMA_SQL")?;
+        conn.execute_batch(SCHEMA_SQL)
+            .context("init: execute SCHEMA_SQL")?;
         conn.execute(
             "INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', ?1)",
             params![SCHEMA_VERSION],
         )?;
     } else if existing_version < SCHEMA_VERSION {
         // 遍历从 existing_version 到 SCHEMA_VERSION 之间的所有迁移
-        run_migrations(&conn, existing_version)
-            .context(format!("run migrations from v{} to v{}", existing_version, SCHEMA_VERSION))?;
+        run_migrations(&conn, existing_version).context(format!(
+            "run migrations from v{} to v{}",
+            existing_version, SCHEMA_VERSION
+        ))?;
         conn.execute(
             "UPDATE meta SET value = ?1 WHERE key = 'schema_version'",
             params![SCHEMA_VERSION],
@@ -384,9 +395,9 @@ pub fn update_entry(
     updated_at: &str,
 ) -> Result<()> {
     let mut stmts = Stmts::new(conn)?;
-    stmts
-        .update_entry
-        .execute(params![direction, question, context, importance, status, updated_at, id])?;
+    stmts.update_entry.execute(params![
+        direction, question, context, importance, status, updated_at, id
+    ])?;
     Ok(())
 }
 
@@ -414,9 +425,7 @@ pub fn get_entry(conn: &Connection, id: &str) -> Result<Option<Entry>> {
 /// 查询条目的 findings。
 pub fn get_findings(conn: &Connection, entry_id: &str) -> Result<Vec<Finding>> {
     let mut stmts = Stmts::new(conn)?;
-    let mut rows = stmts
-        .get_findings_by_entry
-        .query(params![entry_id])?;
+    let mut rows = stmts.get_findings_by_entry.query(params![entry_id])?;
     let mut results = Vec::new();
     while let Some(row) = rows.next()? {
         results.push(Finding {
@@ -487,7 +496,9 @@ pub fn search_findings(
 ) -> Result<Vec<Finding>> {
     let mut stmts = Stmts::new(conn)?;
     let fts_query = sanitize_fts_query(query);
-    let mut rows = stmts.search_findings.query(params![fts_query, kind_filter, limit as i64])?;
+    let mut rows = stmts
+        .search_findings
+        .query(params![fts_query, kind_filter, limit as i64])?;
     let mut results = Vec::new();
     while let Some(row) = rows.next()? {
         results.push(Finding {
@@ -525,7 +536,13 @@ pub fn upsert_entity(
     metadata: Option<&str>,
 ) -> Result<i64> {
     let mut stmts = Stmts::new(conn)?;
-    stmts.upsert_entity.execute(params![name, kind, description, metadata, framework_kernel::time::now_iso()])?;
+    stmts.upsert_entity.execute(params![
+        name,
+        kind,
+        description,
+        metadata,
+        framework_kernel::time::now_iso()
+    ])?;
     // Return entity ID via a fresh query
     let mut q = stmts.get_entity_by_name.query(params![name])?;
     match q.next()? {
@@ -565,7 +582,9 @@ pub fn insert_entry_entity(
     role: &str,
 ) -> Result<()> {
     let mut stmts = Stmts::new(conn)?;
-    stmts.insert_entry_entity.execute(params![entry_id, entity_id, role])?;
+    stmts
+        .insert_entry_entity
+        .execute(params![entry_id, entity_id, role])?;
     Ok(())
 }
 
@@ -590,7 +609,9 @@ pub fn get_entity_by_name(conn: &Connection, name: &str) -> Result<Option<Entity
 pub fn search_entities(conn: &Connection, query: &str, limit: usize) -> Result<Vec<Entity>> {
     let mut stmts = Stmts::new(conn)?;
     let fts_query = sanitize_fts_query(query);
-    let mut rows = stmts.search_entities.query(params![fts_query, limit as i64])?;
+    let mut rows = stmts
+        .search_entities
+        .query(params![fts_query, limit as i64])?;
     let mut results = Vec::new();
     while let Some(row) = rows.next()? {
         results.push(Entity {
@@ -944,6 +965,7 @@ END;
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use tempfile::tempdir;
 
@@ -1021,7 +1043,8 @@ mod tests {
     fn search_entries_no_match() {
         let (_dir, conn) = test_db();
         insert_entry(&conn, &test_entry("e1", "deepen", "transformer")).unwrap();
-        let results = search_entries(&conn, "quantum computing", None, None, None, None, 10).unwrap();
+        let results =
+            search_entries(&conn, "quantum computing", None, None, None, None, 10).unwrap();
         assert!(results.is_empty());
     }
 
@@ -1030,7 +1053,8 @@ mod tests {
         let (_dir, conn) = test_db();
         insert_entry(&conn, &test_entry("e1", "deepen", "transformer")).unwrap();
         insert_entry(&conn, &test_entry("e2", "broaden", "transformer")).unwrap();
-        let results = search_entries(&conn, "transformer", Some("deepen"), None, None, None, 10).unwrap();
+        let results =
+            search_entries(&conn, "transformer", Some("deepen"), None, None, None, 10).unwrap();
         assert_eq!(results.len(), 1);
     }
 
@@ -1039,9 +1063,12 @@ mod tests {
         let (_dir, conn) = test_db();
         insert_entry(&conn, &test_entry("e1", "deepen", "test")).unwrap();
         let finding = Finding {
-            id: 0, entry_id: "e1".to_string(), kind: "finding".to_string(),
+            id: 0,
+            entry_id: "e1".to_string(),
+            kind: "finding".to_string(),
             content: "attention improves accuracy".to_string(),
-            confidence: Some(0.8), metadata: None,
+            confidence: Some(0.8),
+            metadata: None,
             created_at: framework_kernel::time::now_iso(),
         };
         insert_finding(&conn, &finding).unwrap();

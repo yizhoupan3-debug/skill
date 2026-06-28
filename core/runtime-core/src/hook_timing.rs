@@ -18,7 +18,6 @@ pub fn mark_hook_start() {
     HOOK_STARTED.with(|c| c.set(Some(Instant::now())));
 }
 
-
 pub fn emit_hook_timing_line(event: &str) {
     if !router_rs_hook_timing_enabled() {
         // Reset thread-local accumulators in case a prior call accumulated state
@@ -34,7 +33,10 @@ pub fn emit_hook_timing_line(event: &str) {
     let lock_wait_ms = LOCK_WAIT_MS.with(|c| c.get());
     let cargo_check_ms = CARGO_CHECK_MS.with(|c| c.get());
     tracing::debug!(
-        event, duration_ms, lock_wait_ms, cargo_check_ms,
+        event,
+        duration_ms,
+        lock_wait_ms,
+        cargo_check_ms,
         "hook timing"
     );
     HOOK_STARTED.with(|c| c.set(None));

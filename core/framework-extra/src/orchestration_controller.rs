@@ -11,19 +11,18 @@ use fr_utils::constants::{
     RUNTIME_EVENT_HANDOFF_SCHEMA_VERSION, RUNTIME_EVENT_SINK_SCHEMA_VERSION,
     RUNTIME_EVENT_STREAM_SCHEMA_VERSION,
 };
-use rt_storage::runtime_envelope_ids::{
-    BACKGROUND_CONTROL_AUTHORITY, BACKGROUND_CONTROL_SCHEMA_VERSION,
-    RUNTIME_CONTROL_PLANE_AUTHORITY,
-    RUNTIME_OBSERVABILITY_DASHBOARD_SCHEMA_VERSION, RUNTIME_OBSERVABILITY_EXPORTER_SCHEMA_VERSION,
-    RUNTIME_OBSERVABILITY_HEALTH_SNAPSHOT_SCHEMA_VERSION,
-    RUNTIME_OBSERVABILITY_METRIC_CATALOG_SCHEMA_VERSION,
-    RUNTIME_OBSERVABILITY_METRIC_CATALOG_VERSION, RUNTIME_OBSERVABILITY_SIGNAL_VOCABULARY,
-};
 use framework_kernel::stdio_payload_types::{
     BackgroundControlEffectPlanPayload, BackgroundControlRequestPayload,
     BackgroundControlResponsePayload,
 };
-
+use rt_storage::runtime_envelope_ids::{
+    BACKGROUND_CONTROL_AUTHORITY, BACKGROUND_CONTROL_SCHEMA_VERSION,
+    RUNTIME_CONTROL_PLANE_AUTHORITY, RUNTIME_OBSERVABILITY_DASHBOARD_SCHEMA_VERSION,
+    RUNTIME_OBSERVABILITY_EXPORTER_SCHEMA_VERSION,
+    RUNTIME_OBSERVABILITY_HEALTH_SNAPSHOT_SCHEMA_VERSION,
+    RUNTIME_OBSERVABILITY_METRIC_CATALOG_SCHEMA_VERSION,
+    RUNTIME_OBSERVABILITY_METRIC_CATALOG_VERSION, RUNTIME_OBSERVABILITY_SIGNAL_VOCABULARY,
+};
 
 fn background_effect_plan(next_step: &str) -> BackgroundControlEffectPlanPayload {
     BackgroundControlEffectPlanPayload {
@@ -171,23 +170,24 @@ fn handle_batch_plan(
     }
     if let Some(requested) = requested_group_id.as_ref()
         && let Some(existing) = request_group_ids.iter().next()
-            && existing != requested {
-                let mut effect_plan = background_effect_plan("reject");
-                effect_plan.terminal_status = Some("failed".to_string());
-                let mut resp = base_response("batch-plan", supported_multitask_strategies);
-                resp.accepted = Some(false);
-                resp.requires_takeover = Some(false);
-                resp.error = Some(
+        && existing != requested
+    {
+        let mut effect_plan = background_effect_plan("reject");
+        effect_plan.terminal_status = Some("failed".to_string());
+        let mut resp = base_response("batch-plan", supported_multitask_strategies);
+        resp.accepted = Some(false);
+        resp.requires_takeover = Some(false);
+        resp.error = Some(
                     "enqueue_background_batch requires one consistent parallel_group_id across the whole batch."
                         .to_string(),
                 );
-                resp.terminal_status = Some("failed".to_string());
-                resp.finalize_immediately = Some(true);
-                resp.cancel_running_task = Some(false);
-                resp.reason = "batch-plan-misaligned-parallel-group".to_string();
-                resp.effect_plan = effect_plan;
-                return Ok(resp);
-            }
+        resp.terminal_status = Some("failed".to_string());
+        resp.finalize_immediately = Some(true);
+        resp.cancel_running_task = Some(false);
+        resp.reason = "batch-plan-misaligned-parallel-group".to_string();
+        resp.effect_plan = effect_plan;
+        return Ok(resp);
+    }
 
     let resolved_parallel_group_id = requested_group_id
         .or_else(|| request_group_ids.into_iter().next())
@@ -647,10 +647,11 @@ pub fn build_runtime_observability_metric_catalog_payload() -> Value {
         .map(|metric| {
             let mut metric_object = metric;
             if let Some(base_dimensions) = metric_object.get("base_dimensions").cloned()
-                && let Some(object) = metric_object.as_object_mut() {
-                    object.remove("base_dimensions");
-                    object.insert("dimensions".to_string(), base_dimensions);
-                }
+                && let Some(object) = metric_object.as_object_mut()
+            {
+                object.remove("base_dimensions");
+                object.insert("dimensions".to_string(), base_dimensions);
+            }
             metric_object
         })
         .collect::<Vec<Value>>();
@@ -772,4 +773,3 @@ pub fn runtime_observability_dashboard_schema() -> Value {
         ],
     })
 }
-

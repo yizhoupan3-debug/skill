@@ -29,16 +29,17 @@ pub(super) fn handle_tools_call(
     {
         let limiter = get_rate_limiter();
         if let Some(mut guard) = poison_safe_lock!(limiter)
-            && let Err(e) = guard.check_and_record(tool_name) {
-                return json!({
-                    "jsonrpc": "2.0",
-                    "id": id,
-                    "result": {
-                        "content": [{ "type": "text", "text": format!("Rate limit: {}. Consider batching operations.", e) }],
-                        "isError": true,
-                    },
-                });
-            }
+            && let Err(e) = guard.check_and_record(tool_name)
+        {
+            return json!({
+                "jsonrpc": "2.0",
+                "id": id,
+                "result": {
+                    "content": [{ "type": "text", "text": format!("Rate limit: {}. Consider batching operations.", e) }],
+                    "isError": true,
+                },
+            });
+        }
     }
 
     // HX-5: MCP pre-guard (mcp-tool-safety); panic → allow + log.
@@ -57,7 +58,13 @@ pub(super) fn handle_tools_call(
         });
     }
 
-    let result = dispatch_tool(tool_name, arguments, repo_root, host_id, connection_session_id);
+    let result = dispatch_tool(
+        tool_name,
+        arguments,
+        repo_root,
+        host_id,
+        connection_session_id,
+    );
 
     match result {
         Ok(content) => {
@@ -79,7 +86,6 @@ pub(super) fn handle_tools_call(
         }),
     }
 }
-
 
 pub(super) fn tool_skill_route(
     arguments: &Value,
@@ -137,7 +143,12 @@ pub(super) fn tool_skill_search(
             runtime_path.display()
         ));
     }
-    Ok(crate::hooks::mcp_tool_search_skills(query, limit, effective_host, &repo_root.to_string_lossy())?)
+    Ok(crate::hooks::mcp_tool_search_skills(
+        query,
+        limit,
+        effective_host,
+        &repo_root.to_string_lossy(),
+    )?)
 }
 
 pub(super) fn tool_skill_read(arguments: &Value, repo_root: &Path) -> Result<String, String> {
@@ -290,7 +301,6 @@ pub(super) fn tool_record_evidence(arguments: &Value, repo_root: &Path) -> Resul
 
     crate::hooks::append_evidence_index(repo_root, None, entry)?;
 
-
     let exit_display = exit_code
         .map(|ec| ec.to_string())
         .unwrap_or_else(|| "null".to_string());
@@ -336,12 +346,12 @@ pub(super) fn tool_session_checkpoint(
     crate::hooks::write_framework_session_artifacts(payload)
         .map_err(|e| format!("Checkpoint write failed: {e}"))?;
 
-
     Ok(json!({"result": format!(
         "Checkpoint written: summary={}, next_actions_count={}",
         summary.chars().count(),
         next_actions.len()
-    )}).to_string())
+    )})
+    .to_string())
 }
 
 pub fn tool_closeout_gate(
@@ -349,7 +359,9 @@ pub fn tool_closeout_gate(
     repo_root: &Path,
     host_id: &str,
 ) -> Result<String, String> {
-    Ok(crate::hooks::tool_closeout_gate_evaluate(arguments, repo_root, host_id)?)
+    Ok(crate::hooks::tool_closeout_gate_evaluate(
+        arguments, repo_root, host_id,
+    )?)
 }
 
 pub(super) fn tool_closeout_record_write(
@@ -357,7 +369,9 @@ pub(super) fn tool_closeout_record_write(
     repo_root: &Path,
     _host_id: &str,
 ) -> Result<String, String> {
-    Ok(crate::hooks::tool_closeout_record_write_dispatch(arguments, repo_root)?)
+    Ok(crate::hooks::tool_closeout_record_write_dispatch(
+        arguments, repo_root,
+    )?)
 }
 
 pub(super) fn tool_goal_state_read(arguments: &Value, repo_root: &Path) -> Result<String, String> {
@@ -372,9 +386,9 @@ pub(super) fn tool_goal_state_manage(
     repo_root: &Path,
     connection_session_id: &str,
 ) -> Result<String, String> {
-    let result = crate::hooks::tool_goal_state_manage_dispatch(arguments, repo_root, connection_session_id)?;
+    let result =
+        crate::hooks::tool_goal_state_manage_dispatch(arguments, repo_root, connection_session_id)?;
     Ok(result)
 }
 
 // ── Research Harness MCP Tools ──
-

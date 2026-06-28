@@ -28,10 +28,7 @@ pub fn check_figure_references(tex_path: &Path) -> Result<Vec<String>> {
     let labels = extract_labels(&content);
     let refs = extract_refs(&content);
 
-    let missing: Vec<String> = refs
-        .into_iter()
-        .filter(|r| !labels.contains(r))
-        .collect();
+    let missing: Vec<String> = refs.into_iter().filter(|r| !labels.contains(r)).collect();
 
     Ok(missing)
 }
@@ -92,7 +89,8 @@ fn extract_labels(content: &str) -> HashSet<String> {
 /// 提取 LaTeX 文件中所有 \ref{...}, \eqref{...}, \autoref{...} 的引用名。
 fn extract_refs(content: &str) -> Vec<String> {
     #[allow(clippy::expect_used)]
-    let re = Regex::new(r"\\(?:ref|eqref|autoref|nameref|pageref)\{([^}]+)\}").expect("static regex");
+    let re =
+        Regex::new(r"\\(?:ref|eqref|autoref|nameref|pageref)\{([^}]+)\}").expect("static regex");
     re.captures_iter(content)
         .map(|cap| cap[1].to_string())
         .collect()
@@ -100,6 +98,7 @@ fn extract_refs(content: &str) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     #[test]

@@ -6,10 +6,10 @@ use serde_json::Value;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use super::pointer_ops::read_active_task_id;
 use super::RFV_LOOP_STATE_FILENAME;
+use super::pointer_ops::read_active_task_id;
 
-pub fn quality_gate_state_path(repo_root: &Path, task_id: &str) -> Result<PathBuf, FrameworkError> {
+pub fn rfv_loop_state_path(repo_root: &Path, task_id: &str) -> Result<PathBuf, FrameworkError> {
     let tid = crate::utils::path_guard::validate_task_id_component(task_id)?;
     Ok(repo_root
         .join("artifacts/current")
@@ -17,13 +17,15 @@ pub fn quality_gate_state_path(repo_root: &Path, task_id: &str) -> Result<PathBu
         .join(RFV_LOOP_STATE_FILENAME))
 }
 
-pub fn read_quality_gate_state(
+pub fn read_rfv_loop_state(
     repo_root: &Path,
     task_id_override: Option<&str>,
 ) -> Result<Option<Value>, FrameworkError> {
     let task_id = if let Some(t) = task_id_override {
         if t.trim().is_empty() {
-            return Err(FrameworkError::validation("framework_quality_gate: task_id override is empty"));
+            return Err(FrameworkError::validation(
+                "framework_quality_gate: task_id override is empty",
+            ));
         }
         t.trim().to_string()
     } else {
@@ -33,8 +35,10 @@ pub fn read_quality_gate_state(
         t
     };
     crate::utils::path_guard::validate_task_id_component(&task_id)?;
-    let path = quality_gate_state_path(repo_root, &task_id)?;
-    if !path.is_file() { return Ok(None); }
+    let path = rfv_loop_state_path(repo_root, &task_id)?;
+    if !path.is_file() {
+        return Ok(None);
+    }
     let raw = fs::read_to_string(&path)?;
     let value: Value = serde_json::from_str(&raw)?;
     Ok(Some(value))

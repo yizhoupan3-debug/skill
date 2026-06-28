@@ -77,7 +77,11 @@ pub fn search_default(query: &str, limit: usize) -> Result<Vec<Value>> {
 // ── Convenience wrapper returning crate::types::Paper ──
 
 /// Search and convert to typed Paper structs.
-pub fn search_papers(client: &Client, query: &str, limit: usize) -> Result<Vec<crate::types::Paper>> {
+pub fn search_papers(
+    client: &Client,
+    query: &str,
+    limit: usize,
+) -> Result<Vec<crate::types::Paper>> {
     let raw = search(client, query, limit)?;
     raw.into_iter().map(json_to_paper).collect()
 }
@@ -122,6 +126,7 @@ fn json_to_paper(v: Value) -> Result<crate::types::Paper> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use serde_json::json;
 

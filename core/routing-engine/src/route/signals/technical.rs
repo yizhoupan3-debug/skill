@@ -146,9 +146,7 @@ pub fn has_parallel_execution_context(query_text: &str, query_token_list: &[Stri
         "split work",
     ]
     .iter()
-    .any(|marker| {
-        query_text.contains(*marker) || text_matches_phrase(query_token_list, marker)
-    });
+    .any(|marker| query_text.contains(*marker) || text_matches_phrase(query_token_list, marker));
     if !explicit_parallel {
         return false;
     }
@@ -195,8 +193,7 @@ pub fn has_parallel_execution_context(query_text: &str, query_token_list: &[Stri
         if **marker == "ui" {
             return text_matches_phrase(query_token_list, marker);
         }
-        query_text.contains(*marker)
-            || text_matches_phrase(query_token_list, marker)
+        query_text.contains(*marker) || text_matches_phrase(query_token_list, marker)
     })
     .count();
 
@@ -213,24 +210,21 @@ pub fn has_parallel_review_candidate_context(
         if marker.as_str() == "review" {
             return text_matches_phrase(query_token_list, "review");
         }
-        query_text.contains(marker.as_str())
-            || text_matches_phrase(query_token_list, marker)
+        query_text.contains(marker.as_str()) || text_matches_phrase(query_token_list, marker)
     });
     if !review_requested {
         return false;
     }
 
     let broad_or_independent = markers.breadth_markers.iter().any(|marker| {
-        query_text.contains(marker.as_str())
-            || text_matches_phrase(query_token_list, marker)
+        query_text.contains(marker.as_str()) || text_matches_phrase(query_token_list, marker)
     });
     if !broad_or_independent {
         return false;
     }
 
     markers.scope_markers.iter().any(|marker| {
-        query_text.contains(marker.as_str())
-            || text_matches_phrase(query_token_list, marker)
+        query_text.contains(marker.as_str()) || text_matches_phrase(query_token_list, marker)
     })
 }
 
@@ -268,12 +262,18 @@ pub fn should_defer_to_artifact_gate(
     if query_text.contains(&explicit_entry) {
         return false;
     }
-    if record.skill_flags.iter().any(|f| f == "artifact_exception:ppt_beamer")
+    if record
+        .skill_flags
+        .iter()
+        .any(|f| f == "artifact_exception:ppt_beamer")
         && super::design::has_beamer_slide_context(query_text, query_token_list)
     {
         return false;
     }
-    if record.skill_flags.iter().any(|f| f == "artifact_exception:source_slide_formats")
+    if record
+        .skill_flags
+        .iter()
+        .any(|f| f == "artifact_exception:source_slide_formats")
         && super::design::has_source_slide_format_context(query_text, query_token_list)
     {
         return false;
@@ -294,7 +294,10 @@ pub fn should_suppress_non_target_artifact_gate(
     query_text: &str,
     query_token_list: &[String],
 ) -> bool {
-    if record.skill_flags.iter().any(|f| f == "artifact_exception:design_md_suppress")
+    if record
+        .skill_flags
+        .iter()
+        .any(|f| f == "artifact_exception:design_md_suppress")
         && super::design::has_design_contract_context(query_text, query_token_list)
         && !super::design::has_design_contract_negation_context(query_text, query_token_list)
     {
@@ -312,7 +315,10 @@ pub fn should_prefer_design_contract_over_artifact(
     query_text: &str,
     query_token_list: &[String],
 ) -> bool {
-    record.skill_flags.iter().any(|f| f == "artifact_exception:slides_design_contract")
+    record
+        .skill_flags
+        .iter()
+        .any(|f| f == "artifact_exception:slides_design_contract")
         && super::design::has_design_contract_context(query_text, query_token_list)
         && !super::design::has_design_contract_negation_context(query_text, query_token_list)
 }

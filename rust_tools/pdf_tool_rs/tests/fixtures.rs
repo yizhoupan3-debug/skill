@@ -1,5 +1,5 @@
 use lopdf::content::{Content, Operation};
-use lopdf::{dictionary, Document, Object, Stream};
+use lopdf::{Document, Object, Stream, dictionary};
 use std::path::{Path, PathBuf};
 
 /// Valid PDF with extractable "Hello World!" text.
@@ -116,7 +116,17 @@ pub fn write_image_only_pdf(path: &Path) {
     let content = Content {
         operations: vec![
             Operation::new("q", vec![]),
-            Operation::new("cm", vec![200.into(), 0.into(), 0.into(), 200.into(), 100.into(), 400.into()]),
+            Operation::new(
+                "cm",
+                vec![
+                    200.into(),
+                    0.into(),
+                    0.into(),
+                    200.into(),
+                    100.into(),
+                    400.into(),
+                ],
+            ),
             Operation::new("Do", vec!["Im1".into()]),
             Operation::new("Q", vec![]),
         ],

@@ -136,14 +136,15 @@ pub fn normalize_path(path: &Path) -> Result<PathBuf> {
     let combined = if path.is_absolute() {
         path.to_path_buf()
     } else {
-        std::env::current_dir()?
-            .join(path)
+        std::env::current_dir()?.join(path)
     };
     // Resolve . and .. components without requiring path to exist on disk
     let mut normalized = PathBuf::new();
     for component in combined.components() {
         match component {
-            std::path::Component::ParentDir => { normalized.pop(); }
+            std::path::Component::ParentDir => {
+                normalized.pop();
+            }
             std::path::Component::CurDir => {} // skip
             other => normalized.push(other.as_os_str()),
         }
@@ -158,9 +159,10 @@ pub fn try_framework_root_from_workspace_env() -> Option<PathBuf> {
         };
         let candidate = PathBuf::from(raw);
         if let Ok(root) = normalize_path(&candidate)
-            && is_framework_root(&root) {
-                return Some(root);
-            }
+            && is_framework_root(&root)
+        {
+            return Some(root);
+        }
     }
     None
 }
@@ -195,7 +197,7 @@ pub fn resolve_framework_root(explicit: Option<&Path>) -> Result<PathBuf> {
     Err(FrameworkError::validation(
         "missing framework_root; pass --framework-root, set SKILL_FRAMEWORK_ROOT, \
          or set a registered host workspace root env var \
-         to the framework checkout when cwd is outside the repo"
+         to the framework checkout when cwd is outside the repo",
     ))
 }
 
@@ -210,10 +212,7 @@ pub fn resolve_projection_framework_root(explicit: Option<&Path>) -> Result<Path
     Ok(root)
 }
 
-pub fn resolve_project_root(
-    explicit: Option<&Path>,
-    framework_root: &Path,
-) -> Result<PathBuf> {
+pub fn resolve_project_root(explicit: Option<&Path>, framework_root: &Path) -> Result<PathBuf> {
     if let Some(path) = explicit {
         return normalize_path(path);
     }
@@ -253,10 +252,7 @@ pub fn normalize_discovered_project_root(
     Ok(candidate)
 }
 
-pub fn resolve_artifact_root(
-    explicit: Option<&Path>,
-    framework_root: &Path,
-) -> Result<PathBuf> {
+pub fn resolve_artifact_root(explicit: Option<&Path>, framework_root: &Path) -> Result<PathBuf> {
     if let Some(path) = explicit {
         return normalize_path(path);
     }
@@ -281,7 +277,13 @@ fn cargo_metadata_target_dir(manifest: &Path) -> Option<PathBuf> {
         return None;
     }
     let output = std::process::Command::new("cargo")
-        .args(["metadata", "--no-deps", "--format-version", "1", "--manifest-path"])
+        .args([
+            "metadata",
+            "--no-deps",
+            "--format-version",
+            "1",
+            "--manifest-path",
+        ])
         .arg(manifest)
         .output()
         .ok()?;
@@ -467,9 +469,7 @@ pub fn codegraph_mcp_cargo_bootstrap_args(framework_root: &Path, repo_root: &str
 pub fn validate_mcp_command_binary(cmd: &str, framework_root: Option<&Path>) -> Result<()> {
     if cmd == "cargo" {
         if which::which("cargo").is_err() {
-            return Err(FrameworkError::config(
-                "Cargo is not found on system PATH",
-            ));
+            return Err(FrameworkError::config("Cargo is not found on system PATH"));
         }
         return Ok(());
     }
@@ -539,8 +539,10 @@ pub fn resolve_projection_roots(
         let mut m = BTreeMap::new();
         // Map explicit CLI overrides by host_id for lookup
         // Hosts not in `host_homes` have no entry — same as None in the old per-host scheme.
-        let explicit_overrides: std::collections::HashMap<&str, Option<&Path>> =
-            host_homes.iter().map(|(id, path)| (id.as_str(), Some(path.as_path()))).collect();
+        let explicit_overrides: std::collections::HashMap<&str, Option<&Path>> = host_homes
+            .iter()
+            .map(|(id, path)| (id.as_str(), Some(path.as_path())))
+            .collect();
         for host_id in framework_kernel::runtime_registry::ALL_HOST_IDS {
             let env_var = framework_kernel::runtime_registry::home_env_var(host_id);
             let default_leaf = framework_kernel::runtime_registry::host_private_config_dir(host_id);

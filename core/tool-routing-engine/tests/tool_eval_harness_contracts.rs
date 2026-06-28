@@ -1,5 +1,6 @@
 #[cfg(test)]
 mod tool_eval_harness_contracts {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use std::path::Path;
 
     /// Resolve project root from `CARGO_MANIFEST_DIR` (core/tool-routing-engine).
@@ -20,9 +21,8 @@ mod tool_eval_harness_contracts {
             .expect("should load real MCP_TOOL_REGISTRY.json");
 
         let cases_path = project_root().join("tests/tool_routing_eval_cases.json");
-        let cases =
-            tool_routing_engine::eval::load_tool_routing_eval_cases(&cases_path)
-                .expect("load tool routing eval cases");
+        let cases = tool_routing_engine::eval::load_tool_routing_eval_cases(&cases_path)
+            .expect("load tool routing eval cases");
         let report = tool_routing_engine::eval::evaluate_tool_routing_cases(&records, cases)
             .expect("evaluate tool routing cases");
 
@@ -46,10 +46,7 @@ mod tool_eval_harness_contracts {
 
         eprintln!("=== Tool Routing Eval Report ===");
         eprintln!("  Cases:          {}", m.case_count);
-        eprintln!(
-            "  Trigger hit:    {} ({:.1}%)",
-            m.trigger_hit, trigger_rate
-        );
+        eprintln!("  Trigger hit:    {} ({:.1}%)", m.trigger_hit, trigger_rate);
         eprintln!("  Trigger miss:   {}", m.trigger_miss);
         eprintln!(
             "  Overtrigger:    {} ({:.1}%)",
@@ -62,8 +59,7 @@ mod tool_eval_harness_contracts {
 
         // Print miss/overtrigger details for diagnosis
         for result in &report.results {
-            let relevant =
-                matches!(result.category.as_str(), "should-trigger" | "fuzzy-rescue");
+            let relevant = matches!(result.category.as_str(), "should-trigger" | "fuzzy-rescue");
             if relevant && !result.trigger_hit {
                 eprintln!(
                     "  MISS id={:?} expected_tool={:?} selected={:?} task={:?}",

@@ -75,17 +75,18 @@ fn open_append_nofollow(path: &Path) -> Result<fs::File, std::io::Error> {
 
 #[cfg(not(unix))]
 fn open_append_nofollow(path: &Path) -> Result<fs::File, std::io::Error> {
-    fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(path)
+    fs::OpenOptions::new().create(true).append(true).open(path)
 }
 
-pub fn append_text_with_process_lock(path: &Path, payload: &str, context: &str) -> Result<(), FrameworkError> {
+pub fn append_text_with_process_lock(
+    path: &Path,
+    payload: &str,
+    context: &str,
+) -> Result<(), FrameworkError> {
     validate_write_path(path, None)?;
-    let _guard = append_io_lock()
-        .lock()
-        .map_err(|_| FrameworkError::Lock { message: format!("{context} append lock poisoned") })?;
+    let _guard = append_io_lock().lock().map_err(|_| FrameworkError::Lock {
+        message: format!("{context} append lock poisoned"),
+    })?;
     let mut file = open_append_nofollow(path)?;
     file.lock_exclusive()?;
     file.write_all(payload.as_bytes())?;

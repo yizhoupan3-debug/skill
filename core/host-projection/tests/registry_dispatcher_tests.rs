@@ -6,9 +6,11 @@
 //! All expected values are read from RUNTIME_REGISTRY.json at test time —
 //! the registry is the single source of truth for host metadata.
 
+#![allow(clippy::unwrap_used, clippy::expect_used)]
+
 use host_projection::hosts::hook_dispatch::HookEvent;
 use host_projection::hosts::host_provider_for_id;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::path::Path;
 
 /// Load RUNTIME_REGISTRY.json and return per-host metadata.
@@ -32,8 +34,8 @@ fn test_repo_root() -> &'static Path {
 #[test]
 fn all_hosts_have_dispatcher() {
     for host_id in framework_kernel::runtime_registry::ALL_HOST_IDS {
-        let provider = host_provider_for_id(host_id)
-            .unwrap_or_else(|| panic!("no provider for {host_id}"));
+        let provider =
+            host_provider_for_id(host_id).unwrap_or_else(|| panic!("no provider for {host_id}"));
         let _ = provider.dispatcher();
     }
 }
@@ -125,8 +127,8 @@ fn pretool_protection_matches_registry() {
 #[test]
 fn handle_stop_does_not_panic() {
     for host_id in framework_kernel::runtime_registry::ALL_HOST_IDS {
-        let provider = host_provider_for_id(host_id)
-            .unwrap_or_else(|| panic!("no provider for {host_id}"));
+        let provider =
+            host_provider_for_id(host_id).unwrap_or_else(|| panic!("no provider for {host_id}"));
         let dispatcher = provider.dispatcher();
         let event = HookEvent {
             repo_root: test_repo_root(),

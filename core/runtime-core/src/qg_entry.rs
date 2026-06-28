@@ -15,9 +15,7 @@
 
 use std::path::Path;
 
-use quality_gate::types::{
-    CheckContext, Finding, GateVerdict, Severity,
-};
+use quality_gate::types::{CheckContext, Finding, GateVerdict, Severity};
 
 use crate::qg_route::evaluate_qg_route;
 
@@ -103,9 +101,10 @@ pub fn trigger(
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
-    use std::sync::OnceLock;
     use crate::qg_route;
+    use std::sync::OnceLock;
 
     static QG_ENTRY_TEST_INIT: OnceLock<()> = OnceLock::new();
 

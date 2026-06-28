@@ -53,7 +53,9 @@ pub fn runtime_backend_capabilities(
                 supports_sqlite_wal: false,
             })
         }
-        other => Err(FrameworkError::unsupported(format!("unsupported runtime backend family: {other:?}"))),
+        other => Err(FrameworkError::unsupported(format!(
+            "unsupported runtime backend family: {other:?}"
+        ))),
     }
 }
 

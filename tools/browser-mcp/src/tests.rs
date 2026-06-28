@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used, clippy::expect_used)]
 use super::*;
 use std::io::Cursor;
 
@@ -1402,7 +1403,10 @@ fn browser_mcp_unknown_tool_returns_error() {
     )
     .expect("response");
     assert_eq!(response["result"]["isError"], true);
-    assert_eq!(response["result"]["structuredContent"]["error"]["code"], "INVALID_INPUT");
+    assert_eq!(
+        response["result"]["structuredContent"]["error"]["code"],
+        "INVALID_INPUT"
+    );
     fs::remove_dir_all(repo_root).expect("cleanup");
 }
 
@@ -1420,7 +1424,6 @@ fn browser_mcp_browser_diagnostics_returns_health() {
     fs::remove_dir_all(repo_root).expect("cleanup");
 }
 
-
 #[test]
 fn browser_mcp_browser_open_requires_url() {
     let repo_root = temp_root("open-no-url");
@@ -1431,7 +1434,10 @@ fn browser_mcp_browser_open_requires_url() {
     )
     .expect("response");
     assert_eq!(response["result"]["isError"], true);
-    assert_eq!(response["result"]["structuredContent"]["error"]["code"], "INVALID_INPUT");
+    assert_eq!(
+        response["result"]["structuredContent"]["error"]["code"],
+        "INVALID_INPUT"
+    );
     fs::remove_dir_all(repo_root).expect("cleanup");
 }
 
@@ -1445,7 +1451,10 @@ fn browser_mcp_browser_click_requires_ref() {
     )
     .expect("response");
     assert_eq!(response["result"]["isError"], true);
-    assert_eq!(response["result"]["structuredContent"]["error"]["code"], "INVALID_INPUT");
+    assert_eq!(
+        response["result"]["structuredContent"]["error"]["code"],
+        "INVALID_INPUT"
+    );
     fs::remove_dir_all(repo_root).expect("cleanup");
 }
 
@@ -1472,7 +1481,10 @@ fn browser_mcp_browser_press_requires_key() {
     )
     .expect("response");
     assert_eq!(response["result"]["isError"], true);
-    assert_eq!(response["result"]["structuredContent"]["error"]["code"], "INVALID_INPUT");
+    assert_eq!(
+        response["result"]["structuredContent"]["error"]["code"],
+        "INVALID_INPUT"
+    );
     fs::remove_dir_all(repo_root).expect("cleanup");
 }
 
@@ -1489,9 +1501,18 @@ fn browser_mcp_tool_definitions_include_output_schema() {
     for tool in tools {
         assert!(tool.get("name").is_some(), "tool missing name");
         assert!(tool.get("title").is_some(), "tool missing title");
-        assert!(tool.get("description").is_some(), "tool missing description");
-        assert!(tool.get("inputSchema").is_some(), "tool missing inputSchema");
-        assert!(tool.get("outputSchema").is_some(), "tool missing outputSchema");
+        assert!(
+            tool.get("description").is_some(),
+            "tool missing description"
+        );
+        assert!(
+            tool.get("inputSchema").is_some(),
+            "tool missing inputSchema"
+        );
+        assert!(
+            tool.get("outputSchema").is_some(),
+            "tool missing outputSchema"
+        );
     }
     fs::remove_dir_all(repo_root).expect("cleanup");
 }

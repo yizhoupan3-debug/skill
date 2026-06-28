@@ -4,7 +4,7 @@
 use crate::atomic_write::write_atomic_json;
 use crate::harness_context_signals::quality_gate_state_signals_math;
 use core_state::state_manager::{
-    read_quality_gate_state, quality_gate_state_path, write_active_task_pointer,
+    read_rfv_loop_state, rfv_loop_state_path, write_active_task_pointer,
 };
 use serde_json::json;
 use std::fs;
@@ -26,7 +26,7 @@ fn rfv_state_read_round_trip_smoke() {
     let _ = fs::remove_dir_all(&repo);
     fs::create_dir_all(repo.join("artifacts/current/rfv-task")).expect("mkdir");
 
-    let path = quality_gate_state_path(&repo, "rfv-task").expect("path");
+    let path = rfv_loop_state_path(&repo, "rfv-task").expect("path");
     let state = json!({
         "schema_version": "router-rs-quality-gate-v1",
         "loop_status": "active",
@@ -34,13 +34,13 @@ fn rfv_state_read_round_trip_smoke() {
     });
     write_atomic_json(&path, &state).expect("write rfv");
 
-    let read = read_quality_gate_state(&repo, Some("rfv-task"))
+    let read = read_rfv_loop_state(&repo, Some("rfv-task"))
         .expect("read")
         .expect("some");
     assert_eq!(read["loop_status"], json!("active"));
 
     write_active_task_pointer(&repo, "rfv-task").expect("pointer");
-    let via_active = read_quality_gate_state(&repo, None)
+    let via_active = read_rfv_loop_state(&repo, None)
         .expect("read active")
         .expect("some");
     assert_eq!(via_active["goal"], json!("prove convergence"));

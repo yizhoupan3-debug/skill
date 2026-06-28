@@ -66,8 +66,7 @@ fn cli_top_level_commands_smoke() {
                 command: FrameworkCommand::Doctor(_),
             } => {}
             RouterCommand::Host { command } => match command {
-                HostCommand::Hook { .. }
-                | HostCommand::Agent { .. } => {}
+                HostCommand::Hook { .. } | HostCommand::Agent { .. } => {}
             },
             RouterCommand::Storage { .. } | RouterCommand::Diagnose { .. } => {}
             RouterCommand::HookPolicy {

@@ -61,10 +61,10 @@ impl GateChecker for CorrectnessChecker {
             };
 
             let unwrap_count = content.matches(".unwrap()").count();
-            let todo_count = content.matches("todo!()").count() + content.matches("todo!(\"").count();
-            let unimplemented_count =
-                content.matches("unimplemented!()").count()
-                    + content.matches("unimplemented!(\"").count();
+            let todo_count =
+                content.matches("todo!()").count() + content.matches("todo!(\"").count();
+            let unimplemented_count = content.matches("unimplemented!()").count()
+                + content.matches("unimplemented!(\"").count();
 
             total_unwrap += unwrap_count;
             total_todo += todo_count;
@@ -98,14 +98,9 @@ impl GateChecker for CorrectnessChecker {
             findings.push(Finding {
                 id: "correctness_todo".to_string(),
                 severity: Severity::C,
-                description: format!(
-                    "{} todo!() / todo!(\"…\") stubs remaining",
-                    total_todo,
-                ),
+                description: format!("{} todo!() / todo!(\"…\") stubs remaining", total_todo,),
                 location: None,
-                suggestion: Some(
-                    "implement stubs before closing the task".to_string(),
-                ),
+                suggestion: Some("implement stubs before closing the task".to_string()),
             });
         }
 
@@ -142,4 +137,3 @@ impl GateChecker for CorrectnessChecker {
         }
     }
 }
-

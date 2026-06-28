@@ -65,12 +65,7 @@ mod tests {
     use super::*;
     use crate::types::{AigcSignal, AigcSignalType};
 
-    fn make_result(
-        segment_id: &str,
-        ngram: f64,
-        burst: f64,
-        pattern: f64,
-    ) -> AigcDetectionResult {
+    fn make_result(segment_id: &str, ngram: f64, burst: f64, pattern: f64) -> AigcDetectionResult {
         AigcDetectionResult {
             segment_id: segment_id.to_string(),
             ai_probability: 0.0, // overridden by scorer
@@ -108,7 +103,10 @@ mod tests {
         // Mid range
         let mid = vec![make_result("a", 0.5, 0.5, 0.5)];
         let s = score(&mid);
-        assert!((40..=60).contains(&s), "mid-range score should be ~50, got {s}");
+        assert!(
+            (40..=60).contains(&s),
+            "mid-range score should be ~50, got {s}"
+        );
     }
 
     #[test]

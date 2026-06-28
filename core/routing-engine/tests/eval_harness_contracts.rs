@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used, clippy::expect_used)]
 //! Eval harness: run golden dataset and assert accuracy baselines.
 //!
 //! Uses `evaluate_routing_cases()` from the routing engine.
@@ -71,8 +72,14 @@ fn routing_accuracy_meets_baseline() {
     eprintln!("  Cases:          {}", m.case_count);
     eprintln!("  Trigger hit:    {} ({:.1}%)", m.trigger_hit, trigger_rate);
     eprintln!("  Trigger miss:   {}", m.trigger_miss);
-    eprintln!("  Overtrigger:    {} ({:.1}%)", m.overtrigger, overtrigger_rate);
-    eprintln!("  Owner correct:  {} ({:.1}%)", m.owner_correct, owner_accuracy);
+    eprintln!(
+        "  Overtrigger:    {} ({:.1}%)",
+        m.overtrigger, overtrigger_rate
+    );
+    eprintln!(
+        "  Owner correct:  {} ({:.1}%)",
+        m.owner_correct, owner_accuracy
+    );
     eprintln!("  Overlay correct: {}", m.overlay_correct);
 
     // Print details for failed cases
@@ -84,7 +91,11 @@ fn routing_accuracy_meets_baseline() {
         if relevant && !result.trigger_hit {
             eprintln!(
                 "  MISS id={:?} expected_owner={:?} focus_skill={:?} selected={:?} task={:?}",
-                result.id, result.expected_owner, result.focus_skill, result.selected_owner, result.task
+                result.id,
+                result.expected_owner,
+                result.focus_skill,
+                result.selected_owner,
+                result.task
             );
         }
     }

@@ -1,5 +1,5 @@
-use core_errors::FrameworkError;
 use super::paths::stable_memory_key;
+use core_errors::FrameworkError;
 use fs2::FileExt;
 use sha2::{Digest, Sha256};
 use std::fs;
@@ -167,7 +167,8 @@ pub fn filesystem_write_text(path: &Path, payload_text: &str) -> Result<(), Fram
         .duration_since(UNIX_EPOCH)
         .map_err(|err| format!("system time before unix epoch: {err}"))?
         .as_nanos();
-    filesystem_write_text_inner(path, payload_text, nanos).map_err(|e| FrameworkError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))
+    filesystem_write_text_inner(path, payload_text, nanos)
+        .map_err(|e| FrameworkError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))
 }
 
 #[tracing::instrument(level = "debug", skip_all)]

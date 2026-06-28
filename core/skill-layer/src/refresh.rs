@@ -45,7 +45,9 @@ pub fn validate_skills(repo_root: &Path) -> Result<(), FrameworkError> {
         }
         Ok(())
     } else {
-        Err(FrameworkError::Validation { message: report.errors.join("\n") })
+        Err(FrameworkError::Validation {
+            message: report.errors.join("\n"),
+        })
     }
 }
 
@@ -88,9 +90,12 @@ pub fn refresh_skills(cmd: &SkillsCommand) -> Result<(), FrameworkError> {
         }
     }
     if let Some(ref generate_target) = cmd.generate {
-        let slug = if generate_target == "all" { None } else { Some(generate_target.as_str()) };
-        let report = crate::generate::generate_frontmatter(&cmd.repo_root, slug, cmd.dry_run)
-            .map_err(FrameworkError::validation)?;
+        let slug = if generate_target == "all" {
+            None
+        } else {
+            Some(generate_target.as_str())
+        };
+        let report = crate::generate::generate_frontmatter(&cmd.repo_root, slug, cmd.dry_run)?;
         if cmd.dry_run {
             tracing::info!(
                 "framework skills generate{slug_msg}: {}/{} generated, {}/{} skipped (--dry-run)",
@@ -133,8 +138,7 @@ pub fn generate_health_manifest(repo_root: &Path) -> Result<(), FrameworkError> 
 
 fn write_skill_tiers_from_surface_policy(repo_root: &Path) -> Result<(), FrameworkError> {
     let policy_path = paths::surface_policy_json(repo_root);
-    let policy: Value =
-        serde_json::from_str(&fs::read_to_string(&policy_path)?)?;
+    let policy: Value = serde_json::from_str(&fs::read_to_string(&policy_path)?)?;
     let activation_counts = policy
         .pointer("/skill_system/activation_counts")
         .cloned()
@@ -156,8 +160,6 @@ fn write_skill_tiers_from_surface_policy(repo_root: &Path) -> Result<(), Framewo
     let dest = paths::tiers_json(repo_root);
     core_state_utils::atomic_write::write_atomic_json(&dest, &out)
 }
-
-
 
 // ---------------------------------------------------------------------------
 // ---------------------------------------------------------------------------

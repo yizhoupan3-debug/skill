@@ -40,9 +40,15 @@ impl GateChecker for Inequality {
                 severity: Severity::C,
                 description: "No output_data provided — inequality checks skipped".to_string(),
                 location: None,
-                suggestion: Some("pass output_data with inequalities array to enable checks".to_string()),
+                suggestion: Some(
+                    "pass output_data with inequalities array to enable checks".to_string(),
+                ),
             });
-            return CheckResult { checker_id: self.id().to_string(), passed: true, findings };
+            return CheckResult {
+                checker_id: self.id().to_string(),
+                passed: true,
+                findings,
+            };
         };
 
         if !inequality::solver_available() {
@@ -51,9 +57,15 @@ impl GateChecker for Inequality {
                 severity: Severity::C,
                 description: "minilp solver not available — inequality checks degraded".to_string(),
                 location: None,
-                suggestion: Some("install minilp feature to enable full LP feasibility checks".to_string()),
+                suggestion: Some(
+                    "install minilp feature to enable full LP feasibility checks".to_string(),
+                ),
             });
-            return CheckResult { checker_id: self.id().to_string(), passed: true, findings };
+            return CheckResult {
+                checker_id: self.id().to_string(),
+                passed: true,
+                findings,
+            };
         }
 
         let Some(exprs) = data.get("inequalities").and_then(|v| v.as_array()) else {
@@ -62,17 +74,28 @@ impl GateChecker for Inequality {
                 severity: Severity::C,
                 description: "output_data has no inequalities array — check skipped".to_string(),
                 location: None,
-                suggestion: Some("add \"inequalities\": [\"x + y <= 10\", ...] to output_data".to_string()),
+                suggestion: Some(
+                    "add \"inequalities\": [\"x + y <= 10\", ...] to output_data".to_string(),
+                ),
             });
-            return CheckResult { checker_id: self.id().to_string(), passed: true, findings };
+            return CheckResult {
+                checker_id: self.id().to_string(),
+                passed: true,
+                findings,
+            };
         };
 
-        let timeout_ms = data.get("timeout_ms").and_then(|v| v.as_u64()).unwrap_or(5000);
+        let timeout_ms = data
+            .get("timeout_ms")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(5000);
 
         // Parse all inequality expressions
         let mut parsed = Vec::new();
         for (i, expr_val) in exprs.iter().enumerate() {
-            let Some(expr_str) = expr_val.as_str() else { continue };
+            let Some(expr_str) = expr_val.as_str() else {
+                continue;
+            };
             match inequality::parse_inequality_latex(expr_str) {
                 Ok(ineq) => parsed.push(ineq),
                 Err(e) => {
@@ -95,7 +118,11 @@ impl GateChecker for Inequality {
                 location: None,
                 suggestion: None,
             });
-            return CheckResult { checker_id: self.id().to_string(), passed: true, findings };
+            return CheckResult {
+                checker_id: self.id().to_string(),
+                passed: true,
+                findings,
+            };
         }
 
         // Solve the system
@@ -126,7 +153,9 @@ impl GateChecker for Inequality {
                         system.len()
                     ),
                     location: None,
-                    suggestion: Some("review inequality constraints for contradictions".to_string()),
+                    suggestion: Some(
+                        "review inequality constraints for contradictions".to_string(),
+                    ),
                 });
             }
             FeasibilityResult::Timeout { timeout_ms: t } => {
@@ -135,7 +164,9 @@ impl GateChecker for Inequality {
                     severity: Severity::Warning,
                     description: format!("Inequality solver timed out after {t}ms"),
                     location: None,
-                    suggestion: Some("increase timeout_ms or simplify the constraint system".to_string()),
+                    suggestion: Some(
+                        "increase timeout_ms or simplify the constraint system".to_string(),
+                    ),
                 });
             }
             FeasibilityResult::Error { message } => {
@@ -158,7 +189,13 @@ impl GateChecker for Inequality {
             }
         }
 
-        let passed = findings.iter().all(|f| matches!(f.severity, Severity::C | Severity::Warning));
-        CheckResult { checker_id: self.id().to_string(), passed, findings }
+        let passed = findings
+            .iter()
+            .all(|f| matches!(f.severity, Severity::C | Severity::Warning));
+        CheckResult {
+            checker_id: self.id().to_string(),
+            passed,
+            findings,
+        }
     }
 }

@@ -18,7 +18,11 @@ use std::collections::HashMap;
 pub fn parse_columnar_keys(doc: &Value) -> Vec<String> {
     doc["keys"]
         .as_array()
-        .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+        .map(|a| {
+            a.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect()
+        })
         .unwrap_or_default()
 }
 
@@ -40,13 +44,11 @@ pub fn load_columnar_rows(doc: &Value) -> HashMap<String, Vec<Value>> {
     if let Some(skills) = doc["skills"].as_array() {
         for row in skills {
             if let Some(idx) = slug_idx
-                && let Some(slug) = row.get(idx).and_then(|v| v.as_str()) {
-                    let values: Vec<Value> = row
-                        .as_array()
-                        .map(|a| a.to_vec())
-                        .unwrap_or_default();
-                    rows.insert(slug.to_string(), values);
-                }
+                && let Some(slug) = row.get(idx).and_then(|v| v.as_str())
+            {
+                let values: Vec<Value> = row.as_array().map(|a| a.to_vec()).unwrap_or_default();
+                rows.insert(slug.to_string(), values);
+            }
         }
     }
     rows
@@ -112,6 +114,8 @@ pub fn col_str_vec(row: &[Value], keys: &[String], column: &str) -> Vec<String> 
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
+
     use super::*;
 
     fn sample_doc() -> Value {

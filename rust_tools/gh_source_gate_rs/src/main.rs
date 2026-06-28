@@ -4,8 +4,8 @@ use serde_json::Value;
 use std::path::PathBuf;
 
 use gh_source_gate_rs::{
-    build_doctor_report, fetch_comments_json, inspect_pr_checks_json, render_check_results,
-    render_comment_summary, render_doctor_report, DEFAULT_CONTEXT_LINES, DEFAULT_MAX_LINES,
+    DEFAULT_CONTEXT_LINES, DEFAULT_MAX_LINES, build_doctor_report, fetch_comments_json,
+    inspect_pr_checks_json, render_check_results, render_comment_summary, render_doctor_report,
 };
 
 #[derive(Parser)]

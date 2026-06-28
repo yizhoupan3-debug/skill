@@ -38,7 +38,9 @@ pub fn load_tool_records(registry_path: &Path) -> Result<Vec<McpToolRecord>, Fra
     let tools = root
         .get("tools")
         .and_then(|v| v.as_array())
-        .ok_or(FrameworkError::validation("MCP_TOOL_REGISTRY.json missing 'tools' array"))?;
+        .ok_or(FrameworkError::validation(
+            "MCP_TOOL_REGISTRY.json missing 'tools' array",
+        ))?;
 
     if tools.is_empty() {
         return Ok(Vec::new());
@@ -48,8 +50,7 @@ pub fn load_tool_records(registry_path: &Path) -> Result<Vec<McpToolRecord>, Fra
     tools
         .iter()
         .map(|tool| {
-            serde_json::from_value::<McpToolRecord>(tool.clone())
-                .map_err(FrameworkError::Json)
+            serde_json::from_value::<McpToolRecord>(tool.clone()).map_err(FrameworkError::Json)
         })
         .collect()
 }
@@ -73,26 +74,32 @@ fn cache() -> &'static std::sync::RwLock<Option<CacheEntry>> {
 /// the cached result. After the TTL expires, the next call reloads from disk.
 /// On reload failure, returns stale cache data (with a warning) instead of
 /// propagating the error, so transient I/O issues don't disrupt routing.
-pub fn load_tool_records_cached(registry_path: &Path) -> Result<Vec<McpToolRecord>, FrameworkError> {
+pub fn load_tool_records_cached(
+    registry_path: &Path,
+) -> Result<Vec<McpToolRecord>, FrameworkError> {
     let now = Instant::now();
 
     // Fast path: check cache (read lock)
     {
         if let Ok(guard) = cache().read()
             && let Some(entry) = guard.as_ref()
-                && now.duration_since(entry.loaded_at) < Duration::from_secs(CACHE_TTL_SECS) {
-                    return Ok(entry.records.clone());
-                }
+            && now.duration_since(entry.loaded_at) < Duration::from_secs(CACHE_TTL_SECS)
+        {
+            return Ok(entry.records.clone());
+        }
     }
 
     // TTL expired or cache empty: reload from disk (write lock)
     {
-        let mut guard = cache().write().map_err(|_| FrameworkError::lock("cache poisoned"))?;
+        let mut guard = cache()
+            .write()
+            .map_err(|_| FrameworkError::lock("cache poisoned"))?;
         // Double-check after acquiring write lock (another thread may have reloaded)
         if let Some(entry) = guard.as_ref()
-            && now.duration_since(entry.loaded_at) < Duration::from_secs(CACHE_TTL_SECS) {
-                return Ok(entry.records.clone());
-            }
+            && now.duration_since(entry.loaded_at) < Duration::from_secs(CACHE_TTL_SECS)
+        {
+            return Ok(entry.records.clone());
+        }
         match load_tool_records(registry_path) {
             Ok(records) => {
                 guard.replace(CacheEntry {
@@ -104,9 +111,7 @@ pub fn load_tool_records_cached(registry_path: &Path) -> Result<Vec<McpToolRecor
             Err(e) => {
                 // Reload failed: return stale data if available, otherwise propagate error
                 if let Some(entry) = guard.as_ref() {
-                    tracing::warn!(
-                        "tool registry reload failed, using stale cache: {e}"
-                    );
+                    tracing::warn!("tool registry reload failed, using stale cache: {e}");
                     Ok(entry.records.clone())
                 } else {
                     Err(e)

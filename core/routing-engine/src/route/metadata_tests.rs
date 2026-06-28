@@ -1,13 +1,13 @@
 #[cfg(test)]
 mod route_metadata_tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
+    use crate::route::RawSkillRecord;
     use crate::route::constants::FRAMEWORK_COMMAND_KIND;
     use crate::route::has_paper_review_judgment_context;
     use crate::route::normalize_text;
-    use crate::route::RawSkillRecord;
     use crate::route::{filter_records_for_host, route_task, search_skills};
     use crate::route::{
-        has_explicit_framework_alias_call,
-        has_literal_framework_alias_call, skill_record_from_raw,
+        has_explicit_framework_alias_call, has_literal_framework_alias_call, skill_record_from_raw,
     };
     use crate::route::{
         load_records, load_records_cached_for_stdio, load_records_cached_for_stdio_resolved,
@@ -147,8 +147,7 @@ mod route_metadata_tests {
         )
         .expect("write metadata");
 
-        let records =
-            load_records(Some(&runtime_path)).expect("load route records");
+        let records = load_records(Some(&runtime_path)).expect("load route records");
         let record = records
             .iter()
             .find(|record| record.slug == "sample-skill")
@@ -482,8 +481,7 @@ mod route_metadata_tests {
         .expect("write metadata");
 
         let first =
-            load_records_cached_for_stdio_resolved(Some(&runtime_path))
-                .expect("first cached load");
+            load_records_cached_for_stdio_resolved(Some(&runtime_path)).expect("first cached load");
         assert!(first[0].do_not_use_tokens.contains("first"));
         assert!(!first[0].do_not_use_tokens.contains("second"));
 
@@ -497,9 +495,8 @@ mod route_metadata_tests {
             .unwrap(),
         )
         .expect("update metadata");
-        let second =
-            load_records_cached_for_stdio_resolved(Some(&runtime_path))
-                .expect("second cached load");
+        let second = load_records_cached_for_stdio_resolved(Some(&runtime_path))
+            .expect("second cached load");
         assert!(!second[0].do_not_use_tokens.contains("first"));
         assert!(second[0].do_not_use_tokens.contains("second"));
 
@@ -582,11 +579,9 @@ mod route_metadata_tests {
             pairs.push((runtime_path, manifest_path));
         }
 
-        let first = load_records_cached_for_stdio(Some(&pairs[0].0))
-            .expect("load pair 0");
+        let first = load_records_cached_for_stdio(Some(&pairs[0].0)).expect("load pair 0");
         for (runtime_path, _manifest_path) in pairs.iter().skip(1) {
-            load_records_cached_for_stdio(Some(runtime_path))
-                .expect("load subsequent pair");
+            load_records_cached_for_stdio(Some(runtime_path)).expect("load subsequent pair");
         }
         let replay = load_records_cached_for_stdio(Some(&pairs[0].0))
             .expect("reload pair 0 after fifo eviction");
@@ -650,8 +645,8 @@ mod route_metadata_tests {
 
     #[test]
     fn manifest_paper_workbench_row_accepts_plain_slug_literal() {
-        let runtime_path =
-            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../skills/SKILL_ROUTING_RUNTIME.json");
+        let runtime_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../skills/SKILL_ROUTING_RUNTIME.json");
         let records = load_records_from_runtime(&runtime_path).expect("runtime load");
         let rec = records
             .iter()

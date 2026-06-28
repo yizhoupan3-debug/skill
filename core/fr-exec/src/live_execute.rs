@@ -23,8 +23,7 @@ fn normalize_allowlisted_host(host: &str) -> String {
     host.trim().trim_end_matches('.').to_ascii_lowercase()
 }
 
-fn parse_execute_aggregator_host_allowlist(
-) -> Result<Option<HashSet<String>>, FrameworkError> {
+fn parse_execute_aggregator_host_allowlist() -> Result<Option<HashSet<String>>, FrameworkError> {
     let raw_value = match std::env::var(EXECUTE_AGGREGATOR_HOST_ALLOWLIST_ENV) {
         Ok(value) => value,
         Err(std::env::VarError::NotPresent) => return Ok(None),
@@ -63,9 +62,7 @@ fn parse_execute_aggregator_host_allowlist(
     Ok(Some(hosts))
 }
 
-pub fn execute_request(
-    payload: ExecuteRequestPayload,
-) -> Result<ExecuteResponsePayload, String> {
+pub fn execute_request(payload: ExecuteRequestPayload) -> Result<ExecuteResponsePayload, String> {
     if payload.dry_run {
         return Ok(build_dry_run_execute_response(&payload));
     }
@@ -137,11 +134,13 @@ pub fn build_live_execute_prompt(payload: &ExecuteRequestPayload) -> String {
     lines.join("\n")
 }
 
-fn build_dry_run_execute_response(
-    payload: &ExecuteRequestPayload,
-) -> ExecuteResponsePayload {
+fn build_dry_run_execute_response(payload: &ExecuteRequestPayload) -> ExecuteResponsePayload {
     let trimmed = payload.task.trim();
-    let input_tokens = if trimmed.is_empty() { 0 } else { trimmed.chars().count().div_ceil(4) };
+    let input_tokens = if trimmed.is_empty() {
+        0
+    } else {
+        trimmed.chars().count().div_ceil(4)
+    };
     let output_tokens = payload.default_output_tokens.min(96);
     let content = format!(
         "[dry-run] Routed to `{}` on {}. Session `{}` is ready for Rust-owned execution.",
@@ -279,10 +278,7 @@ struct DeepContinuationResult {
 }
 
 /// Send a request to the aggregator with a single retry for transient errors (429, 5xx).
-fn send_request_with_retry<F>(
-    request_body: &Value,
-    send_request: &mut F,
-) -> Result<Value, String>
+fn send_request_with_retry<F>(request_body: &Value, send_request: &mut F) -> Result<Value, String>
 where
     F: FnMut(&Value) -> Result<(u16, String), String>,
 {
@@ -305,9 +301,8 @@ where
                     // 4xx client errors (401/403/404 etc.): return immediately, no retry
                     return Err(last_error);
                 }
-                return serde_json::from_str::<Value>(&response_body).map_err(|err| {
-                    format!("parse router-rs live execute response failed: {err}")
-                });
+                return serde_json::from_str::<Value>(&response_body)
+                    .map_err(|err| format!("parse router-rs live execute response failed: {err}"));
             }
             Err(err) => {
                 last_error = format!("router-rs live execute request failed: {err}");
@@ -354,7 +349,8 @@ where
 
     let system_anchor = build_compact_anchor(prompt_preview, DEEP_CONTINUATION_ANCHOR_CHARS);
     let task_anchor = build_compact_anchor(task, DEEP_CONTINUATION_ANCHOR_CHARS);
-    let assistant_tail = build_assistant_tail_window(&content, DEEP_CONTINUATION_ASSISTANT_TAIL_CHARS);
+    let assistant_tail =
+        build_assistant_tail_window(&content, DEEP_CONTINUATION_ASSISTANT_TAIL_CHARS);
     let continuation_messages = vec![
         serde_json::json!({
             "role": "system",
@@ -476,9 +472,7 @@ where
 
     let response_payload = send_request_with_retry(&request_body, &mut send_request)?;
     let content = extract_chat_completion_content(&response_payload)?;
-    let first_usage_ref = response_payload
-        .get("usage")
-        .and_then(Value::as_object);
+    let first_usage_ref = response_payload.get("usage").and_then(Value::as_object);
     let finish_reason = response_payload
         .get("choices")
         .and_then(Value::as_array)
@@ -574,26 +568,27 @@ pub fn perform_live_execute(
 /// up a tokio worker thread for up to 30 seconds. A future improvement would be to
 /// use an async `reqwest::Client` and `tokio::task::spawn_blocking` to offload the
 /// blocking I/O, or to gate this path so it only runs outside the stdio hot path.
-pub fn live_execute_http_client(
-) -> Result<&'static reqwest::blocking::Client, FrameworkError> {
+pub fn live_execute_http_client() -> Result<&'static reqwest::blocking::Client, FrameworkError> {
     static CLIENT: OnceLock<reqwest::blocking::Client> = OnceLock::new();
     if let Some(client) = CLIENT.get() {
         return Ok(client);
     }
-    let mut builder = reqwest::blocking::Client::builder()
-        .timeout(Duration::from_secs(30));
+    let mut builder = reqwest::blocking::Client::builder().timeout(Duration::from_secs(30));
     // Inherit proxy configuration from environment (cached at process level).
     if let Some(proxy_url) = http_util::cached_proxy_url()
-        && let Ok(proxy) = reqwest::Proxy::all(proxy_url) {
-            builder = builder.proxy(proxy);
-        }
+        && let Ok(proxy) = reqwest::Proxy::all(proxy_url)
+    {
+        builder = builder.proxy(proxy);
+    }
     let client = builder
         .build()
         .map_err(|err| FrameworkError::validation(format!("build reqwest client failed: {err}")))?;
     let _ = CLIENT.set(client);
-    CLIENT
-        .get()
-        .ok_or_else(|| FrameworkError::validation("build reqwest client failed: client cache was not initialized".to_string()))
+    CLIENT.get().ok_or_else(|| {
+        FrameworkError::validation(
+            "build reqwest client failed: client cache was not initialized".to_string(),
+        )
+    })
 }
 
 pub fn build_live_execute_response(
@@ -828,22 +823,38 @@ mod tests {
     #[test]
     fn prompt_native_runtime_no_skill_body() {
         let p = ExecuteRequestPayload {
-            schema_version: "1".into(), task: "hello".into(), session_id: "s1".into(),
-            user_id: "u1".into(), selected_skill: "none".into(), overlay_skill: None,
-            layer: "L3".into(), route_engine: None, diagnostic_route_mode: None,
-            reasons: vec![], prompt_preview: None, dry_run: false,
-            trace_event_count: 0, trace_output_path: None, default_output_tokens: 512,
-            model_id: "gpt-4".into(), aggregator_base_url: "".into(), aggregator_api_key: "".into(),
+            schema_version: "1".into(),
+            task: "hello".into(),
+            session_id: "s1".into(),
+            user_id: "u1".into(),
+            selected_skill: "none".into(),
+            overlay_skill: None,
+            layer: "L3".into(),
+            route_engine: None,
+            diagnostic_route_mode: None,
+            reasons: vec![],
+            prompt_preview: None,
+            dry_run: false,
+            trace_event_count: 0,
+            trace_output_path: None,
+            default_output_tokens: 512,
+            model_id: "gpt-4".into(),
+            aggregator_base_url: "".into(),
+            aggregator_api_key: "".into(),
         };
         let prompt = build_live_execute_prompt(&p);
         assert!(prompt.contains("no skill body"), "native runtime hint");
-        assert!(!prompt.contains("Primary focus: none"), "no 'none' label leak");
+        assert!(
+            !prompt.contains("Primary focus: none"),
+            "no 'none' label leak"
+        );
     }
 
     #[test]
     fn prompt_selected_skill_and_overlay() {
         let p = ExecuteRequestPayload {
-            selected_skill: "pdf".into(), overlay_skill: Some("ocr".into()),
+            selected_skill: "pdf".into(),
+            overlay_skill: Some("ocr".into()),
             ..base_payload()
         };
         let prompt = build_live_execute_prompt(&p);
@@ -860,13 +871,23 @@ mod tests {
     #[test]
     fn prompt_includes_reasons_up_to_five() {
         let p = ExecuteRequestPayload {
-            reasons: vec!["a".into(), "b".into(), "c".into(), "d".into(), "e".into(), "f".into()],
+            reasons: vec![
+                "a".into(),
+                "b".into(),
+                "c".into(),
+                "d".into(),
+                "e".into(),
+                "f".into(),
+            ],
             ..base_payload()
         };
         let prompt = build_live_execute_prompt(&p);
         assert!(prompt.contains("Task cues:"));
         // Only the first 5 reasons should appear, "f" should not
-        assert!(!prompt.contains("- f"), "reason 'f' should be truncated (6th)");
+        assert!(
+            !prompt.contains("- f"),
+            "reason 'f' should be truncated (6th)"
+        );
     }
 
     #[test]
@@ -949,7 +970,10 @@ mod tests {
         let payload = json!({
             "choices": [{"message": {"content": "Hello world"}}]
         });
-        assert_eq!(extract_chat_completion_content(&payload).unwrap(), "Hello world");
+        assert_eq!(
+            extract_chat_completion_content(&payload).unwrap(),
+            "Hello world"
+        );
     }
 
     #[test]
@@ -957,7 +981,10 @@ mod tests {
         let payload = json!({
             "choices": [{"message": {"content": [{"text": "Hello "}, {"text": "world"}]}}]
         });
-        assert_eq!(extract_chat_completion_content(&payload).unwrap(), "Hello world");
+        assert_eq!(
+            extract_chat_completion_content(&payload).unwrap(),
+            "Hello world"
+        );
     }
 
     #[test]
@@ -983,7 +1010,9 @@ mod tests {
     #[test]
     fn execute_request_dry_run_returns_estimated_tokens() {
         let p = ExecuteRequestPayload {
-            dry_run: true, task: "hello world".into(), default_output_tokens: 64,
+            dry_run: true,
+            task: "hello world".into(),
+            default_output_tokens: 64,
             ..base_payload()
         };
         let result = execute_request(p);
@@ -999,7 +1028,9 @@ mod tests {
     #[test]
     fn execute_request_dry_run_empty_task_has_zero_input_tokens() {
         let p = ExecuteRequestPayload {
-            dry_run: true, task: "".into(), default_output_tokens: 64,
+            dry_run: true,
+            task: "".into(),
+            default_output_tokens: 64,
             ..base_payload()
         };
         let resp = execute_request(p).unwrap();
@@ -1012,11 +1043,17 @@ mod tests {
     fn build_response_without_continuation() {
         let payload = base_payload();
         let result = LiveExecuteResult {
-            content: "done".into(), model_id: Some("gpt-4".into()),
-            run_id: Some("r1".into()), status: Some("stop".into()),
-            input_tokens: 10, output_tokens: 20, total_tokens: 30,
+            content: "done".into(),
+            model_id: Some("gpt-4".into()),
+            run_id: Some("r1".into()),
+            status: Some("stop".into()),
+            input_tokens: 10,
+            output_tokens: 20,
+            total_tokens: 30,
             finish_reason: Some("stop".into()),
-            continuation_attempted: false, continuation_status: None, continuation_error: None,
+            continuation_attempted: false,
+            continuation_status: None,
+            continuation_error: None,
         };
         let resp = build_live_execute_response(&payload, None, result);
         assert!(resp.live_run);
@@ -1024,25 +1061,36 @@ mod tests {
         assert_eq!(resp.model_id.as_deref(), Some("gpt-4"));
         // Continuation fields should not appear in metadata
         let md = resp.metadata.as_object().unwrap();
-        assert!(md.get("continuation_attempted").is_none(), "skip when absent");
+        assert!(
+            md.get("continuation_attempted").is_none(),
+            "skip when absent"
+        );
     }
 
     #[test]
     fn build_response_with_continuation() {
         let payload = base_payload();
         let result = LiveExecuteResult {
-            content: "deep result".into(), model_id: None,
-            run_id: Some("r2".into()), status: Some("length".into()),
-            input_tokens: 100, output_tokens: 200, total_tokens: 300,
+            content: "deep result".into(),
+            model_id: None,
+            run_id: Some("r2".into()),
+            status: Some("length".into()),
+            input_tokens: 100,
+            output_tokens: 200,
+            total_tokens: 300,
             finish_reason: Some("length".into()),
-            continuation_attempted: true, continuation_status: Some("success".into()),
+            continuation_attempted: true,
+            continuation_status: Some("success".into()),
             continuation_error: None,
         };
         let resp = build_live_execute_response(&payload, Some("preview".into()), result);
         assert!(resp.live_run);
         assert_eq!(resp.prompt_preview.as_deref(), Some("preview"));
         let md = resp.metadata.as_object().unwrap();
-        assert_eq!(md.get("continuation_status").and_then(Value::as_str), Some("success"));
+        assert_eq!(
+            md.get("continuation_status").and_then(Value::as_str),
+            Some("success")
+        );
     }
 
     // ── perform_live_execute_with_sender (mock sender) ──
@@ -1050,13 +1098,14 @@ mod tests {
     #[test]
     fn live_execute_with_sender_success() {
         let p = ExecuteRequestPayload {
-            task: "test task".into(), model_id: "gpt-4".into(),
-            default_output_tokens: 512, ..base_payload()
+            task: "test task".into(),
+            model_id: "gpt-4".into(),
+            default_output_tokens: 512,
+            ..base_payload()
         };
-        let result = perform_live_execute_with_sender(
-            &p, "prompt",
-            |_| Ok((200, r#"{"choices":[{"message":{"content":"OK"}}],"usage":{"prompt_tokens":5,"completion_tokens":3,"total_tokens":8}}"#.into())),
-        );
+        let result = perform_live_execute_with_sender(&p, "prompt", |_| {
+            Ok((200, r#"{"choices":[{"message":{"content":"OK"}}],"usage":{"prompt_tokens":5,"completion_tokens":3,"total_tokens":8}}"#.into()))
+        });
         assert!(result.is_ok());
         let r = result.unwrap();
         assert_eq!(r.content, "OK");
@@ -1067,21 +1116,20 @@ mod tests {
     #[test]
     fn live_execute_retries_on_500_then_succeeds() {
         let p = ExecuteRequestPayload {
-            task: "retry test".into(), model_id: "gpt-4".into(),
-            default_output_tokens: 512, ..base_payload()
+            task: "retry test".into(),
+            model_id: "gpt-4".into(),
+            default_output_tokens: 512,
+            ..base_payload()
         };
         let mut call_count = 0usize;
-        let result = perform_live_execute_with_sender(
-            &p, "prompt",
-            |_| {
-                call_count += 1;
-                if call_count == 1 {
-                    Ok((500, "server error".into()))
-                } else {
-                    Ok((200, r#"{"choices":[{"message":{"content":"recovered"}}],"usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}}"#.into()))
-                }
-            },
-        );
+        let result = perform_live_execute_with_sender(&p, "prompt", |_| {
+            call_count += 1;
+            if call_count == 1 {
+                Ok((500, "server error".into()))
+            } else {
+                Ok((200, r#"{"choices":[{"message":{"content":"recovered"}}],"usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}}"#.into()))
+            }
+        });
         assert!(result.is_ok());
         assert_eq!(call_count, 2, "should retry once");
     }
@@ -1090,16 +1138,15 @@ mod tests {
     fn live_execute_400_does_not_retry() {
         let mut call_count = 0usize;
         let p = ExecuteRequestPayload {
-            task: "no retry".into(), model_id: "gpt-4".into(),
-            default_output_tokens: 512, ..base_payload()
+            task: "no retry".into(),
+            model_id: "gpt-4".into(),
+            default_output_tokens: 512,
+            ..base_payload()
         };
-        let result = perform_live_execute_with_sender(
-            &p, "prompt",
-            |_| {
-                call_count += 1;
-                Ok((401, "unauthorized".into()))
-            },
-        );
+        let result = perform_live_execute_with_sender(&p, "prompt", |_| {
+            call_count += 1;
+            Ok((401, "unauthorized".into()))
+        });
         assert!(result.is_err());
         assert_eq!(call_count, 1, "should NOT retry on 4xx");
     }
@@ -1107,55 +1154,75 @@ mod tests {
     #[test]
     fn live_execute_deep_continuation_on_length() {
         let p = ExecuteRequestPayload {
-            task: "deep".into(), model_id: "gpt-4".into(),
-            default_output_tokens: 1024, ..base_payload()
+            task: "deep".into(),
+            model_id: "gpt-4".into(),
+            default_output_tokens: 1024,
+            ..base_payload()
         };
-        let result = perform_live_execute_with_sender(
-            &p, "prompt",
-            |body| {
-                let is_continuation = body.get("messages").and_then(Value::as_array)
-                    .map(|m| m.len() > 2).unwrap_or(false);
-                if is_continuation {
-                    Ok((200, r#"{"choices":[{"message":{"content":" continuation"}}],"usage":{"prompt_tokens":2,"completion_tokens":1,"total_tokens":3}}"#.into()))
-                } else {
-                    Ok((200, r#"{"choices":[{"message":{"content":"first half"},"finish_reason":"length"}]}"#.into()))
-                }
-            },
-        );
+        let result = perform_live_execute_with_sender(&p, "prompt", |body| {
+            let is_continuation = body
+                .get("messages")
+                .and_then(Value::as_array)
+                .map(|m| m.len() > 2)
+                .unwrap_or(false);
+            if is_continuation {
+                Ok((200, r#"{"choices":[{"message":{"content":" continuation"}}],"usage":{"prompt_tokens":2,"completion_tokens":1,"total_tokens":3}}"#.into()))
+            } else {
+                Ok((200, r#"{"choices":[{"message":{"content":"first half"},"finish_reason":"length"}]}"#.into()))
+            }
+        });
         assert!(result.is_ok());
         let r = result.unwrap();
         assert!(r.continuation_attempted);
         assert_eq!(r.continuation_status.as_deref(), Some("success"));
         // Content should include both halves
-        assert!(r.content.contains("first half"), "original content preserved");
+        assert!(
+            r.content.contains("first half"),
+            "original content preserved"
+        );
         assert!(r.content.contains("continuation"), "continuation appended");
     }
 
     #[test]
     fn live_execute_deep_no_continuation_for_stop() {
         let p = ExecuteRequestPayload {
-            task: "short".into(), model_id: "gpt-4".into(),
-            default_output_tokens: 256, ..base_payload()
+            task: "short".into(),
+            model_id: "gpt-4".into(),
+            default_output_tokens: 256,
+            ..base_payload()
         };
-        let result = perform_live_execute_with_sender(
-            &p, "prompt",
-            |_| Ok((200, r#"{"choices":[{"message":{"content":"done"}}],"usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}}"#.into())),
-        );
+        let result = perform_live_execute_with_sender(&p, "prompt", |_| {
+            Ok((200, r#"{"choices":[{"message":{"content":"done"}}],"usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}}"#.into()))
+        });
         assert!(result.is_ok());
         let r = result.unwrap();
-        assert!(!r.continuation_attempted, "no continuation when finish_reason != length");
+        assert!(
+            !r.continuation_attempted,
+            "no continuation when finish_reason != length"
+        );
     }
 
     // ── Shared helper ──
 
     fn base_payload() -> ExecuteRequestPayload {
         ExecuteRequestPayload {
-            schema_version: "1".into(), task: "test".into(), session_id: "s1".into(),
-            user_id: "u1".into(), selected_skill: "pdf".into(), overlay_skill: None,
-            layer: "L3".into(), route_engine: None, diagnostic_route_mode: None,
-            reasons: vec![], prompt_preview: None, dry_run: false,
-            trace_event_count: 0, trace_output_path: None, default_output_tokens: 512,
-            model_id: "gpt-4".into(), aggregator_base_url: "".into(),
+            schema_version: "1".into(),
+            task: "test".into(),
+            session_id: "s1".into(),
+            user_id: "u1".into(),
+            selected_skill: "pdf".into(),
+            overlay_skill: None,
+            layer: "L3".into(),
+            route_engine: None,
+            diagnostic_route_mode: None,
+            reasons: vec![],
+            prompt_preview: None,
+            dry_run: false,
+            trace_event_count: 0,
+            trace_output_path: None,
+            default_output_tokens: 512,
+            model_id: "gpt-4".into(),
+            aggregator_base_url: "".into(),
             aggregator_api_key: "".into(),
         }
     }

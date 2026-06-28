@@ -35,7 +35,9 @@ fn effective_storage_root_does_not_silently_consult_codex_or_cursor_home() {
     let prior_cursor = std::env::var("CURSOR_HOME").ok();
     unsafe { core_state_utils::env_sync::remove_env("ROUTER_RS_STORAGE_ROOT") };
     unsafe { core_state_utils::env_sync::set_env("CODEX_HOME", "/tmp/router-rs-test-codex-home") };
-    unsafe { core_state_utils::env_sync::set_env("CURSOR_HOME", "/tmp/router-rs-test-cursor-home") };
+    unsafe {
+        core_state_utils::env_sync::set_env("CURSOR_HOME", "/tmp/router-rs-test-cursor-home")
+    };
     let request = RuntimeStorageRequestPayload {
         operation: "write_text".to_string(),
         path: "artifacts/x.json".to_string(),
@@ -54,7 +56,12 @@ fn effective_storage_root_does_not_silently_consult_codex_or_cursor_home() {
     );
 
     // Sanity: explicit ROUTER_RS_STORAGE_ROOT IS honored.
-    unsafe { core_state_utils::env_sync::set_env("ROUTER_RS_STORAGE_ROOT", "/tmp/router-rs-test-explicit") };
+    unsafe {
+        core_state_utils::env_sync::set_env(
+            "ROUTER_RS_STORAGE_ROOT",
+            "/tmp/router-rs-test-explicit",
+        )
+    };
     let resolved = effective_storage_root_for_request(&request);
     assert_eq!(resolved.as_deref(), Some("/tmp/router-rs-test-explicit"));
 
@@ -849,7 +856,7 @@ fn backend_capabilities_memory() {
 fn backend_capabilities_rejects_unknown() {
     let result = runtime_backend_capabilities("redis");
     assert!(result.is_err());
-    assert!(result.unwrap_err().contains("unsupported"));
+    assert!(result.unwrap_err().to_string().contains("unsupported"));
 }
 
 #[test]
@@ -1554,7 +1561,7 @@ fn runtime_storage_rejects_unsupported_operation() {
         tail_lines: None,
     });
     assert!(result.is_err());
-    assert!(result.unwrap_err().contains("unsupported"));
+    assert!(result.unwrap_err().to_string().contains("unsupported"));
 }
 
 #[test]
@@ -1836,13 +1843,22 @@ fn env_checkpoint_storage_db_path_returns_none_when_unset() {
 #[serial]
 fn env_checkpoint_storage_db_path_returns_path_when_set() {
     let prior = std::env::var("CODEX_AGNO_CHECKPOINT_STORAGE_DB_FILE").ok();
-    unsafe { core_state_utils::env_sync::set_env("CODEX_AGNO_CHECKPOINT_STORAGE_DB_FILE", "/tmp/test.sqlite3") };
+    unsafe {
+        core_state_utils::env_sync::set_env(
+            "CODEX_AGNO_CHECKPOINT_STORAGE_DB_FILE",
+            "/tmp/test.sqlite3",
+        )
+    };
     let result = env_checkpoint_storage_db_path();
     assert!(result.is_some());
     assert!(result.unwrap().ends_with("test.sqlite3"));
     match prior {
-        Some(v) => unsafe { core_state_utils::env_sync::set_env("CODEX_AGNO_CHECKPOINT_STORAGE_DB_FILE", &v) },
-        None => unsafe { core_state_utils::env_sync::remove_env("CODEX_AGNO_CHECKPOINT_STORAGE_DB_FILE") },
+        Some(v) => unsafe {
+            core_state_utils::env_sync::set_env("CODEX_AGNO_CHECKPOINT_STORAGE_DB_FILE", &v)
+        },
+        None => unsafe {
+            core_state_utils::env_sync::remove_env("CODEX_AGNO_CHECKPOINT_STORAGE_DB_FILE")
+        },
     }
 }
 

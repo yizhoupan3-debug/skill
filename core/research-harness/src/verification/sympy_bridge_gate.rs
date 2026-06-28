@@ -14,8 +14,8 @@
 use quality_gate::checker::GateChecker;
 use quality_gate::types::{CheckContext, CheckResult, Finding, Severity};
 
-use crate::verification::sympy_bridge;
 use crate::types::VerificationStatus;
+use crate::verification::sympy_bridge;
 
 pub struct SympyBridge;
 
@@ -41,9 +41,15 @@ impl GateChecker for SympyBridge {
                 severity: Severity::C,
                 description: "SymPy is not available — bridge checks degraded".to_string(),
                 location: None,
-                suggestion: Some("install sympy and a Python environment to enable full checks".to_string()),
+                suggestion: Some(
+                    "install sympy and a Python environment to enable full checks".to_string(),
+                ),
             });
-            return CheckResult { checker_id: self.id().to_string(), passed: true, findings };
+            return CheckResult {
+                checker_id: self.id().to_string(),
+                passed: true,
+                findings,
+            };
         }
 
         let Some(data) = ctx.output_data.as_ref() else {
@@ -54,7 +60,11 @@ impl GateChecker for SympyBridge {
                 location: None,
                 suggestion: Some("pass output_data with sympy keys to enable checks".to_string()),
             });
-            return CheckResult { checker_id: self.id().to_string(), passed: true, findings };
+            return CheckResult {
+                checker_id: self.id().to_string(),
+                passed: true,
+                findings,
+            };
         };
 
         // Identity verification via SymPy
@@ -75,7 +85,9 @@ impl GateChecker for SympyBridge {
                 location: None,
                 suggestion: if matches!(vr.status, VerificationStatus::Fail) {
                     Some("identity not verified by SymPy — check expressions".to_string())
-                } else { None },
+                } else {
+                    None
+                },
             });
         }
 
@@ -97,7 +109,13 @@ impl GateChecker for SympyBridge {
             });
         }
 
-        let passed = findings.iter().all(|f| matches!(f.severity, Severity::C | Severity::Warning));
-        CheckResult { checker_id: self.id().to_string(), passed, findings }
+        let passed = findings
+            .iter()
+            .all(|f| matches!(f.severity, Severity::C | Severity::Warning));
+        CheckResult {
+            checker_id: self.id().to_string(),
+            passed,
+            findings,
+        }
     }
 }

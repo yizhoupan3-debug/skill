@@ -74,7 +74,10 @@ pub fn classify_protected_path(
     if protected_paths.contains(&normalized) {
         return Some("protected_file");
     }
-    if protected_prefixes.iter().any(|prefix| normalized.starts_with(prefix)) {
+    if protected_prefixes
+        .iter()
+        .any(|prefix| normalized.starts_with(prefix))
+    {
         return Some("protected_prefix");
     }
     None
@@ -91,9 +94,9 @@ fn relative_candidate_path(path: &str, repo_root: &Path) -> String {
                     .canonicalize()
                     .unwrap_or_else(|_| repo_root.to_path_buf()),
             )
-        {
-            return normalize_repo_relative_path(&rel.to_string_lossy());
-        }
+    {
+        return normalize_repo_relative_path(&rel.to_string_lossy());
+    }
     normalize_repo_relative_path(path)
 }
 
@@ -127,7 +130,13 @@ pub fn normalize_repo_relative_path(path: &str) -> String {
 
 fn iter_candidate_paths(payload: &Value) -> Vec<String> {
     let mut candidates = Vec::new();
-    for key in &["file_path", "changed_path", "path", "config_path", "target_path"] {
+    for key in &[
+        "file_path",
+        "changed_path",
+        "path",
+        "config_path",
+        "target_path",
+    ] {
         if let Some(text) = payload.get(key).and_then(Value::as_str) {
             let normalized = text.replace('\\', "/");
             if !normalized.is_empty() {
@@ -167,16 +176,23 @@ pub fn bash_write_target(
     protected_prefixes: &[&str],
 ) -> Option<String> {
     let tool_name = payload.get("tool_name").and_then(Value::as_str)?;
-    if tool_name != "Bash" { return None; }
+    if tool_name != "Bash" {
+        return None;
+    }
     let command = payload
-        .get("tool_input").and_then(Value::as_object)
+        .get("tool_input")
+        .and_then(Value::as_object)
         .and_then(|ti| ti.get("command"))
         .or_else(|| payload.get("command"))
         .and_then(Value::as_str)?;
     for segment in split_bash_segments(command) {
         let looks_mutating = bash_command_looks_mutating(&segment);
-        let all_hints: Vec<String> = protected_paths.iter().cloned().chain(protected_prefixes.iter().map(|s| s.to_string())).collect();
-    for hint in &all_hints {
+        let all_hints: Vec<String> = protected_paths
+            .iter()
+            .cloned()
+            .chain(protected_prefixes.iter().map(|s| s.to_string()))
+            .collect();
+        for hint in &all_hints {
             if bash_segment_mentions_path(&segment, hint)
                 && (looks_mutating || bash_segment_redirects_to_hint(&segment, hint))
             {
@@ -197,13 +213,19 @@ fn split_bash_segments(command: &str) -> Vec<String> {
         let next = chars.get(idx + 1).copied();
         let prev = if idx > 0 { Some(chars[idx - 1]) } else { None };
         let mut sep_len = 0usize;
-        if current == ';' { sep_len = 1; }
-        else if next == Some(current) && matches!(current, '&' | '|') { sep_len = 2; }
-        else if current == '|' && prev != Some('>') { sep_len = 1; }
+        if current == ';' {
+            sep_len = 1;
+        } else if next == Some(current) && matches!(current, '&' | '|') {
+            sep_len = 2;
+        } else if current == '|' && prev != Some('>') {
+            sep_len = 1;
+        }
         if sep_len > 0 {
             let seg: String = chars[start..idx].iter().collect();
             let trimmed = seg.trim();
-            if !trimmed.is_empty() { segments.push(trimmed.to_string()); }
+            if !trimmed.is_empty() {
+                segments.push(trimmed.to_string());
+            }
             idx += sep_len;
             start = idx;
             continue;
@@ -212,8 +234,14 @@ fn split_bash_segments(command: &str) -> Vec<String> {
     }
     let tail: String = chars[start..].iter().collect();
     let trimmed = tail.trim();
-    if !trimmed.is_empty() { segments.push(trimmed.to_string()); }
-    if segments.is_empty() { vec![command.trim().to_string()] } else { segments }
+    if !trimmed.is_empty() {
+        segments.push(trimmed.to_string());
+    }
+    if segments.is_empty() {
+        vec![command.trim().to_string()]
+    } else {
+        segments
+    }
 }
 
 static MUTATING_COMMAND_PATTERNS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
@@ -221,14 +249,23 @@ static MUTATING_COMMAND_PATTERNS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
         r"^\s*(mv|cp|install|touch|rm|unlink|truncate)\b",
         r"^\s*ln\b[^\n]*\s-[^\n]*[fs][^\n]*\b",
         r"^\s*git\s+(checkout\s+--|restore\b)",
-        r"\bsed\s+-i\b", r"\bperl\s+-pi\b",
-        r"\bpython3?\s+-c\b", r"\bnode\s+-e\b", r"\bruby\s+-e\b",
-        r"\btee\b", r"\bdd\b",
-    ].iter().filter_map(|p| Regex::new(p).ok()).collect()
+        r"\bsed\s+-i\b",
+        r"\bperl\s+-pi\b",
+        r"\bpython3?\s+-c\b",
+        r"\bnode\s+-e\b",
+        r"\bruby\s+-e\b",
+        r"\btee\b",
+        r"\bdd\b",
+    ]
+    .iter()
+    .filter_map(|p| Regex::new(p).ok())
+    .collect()
 });
 
 fn bash_command_looks_mutating(command: &str) -> bool {
-    MUTATING_COMMAND_PATTERNS.iter().any(|re| re.is_match(command))
+    MUTATING_COMMAND_PATTERNS
+        .iter()
+        .any(|re| re.is_match(command))
 }
 
 fn bash_segment_mentions_path(segment: &str, hint: &str) -> bool {
@@ -249,9 +286,15 @@ fn bash_segment_redirects_to_hint(segment: &str, hint: &str) -> bool {
         let regexes = map.entry(hint.to_string()).or_insert_with(|| {
             let escaped = regex::escape(hint);
             let p1 = format!(r#"(>>?|>\|)\s*['\"]?[^'\"\n;&|]*{escaped}[^'\"\n;&|]*['\"]?"#);
-            let p2 = format!(r#"\btee\b(?:\s+-a)?\s+['\"]?[^'\"\n;&|]*{escaped}[^'\"\n;&|]*['\"]?"#);
-            let p3 = format!(r#"\bdd\b[^\n;&|]*\bof=['\"]?[^'\"\n;&|]*{escaped}[^'\"\n;&|]*['\"]?"#);
-            [Regex::new(&p1).unwrap(), Regex::new(&p2).unwrap(), Regex::new(&p3).unwrap()]
+            let p2 =
+                format!(r#"\btee\b(?:\s+-a)?\s+['\"]?[^'\"\n;&|]*{escaped}[^'\"\n;&|]*['\"]?"#);
+            let p3 =
+                format!(r#"\bdd\b[^\n;&|]*\bof=['\"]?[^'\"\n;&|]*{escaped}[^'\"\n;&|]*['\"]?"#);
+            [
+                Regex::new(&p1).unwrap(),
+                Regex::new(&p2).unwrap(),
+                Regex::new(&p3).unwrap(),
+            ]
         });
         regexes.iter().any(|re| re.is_match(segment))
     })

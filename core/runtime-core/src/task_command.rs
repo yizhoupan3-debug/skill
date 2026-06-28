@@ -6,10 +6,10 @@
 //!
 //! See `core/core-state/src/task_state.rs` for the unified resolve model.
 
-use serde_json::Value;
 use core_errors::FrameworkError;
+use core_state::transition_validation::{TaskTransition, validate_transition};
 use quality_gate;
-use core_state::transition_validation::{validate_transition, TaskTransition};
+use serde_json::Value;
 
 pub const TASK_LEDGER_COMMAND_ENVELOPE_SCHEMA: &str = "router-rs-task-ledger-command-envelope-v1";
 
@@ -22,7 +22,9 @@ pub enum TaskLedgerCommand {
 }
 
 /// Parse `{ schema_version?, kind, payload }` → [`TaskLedgerCommand`].
-pub fn parse_task_ledger_command_envelope(envelope: &Value) -> Result<TaskLedgerCommand, FrameworkError> {
+pub fn parse_task_ledger_command_envelope(
+    envelope: &Value,
+) -> Result<TaskLedgerCommand, FrameworkError> {
     let schema = envelope
         .get("schema_version")
         .and_then(Value::as_str)
@@ -50,33 +52,38 @@ pub fn parse_task_ledger_command_envelope(envelope: &Value) -> Result<TaskLedger
         "rfv_loop" | "quality_gate" => Ok(TaskLedgerCommand::QualityGate(payload)),
         "session_artifacts" => Ok(TaskLedgerCommand::SessionArtifacts(payload)),
         "hook_evidence_append" => Ok(TaskLedgerCommand::HookEvidenceAppend(payload)),
-        _ => Err(FrameworkError::validation(format!("task_ledger_command: unknown kind {kind:?}"))),
+        _ => Err(FrameworkError::validation(format!(
+            "task_ledger_command: unknown kind {kind:?}"
+        ))),
     }
 }
 
 /// Dispatch without taking an extra outer lock (`apply_task_ledger_mutation` is invoked inside handlers where needed).
 pub fn dispatch_task_ledger_command(cmd: TaskLedgerCommand) -> Result<Value, FrameworkError> {
     match cmd {
-        TaskLedgerCommand::GoalDrive(p) => runtime_infra::kernel_utils::framework_goal_drive(p)
-                .map_err(FrameworkError::validation),
+        TaskLedgerCommand::GoalDrive(p) => {
+            runtime_infra::kernel_utils::framework_goal_drive(p).map_err(FrameworkError::validation)
+        }
         TaskLedgerCommand::QualityGate(p) => {
-            let repo_root = std::path::Path::new(
-                p.get("repo_root").and_then(|v| v.as_str()).unwrap_or(".")
-            );
+            let repo_root =
+                std::path::Path::new(p.get("repo_root").and_then(|v| v.as_str()).unwrap_or("."));
             let task_id = p.get("task_id").and_then(|v| v.as_str()).unwrap_or("");
             let goal = p.get("goal").and_then(|v| v.as_str()).unwrap_or("");
             let round = p.get("round").and_then(|v| v.as_u64()).unwrap_or(1);
-            let scene = p.get("scene")
+            let scene = p
+                .get("scene")
                 .and_then(|v| v.as_str())
                 .filter(|s| !s.is_empty())
                 .unwrap_or(quality_gate::scene::GENERAL);
-            let sub_scene = p.get("sub_scene")
+            let sub_scene = p
+                .get("sub_scene")
                 .and_then(|v| v.as_str())
                 .filter(|s| !s.is_empty());
 
             // Stage 1: transition validation as blocking gate (anti-fraud evidence check)
             if !task_id.is_empty() {
-                let transition_v = validate_transition(repo_root, task_id, TaskTransition::Complete);
+                let transition_v =
+                    validate_transition(repo_root, task_id, TaskTransition::Complete);
                 if !transition_v.passed {
                     return serde_json::to_value(&quality_gate::types::GateVerdict {
                         passed: false,
@@ -99,7 +106,16 @@ pub fn dispatch_task_ledger_command(cmd: TaskLedgerCommand) -> Result<Value, Fra
             let output_data = p.get("output_data").cloned();
 
             // Stage 2: QG Route evaluation
-            let verdict = crate::qg_entry::trigger(repo_root, task_id, scene, goal, sub_scene, round, None, output_data);
+            let verdict = crate::qg_entry::trigger(
+                repo_root,
+                task_id,
+                scene,
+                goal,
+                sub_scene,
+                round,
+                None,
+                output_data,
+            );
             Ok(serde_json::to_value(&verdict)?)
         }
         TaskLedgerCommand::SessionArtifacts(p) => {

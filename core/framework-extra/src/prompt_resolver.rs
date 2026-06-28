@@ -23,7 +23,9 @@ impl PromptResolver {
         let hash = sanitize_hash(raw_hash);
         match self.store.get(hash) {
             Ok(content) => Ok(content),
-            Err(ContentNotFound(h)) => Err(FrameworkError::not_found(format!("content not found: {h}"))),
+            Err(ContentNotFound(h)) => {
+                Err(FrameworkError::not_found(format!("content not found: {h}")))
+            }
         }
     }
 }
@@ -46,6 +48,7 @@ fn sanitize_hash(raw: &str) -> &str {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use crate::content_store::ContentStore;
 

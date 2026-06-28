@@ -111,8 +111,9 @@ impl ScoringWeights {
 
 impl Default for ScoringWeights {
     fn default() -> Self {
-        serde_json::from_str(DEFAULTS_JSON)
-            .expect("BUG: embedded scoring_weights.json failed to deserialize")
+        serde_json::from_str(DEFAULTS_JSON).unwrap_or_else(|e| {
+            panic!("BUG: embedded scoring_weights.json failed to deserialize: {e}")
+        })
     }
 }
 
@@ -133,8 +134,9 @@ static WEIGHTS: LazyLock<&'static ScoringWeights> = LazyLock::new(|| {
         }
     }
     // 2. Fallback: compile-time embedded JSON.
-    let w: ScoringWeights = serde_json::from_str(DEFAULTS_JSON)
-        .expect("BUG: embedded scoring_weights.json failed to deserialize");
+    let w: ScoringWeights = serde_json::from_str(DEFAULTS_JSON).unwrap_or_else(|e| {
+        panic!("BUG: embedded scoring_weights.json failed to deserialize: {e}")
+    });
     Box::leak(Box::new(w))
 });
 
@@ -145,6 +147,7 @@ pub fn scoring_weights() -> &'static ScoringWeights {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     #[test]

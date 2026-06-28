@@ -60,9 +60,12 @@ fn main() {
     out.push_str("// source: configs/framework/RUNTIME_REGISTRY.json\n\n");
 
     // --- all_known_host_dirs ---
-    let known_dirs = reg.get("all_known_host_dirs").and_then(serde_json::Value::as_array);
+    let known_dirs = reg
+        .get("all_known_host_dirs")
+        .and_then(serde_json::Value::as_array);
     if let Some(dirs) = known_dirs {
-        let items: Vec<String> = dirs.iter()
+        let items: Vec<String> = dirs
+            .iter()
             .filter_map(|v| v.as_str().map(|s| format!("\"{s}\"")))
             .collect();
         out.push_str(&format!(
@@ -72,9 +75,12 @@ fn main() {
     }
 
     // --- ephemeral_path_patterns ---
-    let patterns = reg.get("ephemeral_path_patterns").and_then(serde_json::Value::as_array);
+    let patterns = reg
+        .get("ephemeral_path_patterns")
+        .and_then(serde_json::Value::as_array);
     if let Some(pat) = patterns {
-        let items: Vec<String> = pat.iter()
+        let items: Vec<String> = pat
+            .iter()
             .filter_map(|v| v.as_str().map(|s| format!("\"{s}\"")))
             .collect();
         out.push_str(&format!(
@@ -84,9 +90,12 @@ fn main() {
     }
 
     // --- ephemeral_task_prefixes + is_ephemeral_task_id ---
-    let prefixes = reg.get("ephemeral_task_prefixes").and_then(serde_json::Value::as_array);
+    let prefixes = reg
+        .get("ephemeral_task_prefixes")
+        .and_then(serde_json::Value::as_array);
     if let Some(pref) = prefixes {
-        let items: Vec<String> = pref.iter()
+        let items: Vec<String> = pref
+            .iter()
             .filter_map(|v| v.as_str().map(|s| format!("\"{s}\"")))
             .collect();
         out.push_str(&format!(
@@ -96,12 +105,12 @@ fn main() {
         out.push_str(
             "pub fn is_ephemeral_task_id(tid: &str) -> bool {\n\
              EPHEMERAL_TASK_PREFIXES.iter().any(|p| tid.starts_with(p))\n\
-             }\n\n"
+             }\n\n",
         );
     } else {
         out.push_str(
             "pub const EPHEMERAL_TASK_PREFIXES: &[&str] = &[];\n\
-             pub fn is_ephemeral_task_id(_tid: &str) -> bool { false }\n\n"
+             pub fn is_ephemeral_task_id(_tid: &str) -> bool { false }\n\n",
         );
     }
 
@@ -113,9 +122,11 @@ fn main() {
     ));
 
     // --- host_home_dirs (from supported host metadata.default_home_dir) ---
-    let home_dirs: Vec<String> = supported.iter()
+    let home_dirs: Vec<String> = supported
+        .iter()
         .filter_map(|id| {
-            metadata.get(id)
+            metadata
+                .get(id)
                 .and_then(|m| m.get("default_home_dir"))
                 .and_then(serde_json::Value::as_str)
                 .map(|dir| format!("\"{dir}\""))
@@ -136,7 +147,8 @@ fn main() {
     out.push_str("pub fn host_private_config_dir(host_id: &str) -> &'static str {\n");
     out.push_str("    match host_id {\n");
     for id in &supported {
-        if let Some(dir) = metadata.get(id.as_str())
+        if let Some(dir) = metadata
+            .get(id.as_str())
             .and_then(|m| m.get("config_dir"))
             .and_then(serde_json::Value::as_str)
         {
@@ -150,7 +162,8 @@ fn main() {
     out.push_str("pub fn projection_entrypoint_subdir(host_id: &str) -> &'static str {\n");
     out.push_str("    match host_id {\n");
     for id in &supported {
-        if let Some(dir) = metadata.get(id.as_str())
+        if let Some(dir) = metadata
+            .get(id.as_str())
             .and_then(|m| m.get("entrypoint_subdir"))
             .and_then(serde_json::Value::as_str)
             .filter(|s| !s.is_empty())
@@ -165,7 +178,8 @@ fn main() {
     out.push_str("pub fn projection_entrypoint_filename(host_id: &str) -> &'static str {\n");
     out.push_str("    match host_id {\n");
     for id in &supported {
-        if let Some(fname) = metadata.get(id.as_str())
+        if let Some(fname) = metadata
+            .get(id.as_str())
             .and_then(|m| m.get("entrypoint_filename"))
             .and_then(serde_json::Value::as_str)
             .filter(|s| !s.is_empty())
@@ -177,10 +191,13 @@ fn main() {
     out.push_str("    }\n}\n\n");
 
     // projection_entrypoint_frontmatter_extra
-    out.push_str("pub fn projection_entrypoint_frontmatter_extra(host_id: &str) -> &'static str {\n");
+    out.push_str(
+        "pub fn projection_entrypoint_frontmatter_extra(host_id: &str) -> &'static str {\n",
+    );
     out.push_str("    match host_id {\n");
     for id in &supported {
-        if let Some(val) = metadata.get(id.as_str())
+        if let Some(val) = metadata
+            .get(id.as_str())
             .and_then(|m| m.get("entrypoint_frontmatter_extra"))
             .and_then(serde_json::Value::as_str)
             .filter(|s| !s.is_empty())
@@ -196,7 +213,8 @@ fn main() {
     out.push_str("pub fn projection_entrypoint_description(host_id: &str) -> &'static str {\n");
     out.push_str("    match host_id {\n");
     for id in &supported {
-        if let Some(val) = metadata.get(id.as_str())
+        if let Some(val) = metadata
+            .get(id.as_str())
             .and_then(|m| m.get("entrypoint_description"))
             .and_then(serde_json::Value::as_str)
             .filter(|s| !s.is_empty())
@@ -212,7 +230,8 @@ fn main() {
     out.push_str("pub fn projection_entrypoint_trailer(host_id: &str) -> &'static str {\n");
     out.push_str("    match host_id {\n");
     for id in &supported {
-        if let Some(val) = metadata.get(id.as_str())
+        if let Some(val) = metadata
+            .get(id.as_str())
             .and_then(|m| m.get("entrypoint_trailer"))
             .and_then(serde_json::Value::as_str)
             .filter(|s| !s.is_empty())
@@ -228,7 +247,8 @@ fn main() {
     out.push_str("pub fn review_gate_disable_env(host_id: &str) -> &'static str {\n");
     out.push_str("    match host_id {\n");
     for id in &supported {
-        if let Some(env) = metadata.get(id.as_str())
+        if let Some(env) = metadata
+            .get(id.as_str())
             .and_then(|m| m.get("review_gate_disable_env"))
             .and_then(serde_json::Value::as_str)
         {
@@ -242,7 +262,8 @@ fn main() {
     out.push_str("pub fn paper_prose_env(host_id: &str) -> &'static str {\n");
     out.push_str("    match host_id {\n");
     for id in &supported {
-        if let Some(env) = metadata.get(id.as_str())
+        if let Some(env) = metadata
+            .get(id.as_str())
             .and_then(|m| m.get("paper_prose_env"))
             .and_then(serde_json::Value::as_str)
         {
@@ -256,7 +277,8 @@ fn main() {
     out.push_str("pub fn paper_adversarial_env(host_id: &str) -> &'static str {\n");
     out.push_str("    match host_id {\n");
     for id in &supported {
-        if let Some(env) = metadata.get(id.as_str())
+        if let Some(env) = metadata
+            .get(id.as_str())
             .and_then(|m| m.get("paper_adversarial_env"))
             .and_then(serde_json::Value::as_str)
         {
@@ -270,18 +292,17 @@ fn main() {
     out.push_str("pub fn settings_guarded_paths(host_id: &str) -> &'static [&'static str] {\n");
     out.push_str("    match host_id {\n");
     for id in &supported {
-        if let Some(paths) = metadata.get(id.as_str())
+        if let Some(paths) = metadata
+            .get(id.as_str())
             .and_then(|m| m.get("settings_paths"))
             .and_then(serde_json::Value::as_array)
         {
-            let items: Vec<String> = paths.iter()
+            let items: Vec<String> = paths
+                .iter()
                 .filter_map(|v| v.as_str().map(|s| format!("\"{s}\"")))
                 .collect();
             if !items.is_empty() {
-                out.push_str(&format!(
-                    "        \"{id}\" => &[{}],\n",
-                    items.join(", ")
-                ));
+                out.push_str(&format!("        \"{id}\" => &[{}],\n", items.join(", ")));
             }
         }
     }
@@ -292,18 +313,17 @@ fn main() {
     out.push_str("pub fn generated_entrypoint_paths(host_id: &str) -> &'static [&'static str] {\n");
     out.push_str("    match host_id {\n");
     for id in &supported {
-        if let Some(paths) = metadata.get(id.as_str())
+        if let Some(paths) = metadata
+            .get(id.as_str())
             .and_then(|m| m.get("entrypoint_paths"))
             .and_then(serde_json::Value::as_array)
         {
-            let items: Vec<String> = paths.iter()
+            let items: Vec<String> = paths
+                .iter()
                 .filter_map(|v| v.as_str().map(|s| format!("\"{s}\"")))
                 .collect();
             if !items.is_empty() {
-                out.push_str(&format!(
-                    "        \"{id}\" => &[{}],\n",
-                    items.join(", ")
-                ));
+                out.push_str(&format!("        \"{id}\" => &[{}],\n", items.join(", ")));
             }
         }
     }
@@ -314,7 +334,8 @@ fn main() {
     out.push_str("pub fn hook_state_unreadable_tag(host_id: &str) -> &'static str {\n");
     out.push_str("    match host_id {\n");
     for id in &supported {
-        if let Some(tag) = metadata.get(id.as_str())
+        if let Some(tag) = metadata
+            .get(id.as_str())
             .and_then(|m| m.get("hook_state_unreadable_tag"))
             .and_then(serde_json::Value::as_str)
         {
@@ -328,7 +349,8 @@ fn main() {
     out.push_str("pub fn session_namespace_env(host_id: &str) -> &'static str {\n");
     out.push_str("    match host_id {\n");
     for id in &supported {
-        if let Some(env) = metadata.get(id.as_str())
+        if let Some(env) = metadata
+            .get(id.as_str())
             .and_then(|m| m.get("session_namespace_env"))
             .and_then(serde_json::Value::as_str)
         {
@@ -342,7 +364,8 @@ fn main() {
     out.push_str("pub fn home_env_var(host_id: &str) -> &'static str {\n");
     out.push_str("    match host_id {\n");
     for id in &supported {
-        if let Some(env) = metadata.get(id.as_str())
+        if let Some(env) = metadata
+            .get(id.as_str())
             .and_then(|m| m.get("home_env_var"))
             .and_then(serde_json::Value::as_str)
         {
@@ -356,11 +379,13 @@ fn main() {
     out.push_str("pub fn install_scopes(host_id: &str) -> &'static [&'static str] {\n");
     out.push_str("    match host_id {\n");
     for id in &supported {
-        if let Some(arr) = metadata.get(id.as_str())
+        if let Some(arr) = metadata
+            .get(id.as_str())
             .and_then(|m| m.get("install_scopes"))
             .and_then(serde_json::Value::as_array)
         {
-            let items: Vec<String> = arr.iter()
+            let items: Vec<String> = arr
+                .iter()
                 .filter_map(|v| v.as_str().map(|s| format!("\"{s}\"")))
                 .collect();
             if !items.is_empty() {
@@ -422,6 +447,7 @@ fn main() {
             "/// This signals the caller to resolve the path relative to `account_home_root`\n",
         );
         out.push_str("/// instead of `host_home_root`.\n");
+        out.push_str("#[allow(clippy::match_like_matches_macro)]\n");
         out.push_str(
             "pub fn host_projection_mcp_base_is_account(host_id: &str, scope: &str) -> bool {\n",
         );
@@ -434,10 +460,8 @@ fn main() {
             {
                 for entry in entries {
                     if let Some(s) = entry.get("scope").and_then(|v| v.as_str()) {
-                        let is_account = entry
-                            .get("base")
-                            .and_then(|v| v.as_str())
-                            == Some("account_home");
+                        let is_account =
+                            entry.get("base").and_then(|v| v.as_str()) == Some("account_home");
                         if is_account {
                             out.push_str(&format!("        (\"{host_id}\", \"{s}\") => true,\n"));
                         }
@@ -457,7 +481,8 @@ fn main() {
         out.push_str("pub fn host_mcp_config_format(host_id: &str) -> &'static str {\n");
         out.push_str("    match host_id {\n");
         for id in &supported {
-            if let Some(fmt) = metadata.get(id.as_str())
+            if let Some(fmt) = metadata
+                .get(id.as_str())
                 .and_then(|m| m.get("mcp_config_format"))
                 .and_then(serde_json::Value::as_str)
                 .filter(|s| !s.is_empty())
@@ -476,7 +501,8 @@ fn main() {
     out.push_str("pub fn host_driver_binary(host_id: &str) -> &'static str {\n");
     out.push_str("    match host_id {\n");
     for id in &supported {
-        if let Some(bin) = metadata.get(id.as_str())
+        if let Some(bin) = metadata
+            .get(id.as_str())
             .and_then(|m| m.get("driver_binary"))
             .and_then(serde_json::Value::as_str)
         {
@@ -493,7 +519,8 @@ fn main() {
     out.push_str("pub fn host_config_schema_url(host_id: &str) -> &'static str {\n");
     out.push_str("    match host_id {\n");
     for id in &supported {
-        if let Some(url) = metadata.get(id.as_str())
+        if let Some(url) = metadata
+            .get(id.as_str())
             .and_then(|m| m.get("config_schema_url"))
             .and_then(serde_json::Value::as_str)
         {
@@ -505,9 +532,11 @@ fn main() {
 
     // --- ALL_HOST_WORKSPACE_ROOT_ENV_VARS (from hook_launcher.root_env_var) ---
     {
-        let env_vars: Vec<String> = supported.iter()
+        let env_vars: Vec<String> = supported
+            .iter()
             .filter_map(|id| {
-                metadata.get(id.as_str())
+                metadata
+                    .get(id.as_str())
                     .and_then(|m| m.get("hook_launcher"))
                     .and_then(|hl| hl.get("root_env_var"))
                     .and_then(serde_json::Value::as_str)
@@ -544,11 +573,7 @@ fn main() {
             .as_array()
             .expect("stdio_op_domains value must be an array")
             .iter()
-            .map(|v| {
-                v.as_str()
-                    .expect("stdio op must be a string")
-                    .to_string()
-            })
+            .map(|v| v.as_str().expect("stdio op must be a string").to_string())
             .collect();
         domain_order.push((domain_name.clone(), ops));
     }

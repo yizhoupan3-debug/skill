@@ -89,6 +89,7 @@ fn row_to_node(row: &rusqlite::Row<'_>) -> rusqlite::Result<Node> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::search_symbols;
     use crate::db::index_ops::ingest_parsed_file;
     use crate::db::schema::init_schema;

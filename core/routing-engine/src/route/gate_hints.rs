@@ -34,10 +34,7 @@ fn parsed_phrases() -> &'static HashMap<String, Vec<String>> {
 }
 
 pub fn gate_hint_phrases(gate: &str) -> Vec<String> {
-    parsed_phrases()
-        .get(gate)
-        .cloned()
-        .unwrap_or_default()
+    parsed_phrases().get(gate).cloned().unwrap_or_default()
 }
 
 pub fn embedded_schema_version() -> &'static str {

@@ -83,7 +83,10 @@ pub fn route_tool_from_records(
             .into_iter()
             .filter(|c| {
                 c.record.host_platforms.is_empty()
-                    || c.record.host_platforms.iter().any(|p| p.to_lowercase() == hid_lower)
+                    || c.record
+                        .host_platforms
+                        .iter()
+                        .any(|p| p.to_lowercase() == hid_lower)
             })
             .collect()
     } else {
@@ -120,13 +123,20 @@ pub fn route_tool_from_records(
         if let Some(hid) = host_id {
             let hid_lower = hid.to_lowercase();
             if !record.host_platforms.is_empty()
-                && !record.host_platforms.iter().any(|p| p.to_lowercase() == hid_lower)
+                && !record
+                    .host_platforms
+                    .iter()
+                    .any(|p| p.to_lowercase() == hid_lower)
             {
                 continue;
             }
         }
         // Skip deprecated tools and no_routing tools in fuzzy rescue
-        if record.tool_flags.iter().any(|f| f == "deprecated" || f == "no_routing") {
+        if record
+            .tool_flags
+            .iter()
+            .any(|f| f == "deprecated" || f == "no_routing")
+        {
             continue;
         }
         if let Some(fuzzy_score) = best_fuzzy_score(&query_lower, &record.trigger_hints) {
@@ -181,24 +191,22 @@ pub(crate) fn score_tool(
         .into_iter()
         .collect();
 
-    let alias_tokens: HashSet<String> = tokenize_text(&display_name_lower)
-        .into_iter()
-        .collect();
+    let alias_tokens: HashSet<String> = tokenize_text(&display_name_lower).into_iter().collect();
 
-    let do_not_use_tokens: HashSet<String> =
-        if record.tool_flags.iter().any(|f| f == "deprecated") {
-            // Only include "deprecated" as the signal keyword — do NOT clone
-            // name_tokens here. Otherwise the tool gets penalized for its OWN
-            // name tokens matching the query, creating a confusing self-penalty
-            // where the same tokens earn positive score (Step 2) and then reduce
-            // it (Step 6). The penalty should only fire when the query explicitly
-            // signals "I want something deprecated".
-            let mut tokens = HashSet::new();
-            tokens.insert("deprecated".to_string());
-            tokens
-        } else {
-            HashSet::new()
-        };
+    let do_not_use_tokens: HashSet<String> = if record.tool_flags.iter().any(|f| f == "deprecated")
+    {
+        // Only include "deprecated" as the signal keyword — do NOT clone
+        // name_tokens here. Otherwise the tool gets penalized for its OWN
+        // name tokens matching the query, creating a confusing self-penalty
+        // where the same tokens earn positive score (Step 2) and then reduce
+        // it (Step 6). The penalty should only fire when the query explicitly
+        // signals "I want something deprecated".
+        let mut tokens = HashSet::new();
+        tokens.insert("deprecated".to_string());
+        tokens
+    } else {
+        HashSet::new()
+    };
 
     let mut score = 0.0f64;
     let mut reasons = Vec::new();
@@ -219,10 +227,16 @@ pub(crate) fn score_tool(
         .filter(|qt| name_tokens.contains(qt.as_str()) && !unique_matched.contains(qt.as_str()))
         .count();
     if name_match_count > 0 {
-        score += weights.name_tokens_base + weights.name_tokens_per_token * (name_match_count as f64);
+        score +=
+            weights.name_tokens_base + weights.name_tokens_per_token * (name_match_count as f64);
         reasons.push(format!("name_tokens:{name_match_count}"));
         matched_token_count += name_match_count;
-        unique_matched.extend(query_tokens.iter().filter(|qt| name_tokens.contains(qt.as_str())).map(|s| s.as_str()));
+        unique_matched.extend(
+            query_tokens
+                .iter()
+                .filter(|qt| name_tokens.contains(qt.as_str()))
+                .map(|s| s.as_str()),
+        );
     }
 
     // Step 3: Trigger hint matching
@@ -255,7 +269,12 @@ pub(crate) fn score_tool(
         score += kw_score;
         reasons.push(format!("keywords:{keyword_match_count}"));
         matched_token_count += keyword_match_count;
-        unique_matched.extend(query_tokens.iter().filter(|qt| keyword_tokens.contains(qt.as_str())).map(|s| s.as_str()));
+        unique_matched.extend(
+            query_tokens
+                .iter()
+                .filter(|qt| keyword_tokens.contains(qt.as_str()))
+                .map(|s| s.as_str()),
+        );
     }
 
     // Alias matching uses a separate unique count against both keyword_tokens and unique_matched.
@@ -264,12 +283,17 @@ pub(crate) fn score_tool(
         .filter(|qt| alias_tokens.contains(qt.as_str()) && !unique_matched.contains(qt.as_str()))
         .count();
     if alias_match_count > 0 {
-        let alias_score = weights.alias_hits_base
-            + weights.alias_hits_per_hit * (alias_match_count as f64);
+        let alias_score =
+            weights.alias_hits_base + weights.alias_hits_per_hit * (alias_match_count as f64);
         score += alias_score;
         reasons.push(format!("alias_tokens:{alias_match_count}"));
         matched_token_count += alias_match_count;
-        unique_matched.extend(query_tokens.iter().filter(|qt| alias_tokens.contains(qt.as_str())).map(|s| s.as_str()));
+        unique_matched.extend(
+            query_tokens
+                .iter()
+                .filter(|qt| alias_tokens.contains(qt.as_str()))
+                .map(|s| s.as_str()),
+        );
     }
 
     // Step 5: Description token matching (dedup against unique_matched)
@@ -278,8 +302,8 @@ pub(crate) fn score_tool(
         .filter(|qt| desc_tokens.contains(qt.as_str()) && !unique_matched.contains(qt.as_str()))
         .count();
     if desc_match_count > 0 {
-        let desc_score =
-            (weights.description_per_match * (desc_match_count as f64)).min(weights.description_max);
+        let desc_score = (weights.description_per_match * (desc_match_count as f64))
+            .min(weights.description_max);
         score += desc_score;
         reasons.push(format!("description:{desc_match_count}"));
         matched_token_count += desc_match_count;
@@ -293,12 +317,9 @@ pub(crate) fn score_tool(
             .filter(|qt| do_not_use_tokens.contains(qt.as_str()))
             .map(|s| s.as_str())
             .collect();
-        let total_penalty = base_penalty
-            + (additional_hits.len() as f64) * weights.do_not_use_penalty_per_hit;
-        let penalty = f64::min(
-            score * weights.do_not_use_penalty_max_ratio,
-            total_penalty,
-        );
+        let total_penalty =
+            base_penalty + (additional_hits.len() as f64) * weights.do_not_use_penalty_per_hit;
+        let penalty = f64::min(score * weights.do_not_use_penalty_max_ratio, total_penalty);
         score = f64::max(0.0, score - penalty);
         reasons.push(format!("do_not_use_penalty:{penalty:.1}"));
     }
@@ -322,6 +343,7 @@ pub(crate) fn score_tool(
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     fn test_tool_record(slug: &str, keywords: &[&str]) -> McpToolRecord {
@@ -422,8 +444,10 @@ mod tests {
         let decision = route_tool_from_records("文本提取", &records, None);
         assert!(decision.is_some(), "display name should match");
         if let Some(d) = decision {
-            assert!(d.reasons.iter().any(|r| r.contains("alias")),
-                "display name matching now produces alias_tokens reasons");
+            assert!(
+                d.reasons.iter().any(|r| r.contains("alias")),
+                "display name matching now produces alias_tokens reasons"
+            );
         }
     }
 
@@ -453,7 +477,8 @@ mod tests {
         // triggers the do-not-use penalty. Querying the tool name alone no
         // longer self-penalizes (name_tokens are not cloned into do_not_use_tokens).
         let query_tokens = tokenize_text("old_tool deprecated");
-        let (score, reasons, _) = score_tool(&record, "old_tool deprecated", &query_tokens, &weights);
+        let (score, reasons, _) =
+            score_tool(&record, "old_tool deprecated", &query_tokens, &weights);
         assert!(score > 0.0, "exact name should still score positively");
         assert!(
             reasons.iter().any(|r| r.contains("do_not_use_penalty")),
@@ -485,15 +510,24 @@ mod tests {
             input_schema_json: None,
         };
         let query_tokens = tokenize_text("ext_tool");
-        let (score_builtin, _, _) = score_tool(&make_record("builtin"), "ext_tool", &query_tokens, &weights);
-        let (score_external, reasons, _) = score_tool(&make_record("external"), "ext_tool", &query_tokens, &weights);
+        let (score_builtin, _, _) =
+            score_tool(&make_record("builtin"), "ext_tool", &query_tokens, &weights);
+        let (score_external, reasons, _) = score_tool(
+            &make_record("external"),
+            "ext_tool",
+            &query_tokens,
+            &weights,
+        );
         assert!(
             reasons.iter().any(|r| r.contains("layer")),
             "layer penalty reason should be present"
         );
         // external layer penalty is -2.0 relative to builtin
         let diff = score_builtin - score_external;
-        assert!((diff - 2.0).abs() < 0.001, "external layer penalty should reduce score by 2.0");
+        assert!(
+            (diff - 2.0).abs() < 0.001,
+            "external layer penalty should reduce score by 2.0"
+        );
     }
 
     #[test]
@@ -530,7 +564,10 @@ mod tests {
         let records = vec![test_tool_record("pdf_read", &["pdf"])];
         let long_query = "a".repeat(5000);
         let decision = route_tool_from_records(&long_query, &records, None);
-        assert!(decision.is_none(), "query over MAX_QUERY_LEN should return None");
+        assert!(
+            decision.is_none(),
+            "query over MAX_QUERY_LEN should return None"
+        );
     }
 
     #[test]
@@ -540,7 +577,10 @@ mod tests {
         let records = vec![record];
         // Even with exact match, deprecated tool must not be selected
         let decision = route_tool_from_records("old_tool legacy", &records, None);
-        assert!(decision.is_none(), "deprecated tool should be excluded from routing");
+        assert!(
+            decision.is_none(),
+            "deprecated tool should be excluded from routing"
+        );
     }
 
     #[test]
@@ -550,6 +590,9 @@ mod tests {
         let records = vec![record];
         // Even with exact match, no_routing tool must not be selected
         let decision = route_tool_from_records("task_create", &records, None);
-        assert!(decision.is_none(), "no_routing tool should be excluded from routing");
+        assert!(
+            decision.is_none(),
+            "no_routing tool should be excluded from routing"
+        );
     }
 }

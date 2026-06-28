@@ -140,7 +140,10 @@ fn snapshot_all_host_hooks(repo_root: &Path) -> Value {
         let cmd_fragment = format!("{host_id}-router-rs-hook.sh");
         let provider = host_projection::hosts::host_provider_for_id(host_id);
         let hooks_path = provider.and_then(|p| p.hooks_manifest_path());
-        let template_path = format!("configs/framework/{}-hooks.workspace-template.json", host_id);
+        let template_path = format!(
+            "configs/framework/{}-hooks.workspace-template.json",
+            host_id
+        );
         match hooks_path {
             Some(hooks_rel) => {
                 let snap = shared_schema_drift::snapshot_host_hooks_json(
@@ -163,8 +166,11 @@ fn snapshot_all_host_hooks(repo_root: &Path) -> Value {
 }
 
 fn host_hooks_json_ok(hooks: &Value) -> bool {
-    let Some(map) = hooks.as_object() else { return false };
-    map.values().all(|v| shared_schema_drift::host_hooks_json_ok(v))
+    let Some(map) = hooks.as_object() else {
+        return false;
+    };
+    map.values()
+        .all(|v| shared_schema_drift::host_hooks_json_ok(v))
 }
 
 // ── Task artifacts snapshot ──
@@ -232,23 +238,20 @@ pub fn build_baseline(repo_root: &Path, task_id: &str) -> Result<SchemaDriftBase
         host_hooks: snapshot_all_host_hooks(repo_root),
         task_artifacts: snapshot_task_artifacts(repo_root, task_id),
         contracts: ContractVersionsSnapshot {
-            closeout_record: core_state::closeout_validation::closeout_record_schema_version().to_string(),
+            closeout_record: core_state::closeout_validation::closeout_record_schema_version()
+                .to_string(),
             hook_observation: ROUTER_RS_HOOK_OBSERVATION_SCHEMA_VERSION.to_string(),
         },
     })
 }
 
-pub fn write_baseline(
-    repo_root: &Path,
-    task_id: &str,
-) -> Result<(SchemaDriftBaseline, PathBuf)> {
+pub fn write_baseline(repo_root: &Path, task_id: &str) -> Result<(SchemaDriftBaseline, PathBuf)> {
     let baseline = build_baseline(repo_root, task_id)?;
     let path = baseline_path(repo_root, task_id);
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|e| format!("mkdir {}: {e}", parent.display()))?;
     }
-    let value =
-        serde_json::to_value(&baseline).map_err(|e| format!("serialize baseline: {e}"))?;
+    let value = serde_json::to_value(&baseline).map_err(|e| format!("serialize baseline: {e}"))?;
     core_state_utils::atomic_write::write_atomic_json(&path, &value)?;
     Ok((baseline, path))
 }
@@ -281,7 +284,8 @@ pub fn check_against_baseline(repo_root: &Path, task_id: &str) -> SchemaDriftChe
     let current_hooks = snapshot_all_host_hooks(repo_root);
     let current_artifacts = snapshot_task_artifacts(repo_root, task_id);
     let current_contracts = ContractVersionsSnapshot {
-        closeout_record: core_state::closeout_validation::closeout_record_schema_version().to_string(),
+        closeout_record: core_state::closeout_validation::closeout_record_schema_version()
+            .to_string(),
         hook_observation: ROUTER_RS_HOOK_OBSERVATION_SCHEMA_VERSION.to_string(),
     };
 

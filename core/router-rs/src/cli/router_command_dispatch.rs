@@ -1,40 +1,44 @@
 //! 子命令 `dispatch_*` 实现。
 
-use serde_json::{Value, json};
 use serde::Serialize;
+use serde_json::{Value, json};
 use std::fs;
 use std::path::Path;
 
-use fr_exec::trace_stream_io::{
-    inspect_trace_stream, replay_trace_stream, write_trace_compaction_delta, write_trace_metadata,
-};
-use host_projection::hooks;
-use host_projection::host_entrypoint_sync::sync_host_entrypoints;
 use super::args::*;
-use fr_utils::json_io::{parse_json_input, print_json_value as raw_print_json_value};
+use core_policy::hook_policy::{
+    HookPolicyEvaluateRequest, evaluate_hook_policy, hook_policy_contract,
+};
 use core_state::closeout_validation::{
     CloseoutEvidenceContext, closeout_enforcement_contract, evaluate_closeout_record_value,
     evaluate_closeout_record_value_with_context,
 };
+use fr_exec::trace_stream_io::{
+    inspect_trace_stream, replay_trace_stream, write_trace_compaction_delta, write_trace_metadata,
+};
+use fr_utils::json_io::{parse_json_input, print_json_value as raw_print_json_value};
+use fr_utils::types::FrameworkAliasBuildOptions;
+use framework_extra::alias::build_framework_alias_envelope;
+use framework_extra::contract_summary::build_framework_contract_summary_envelope;
+use framework_extra::evidence::framework_hook_evidence_append;
+use framework_extra::framework_doctor::run_framework_doctor;
+use framework_extra::prompt_compression::build_framework_prompt_compression_envelope;
+use framework_extra::session_artifacts::write_framework_session_artifacts;
+use framework_extra::snapshot::build_framework_runtime_snapshot_envelope_with_level;
+use framework_extra::statusline::build_framework_statusline;
+use framework_kernel::repo_roots::resolve_repo_root_arg;
+use host_projection::hooks;
+use host_projection::hooks::read_stdin_limited;
+use host_projection::host_entrypoint_sync::sync_host_entrypoints;
+use host_projection::hosts::hook_dispatch::{HookEvent, HookOutput};
 #[cfg(feature = "codegraph")]
 use runtime_core::codegraph_mcp::run_codegraph_mcp_stdio_loop;
 use runtime_core::eval_route::{eval_route_contract, run_eval_route};
 use runtime_core::framework_profile::{
-    build_profile_artifact_bundle, build_control_plane_contract_descriptors, build_profile_bundle,
+    build_control_plane_contract_descriptors, build_profile_artifact_bundle, build_profile_bundle,
     load_framework_profile,
 };
-use fr_utils::types::FrameworkAliasBuildOptions;
-use framework_extra::alias::build_framework_alias_envelope;
-use framework_extra::contract_summary::build_framework_contract_summary_envelope;
-use framework_extra::prompt_compression::build_framework_prompt_compression_envelope;
-use framework_extra::snapshot::build_framework_runtime_snapshot_envelope_with_level;
-use framework_extra::statusline::build_framework_statusline;
-use framework_extra::evidence::framework_hook_evidence_append;
-use framework_kernel::repo_roots::resolve_repo_root_arg;
-use framework_extra::framework_doctor::run_framework_doctor;
-use framework_extra::session_artifacts::write_framework_session_artifacts;
 use runtime_core::harness_contract::{harness_contract, lint_skill_contracts};
-use core_policy::hook_policy::{HookPolicyEvaluateRequest, evaluate_hook_policy, hook_policy_contract};
 use runtime_core::host_integration::run_host_integration_from_args;
 use runtime_core::runtime_storage::{
     build_checkpoint_control_plane_compiler_payload, runtime_backend_family_catalog_payload,
@@ -47,8 +51,6 @@ use runtime_core::trace_runtime::{
     TraceCompactRequestPayload, TraceRecordEventRequestPayload, compact_trace_stream,
     record_trace_event,
 };
-use host_projection::hosts::hook_dispatch::{HookEvent, HookOutput};
-use host_projection::hooks::read_stdin_limited;
 
 use runtime_core::runtime_storage::RuntimeStorageRequestPayload;
 
@@ -106,7 +108,11 @@ fn resolve_host_entrypoint_provider(
 ) -> Result<runtime_core::host_entrypoint_sync::HostEntrypointPayloadProvider, String> {
     let resolved = match host_id {
         Some(id) if !id.trim().is_empty() => id.trim(),
-        _ => return Err("host-id is required for sync-entrypoints; pass --host-id <host_name>".to_string()),
+        _ => {
+            return Err(
+                "host-id is required for sync-entrypoints; pass --host-id <host_name>".to_string(),
+            );
+        }
     };
     let host_provider = runtime_core::hosts::host_provider_for_routing_spelling(resolved)
         .ok_or_else(|| format!(
@@ -118,13 +124,15 @@ fn resolve_host_entrypoint_provider(
     if let Ok(contents) = std::fs::read(&context_path) {
         files.insert(context_file.to_string(), contents);
     }
-    Ok(runtime_core::host_entrypoint_sync::HostEntrypointPayloadProvider {
-        files,
-        json_relative_paths: vec![],
-        manifest_relative_path: format!(".host_entrypoints_sync_manifest_{resolved}.json"),
-        agent_policy_entrypoint: context_file.to_string(),
-        after_apply: None,
-    })
+    Ok(
+        runtime_core::host_entrypoint_sync::HostEntrypointPayloadProvider {
+            files,
+            json_relative_paths: vec![],
+            manifest_relative_path: format!(".host_entrypoints_sync_manifest_{resolved}.json"),
+            agent_policy_entrypoint: context_file.to_string(),
+            after_apply: None,
+        },
+    )
 }
 
 pub fn dispatch_framework_command(command: FrameworkCommand) -> Result<(), String> {
@@ -143,10 +151,7 @@ pub fn dispatch_framework_command(command: FrameworkCommand) -> Result<(), Strin
             let repo_root = resolve_repo_root_arg(command.repo_root.as_deref())?;
             let result = run_framework_doctor(&repo_root)?;
             if result.warn_count > 0 {
-                return Err(format!(
-                    "doctor found {} warning(s)",
-                    result.warn_count,
-                ));
+                return Err(format!("doctor found {} warning(s)", result.warn_count,));
             }
             Ok(())
         }
@@ -212,14 +217,19 @@ pub fn dispatch_framework_command(command: FrameworkCommand) -> Result<(), Strin
             let payload = parse_json_input::<Value>(&command.input_json, "framework step ledger")?;
             print_json_value(&handle_step_ledger_operation(payload)?)
         }
-        FrameworkCommand::Maint { command } => runtime_core::framework_maint::dispatch(command).map_err(|e| e.to_string()),
+        FrameworkCommand::Maint { command } => {
+            runtime_core::framework_maint::dispatch(command).map_err(|e| e.to_string())
+        }
         FrameworkCommand::Skills { command } => dispatch_framework_skills(command),
         FrameworkCommand::HostIntegration(command) => {
             let payload = run_host_integration_from_args(&command.args)?;
             print_json_value(&payload)
         }
         FrameworkCommand::NlRouteSignalRegistryContract => {
-            println!("{}", runtime_core::route::nl_route_signal_registry_names_json());
+            println!(
+                "{}",
+                runtime_core::route::nl_route_signal_registry_names_json()
+            );
             Ok(())
         }
         FrameworkCommand::Contracts(command) => {
@@ -260,7 +270,8 @@ pub fn dispatch_framework_skills(command: SkillsSubcommand) -> Result<(), String
                 backfill,
                 dry_run,
                 generate,
-            }).map_err(|e| e.to_string())
+            })
+            .map_err(|e| e.to_string())
         }
     }
 }
@@ -311,11 +322,12 @@ fn scaffold_host_integration(
         .get("host_targets")
         .and_then(|v| v.get("supported"))
         .and_then(|v| v.as_array())
-        && supported.iter().any(|v| v.as_str() == Some(host_id)) {
-            return Err(format!(
-                "Host {host_id:?} already exists in RUNTIME_REGISTRY.json"
-            ));
-        }
+        && supported.iter().any(|v| v.as_str() == Some(host_id))
+    {
+        return Err(format!(
+            "Host {host_id:?} already exists in RUNTIME_REGISTRY.json"
+        ));
+    }
 
     let host_id_camel = host_id.replace('-', "_");
     let host_name = split_and_capitalize(host_id, " ");
@@ -470,7 +482,12 @@ pub fn ensure_host_dispatchers_registered() {
     let hook_entries: Vec<(&'static str, HookDispatchFn)> =
         framework_kernel::runtime_registry::ALL_HOST_IDS
             .iter()
-            .map(|&host_id| (host_id, (|hid, ev, repo| dispatch_host_hook(hid, ev, repo)) as HookDispatchFn))
+            .map(|&host_id| {
+                (
+                    host_id,
+                    (|hid, ev, repo| dispatch_host_hook(hid, ev, repo)) as HookDispatchFn,
+                )
+            })
             .collect();
     host_projection::hosts::register_hook_dispatchers(hook_entries);
 
@@ -479,10 +496,15 @@ pub fn ensure_host_dispatchers_registered() {
     let agent_entries: Vec<(&'static str, AgentDispatchFn)> =
         framework_kernel::runtime_registry::ALL_HOST_IDS
             .iter()
-            .map(|&host_id| (host_id, (|host_id, repo| {
-                let root = resolve_repo_root_arg(repo)?;
-                runtime_core::hosts::run_agent_mcp_loop(Some(&root), host_id)
-            }) as AgentDispatchFn))
+            .map(|&host_id| {
+                (
+                    host_id,
+                    (|host_id, repo| {
+                        let root = resolve_repo_root_arg(repo)?;
+                        runtime_core::hosts::run_agent_mcp_loop(Some(&root), host_id)
+                    }) as AgentDispatchFn,
+                )
+            })
             .collect();
     host_projection::hosts::register_agent_dispatchers(agent_entries);
 }
@@ -506,8 +528,7 @@ fn dispatch_host_hook(host_id: &str, event: &str, repo_root: Option<&Path>) -> R
     let payload: Value = if input.trim().is_empty() {
         json!({})
     } else {
-        serde_json::from_str(input.trim())
-            .map_err(|err| format!("stdin_json_invalid: {err}"))?
+        serde_json::from_str(input.trim()).map_err(|err| format!("stdin_json_invalid: {err}"))?
     };
 
     // Dispatch via host provider's registered HostHookDispatcher
@@ -527,14 +548,24 @@ fn dispatch_host_hook(host_id: &str, event: &str, repo_root: Option<&Path>) -> R
     // Merge paper hooks into output (userpromptsubmit only — modify output before submit)
     // PostToolUse is intentionally excluded: it fires per-tool-call, not per-user-turn,
     // so merging into its output would repeat the nudge paragraph N times per prompt.
-    if host_projection::hosts::hook_dispatch::normalize_event_name(event).as_ref() == "userpromptsubmit" {
+    if host_projection::hosts::hook_dispatch::normalize_event_name(event).as_ref()
+        == "userpromptsubmit"
+    {
         let prompt_text = host_projection::hosts::hook_dispatch::extract_prompt_text(&payload);
         let use_followup_message = provider.host_id() == "cursor";
         host_projection::hooks::maybe_merge_paper_prose_before_submit(
-            &repo_root, &mut json_output, &prompt_text, use_followup_message, provider.host_id(),
+            &repo_root,
+            &mut json_output,
+            &prompt_text,
+            use_followup_message,
+            provider.host_id(),
         );
         host_projection::hooks::maybe_merge_paper_adversarial_before_submit(
-            &repo_root, &mut json_output, &prompt_text, use_followup_message, provider.host_id(),
+            &repo_root,
+            &mut json_output,
+            &prompt_text,
+            use_followup_message,
+            provider.host_id(),
         );
     }
 
@@ -768,10 +799,7 @@ pub fn dispatch_closeout_command(command: CloseoutCommand) -> Result<(), String>
 pub fn dispatch_eval_command(command: EvalCommand) -> Result<(), String> {
     match command {
         EvalCommand::Route(args) => {
-            let report = run_eval_route(
-                &args.cases,
-                args.runtime.as_deref(),
-            )?;
+            let report = run_eval_route(&args.cases, args.runtime.as_deref())?;
             print_json_value(&report)
         }
         EvalCommand::RouteContract => print_json_value(&eval_route_contract()),
@@ -826,11 +854,15 @@ pub fn dispatch_loop_command(command: LoopCommand) -> Result<(), String> {
             let registry_path = repo_root.join("configs/framework/LOOP_REGISTRY.json");
             let raw = fs::read_to_string(&registry_path)
                 .map_err(|e| format!("read LOOP_REGISTRY.json: {e}"))?;
-            let registry: goal_engine::LoopRegistryRoot = serde_json::from_str(&raw)
-                .map_err(|e| format!("parse LOOP_REGISTRY.json: {e}"))?;
-            let entry = registry.loops.iter()
+            let registry: goal_engine::LoopRegistryRoot =
+                serde_json::from_str(&raw).map_err(|e| format!("parse LOOP_REGISTRY.json: {e}"))?;
+            let entry = registry
+                .loops
+                .iter()
                 .find(|e| e.loop_id == args.loop_id)
-                .ok_or_else(|| format!("loop '{}' not found in LOOP_REGISTRY.json", args.loop_id))?;
+                .ok_or_else(|| {
+                    format!("loop '{}' not found in LOOP_REGISTRY.json", args.loop_id)
+                })?;
             let timeout = std::time::Duration::from_secs(args.timeout);
             let ctx = goal_engine::runner::RunContext {
                 repo_root: &repo_root,
@@ -839,8 +871,8 @@ pub fn dispatch_loop_command(command: LoopCommand) -> Result<(), String> {
                 timeout: Some(timeout),
                 depth_remaining: goal_engine::runner::RunContext::default_max_depth(),
             };
-            let aggregate = goal_engine::runner::run_loop(&ctx)
-                .map_err(|e| format!("loop run failed: {e}"))?;
+            let aggregate =
+                goal_engine::runner::run_loop(&ctx).map_err(|e| format!("loop run failed: {e}"))?;
             print_json_value(&serde_json::json!({
                 "ok": true,
                 "loop_id": args.loop_id,
@@ -852,7 +884,8 @@ pub fn dispatch_loop_command(command: LoopCommand) -> Result<(), String> {
         LoopCommand::Status(args) => {
             let repo_root = resolve_repo_root_arg(None)?;
             match goal_engine::runner::run_loop_status(&repo_root, &args.loop_id)
-                .map_err(|e| format!("loop status failed: {e}"))? {
+                .map_err(|e| format!("loop status failed: {e}"))?
+            {
                 Some(state) => print_json_value(&serde_json::json!({
                     "ok": true,
                     "loop_id": args.loop_id,
@@ -903,19 +936,29 @@ pub fn dispatch_research_command(command: ResearchCommand) -> Result<(), String>
         ResearchCommand::Verify { command } => match command {
             ResearchVerifyCommand::Literature(args) => dispatch_research_verify_literature(args),
             ResearchVerifyCommand::Structure(args) => dispatch_research_verify_structure(args),
-            ResearchVerifyCommand::Reproducibility(args) => dispatch_research_verify_reproducibility(args),
+            ResearchVerifyCommand::Reproducibility(args) => {
+                dispatch_research_verify_reproducibility(args)
+            }
         },
     }
 }
 
 fn dispatch_research_aigc_check(args: ResearchAigcCheckCommand) -> Result<(), String> {
     #[cfg(not(feature = "research"))]
-    { let _ = args; Err("research feature not enabled; rebuild with --features research".to_string()) }
-    #[cfg(feature = "research")] {
+    {
+        let _ = args;
+        Err("research feature not enabled; rebuild with --features research".to_string())
+    }
+    #[cfg(feature = "research")]
+    {
         use research_harness::aigc::Language;
         use research_harness::aigc::detector::{DetectionConfig, detect};
         let config = DetectionConfig {
-            language: if args.language == "zh" { Language::Chinese } else { Language::English },
+            language: if args.language == "zh" {
+                Language::Chinese
+            } else {
+                Language::English
+            },
             ..Default::default()
         };
         let results = detect(&args.text, &config).map_err(|e| e.to_string())?;
@@ -930,24 +973,36 @@ fn dispatch_research_aigc_check(args: ResearchAigcCheckCommand) -> Result<(), St
 
 fn dispatch_research_smoke(args: ResearchSmokeCommand) -> Result<(), String> {
     #[cfg(not(feature = "research"))]
-    { let _ = args; Err("research feature not enabled; rebuild with --features research".to_string()) }
-    #[cfg(feature = "research")] {
-        let repo_root: Option<std::path::PathBuf> = args.repo_root.clone()
+    {
+        let _ = args;
+        Err("research feature not enabled; rebuild with --features research".to_string())
+    }
+    #[cfg(feature = "research")]
+    {
+        let repo_root: Option<std::path::PathBuf> = args
+            .repo_root
+            .clone()
             .filter(|p| !p.as_os_str().is_empty())
             .or_else(|| std::env::current_dir().ok());
         let result = research_harness::smoke::run_smoke_tests(
             repo_root.as_deref().unwrap_or(std::path::Path::new("")),
             args.source.as_deref(),
             args.barrier_id.as_deref(),
-        ).map_err(|e| e.to_string())?;
+        )
+        .map_err(|e| e.to_string())?;
         print_json_value(&result)
     }
 }
 
-fn dispatch_research_verify_literature(args: ResearchVerifyLiteratureCommand) -> Result<(), String> {
+fn dispatch_research_verify_literature(
+    args: ResearchVerifyLiteratureCommand,
+) -> Result<(), String> {
     match args.check.as_str() {
         "doi" => {
-            let doi = args.doi.as_deref().ok_or_else(|| "doi is required for check=doi".to_string())?;
+            let doi = args
+                .doi
+                .as_deref()
+                .ok_or_else(|| "doi is required for check=doi".to_string())?;
             let client = reqwest::blocking::Client::builder()
                 .timeout(std::time::Duration::from_secs(15))
                 .build()
@@ -963,17 +1018,32 @@ fn dispatch_research_verify_literature(args: ResearchVerifyLiteratureCommand) ->
         }
         "claim_coverage" => {
             #[cfg(not(feature = "research"))]
-            { return Err("research feature not enabled; rebuild with --features research".to_string()); }
-            #[cfg(feature = "research")] {
-                let claims: Vec<String> = args.claims.as_deref()
+            {
+                return Err(
+                    "research feature not enabled; rebuild with --features research".to_string(),
+                );
+            }
+            #[cfg(feature = "research")]
+            {
+                let claims: Vec<String> = args
+                    .claims
+                    .as_deref()
                     .ok_or_else(|| "claims is required for check=claim_coverage".to_string())
-                    .and_then(|s| serde_json::from_str(s).map_err(|e| format!("invalid claims JSON: {e}")))?;
-                let references: Vec<String> = args.references.as_deref()
+                    .and_then(|s| {
+                        serde_json::from_str(s).map_err(|e| format!("invalid claims JSON: {e}"))
+                    })?;
+                let references: Vec<String> = args
+                    .references
+                    .as_deref()
                     .ok_or_else(|| "references is required for check=claim_coverage".to_string())
-                    .and_then(|s| serde_json::from_str(s).map_err(|e| format!("invalid references JSON: {e}")))?;
+                    .and_then(|s| {
+                        serde_json::from_str(s).map_err(|e| format!("invalid references JSON: {e}"))
+                    })?;
                 let result = research_harness::verification::literature::verify_claim_coverage(
-                    &claims, &references,
-                ).map_err(|e| e.to_string())?;
+                    &claims,
+                    &references,
+                )
+                .map_err(|e| e.to_string())?;
                 print_json_value(&result)
             }
         }
@@ -983,17 +1053,23 @@ fn dispatch_research_verify_literature(args: ResearchVerifyLiteratureCommand) ->
 
 fn dispatch_research_verify_structure(args: ResearchVerifyStructureCommand) -> Result<(), String> {
     #[cfg(not(feature = "research"))]
-    { let _ = args; Err("research feature not enabled; rebuild with --features research".to_string()) }
-    #[cfg(feature = "research")] {
+    {
+        let _ = args;
+        Err("research feature not enabled; rebuild with --features research".to_string())
+    }
+    #[cfg(feature = "research")]
+    {
         match args.check.as_str() {
             "latex" => {
-                let result = research_harness::verification::structure::check_latex_compilable(&args.path)
-                    .map_err(|e| e.to_string())?;
+                let result =
+                    research_harness::verification::structure::check_latex_compilable(&args.path)
+                        .map_err(|e| e.to_string())?;
                 print_json_value(&result)
             }
             "figures" => {
-                let result = research_harness::verification::structure::check_figure_references(&args.path)
-                    .map_err(|e| e.to_string())?;
+                let result =
+                    research_harness::verification::structure::check_figure_references(&args.path)
+                        .map_err(|e| e.to_string())?;
                 print_json_value(&result)
             }
             other => Err(format!("unknown structure check: {other}")),
@@ -1001,22 +1077,38 @@ fn dispatch_research_verify_structure(args: ResearchVerifyStructureCommand) -> R
     }
 }
 
-fn dispatch_research_verify_reproducibility(args: ResearchVerifyReproducibilityCommand) -> Result<(), String> {
+fn dispatch_research_verify_reproducibility(
+    args: ResearchVerifyReproducibilityCommand,
+) -> Result<(), String> {
     #[cfg(not(feature = "research"))]
-    { let _ = args; Err("research feature not enabled; rebuild with --features research".to_string()) }
-    #[cfg(feature = "research")] {
-        let run_paths: Option<Vec<std::path::PathBuf>> = args.run_paths.as_deref()
-            .map(|s| serde_json::from_str::<Vec<String>>(s)
-                .map_err(|e| format!("invalid run_paths JSON: {e}"))
-                .map(|v| v.into_iter().map(std::path::PathBuf::from).collect()))
+    {
+        let _ = args;
+        Err("research feature not enabled; rebuild with --features research".to_string())
+    }
+    #[cfg(feature = "research")]
+    {
+        let run_paths: Option<Vec<std::path::PathBuf>> = args
+            .run_paths
+            .as_deref()
+            .map(|s| {
+                serde_json::from_str::<Vec<String>>(s)
+                    .map_err(|e| format!("invalid run_paths JSON: {e}"))
+                    .map(|v| v.into_iter().map(std::path::PathBuf::from).collect())
+            })
             .transpose()?;
-        let path_refs: Vec<&std::path::Path> = run_paths.as_deref()
+        let path_refs: Vec<&std::path::Path> = run_paths
+            .as_deref()
             .map(|v| v.iter().map(|p| p.as_path()).collect())
             .unwrap_or_default();
         let result = research_harness::verification::reproducibility::run_reproducibility_audit(
             &args.experiment_dir,
-            if path_refs.is_empty() { None } else { Some(path_refs.as_slice()) },
-        ).map_err(|e| e.to_string())?;
+            if path_refs.is_empty() {
+                None
+            } else {
+                Some(path_refs.as_slice())
+            },
+        )
+        .map_err(|e| e.to_string())?;
         print_json_value(&result)
     }
 }
@@ -1034,8 +1126,12 @@ pub fn dispatch_math_command(command: MathCommand) -> Result<(), String> {
 
 fn dispatch_math_prove(args: MathProveCommand) -> Result<(), String> {
     #[cfg(not(feature = "research"))]
-    { let _ = args; Err("research feature not enabled; rebuild with --features research".to_string()) }
-    #[cfg(feature = "research")] {
+    {
+        let _ = args;
+        Err("research feature not enabled; rebuild with --features research".to_string())
+    }
+    #[cfg(feature = "research")]
+    {
         let result = research_harness::verification::inequality::check_inequality(
             &args.expression,
             args.timeout_ms.map(|t| t as u64),
@@ -1046,8 +1142,11 @@ fn dispatch_math_prove(args: MathProveCommand) -> Result<(), String> {
 
 fn dispatch_math_backend() -> Result<(), String> {
     #[cfg(not(feature = "research"))]
-    { Err("research feature not enabled; rebuild with --features research".to_string()) }
-    #[cfg(feature = "research")] {
+    {
+        Err("research feature not enabled; rebuild with --features research".to_string())
+    }
+    #[cfg(feature = "research")]
+    {
         use research_harness::verification::inequality::solver_available;
         use research_harness::verification::lean_bridge::check_lean_status;
         use research_harness::verification::sympy_bridge::sympy_available;
@@ -1061,10 +1160,14 @@ fn dispatch_math_backend() -> Result<(), String> {
 
 fn dispatch_math_asymptotic_chain(args: MathAsymptoticChainCommand) -> Result<(), String> {
     #[cfg(not(feature = "research"))]
-    { let _ = args; Err("research feature not enabled; rebuild with --features research".to_string()) }
-    #[cfg(feature = "research")] {
-        let steps: Vec<research_harness::verification::asymptotic::AsymptoticStep> = serde_json::from_str(&args.steps)
-            .map_err(|e| format!("invalid steps JSON: {e}"))?;
+    {
+        let _ = args;
+        Err("research feature not enabled; rebuild with --features research".to_string())
+    }
+    #[cfg(feature = "research")]
+    {
+        let steps: Vec<research_harness::verification::asymptotic::AsymptoticStep> =
+            serde_json::from_str(&args.steps).map_err(|e| format!("invalid steps JSON: {e}"))?;
         let result = research_harness::verification::asymptotic::verify_asymptotic_chain_with_name(
             &steps,
             &args.variable,
@@ -1078,8 +1181,12 @@ fn dispatch_math_asymptotic_chain(args: MathAsymptoticChainCommand) -> Result<()
 
 fn dispatch_math_lean_verify(args: MathLeanVerifyCommand) -> Result<(), String> {
     #[cfg(not(feature = "research"))]
-    { let _ = args; Err("research feature not enabled; rebuild with --features research".to_string()) }
-    #[cfg(feature = "research")] {
+    {
+        let _ = args;
+        Err("research feature not enabled; rebuild with --features research".to_string())
+    }
+    #[cfg(feature = "research")]
+    {
         use std::fs;
         let script = fs::read_to_string(&args.script_path)
             .map_err(|e| format!("read Lean script {}: {e}", args.script_path.display()))?;
@@ -1098,35 +1205,179 @@ pub fn dispatch_web_command(command: WebCommand) -> Result<(), String> {
 
 fn dispatch_web_fetch(args: WebFetchCommand) -> Result<(), String> {
     use rt_core_contracts::web_fetch_guard;
+    use std::io::Read;
+
     let max_bytes = args.max_bytes.unwrap_or(50000).min(50000);
-    let (parsed_url, initial_addrs) = web_fetch_guard::validate_and_resolve_web_fetch_url(&args.url)
+
+    // SSRF first pass — validate + resolve origin URL in one DNS call (TOCTOU-safe).
+    let (parsed_url, addrs) = web_fetch_guard::validate_and_resolve_web_fetch_url(&args.url)
         .map_err(|e| e.to_string())?;
-    let final_url = web_fetch_guard::resolve_web_fetch_redirect(&parsed_url, &args.url)
-        .map_err(|e| e.to_string())?;
-    let client = reqwest::blocking::Client::builder()
-        .timeout(std::time::Duration::from_secs(30))
-        .build()
-        .map_err(|e| e.to_string())?;
-    let resp = client.get(&final_url)
-        .header("User-Agent", "router-rs-cli/0.1")
-        .send()
-        .map_err(|e| e.to_string())?;
-    let status = resp.status().as_u16();
-    let body_bytes = resp.bytes()
-        .map_err(|e| e.to_string())?
-        .to_vec();
-    let truncated = body_bytes.len() > max_bytes;
-    let body = if truncated {
-        body_bytes[..max_bytes].to_vec()
-    } else {
-        body_bytes
-    };
-    let text = String::from_utf8_lossy(&body).to_string();
-    print_json_value(&serde_json::json!({
-        "url": final_url,
-        "status": status,
-        "headers": { "content_type": "" },
-        "body": text,
-        "truncated": truncated,
-    }))
+    let origin_host = parsed_url
+        .host_str()
+        .ok_or_else(|| "web_fetch URL missing host".to_string())?
+        .to_string();
+
+    /// Build a reqwest blocking Client with DNS pinning for the given host.
+    /// Pinning prevents DNS rebinding TOCTOU between SSRF validation and the
+    /// actual HTTP connection — the client will never resolve this host again
+    /// and will connect only to the validated addresses.
+    fn build_pinned_client(
+        host: &str,
+        addrs: &[std::net::SocketAddr],
+    ) -> Result<reqwest::blocking::Client, String> {
+        let mut builder = reqwest::blocking::Client::builder()
+            .timeout(std::time::Duration::from_secs(30))
+            .redirect(reqwest::redirect::Policy::none());
+        for addr in addrs {
+            builder = builder.resolve(host, *addr);
+        }
+        builder.build().map_err(|e| e.to_string())
+    }
+
+    let mut client = build_pinned_client(&origin_host, &addrs)?;
+
+    // Helper: extract a header value as &str, returning "" on missing/unparseable.
+    fn header_str<'a>(h: &'a reqwest::header::HeaderMap, name: &str) -> &'a str {
+        h.get(name).and_then(|v| v.to_str().ok()).unwrap_or("")
+    }
+
+    /// Only 301/302/303/307/308 are auto-followable redirects.
+    /// 300 (Multiple Choices), 304 (Not Modified), 305 (Use Proxy) must NOT be followed.
+    fn is_followable_redirect(status: reqwest::StatusCode) -> bool {
+        matches!(status.as_u16(), 301 | 302 | 303 | 307 | 308)
+    }
+
+    /// Check that a redirect does NOT downgrade from HTTPS to a weaker scheme.
+    /// Uses `reqwest::Url::scheme()` (normalised by the URL parser) rather than
+    /// string prefix matching, which would be vulnerable to case-based bypass
+    /// (e.g. `HTTPS://` → `http://`).
+    fn check_scheme_downgrade(
+        original: &reqwest::Url,
+        target: &reqwest::Url,
+    ) -> Result<(), String> {
+        if original.scheme() == "https" && target.scheme() != "https" {
+            return Err(format!(
+                "web_fetch refused redirect from HTTPS to {}: {} → {}",
+                target.scheme(),
+                original,
+                target,
+            ));
+        }
+        Ok(())
+    }
+
+    // Manual redirect loop with SSRF check at each hop.
+    let mut current_url = parsed_url.to_string();
+    let max_hops: u32 = 5;
+    let mut hops: u32 = 0;
+
+    loop {
+        let resp = client
+            .get(&current_url)
+            .header("User-Agent", "router-rs-cli/0.1")
+            .send()
+            .map_err(|e| e.to_string())?;
+
+        let status = resp.status();
+
+        // Only follow 301/302/303/307/308 — 300/304/305/306 are terminal.
+        if is_followable_redirect(status) {
+            hops += 1;
+            if hops > max_hops {
+                return Err(format!(
+                    "web_fetch too many redirects (>{max_hops}) via {current_url}",
+                ));
+            }
+
+            let location = resp
+                .headers()
+                .get("location")
+                .and_then(|v| v.to_str().ok())
+                .unwrap_or("")
+                .to_string();
+
+            if location.is_empty() {
+                return Err(format!(
+                    "web_fetch redirect without Location header for {current_url}"
+                ));
+            }
+
+            // SSRF check on the redirect target.
+            // resolve_web_fetch_redirect joins location against current_url, then
+            // validates through the same SSRF guard (DNS resolve + IP check).
+            let resolved = web_fetch_guard::resolve_web_fetch_redirect(
+                &reqwest::Url::parse(&current_url).map_err(|e| {
+                    format!("web_fetch invalid current URL during redirect: {current_url}: {e}")
+                })?,
+                &location,
+            )
+            .map_err(|e| e.to_string())?;
+
+            // Parse the resolved URL for scheme comparison and DNS pinning.
+            let resolved_url = reqwest::Url::parse(&resolved).map_err(|e| {
+                format!("web_fetch invalid redirect target URL: {resolved}: {e}")
+            })?;
+
+            // HTTPS → HTTP scheme downgrade check (uses Url::scheme()).
+            let current_parsed = reqwest::Url::parse(&current_url).map_err(|e| {
+                format!("web_fetch invalid current URL: {current_url}: {e}")
+            })?;
+            check_scheme_downgrade(&current_parsed, &resolved_url)?;
+
+            // DNS pinning for the redirect target: if the host changed, rebuild
+            // the client so the next HTTP request is pinned against rebinding.
+            let redirect_host = resolved_url
+                .host_str()
+                .ok_or_else(|| {
+                    format!("web_fetch redirect target missing host: {resolved}")
+                })?
+                .to_string();
+
+            if redirect_host != origin_host {
+                let (_url, redirect_addrs) =
+                    web_fetch_guard::validate_and_resolve_web_fetch_url(&resolved)
+                        .map_err(|e| e.to_string())?;
+                client = build_pinned_client(&redirect_host, &redirect_addrs)?;
+            }
+
+            current_url = resolved;
+            continue;
+        }
+
+        // ── Final (non-redirect) response —─
+        let status_code = status.as_u16();
+
+        // Capture headers BEFORE consuming the response body via Read::take.
+        let content_type = header_str(resp.headers(), "content-type").to_string();
+        let content_length = header_str(resp.headers(), "content-length").to_string();
+
+        // Stream with byte cap: use Read::take to avoid reading the full body
+        // into memory when the response is large.
+        let mut body_buf: Vec<u8> = Vec::with_capacity(max_bytes.min(8192));
+        let n = resp
+            .take(max_bytes as u64)
+            .read_to_end(&mut body_buf)
+            .map_err(|e| e.to_string())?;
+
+        // truncated is true only when we read up to the cap AND the cap is > 0.
+        // False-positive: if the response happens to be exactly max_bytes bytes,
+        // truncated=true even though no data was lost — this is conservative.
+        let truncated = max_bytes > 0 && n >= max_bytes;
+
+        // No manual UTF-8 back-off: from_utf8_lossy handles partial multi-byte
+        // sequences at the end of the buffer by emitting U+FFFD, which is the
+        // expected signal that truncation occurred mid-character.
+        let body = String::from_utf8_lossy(&body_buf).to_string();
+
+        return print_json_value(&serde_json::json!({
+            "url": current_url,
+            "status": status_code,
+            "headers": {
+                "content_type": content_type,
+                "content_length": content_length,
+            },
+            "body": body,
+            "truncated": truncated,
+        }));
+    }
 }

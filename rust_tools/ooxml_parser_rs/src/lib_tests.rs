@@ -5,9 +5,9 @@ mod tests {
     use super::*;
     use std::io::Write;
     use std::time::{SystemTime, UNIX_EPOCH};
-    use zip::write::SimpleFileOptions;
     use zip::CompressionMethod;
     use zip::ZipWriter;
+    use zip::write::SimpleFileOptions;
 
     fn temp_xlsx_path(name: &str) -> std::path::PathBuf {
         let mut path = std::env::temp_dir();
@@ -310,11 +310,18 @@ mod tests {
         assert!(output.blocks.iter().any(
             |block| matches!(block, DocxBlock::Paragraph { text, heading_level: None } if text == "Body text")
         ));
-        assert!(output
-            .blocks
-            .iter()
-            .any(|block| matches!(block, DocxBlock::Table { rows } if rows[0][0] == "Cell")));
-        assert!(output.blocks.iter().any(|block| matches!(block, DocxBlock::Image)));
+        assert!(
+            output
+                .blocks
+                .iter()
+                .any(|block| matches!(block, DocxBlock::Table { rows } if rows[0][0] == "Cell"))
+        );
+        assert!(
+            output
+                .blocks
+                .iter()
+                .any(|block| matches!(block, DocxBlock::Image))
+        );
     }
 
     #[test]
@@ -349,7 +356,10 @@ mod tests {
         assert_eq!(detect_ooxml_kind(Path::new("test.docx")), OoxmlKind::Docx);
         assert_eq!(detect_ooxml_kind(Path::new("test.xlsx")), OoxmlKind::Xlsx);
         assert_eq!(detect_ooxml_kind(Path::new("test.pptx")), OoxmlKind::Pptx);
-        assert_eq!(detect_ooxml_kind(Path::new("test.pdf")), OoxmlKind::Unsupported);
+        assert_eq!(
+            detect_ooxml_kind(Path::new("test.pdf")),
+            OoxmlKind::Unsupported
+        );
         assert_eq!(detect_ooxml_kind(Path::new("test")), OoxmlKind::Unsupported);
         assert_eq!(detect_ooxml_kind(Path::new("test.DOCX")), OoxmlKind::Docx);
     }
@@ -401,8 +411,14 @@ mod tests {
 
     #[test]
     fn resolve_zip_path_resolves_relative() {
-        assert_eq!(resolve_zip_path("xl/workbook.xml", "worksheets/sheet1.xml"), "xl/worksheets/sheet1.xml");
-        assert_eq!(resolve_zip_path("xl/workbook.xml", "../media/image.png"), "media/image.png");
+        assert_eq!(
+            resolve_zip_path("xl/workbook.xml", "worksheets/sheet1.xml"),
+            "xl/worksheets/sheet1.xml"
+        );
+        assert_eq!(
+            resolve_zip_path("xl/workbook.xml", "../media/image.png"),
+            "media/image.png"
+        );
         assert_eq!(resolve_zip_path("xl/workbook.xml", "./foo"), "xl/foo");
     }
 
@@ -430,7 +446,12 @@ mod tests {
 
     #[test]
     fn format_size_index_output() {
-        let bounds = SheetBounds { min_row: 1, max_row: 10, min_col: 1, max_col: 5 };
+        let bounds = SheetBounds {
+            min_row: 1,
+            max_row: 10,
+            min_col: 1,
+            max_col: 5,
+        };
         assert_eq!(format_size_index(bounds), "1:10 x 1:5");
     }
 
@@ -448,8 +469,9 @@ mod tests {
             r#"<?xml version="1.0"?>
             <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
               <Relationship Id="rId1" Type="http://example.com/type" Target="target.xml"/>
-            </Relationships>"#
-        ).unwrap();
+            </Relationships>"#,
+        )
+        .unwrap();
         assert_eq!(rels.len(), 1);
         assert_eq!(rels[0].id, "rId1");
         assert_eq!(rels[0].target, "target.xml");

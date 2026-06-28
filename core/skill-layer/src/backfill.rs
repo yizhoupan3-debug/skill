@@ -53,15 +53,9 @@ const BACKFILLABLE_FIELDS: &[(&str, &str)] = &[
 
 /// Returns true if a Value should be treated as non-null for backfill purposes.
 fn is_non_null(v: &Value) -> bool {
-    matches!(
-        v,
-        Value::Number(_) | Value::Bool(_) | Value::Object(_)
-    ) || (v.is_string()
-        && v.as_str()
-            .is_some_and(|s| !s.trim().is_empty()))
-        || (v.is_array()
-            && v.as_array()
-                .is_some_and(|a| !a.is_empty()))
+    matches!(v, Value::Number(_) | Value::Bool(_) | Value::Object(_))
+        || (v.is_string() && v.as_str().is_some_and(|s| !s.trim().is_empty()))
+        || (v.is_array() && v.as_array().is_some_and(|a| !a.is_empty()))
 }
 
 // ---------------------------------------------------------------------------
@@ -74,7 +68,10 @@ fn frontmatter_field_to_value(
     field: &str,
 ) -> Option<Value> {
     match field {
-        "short_description" => fm.short_description.as_ref().map(|v| Value::String(v.clone())),
+        "short_description" => fm
+            .short_description
+            .as_ref()
+            .map(|v| Value::String(v.clone())),
         "metadata" => fm.metadata.clone(),
         "risk" => fm.risk.as_ref().map(|v| Value::String(v.clone())),
         "allowed_tools" => fm
@@ -102,15 +99,23 @@ fn frontmatter_field_to_value(
 /// Run a null-only backfill from SKILL.md frontmatter into the registry JSON.
 ///
 /// `dry_run=true` only scans and reports — no files are modified.
-pub fn backfill_registry(repo_root: &Path, dry_run: bool) -> Result<BackfillReport, FrameworkError> {
+pub fn backfill_registry(
+    repo_root: &Path,
+    dry_run: bool,
+) -> Result<BackfillReport, FrameworkError> {
     let runtime_path = paths::runtime_json(repo_root);
-    let mut doc: Value =
-        serde_json::from_str(&fs::read_to_string(&runtime_path)?)?;
+    let mut doc: Value = serde_json::from_str(&fs::read_to_string(&runtime_path)?)?;
 
     let keys: Vec<String> = doc["keys"]
         .as_array()
-        .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
-        .ok_or_else(|| FrameworkError::Validation { message: "runtime JSON missing keys array".into() })?;
+        .map(|a| {
+            a.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect()
+        })
+        .ok_or_else(|| FrameworkError::Validation {
+            message: "runtime JSON missing keys array".into(),
+        })?;
 
     // Build column index lookup
     let col_idx: HashMap<&str, usize> = keys
@@ -122,7 +127,9 @@ pub fn backfill_registry(repo_root: &Path, dry_run: bool) -> Result<BackfillRepo
     // Verify required columns exist
     let slug_idx = *col_idx
         .get("slug")
-        .ok_or_else(|| FrameworkError::Validation { message: "runtime JSON missing slug column".into() })?;
+        .ok_or_else(|| FrameworkError::Validation {
+            message: "runtime JSON missing slug column".into(),
+        })?;
 
     let mut report = BackfillReport {
         total_skills: 0,
@@ -155,12 +162,16 @@ pub fn backfill_registry(repo_root: &Path, dry_run: bool) -> Result<BackfillRepo
             let fm_text = match fs::read_to_string(&skill_md_path) {
                 Ok(t) => t,
                 Err(e) => {
-                    report.errors.push(format!("{slug}: cannot read SKILL.md: {e}"));
+                    report
+                        .errors
+                        .push(format!("{slug}: cannot read SKILL.md: {e}"));
                     continue;
                 }
             };
             let Ok((fm, _warnings)) = frontmatter_parser::parse_and_validate(&fm_text) else {
-                report.errors.push(format!("{slug}: frontmatter parse failed"));
+                report
+                    .errors
+                    .push(format!("{slug}: frontmatter parse failed"));
                 continue;
             };
             report.skills_with_frontmatter += 1;

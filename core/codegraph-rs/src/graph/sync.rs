@@ -1,6 +1,5 @@
 //! Incremental index sync + filesystem watcher.
 
-
 use crate::CodeGraphIndex;
 use crate::db::index_ops::{
     IndexedFileMeta, IngestStmts, ingest_parsed_file_with_stmts, list_indexed_files, set_meta,
@@ -185,18 +184,16 @@ fn sync_skill_registry(
             .into_iter()
             .find(|m| m.path == parser::skill::RUNTIME_REL_PATH);
         if let Some(ref stored) = indexed
-            && stored.mtime_ns == mtime_ns {
-                return Ok(()); // mtime unchanged, skip entirely
-            }
+            && stored.mtime_ns == mtime_ns
+        {
+            return Ok(()); // mtime unchanged, skip entirely
+        }
     }
 
     // mtime changed or new file: read once, share between hash and parser
-    let content = std::fs::read_to_string(&registry_path)
-        .context("read skill registry")?;
+    let content = std::fs::read_to_string(&registry_path).context("read skill registry")?;
     let mtime_ns = file_mtime_ns(&registry_path)?;
-    let content_hash = hex_encode(
-        Sha256::digest(content.as_bytes()).as_slice(),
-    );
+    let content_hash = hex_encode(Sha256::digest(content.as_bytes()).as_slice());
 
     // Content-hash check for mtime-noise (touch without content change)
     if !force_all {
@@ -204,14 +201,15 @@ fn sync_skill_registry(
             .into_iter()
             .find(|m| m.path == parser::skill::RUNTIME_REL_PATH);
         if let Some(ref stored) = indexed
-            && stored.content_hash == content_hash {
-                return Ok(());
-            }
+            && stored.content_hash == content_hash
+        {
+            return Ok(());
+        }
     }
 
-    let Some(parsed) = parser::skill::parse_skill_registry_with_content(
-        &content, mtime_ns, content_hash,
-    ) else {
+    let Some(parsed) =
+        parser::skill::parse_skill_registry_with_content(&content, mtime_ns, content_hash)
+    else {
         return Ok(());
     };
 
@@ -293,7 +291,11 @@ fn file_mtime_ns(path: &Path) -> anyhow::Result<i64> {
         Ok(m) => m,
         Err(e) => {
             // Filesystems like FUSE/NFS may not support mtime; fall back to epoch.
-            tracing::warn!("[codegraph] mtime unavailable for {} ({}); using epoch", path.display(), e);
+            tracing::warn!(
+                "[codegraph] mtime unavailable for {} ({}); using epoch",
+                path.display(),
+                e
+            );
             SystemTime::UNIX_EPOCH
         }
     };
@@ -380,14 +382,14 @@ impl Drop for IndexWatcher {
         // without dropping the receiver (which would cause the thread to panic).
         // Then join the thread for clean shutdown.
         let (tx, _) = mpsc::channel();
-        self._watcher = RecommendedWatcher::new(tx, Config::default())
-            .unwrap_or_else(|_| {
-                // If we can't create a replacement, the original will be dropped
-                // when this struct is dropped, closing the channel.
-                #[allow(clippy::expect_used)]
-                RecommendedWatcher::new(mpsc::channel().0, Config::default())
-                    .expect("fallback watcher: both primary and fallback notifier channel watchers failed")
-            });
+        self._watcher = RecommendedWatcher::new(tx, Config::default()).unwrap_or_else(|_| {
+            // If we can't create a replacement, the original will be dropped
+            // when this struct is dropped, closing the channel.
+            #[allow(clippy::expect_used)]
+            RecommendedWatcher::new(mpsc::channel().0, Config::default()).expect(
+                "fallback watcher: both primary and fallback notifier channel watchers failed",
+            )
+        });
         if let Some(handle) = self._handle.take() {
             let _ = handle.join();
         }
@@ -396,6 +398,7 @@ impl Drop for IndexWatcher {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::{build_full_index, incremental_sync};
     use crate::CodeGraphIndex;
     use std::fs;
@@ -562,8 +565,7 @@ mod tests {
     #[test]
     fn index_skips_markdown_outside_docs() {
         let (root, index) = temp_repo();
-        fs::write(root.join("README.md"), "# Project\n\nDesc.\n")
-            .expect("write readme");
+        fs::write(root.join("README.md"), "# Project\n\nDesc.\n").expect("write readme");
         let _report = build_full_index(&index, &root).expect("build full index");
         let hits = index
             .search_symbols("Project", None, None, 10)

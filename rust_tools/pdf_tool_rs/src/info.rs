@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use serde::Serialize;
 use std::path::Path;
 
-use crate::read::{extract_text, file_sha256, page_count, classify_content};
+use crate::read::{classify_content, extract_text, file_sha256, page_count};
 
 #[derive(Debug, Serialize)]
 pub struct PdfInfo {

@@ -11,8 +11,7 @@ use std::fs;
 #[test]
 fn provider_registry_not_used_by_routing_engine() {
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
-    let routing_engine_dir =
-        std::path::PathBuf::from(manifest_dir).join("core/routing-engine/src");
+    let routing_engine_dir = std::path::PathBuf::from(manifest_dir).join("core/routing-engine/src");
 
     if !routing_engine_dir.is_dir() {
         // routing-engine not present in this build — skip gracefully.
@@ -61,11 +60,10 @@ fn provider_registry_document_only_in_hook_policy() {
 #[test]
 fn tool_safety_rules_declares_lifecycle_constants() {
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
-    let tsr_path = std::path::PathBuf::from(manifest_dir)
-        .join("core/core-policy/src/tool_safety_rules.rs");
+    let tsr_path =
+        std::path::PathBuf::from(manifest_dir).join("core/core-policy/src/tool_safety_rules.rs");
 
-    let tsr = fs::read_to_string(&tsr_path)
-        .expect("failed to read tool_safety_rules.rs");
+    let tsr = fs::read_to_string(&tsr_path).expect("failed to read tool_safety_rules.rs");
 
     assert!(
         tsr.contains("WRITE_ONLY_AUXILIARY_FILES"),

@@ -1,5 +1,4 @@
 //! Primary routing entrypoints (search + `route_task`) and manifest fallback helpers.
-use tracing;
 use super::aliases::{has_literal_framework_alias_call, qg_checker_id_for_slug};
 use super::constants::{
     FRAMEWORK_COMMAND_KIND, NO_SKILL_SELECTED, PARALLEL_RECORD_SCAN_MIN, PROFILE_COMPILE_AUTHORITY,
@@ -17,6 +16,8 @@ use super::types::{
     MatchRow, RouteContextPayload, RouteDecision, RouteDecisionSnapshotPayload, SearchMatchPayload,
     SearchMatchRecordPayload, SearchResultsPayload, SkillRecord,
 };
+use core_errors::FrameworkError;
+use tracing;
 
 /// Shared skeleton for every RouteDecision — avoids repeated `.to_string()` on static constants
 /// per construction site (saves ~21 String allocs across 7 call sites).  Override
@@ -181,10 +182,11 @@ fn finalize_search_rows(mut rows: Vec<MatchRow>, limit: usize) -> Vec<MatchRow> 
             continue;
         }
         if let Some(worst) = heap.peek()
-            && key > worst.key {
-                heap.pop();
-                heap.push(SearchHeapEntry { key, idx });
-            }
+            && key > worst.key
+        {
+            heap.pop();
+            heap.push(SearchHeapEntry { key, idx });
+        }
     }
     let mut out = heap
         .into_iter()
@@ -273,7 +275,7 @@ pub fn search_skills_subset(
 pub fn filter_record_indices_for_host(
     records: &[SkillRecord],
     host_id: Option<&str>,
-) -> Result<Vec<usize>, String> {
+) -> Result<Vec<usize>, FrameworkError> {
     let Some(host_id) = host_id.map(str::trim).filter(|value| !value.is_empty()) else {
         return Ok((0..records.len()).collect());
     };
@@ -301,14 +303,17 @@ pub fn filter_record_indices_for_host(
 
     if indices.is_empty() && original_len > 0 {
         tracing::warn!(
-            host_id, original_len, saw_host,
+            host_id,
+            original_len,
+            saw_host,
             "host_id filtered all records"
         );
     }
 
     if !saw_host {
         tracing::warn!(
-            host_id, original_len,
+            host_id,
+            original_len,
             "host-aware routing has no skill records for host_id; returning empty"
         );
         return Ok(vec![]);
@@ -319,7 +324,7 @@ pub fn filter_record_indices_for_host(
 pub fn filter_records_for_host(
     records: impl AsRef<[SkillRecord]>,
     host_id: Option<&str>,
-) -> Result<Vec<SkillRecord>, String> {
+) -> Result<Vec<SkillRecord>, FrameworkError> {
     let records = records.as_ref();
     let indices = filter_record_indices_for_host(records, host_id)?;
     Ok(indices
@@ -339,11 +344,13 @@ pub fn route_task(
     session_id: &str,
     allow_overlay: bool,
     first_turn: bool,
-) -> Result<RouteDecision, String> {
+) -> Result<RouteDecision, FrameworkError> {
     crate::hooks::touch_kernel_bootstrap();
     crate::hooks::ensure_kernel_bootstrap();
     if records.is_empty() {
-        return Err("No skill records available for route decision.".to_string());
+        return Err(FrameworkError::NotFound {
+            what: "No skill records available for route decision.".to_string(),
+        });
     }
     if super::aliases::query_invokes_retired_framework_slash_command(query) {
         let route_context =
@@ -351,7 +358,11 @@ pub fn route_task(
         let fallback_reasons = compact_route_reasons(&[
             "Retired framework slash command; native runtime should proceed without loading a skill.",
         ]);
-        return Ok(log_decision(make_no_hit_decision(query, session_id, route_context, fallback_reasons), query, session_id));
+        return Ok(log_decision(
+            make_no_hit_decision(query, session_id, route_context, fallback_reasons),
+            query,
+            session_id,
+        ));
     }
     let primary_query = primary_owner_query_text(query, records, allow_overlay);
     let normalized_query = normalize_text(&primary_query);
@@ -365,7 +376,13 @@ pub fn route_task(
     let overlay_normalized_query = normalize_text(query);
     let overlay_query_tokens = tokenize_route_text(query);
 
-    if let Some(decision) = literal_framework_alias_decision(records, query, &normalized_query, &query_token_list, session_id) {
+    if let Some(decision) = literal_framework_alias_decision(
+        records,
+        query,
+        &normalized_query,
+        &query_token_list,
+        session_id,
+    ) {
         return Ok(log_decision(decision, query, session_id));
     }
 
@@ -397,25 +414,33 @@ pub fn route_task(
     if viable.is_empty() {
         // --- Fuzzy fallback: try trigram similarity against all records ---
         if let Some((record, sim)) = fuzzy_rescue_primary_record(records, &primary_query) {
-            return Ok(log_decision(build_fuzzy_rescue_decision(
-                records,
-                record,
-                sim,
+            return Ok(log_decision(
+                build_fuzzy_rescue_decision(
+                    records,
+                    record,
+                    sim,
+                    query,
+                    &overlay_normalized_query,
+                    &overlay_query_tokens,
+                    session_id,
+                    route_context,
+                    allow_overlay,
+                    &format!("Fuzzy trigram fallback rescued match (similarity={sim:.3})."),
+                    None,
+                ),
                 query,
-                &overlay_normalized_query,
-                &overlay_query_tokens,
                 session_id,
-                route_context,
-                allow_overlay,
-                &format!("Fuzzy trigram fallback rescued match (similarity={sim:.3})."),
-                None,
-            ), query, session_id));
+            ));
         }
         tracing::debug!(query, session_id, "route: no skill hit");
         let fallback_reasons = compact_route_reasons(&[
             "No explicit skill hit; native runtime should proceed without loading a skill.",
         ]);
-        return Ok(log_decision(make_no_hit_decision(query, session_id, route_context, fallback_reasons), query, session_id));
+        return Ok(log_decision(
+            make_no_hit_decision(query, session_id, route_context, fallback_reasons),
+            query,
+            session_id,
+        ));
     }
     // 所有候选（含仅 1 个）全部是 overlay 且 caller 未允许 overlay 时返回 no-hit
     if !viable.is_empty()
@@ -427,7 +452,11 @@ pub fn route_task(
         let fallback_reasons = compact_route_reasons(&[
             "Only overlay signals matched; native runtime should proceed without loading a primary skill.",
         ]);
-        return Ok(log_decision(make_no_hit_decision(query, session_id, route_context, fallback_reasons), query, session_id));
+        return Ok(log_decision(
+            make_no_hit_decision(query, session_id, route_context, fallback_reasons),
+            query,
+            session_id,
+        ));
     }
 
     // Log: all-overlay candidates allowed through by caller
@@ -437,31 +466,30 @@ pub fn route_task(
     {
         tracing::debug!(query, session_id, "route: all-overlay candidates allowed");
     }
-    let selected = pick_owner(
-        viable,
-        &normalized_query,
-        &query_token_list,
-        w,
-    ).map_err(|e| format!("Routing failure: {e}"))?;
+    let selected = pick_owner(viable, &normalized_query, &query_token_list, w)?;
     if selected.score < w.layer_threshold(&selected.record.layer) {
         // --- Fuzzy fallback: try trigram similarity before giving up ---
         if let Some((record, sim)) = fuzzy_rescue_primary_record(records, &primary_query) {
-            return Ok(log_decision(build_fuzzy_rescue_decision(
-                records,
-                record,
-                sim,
-                query,
-                &overlay_normalized_query,
-                &overlay_query_tokens,
-                session_id,
-                route_context,
-                allow_overlay,
-                &format!(
-                    "Fuzzy trigram fallback rescued below-threshold match (similarity={sim:.3}, exact_score={:.2}).",
-                    selected.score
+            return Ok(log_decision(
+                build_fuzzy_rescue_decision(
+                    records,
+                    record,
+                    sim,
+                    query,
+                    &overlay_normalized_query,
+                    &overlay_query_tokens,
+                    session_id,
+                    route_context,
+                    allow_overlay,
+                    &format!(
+                        "Fuzzy trigram fallback rescued below-threshold match (similarity={sim:.3}, exact_score={:.2}).",
+                        selected.score
+                    ),
+                    Some(selected.score),
                 ),
-                Some(selected.score),
-            ), query, session_id));
+                query,
+                session_id,
+            ));
         }
         tracing::debug!(
             query,
@@ -473,7 +501,11 @@ pub fn route_task(
         let fallback_reasons = compact_route_reasons(&[
             "No explicit skill hit; native runtime should proceed without loading a skill.",
         ]);
-        return Ok(log_decision(make_no_hit_decision(query, session_id, route_context, fallback_reasons), query, session_id));
+        return Ok(log_decision(
+            make_no_hit_decision(query, session_id, route_context, fallback_reasons),
+            query,
+            session_id,
+        ));
     }
     let overlay = if allow_overlay {
         pick_overlay(
@@ -489,7 +521,11 @@ pub fn route_task(
     let filtered_overlay = filter_overlay_self(overlay, &selected.record.slug);
     let snapshot_overlay: Option<&str> = filtered_overlay.as_deref();
     let compact_reasons = compact_route_reasons(
-        &selected.reasons.iter().map(|s| s.as_str()).collect::<Vec<_>>()
+        &selected
+            .reasons
+            .iter()
+            .map(|s| s.as_str())
+            .collect::<Vec<_>>(),
     );
 
     let route_snapshot = build_route_snapshot(
@@ -501,18 +537,23 @@ pub fn route_task(
         &compact_reasons,
         selected.matched_token_count,
     );
-    let skeleton = route_decision_skeleton(query, session_id, route_context, compact_reasons.clone());
-    Ok(log_decision(RouteDecision {
-        selected_skill: selected.record.slug.clone(),
-        selected_skill_path: selected.record.skill_path.clone(),
-                overlay_skill: filtered_overlay.clone(),
-        layer: selected.record.layer.clone(),
-        score: round2(selected.score),
-        matched_token_count: selected.matched_token_count,
-        route_snapshot,
-        reasons: compact_reasons,
-        ..skeleton
-    }, query, session_id))
+    let skeleton =
+        route_decision_skeleton(query, session_id, route_context, compact_reasons.clone());
+    Ok(log_decision(
+        RouteDecision {
+            selected_skill: selected.record.slug.clone(),
+            selected_skill_path: selected.record.skill_path.clone(),
+            overlay_skill: filtered_overlay.clone(),
+            layer: selected.record.layer.clone(),
+            score: round2(selected.score),
+            matched_token_count: selected.matched_token_count,
+            route_snapshot,
+            reasons: compact_reasons,
+            ..skeleton
+        },
+        query,
+        session_id,
+    ))
 }
 
 /// Strip overlay-related trigger terms from the query text so the
@@ -612,7 +653,6 @@ fn fuzzy_rescue_best_match<'a>(
         // the hypothetical case gracefully — fuzzy_fallback_score never produces NaN
         // for normal inputs (no division by zero, no sqrt of negative numbers).
         .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(Ordering::Equal))
-        
 }
 
 /// Gate skills excluded from fuzzy rescue when a matching gate context (e.g. CI)
@@ -680,7 +720,7 @@ fn build_fuzzy_rescue_decision(
     RouteDecision {
         selected_skill: record.slug.clone(),
         selected_skill_path: record.skill_path.clone(),
-                overlay_skill: filtered_overlay.clone(),
+        overlay_skill: filtered_overlay.clone(),
         layer: record.layer.clone(),
         score: round2(sim * 100.0),
         fuzzy_match: true,
@@ -709,8 +749,7 @@ pub fn literal_framework_alias_decision(
     let record = records
         .iter()
         .find(|record| has_literal_framework_alias_call(normalized_query, record))?;
-    let reasons =
-        compact_route_reasons(&["Framework alias entrypoint matched explicitly."]);
+    let reasons = compact_route_reasons(&["Framework alias entrypoint matched explicitly."]);
     Some(RouteDecision {
         decision_schema_version: ROUTE_DECISION_SCHEMA_VERSION.to_string(),
         authority: ROUTE_AUTHORITY.to_string(),
@@ -777,14 +816,21 @@ pub fn should_retry_with_manifest(decision: &RouteDecision) -> bool {
     should_retry_with_manifest_records(decision, &[])
 }
 
-pub fn should_retry_with_manifest_records(decision: &RouteDecision, records: &[SkillRecord]) -> bool {
+pub fn should_retry_with_manifest_records(
+    decision: &RouteDecision,
+    records: &[SkillRecord],
+) -> bool {
     if route_decision_is_no_hit(decision) {
         return true;
     }
     if decision.score < 35.0 {
         return true;
     }
-    if decision_has_skill_flag(decision, records, "behavior:gate_exception_visual_screenshot") {
+    if decision_has_skill_flag(
+        decision,
+        records,
+        "behavior:gate_exception_visual_screenshot",
+    ) {
         return decision.route_context.execution_protocol != "audit"
             || !visual_review_has_concrete_visual_signal(decision);
     }
@@ -855,14 +901,12 @@ fn is_explicit_manifest_upgrade(hot: &RouteDecision, full: &RouteDecision) -> bo
 /// Skills that use a low-score override in manifest fallback decisions.
 /// Driven by `behavior:low_score_override:*` skill flag prefix.
 fn find_low_score_override_min_score(records: &[SkillRecord]) -> Option<f64> {
-    records
-        .iter()
-        .find_map(|r| {
-            r.skill_flags.iter().find_map(|f| {
-                f.strip_prefix("behavior:low_score_override:")
-                    .and_then(|s| s.parse::<f64>().ok())
-            })
+    records.iter().find_map(|r| {
+        r.skill_flags.iter().find_map(|f| {
+            f.strip_prefix("behavior:low_score_override:")
+                .and_then(|s| s.parse::<f64>().ok())
         })
+    })
 }
 
 /// Gate skills whose own owners gate_retrigger_on_hot (session_start "required" + gate).
@@ -881,10 +925,11 @@ fn hot_qualifies_for_retry(hot: &RouteDecision, records: &[SkillRecord]) -> bool
     route_decision_is_no_hit(hot)
         || hot.score < 25.0
         || (hot.score < 35.0
-            && records
-                .iter()
-                .any(|r| r.slug == hot.selected_skill && has_skill_flag(r, "behavior:hot_retry_eligible")))
-        || (decision_has_skill_flag(hot, records, "behavior:systematic_debugging_high_threshold") && hot.score < 50.0)
+            && records.iter().any(|r| {
+                r.slug == hot.selected_skill && has_skill_flag(r, "behavior:hot_retry_eligible")
+            }))
+        || (decision_has_skill_flag(hot, records, "behavior:systematic_debugging_high_threshold")
+            && hot.score < 50.0)
     // ^^ systematic-debugging gets a higher retry threshold (50.0 vs 35.0)
     // because its gate-purpose (root-cause analysis) benefits from a wider
     // fallback safety margin — a low hot-score with a different skill shown
@@ -896,12 +941,11 @@ fn is_significant_score_gap_with_signal(full: &RouteDecision, hot: &RouteDecisio
 }
 
 fn is_low_score_override(full: &RouteDecision, records: &[SkillRecord]) -> bool {
-    records
-        .iter()
-        .any(|r| {
-            r.slug == full.selected_skill && find_low_score_override_min_score(std::slice::from_ref(r))
+    records.iter().any(|r| {
+        r.slug == full.selected_skill
+            && find_low_score_override_min_score(std::slice::from_ref(r))
                 .is_some_and(|min_score| full.score >= min_score)
-        })
+    })
 }
 
 fn is_minimal_score_without_signal(full: &RouteDecision, records: &[SkillRecord]) -> bool {
@@ -916,24 +960,33 @@ fn runtime_gate_block_exception(
     runtime_records: &[SkillRecord],
 ) -> bool {
     // visual-review → screenshot: allow fallback unless in audit protocol
-    if decision_has_skill_flag(hot_decision, runtime_records, "behavior:gate_exception_visual_screenshot")
-        && full_decision.selected_skill == "screenshot"
+    if decision_has_skill_flag(
+        hot_decision,
+        runtime_records,
+        "behavior:gate_exception_visual_screenshot",
+    ) && full_decision.selected_skill == "screenshot"
         && hot_decision.route_context.execution_protocol != "audit"
     {
         return true;
     }
 
     // visual-review → systematic-debugging: allow when hot qualifies for retry
-    if decision_has_skill_flag(hot_decision, runtime_records, "behavior:gate_exception_visual_debugging")
-        && full_decision.selected_skill == "systematic-debugging"
+    if decision_has_skill_flag(
+        hot_decision,
+        runtime_records,
+        "behavior:gate_exception_visual_debugging",
+    ) && full_decision.selected_skill == "systematic-debugging"
         && should_retry_with_manifest_records(hot_decision, runtime_records)
     {
         return true;
     }
 
     // skill-framework-developer override: always allow when higher-scored with signal
-    if decision_has_skill_flag(full_decision, runtime_records, "behavior:gate_exception_framework_dev")
-        && full_decision.score > hot_decision.score
+    if decision_has_skill_flag(
+        full_decision,
+        runtime_records,
+        "behavior:gate_exception_framework_dev",
+    ) && full_decision.score > hot_decision.score
         && has_non_generic_manifest_signal(full_decision)
     {
         return true;
@@ -1027,6 +1080,7 @@ fn log_decision(decision: RouteDecision, _query: &str, _session_id: &str) -> Rou
 
 #[cfg(test)]
 mod should_retry_with_manifest_tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     fn make_decision(skill: &str, score: f64, layer: &str, protocol: &str) -> RouteDecision {
@@ -1142,7 +1196,10 @@ mod should_retry_with_manifest_tests {
     #[test]
     fn visual_review_non_audit_triggers_retry_even_with_high_score() {
         let decision = make_decision("visual-review", 90.0, "L1", "four_step");
-        assert!(should_retry_with_manifest_records(&decision, &[make_visual_review_record()]));
+        assert!(should_retry_with_manifest_records(
+            &decision,
+            &[make_visual_review_record()]
+        ));
     }
 
     #[test]
@@ -1151,7 +1208,10 @@ mod should_retry_with_manifest_tests {
         decision
             .reasons
             .push("Visual-review boost applied: visible UI evidence and concrete visual findings requested.".to_string());
-        assert!(!should_retry_with_manifest_records(&decision, &[make_visual_review_record()]));
+        assert!(!should_retry_with_manifest_records(
+            &decision,
+            &[make_visual_review_record()]
+        ));
     }
 
     #[test]
@@ -1166,7 +1226,10 @@ mod should_retry_with_manifest_tests {
         decision
             .reasons
             .push("Trigger hint matched: review.".to_string());
-        assert!(should_retry_with_manifest_records(&decision, &[make_visual_review_record()]));
+        assert!(should_retry_with_manifest_records(
+            &decision,
+            &[make_visual_review_record()]
+        ));
     }
 
     #[test]

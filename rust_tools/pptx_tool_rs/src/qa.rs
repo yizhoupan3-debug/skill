@@ -1,14 +1,14 @@
-use anyhow::{anyhow, bail, Result};
+use crate::{
+    EmitFormat, ZipBundle, detect_fonts_payload, element_overflows, emit_value, expand_path,
+    extract_pptx_structure, has_ai_copy_slop_risk, has_decorative_title_underline_risk,
+    has_dense_text_density_risk, has_dense_text_overlap_risk, has_text_bbox_overlap,
+    layout_rhythm_failing_slides, render_paths,
+};
+use anyhow::{Result, anyhow, bail};
 use serde::Serialize;
 use serde_json::Value;
 use std::collections::BTreeSet;
 use std::path::Path;
-use crate::{
-    ZipBundle, extract_pptx_structure, expand_path, element_overflows,
-    has_text_bbox_overlap, layout_rhythm_failing_slides, has_dense_text_overlap_risk,
-    has_dense_text_density_risk, has_decorative_title_underline_risk, has_ai_copy_slop_risk,
-    detect_fonts_payload, render_paths, EmitFormat, emit_value,
-};
 
 use crate::QaArgs;
 
@@ -57,9 +57,7 @@ pub fn qa_command(args: QaArgs) -> Result<()> {
         },
     )?;
     if args.fail_on_issues && !payload.ok {
-        bail!(
-            "qa failed: overflow, overlap, aesthetic, font, or Rust inspector issue detected"
-        );
+        bail!("qa failed: overflow, overlap, aesthetic, font, or Rust inspector issue detected");
     }
     Ok(())
 }
@@ -165,10 +163,7 @@ pub fn strict_quality_gate(payload: &Value) -> Result<()> {
 }
 
 pub fn font_check_ok(payload: &Value) -> bool {
-    payload
-        .get("ok")
-        .and_then(Value::as_bool)
-        .unwrap_or(false)
+    payload.get("ok").and_then(Value::as_bool).unwrap_or(false)
 }
 
 pub fn inspector_ok(payload: &Value) -> bool {

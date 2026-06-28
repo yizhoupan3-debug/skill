@@ -60,8 +60,13 @@ mod tests {
     #[test]
     fn test_verify_polynomial() {
         let vr = verify_identity("(x+1)^2", "x^2 + 2*x + 1");
-        assert_eq!(vr.status, VerificationStatus::Pass,
-            "expected Pass, got {:?}: {}", vr.status, vr.details);
+        assert_eq!(
+            vr.status,
+            VerificationStatus::Pass,
+            "expected Pass, got {:?}: {}",
+            vr.status,
+            vr.details
+        );
     }
 
     #[test]
@@ -74,6 +79,10 @@ mod tests {
     fn test_simplify() {
         let vr = simplify_expression("x + x");
         assert_eq!(vr.status, VerificationStatus::Pass);
-        assert!(vr.details.contains("2*x"), "expected 2*x, got {}", vr.details);
+        assert!(
+            vr.details.contains("2*x"),
+            "expected 2*x, got {}",
+            vr.details
+        );
     }
 }

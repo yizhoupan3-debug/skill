@@ -158,7 +158,10 @@ mod tests {
 
     #[test]
     fn summarize_environment_fingerprint_none() {
-        assert_eq!(summarize_environment_fingerprint(None), "rust=- platform=- machine=-");
+        assert_eq!(
+            summarize_environment_fingerprint(None),
+            "rust=- platform=- machine=-"
+        );
     }
 
     #[test]

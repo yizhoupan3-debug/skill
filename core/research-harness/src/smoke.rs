@@ -10,7 +10,7 @@
 
 use anyhow::{Context, Result};
 use chrono::Datelike;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
@@ -68,7 +68,10 @@ pub fn load_smoke_config(repo_root: &Path) -> Result<Vec<SmokeQuery>> {
     let config: Value = serde_json::from_str(&text)
         .with_context(|| format!("parse smoke config: {}", path.display()))?;
 
-    let version = config.get("schema_version").and_then(Value::as_str).unwrap_or("");
+    let version = config
+        .get("schema_version")
+        .and_then(Value::as_str)
+        .unwrap_or("");
     if version != EXPECTED_SCHEMA_VERSION {
         tracing::warn!(
             "[smoke] config schema_version={version:?}, expected={EXPECTED_SCHEMA_VERSION:?}"
@@ -82,15 +85,33 @@ pub fn load_smoke_config(repo_root: &Path) -> Result<Vec<SmokeQuery>> {
                 id: str_field(item, "id").to_string(),
                 source: str_field_default(item, "source", "arxiv").to_string(),
                 query: str_field(item, "query").to_string(),
-                expected_min_results: item.get("expected_min_results").and_then(Value::as_u64).unwrap_or(3) as usize,
-                expected_freshness_days: item.get("expected_freshness_days").and_then(Value::as_i64).unwrap_or(180),
-                related_directions: item.get("related_directions")
+                expected_min_results: item
+                    .get("expected_min_results")
+                    .and_then(Value::as_u64)
+                    .unwrap_or(3) as usize,
+                expected_freshness_days: item
+                    .get("expected_freshness_days")
+                    .and_then(Value::as_i64)
+                    .unwrap_or(180),
+                related_directions: item
+                    .get("related_directions")
                     .and_then(Value::as_array)
-                    .map(|a| a.iter().filter_map(Value::as_str).map(String::from).collect())
+                    .map(|a| {
+                        a.iter()
+                            .filter_map(Value::as_str)
+                            .map(String::from)
+                            .collect()
+                    })
                     .unwrap_or_default(),
-                related_barriers: item.get("related_barriers")
+                related_barriers: item
+                    .get("related_barriers")
                     .and_then(Value::as_array)
-                    .map(|a| a.iter().filter_map(Value::as_str).map(String::from).collect())
+                    .map(|a| {
+                        a.iter()
+                            .filter_map(Value::as_str)
+                            .map(String::from)
+                            .collect()
+                    })
                     .unwrap_or_default(),
             });
         }
@@ -105,11 +126,23 @@ pub fn load_smoke_config(repo_root: &Path) -> Result<Vec<SmokeQuery>> {
                         id: str_field(item, "id").to_string(),
                         source: str_field_default(item, "source", "arxiv").to_string(),
                         query: str_field(item, "query").to_string(),
-                        expected_min_results: item.get("expected_min_results").and_then(Value::as_u64).unwrap_or(3) as usize,
-                        expected_freshness_days: item.get("expected_freshness_days").and_then(Value::as_i64).unwrap_or(180),
-                        related_directions: item.get("related_directions")
+                        expected_min_results: item
+                            .get("expected_min_results")
+                            .and_then(Value::as_u64)
+                            .unwrap_or(3) as usize,
+                        expected_freshness_days: item
+                            .get("expected_freshness_days")
+                            .and_then(Value::as_i64)
+                            .unwrap_or(180),
+                        related_directions: item
+                            .get("related_directions")
                             .and_then(Value::as_array)
-                            .map(|a| a.iter().filter_map(Value::as_str).map(String::from).collect())
+                            .map(|a| {
+                                a.iter()
+                                    .filter_map(Value::as_str)
+                                    .map(String::from)
+                                    .collect()
+                            })
                             .unwrap_or_default(),
                         related_barriers: Vec::new(),
                     });
@@ -188,7 +221,9 @@ pub fn execute_query(query: &SmokeQuery, client: &reqwest::blocking::Client) -> 
                         .filter_map(|field| p.get(field).and_then(Value::as_str))
                         .filter_map(|date_str| {
                             chrono::NaiveDate::parse_from_str(date_str, "%Y-%m-%d")
-                                .or_else(|_| chrono::NaiveDate::parse_from_str(date_str, "%Y-%m-%dT%H:%M:%S"))
+                                .or_else(|_| {
+                                    chrono::NaiveDate::parse_from_str(date_str, "%Y-%m-%dT%H:%M:%S")
+                                })
                                 .ok()
                         })
                         .map(|d| (now.date_naive() - d).num_days().max(0))
@@ -268,7 +303,10 @@ pub fn load_previous_results(path: &Path) -> Result<HashMap<String, SmokeResult>
         if let Ok(val) = serde_json::from_str::<SmokeResult>(trimmed) {
             results.insert(val.id.clone(), val);
         } else {
-            tracing::warn!("[smoke] skipping unparseable line in {}: {trimmed}", path.display());
+            tracing::warn!(
+                "[smoke] skipping unparseable line in {}: {trimmed}",
+                path.display()
+            );
         }
     }
     Ok(results)
@@ -370,6 +408,7 @@ pub fn is_fresh(year: u32, threshold_days: i64) -> bool {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use serde_json::json;
 

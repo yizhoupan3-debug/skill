@@ -72,7 +72,9 @@ pub fn init_workspace(
     let date = chrono::Local::now().format("%Y-%m-%d");
     fs::write(
         root.join("research-log.md"),
-        format!("# Research Log — {project}\n\nQuestion: {question}\n\n## {date} — Workspace initialized\n\n"),
+        format!(
+            "# Research Log — {project}\n\nQuestion: {question}\n\n## {date} — Workspace initialized\n\n"
+        ),
     )?;
     fs::write(
         root.join("findings.md"),
@@ -97,6 +99,7 @@ pub fn init_workspace(
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use std::fs;
 

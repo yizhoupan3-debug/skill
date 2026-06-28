@@ -52,12 +52,8 @@ pub const TOOL_INPUT_SESSION_ID_FIELDS: &[&str] = &[
 ];
 
 /// 跨宿主共享的 `tool_input.metadata` 内 session id 字段名。
-pub const TOOL_INPUT_METADATA_SESSION_ID_FIELDS: &[&str] = &[
-    "sessionId",
-    "conversationId",
-    "chatId",
-    "threadId",
-];
+pub const TOOL_INPUT_METADATA_SESSION_ID_FIELDS: &[&str] =
+    &["sessionId", "conversationId", "chatId", "threadId"];
 
 /// 跨宿主共享的 `session_key` 核心逻辑。
 ///

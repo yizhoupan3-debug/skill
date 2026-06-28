@@ -42,9 +42,7 @@ struct HealthManifest {
 /// scores and updates the `generated_at` timestamp.
 ///
 /// `repo_root` is the project root (parent of `skills/`).
-pub fn generate_health_manifest(
-    repo_root: &Path,
-) -> Result<()> {
+pub fn generate_health_manifest(repo_root: &Path) -> Result<()> {
     let skills_root = crate::paths::skills_root(repo_root);
     let manifest_path = crate::paths::health_json(repo_root);
 
@@ -70,11 +68,11 @@ pub fn generate_health_manifest(
                         .unwrap_or_default()
                         .to_string();
                     skills.entry(slug).or_insert_with(|| HealthEntry {
-                                blended_score: 0.0,
-                                status: "Unknown".into(),
-                                route_count: None,
-                                reroute_count: None,
-                            });
+                        blended_score: 0.0,
+                        status: "Unknown".into(),
+                        route_count: None,
+                        reroute_count: None,
+                    });
                 }
             }
         }
@@ -91,7 +89,7 @@ pub fn generate_health_manifest(
 
     let json_val = serde_json::to_value(&manifest)?;
     core_state_utils::atomic_write::write_atomic_json(&manifest_path, &json_val)
-        .map_err(|e| std::io::Error::other(e))?;
+        .map_err(std::io::Error::other)?;
     tracing::info!(
         "health manifest: wrote {} entries to {}",
         manifest.skills.len(),
@@ -128,7 +126,16 @@ fn utc_now() -> String {
     let month_days: [u64; 12] = [
         31,
         if leap { 29 } else { 28 },
-        31, 30, 31, 30, 31, 31, 30, 31, 30, 31,
+        31,
+        30,
+        31,
+        30,
+        31,
+        31,
+        30,
+        31,
+        30,
+        31,
     ];
     let mut m = 1u64;
     for &md in &month_days {
@@ -156,6 +163,8 @@ fn is_leap(year: u64) -> bool {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
+
     use super::*;
 
     #[test]

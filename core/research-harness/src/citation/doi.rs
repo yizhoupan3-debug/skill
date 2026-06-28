@@ -92,10 +92,7 @@ pub async fn resolve_doi(doi: &str) -> Result<Paper> {
                 .and_then(|v| v.as_u64())
                 .map(|y| y as u32);
 
-            let url_str = msg
-                .get("URL")
-                .and_then(|v| v.as_str())
-                .map(String::from);
+            let url_str = msg.get("URL").and_then(|v| v.as_str()).map(String::from);
 
             Ok(Paper {
                 id: clean_doi.to_string(),
@@ -137,6 +134,7 @@ pub async fn resolve_doi(doi: &str) -> Result<Paper> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     #[test]

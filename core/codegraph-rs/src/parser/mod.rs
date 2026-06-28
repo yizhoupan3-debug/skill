@@ -87,6 +87,7 @@ pub fn parse_file(path: &Path, contents: &str, mtime_ns: i64) -> Option<ParsedFi
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::parse_file;
     use std::path::Path;
 

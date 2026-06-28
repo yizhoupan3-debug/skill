@@ -18,10 +18,8 @@ pub fn normalize_skill_host_platforms(
     if default_supported_hosts.is_empty() {
         return Err("default_supported_hosts must be non-empty".to_string());
     }
-    let supported_set: BTreeSet<&str> = default_supported_hosts
-        .iter()
-        .map(|s| s.as_str())
-        .collect();
+    let supported_set: BTreeSet<&str> =
+        default_supported_hosts.iter().map(|s| s.as_str()).collect();
     let mut out: BTreeSet<String> = BTreeSet::new();
     for s in raw {
         let t = s.trim().to_ascii_lowercase();

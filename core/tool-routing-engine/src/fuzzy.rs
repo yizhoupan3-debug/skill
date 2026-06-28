@@ -34,6 +34,7 @@ pub fn best_fuzzy_score(query: &str, hints: &[String]) -> Option<f64> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     #[test]
@@ -55,8 +56,14 @@ mod tests {
 
     #[test]
     fn jaccard_identical() {
-        let a = ["hel", "ell", "llo"].iter().map(|s| s.to_string()).collect();
-        let b = ["hel", "ell", "llo"].iter().map(|s| s.to_string()).collect();
+        let a = ["hel", "ell", "llo"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        let b = ["hel", "ell", "llo"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
         assert!((routing_core::fuzzy::jaccard_similarity(&a, &b) - 1.0).abs() < f64::EPSILON);
     }
 

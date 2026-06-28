@@ -9,7 +9,9 @@ fn runtime_registry_review_gate_spawn_first_fields() {
     let registry = read_json(&root.join("configs/framework/RUNTIME_REGISTRY.json"));
     let rg = &registry["review_gate"];
     assert_eq!(rg["spawn_first_enabled"], true);
-    let nudge = rg["spawn_first_nudge"].as_str().expect("spawn_first_nudge str");
+    let nudge = rg["spawn_first_nudge"]
+        .as_str()
+        .expect("spawn_first_nudge str");
     assert!(nudge.contains("fork_context"));
     assert!(nudge.contains("配对审稿") || nudge.contains("spawn"));
     assert!(
@@ -46,7 +48,6 @@ fn runtime_registry_review_gate_spawn_first_fields() {
     );
 }
 
-
 #[test]
 fn runtime_registry_host_projections_split_harness_capabilities() {
     let schema = read_json(&project_root().join("configs/framework/RUNTIME_REGISTRY_SCHEMA.json"));
@@ -74,13 +75,13 @@ fn runtime_registry_host_projections_split_harness_capabilities() {
         !hook_baseline.is_empty(),
         "harness_capability_policy.cli_agent_hook_baseline must be non-empty"
     );
-    let allowed_exception_status: HashSet<&str> = schema
-        ["harness_capability_exception_status_values"]
-        .as_array()
-        .expect("schema harness_capability_exception_status_values")
-        .iter()
-        .map(|v| v.as_str().expect("exception status token"))
-        .collect();
+    let allowed_exception_status: HashSet<&str> =
+        schema["harness_capability_exception_status_values"]
+            .as_array()
+            .expect("schema harness_capability_exception_status_values")
+            .iter()
+            .map(|v| v.as_str().expect("exception status token"))
+            .collect();
 
     let runtime = read_json(&project_root().join("configs/framework/RUNTIME_REGISTRY.json"));
     let projections = runtime["host_projections"]
@@ -274,4 +275,3 @@ fn runtime_registry_schema_covers_execution_critical_fields_only() {
         }
     }
 }
-

@@ -1,8 +1,7 @@
 use super::common::*;
 use super::*;
 
-use serde_json::{json, Value};
-
+use serde_json::{Value, json};
 
 #[test]
 fn background_control_enqueue_rejects_invalid_strategy_and_capacity() {
@@ -52,7 +51,6 @@ fn background_control_enqueue_rejects_invalid_strategy_and_capacity() {
     assert_eq!(capacity.reason, "capacity-rejected");
 }
 
-
 #[test]
 fn background_control_batch_plan_resolves_group_and_lane_assignments() {
     let planned = build_background_control_response(BackgroundControlRequestPayload {
@@ -95,13 +93,12 @@ fn background_control_batch_plan_resolves_group_and_lane_assignments() {
     assert_eq!(rejected.accepted, Some(false));
     assert_eq!(rejected.reason, "batch-plan-misaligned-parallel-group");
     assert_eq!(
-            rejected.error.as_deref(),
-            Some(
-                "enqueue_background_batch requires one consistent parallel_group_id across the whole batch."
-            )
-        );
+        rejected.error.as_deref(),
+        Some(
+            "enqueue_background_batch requires one consistent parallel_group_id across the whole batch."
+        )
+    );
 }
-
 
 #[test]
 fn background_control_retry_computes_backoff_and_terminal_status() {
@@ -156,7 +153,6 @@ fn background_control_retry_computes_backoff_and_terminal_status() {
     );
     assert_eq!(exhausted.effect_plan.next_step, "finalize_terminal");
 }
-
 
 #[test]
 fn background_control_interrupt_resolves_finalize_and_cancel_paths() {
@@ -214,7 +210,6 @@ fn background_control_interrupt_resolves_finalize_and_cancel_paths() {
     assert_eq!(running.effect_plan.next_step, "request_interrupt");
 }
 
-
 #[test]
 fn background_control_claim_resolves_running_and_suppressed_paths() {
     let queued = build_background_control_response(BackgroundControlRequestPayload {
@@ -261,7 +256,6 @@ fn background_control_claim_resolves_running_and_suppressed_paths() {
     assert_eq!(interrupted.reason, "claim-suppressed-interrupted");
     assert_eq!(interrupted.effect_plan.next_step, "finalize_interrupted");
 }
-
 
 #[test]
 fn background_control_complete_and_completion_race_resolve_terminal_status() {
@@ -332,7 +326,6 @@ fn background_control_complete_and_completion_race_resolve_terminal_status() {
     assert_eq!(race_lost.reason, "completion-race-lost");
     assert_eq!(race_lost.effect_plan.next_step, "finalize_interrupted");
 }
-
 
 #[test]
 fn background_control_retry_claim_and_interrupt_finalize_cover_retry_lifecycle() {
@@ -406,7 +399,6 @@ fn background_control_retry_claim_and_interrupt_finalize_cover_retry_lifecycle()
     assert_eq!(finalize.effect_plan.next_step, "finalize_interrupted");
 }
 
-
 #[test]
 fn background_control_session_release_exposes_wait_plan() {
     let release = build_background_control_response(BackgroundControlRequestPayload {
@@ -444,7 +436,6 @@ fn background_control_session_release_exposes_wait_plan() {
         Some(0.0675)
     );
 }
-
 
 #[test]
 fn background_state_operation_persists_control_plane_projection_and_health() {
@@ -578,7 +569,6 @@ fn background_state_operation_persists_control_plane_projection_and_health() {
     fs::remove_file(&state_path).expect("cleanup filesystem background state");
 }
 
-
 #[test]
 fn background_state_operation_compacts_terminal_jobs_over_capacity() {
     let state_path = temp_json_path("background-state-capacity");
@@ -608,15 +598,15 @@ fn background_state_operation_compacts_terminal_jobs_over_capacity() {
     .expect("capacity-compacted snapshot");
     let jobs = response["state"]["jobs"].as_array().expect("jobs");
     assert_eq!(jobs.len(), 2);
-    assert!(jobs
-        .iter()
-        .any(|job| job["job_id"] == Value::String("job-3".to_string())));
+    assert!(
+        jobs.iter()
+            .any(|job| job["job_id"] == Value::String("job-3".to_string()))
+    );
     assert_eq!(response["health"]["max_background_jobs"], json!(16));
     assert_eq!(response["health"]["max_background_jobs_limit"], json!(64));
 
     fs::remove_file(&state_path).expect("cleanup capacity background state");
 }
-
 
 #[test]
 fn background_state_operation_reports_sqlite_backend_capabilities() {
@@ -712,7 +702,6 @@ fn background_state_operation_reports_sqlite_backend_capabilities() {
     fs::remove_dir_all(&canonical_temp_dir).expect("cleanup sqlite background state dir");
 }
 
-
 #[test]
 fn background_state_arbitration_dispatch_requires_explicit_operation() {
     let state_path = temp_json_path("background-state-arbitration-dispatch");
@@ -759,7 +748,6 @@ fn background_state_arbitration_dispatch_requires_explicit_operation() {
 
     fs::remove_file(&state_path).expect("cleanup arbitration dispatch state");
 }
-
 
 #[test]
 fn background_state_operation_arbitrates_takeover_across_persisted_roundtrip() {
@@ -875,7 +863,6 @@ fn background_state_operation_arbitrates_takeover_across_persisted_roundtrip() {
     fs::remove_file(&state_path).expect("cleanup takeover background state");
 }
 
-
 #[test]
 fn background_state_operation_release_keeps_current_owner_when_only_pending_takeover_exists() {
     let state_path = temp_json_path("background-state-release");
@@ -936,5 +923,3 @@ fn background_state_operation_release_keeps_current_owner_when_only_pending_take
 
     fs::remove_file(&state_path).expect("cleanup release background state");
 }
-
-

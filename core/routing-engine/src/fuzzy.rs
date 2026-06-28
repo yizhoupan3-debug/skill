@@ -40,6 +40,7 @@ pub fn fuzzy_fallback_score(query: &str, record: &SkillRecord) -> f64 {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use std::collections::HashSet;
 

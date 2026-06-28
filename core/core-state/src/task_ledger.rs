@@ -1,7 +1,7 @@
-use core_errors::FrameworkError;
 use crate::utils::path_guard::validate_task_id_component;
-use crate::utils::task_write_lock::acquire_task_ledger_repo_lock;
 use crate::utils::task_write_lock::TaskLedgerRepoLockGuard;
+use crate::utils::task_write_lock::acquire_task_ledger_repo_lock;
+use core_errors::FrameworkError;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::fs::{self, OpenOptions};
@@ -45,11 +45,10 @@ pub fn append_transaction_assuming_l1_held(
     repo_root: &Path,
     task_id: &str,
     tx: LedgerTransaction,
-) -> Result<(), String> {
+) -> Result<(), FrameworkError> {
     let path = task_ledger_path(repo_root, task_id)?;
     if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)
-            .map_err(|err| format!("failed to create dir {}: {err}", parent.display()))?;
+        fs::create_dir_all(parent)?;
     }
 
     let mut compacted_inline = false;
@@ -60,15 +59,14 @@ pub fn append_transaction_assuming_l1_held(
         Ok(mut content) => {
             // Repair any trailing corrupt lines before using content for idempotency
             // and before counting lines for seq.
-            let truncated = crate::utils::jsonl_maintenance::truncate_corrupt_tail(&path)
-                .unwrap_or(false);
+            let truncated =
+                crate::utils::jsonl_maintenance::truncate_corrupt_tail(&path).unwrap_or(false);
 
             // When truncation occurred, re-read to get accurate content for both
             // idempotency check and line counting. This avoids a seq gap where
             // seq would be computed from pre-truncation line count.
             if truncated {
-                content = fs::read_to_string(&path)
-                    .map_err(|err| format!("re-read task ledger after truncate: {err}"))?;
+                content = fs::read_to_string(&path)?;
             }
 
             // --- idempotency: reverse-scan lines, skip full parse when possible ---
@@ -84,9 +82,10 @@ pub fn append_transaction_assuming_l1_held(
                         continue;
                     }
                     if let Ok(existing_tx) = serde_json::from_str::<LedgerTransaction>(line)
-                        && existing_tx.idempotency_key.as_deref() == Some(new_key.as_str()) {
-                            return Ok(());
-                        }
+                        && existing_tx.idempotency_key.as_deref() == Some(new_key.as_str())
+                    {
+                        return Ok(());
+                    }
                 }
             }
 
@@ -96,19 +95,12 @@ pub fn append_transaction_assuming_l1_held(
             let mut final_tx = tx;
             final_tx.seq = Some(line_count);
 
-            let serialized = serde_json::to_string(&final_tx)
-                .map_err(|err| format!("failed to serialize transaction: {err}"))?;
+            let serialized = serde_json::to_string(&final_tx)?;
 
-            let mut file = OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open(&path)
-                .map_err(|err| format!("failed to open task ledger: {err}"))?;
+            let mut file = OpenOptions::new().create(true).append(true).open(&path)?;
 
-            writeln!(file, "{}", serialized)
-                .map_err(|err| format!("failed to write transaction: {err}"))?;
-            file.sync_all()
-                .map_err(|e| format!("fsync task_ledger failed: {e}"))?;
+            writeln!(file, "{}", serialized)?;
+            file.sync_all()?;
             drop(file);
 
             // ── compact using in-memory content (avoids re-read) ─────────────
@@ -117,9 +109,8 @@ pub fn append_transaction_assuming_l1_held(
             content.push_str(&serialized);
             content.push('\n');
 
-            match crate::utils::jsonl_maintenance::compact_jsonl_with_content(
-                &path, &content, 300,
-            ) {
+            match crate::utils::jsonl_maintenance::compact_jsonl_with_content(&path, &content, 300)
+            {
                 Ok(true) => {
                     // Compaction renumbers seq to 0,1,2,…N-1.
                     // TASK_STATE.json aggregate was removed in Wave 2b so there
@@ -140,28 +131,22 @@ pub fn append_transaction_assuming_l1_held(
             let mut final_tx = tx;
             final_tx.seq = Some(0);
 
-            let serialized = serde_json::to_string(&final_tx)
-                .map_err(|err| format!("failed to serialize transaction: {err}"))?;
+            let serialized = serde_json::to_string(&final_tx)?;
 
-            let mut file = OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open(&path)
-                .map_err(|err| format!("failed to open task ledger: {err}"))?;
+            let mut file = OpenOptions::new().create(true).append(true).open(&path)?;
 
-            writeln!(file, "{}", serialized)
-                .map_err(|err| format!("failed to write transaction: {err}"))?;
-            file.sync_all()
-                .map_err(|e| format!("fsync task_ledger failed: {e}"))?;
+            writeln!(file, "{}", serialized)?;
+            file.sync_all()?;
         }
-        Err(e) => return Err(format!("failed to read task ledger: {e}")),
+        Err(e) => return Err(FrameworkError::Io(e)),
     }
 
     // Fallback compaction for the NotFound branch (first entry, 1 line — won't trigger).
     if !compacted_inline
-        && let Err(e) = crate::utils::jsonl_maintenance::compact_jsonl_if_needed(&path, 300) {
-            tracing::warn!(error = %e, "compact_jsonl_if_needed failed for TASK_LEDGER");
-        }
+        && let Err(e) = crate::utils::jsonl_maintenance::compact_jsonl_if_needed(&path, 300)
+    {
+        tracing::warn!(error = %e, "compact_jsonl_if_needed failed for TASK_LEDGER");
+    }
 
     Ok(())
 }
@@ -170,14 +155,15 @@ pub fn append_transaction(
     repo_root: &Path,
     task_id: &str,
     tx: LedgerTransaction,
-) -> Result<(), String> {
-    let _guard: TaskLedgerRepoLockGuard = acquire_task_ledger_repo_lock(repo_root, Duration::from_millis(500))?;
+) -> Result<(), FrameworkError> {
+    let _guard: TaskLedgerRepoLockGuard =
+        acquire_task_ledger_repo_lock(repo_root, Duration::from_millis(500))?;
     append_transaction_assuming_l1_held(repo_root, task_id, tx)
 }
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used)]
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use std::fs;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -207,16 +193,21 @@ mod tests {
         };
         for bad in ["", "../x", "a/b", ".."] {
             let err = append_transaction(&tmp, bad, tx.clone()).expect_err("reject");
+            let err_str = err.to_string();
             assert!(
-                err.contains("task_id must be a single safe path component"),
-                "bad id {bad:?}: {err}"
+                err_str.contains("task_id must be a single safe path component"),
+                "bad id {bad:?}: {err_str}"
             );
         }
         match prev {
             // SAFETY: test-only; ENV_LOCK prevents concurrent env access from other tests.
-            Some(p) => unsafe { core_state_utils::env_sync::set_env("ROUTER_RS_TASK_LEDGER_FLOCK", &p) },
+            Some(p) => unsafe {
+                core_state_utils::env_sync::set_env("ROUTER_RS_TASK_LEDGER_FLOCK", &p)
+            },
             // SAFETY: test-only; ENV_LOCK prevents concurrent env access from other tests.
-            None => unsafe { core_state_utils::env_sync::remove_env("ROUTER_RS_TASK_LEDGER_FLOCK") },
+            None => unsafe {
+                core_state_utils::env_sync::remove_env("ROUTER_RS_TASK_LEDGER_FLOCK")
+            },
         }
         let _ = fs::remove_dir_all(&tmp);
     }

@@ -34,20 +34,24 @@ pub fn detect_language(path: &str) -> Option<&'static str> {
 /// Only index .md files under docs/ or skills/ — skip README.md, CHANGELOG.md, LICENSE.md etc.
 fn should_index_markdown(path: &str) -> bool {
     let normal = path.replace('\\', "/");
-    let in_scope = normal.contains("/docs/") || normal.contains("/skills/")
-        || normal.starts_with("docs/") || normal.starts_with("skills/");
+    let in_scope = normal.contains("/docs/")
+        || normal.contains("/skills/")
+        || normal.starts_with("docs/")
+        || normal.starts_with("skills/");
     if !in_scope {
         return false;
     }
     // Exclude files whose headings are noise (not code-relevant)
     let fname = normal.rsplit('/').next().unwrap_or(&normal);
-    !matches!(fname.to_ascii_lowercase().as_str(),
+    !matches!(
+        fname.to_ascii_lowercase().as_str(),
         "readme.md" | "changelog.md" | "license.md" | "contributing.md" | "index.md"
     )
 }
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     #[test]
@@ -72,7 +76,10 @@ mod tests {
     fn should_index_markdown_in_docs() {
         assert_eq!(detect_language("docs/architecture.md"), Some("markdown"));
         assert_eq!(detect_language("docs/guide.md"), Some("markdown"));
-        assert_eq!(detect_language("skills/code-review-deep/SKILL.md"), Some("markdown"));
+        assert_eq!(
+            detect_language("skills/code-review-deep/SKILL.md"),
+            Some("markdown")
+        );
     }
 
     #[test]
@@ -93,6 +100,9 @@ mod tests {
 
     #[test]
     fn should_index_subdir_skill_markdown() {
-        assert_eq!(detect_language("skills/paper-workbench/SKILL.md"), Some("markdown"));
+        assert_eq!(
+            detect_language("skills/paper-workbench/SKILL.md"),
+            Some("markdown")
+        );
     }
 }

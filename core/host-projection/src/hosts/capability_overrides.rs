@@ -5,7 +5,6 @@
 //! resume logic). All other overrides have been moved to registry-driven code
 //! generation (observation surfaces, dispatcher config, etc.).
 
-
 // ── build_driver_args ──────────────────────────────────────────────────────
 
 /// Build driver CLI args for any host.

@@ -1,6 +1,6 @@
-use anyhow::{bail, Result};
-use clap::{Args, Parser, Subcommand};
+use anyhow::{Result, bail};
 use citation_tool_rs::*;
+use clap::{Args, Parser, Subcommand};
 use std::collections::BTreeSet;
 use std::path::PathBuf;
 

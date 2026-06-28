@@ -1,20 +1,32 @@
 use core_errors::FrameworkError;
 use std::collections::HashSet;
 
-use super::types::{FrameworkProfileContract, HOST_SPECIFIC_METADATA_KEYS, REQUIRED_CORE_CAPABILITIES};
+use super::types::{
+    FrameworkProfileContract, HOST_SPECIFIC_METADATA_KEYS, REQUIRED_CORE_CAPABILITIES,
+};
 
-pub fn validate_framework_profile(profile: &FrameworkProfileContract) -> Result<(), FrameworkError> {
+pub fn validate_framework_profile(
+    profile: &FrameworkProfileContract,
+) -> Result<(), FrameworkError> {
     if profile.profile_id.trim().is_empty() {
-        return Err(FrameworkError::validation("framework profile missing profile_id"));
+        return Err(FrameworkError::validation(
+            "framework profile missing profile_id",
+        ));
     }
     if profile.display_name.trim().is_empty() {
-        return Err(FrameworkError::validation("framework profile missing display_name"));
+        return Err(FrameworkError::validation(
+            "framework profile missing display_name",
+        ));
     }
     if profile.framework_profile_version.trim().is_empty() {
-        return Err(FrameworkError::validation("framework profile missing framework_profile_version"));
+        return Err(FrameworkError::validation(
+            "framework profile missing framework_profile_version",
+        ));
     }
     if profile.host_family.trim() != "shared-rust-core" {
-        return Err(FrameworkError::validation("framework core must be pinned to shared-rust-core"));
+        return Err(FrameworkError::validation(
+            "framework core must be pinned to shared-rust-core",
+        ));
     }
 
     let capability_set = profile

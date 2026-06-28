@@ -24,8 +24,12 @@ pub fn fsync_parent_dir(path: &Path) -> Result<(), FrameworkError> {
                 parent.display()
             ))
         })?;
-    dir.sync_all()
-        .map_err(|err| FrameworkError::validation(format!("fsync parent dir failed for {}: {err}", parent.display())))?;
+    dir.sync_all().map_err(|err| {
+        FrameworkError::validation(format!(
+            "fsync parent dir failed for {}: {err}",
+            parent.display()
+        ))
+    })?;
     Ok(())
 }
 
@@ -41,8 +45,9 @@ pub fn write_atomic_text_to_temp(
     tmp_path: &Path,
 ) -> Result<(), FrameworkError> {
     if let Some(parent) = final_path.parent() {
-        fs::create_dir_all(parent)
-            .map_err(|err| FrameworkError::validation(format!("create parent directory failed: {err}")))?;
+        fs::create_dir_all(parent).map_err(|err| {
+            FrameworkError::validation(format!("create parent directory failed: {err}"))
+        })?;
     }
     let mut opts = OpenOptions::new();
     opts.create(true).truncate(true).write(true);
@@ -51,13 +56,24 @@ pub fn write_atomic_text_to_temp(
         use std::os::unix::fs::OpenOptionsExt;
         opts.mode(0o600);
     }
-    let mut file = opts
-        .open(tmp_path)
-        .map_err(|err| FrameworkError::validation(format!("open temp file failed for {}: {err}", tmp_path.display())))?;
-    file.write_all(content.as_bytes())
-        .map_err(|err| FrameworkError::validation(format!("write temp file failed for {}: {err}", tmp_path.display())))?;
-    file.sync_all()
-        .map_err(|err| FrameworkError::validation(format!("fsync temp file failed for {}: {err}", tmp_path.display())))?;
+    let mut file = opts.open(tmp_path).map_err(|err| {
+        FrameworkError::validation(format!(
+            "open temp file failed for {}: {err}",
+            tmp_path.display()
+        ))
+    })?;
+    file.write_all(content.as_bytes()).map_err(|err| {
+        FrameworkError::validation(format!(
+            "write temp file failed for {}: {err}",
+            tmp_path.display()
+        ))
+    })?;
+    file.sync_all().map_err(|err| {
+        FrameworkError::validation(format!(
+            "fsync temp file failed for {}: {err}",
+            tmp_path.display()
+        ))
+    })?;
     drop(file);
     fs::rename(tmp_path, final_path).map_err(|err| {
         let _ = fs::remove_file(tmp_path);

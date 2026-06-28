@@ -1,7 +1,7 @@
 //! MCP stdio JSON-RPC server shared across tool crates.
 
 use anyhow::Result;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::io::{self, BufRead, Write};
 
 /// Run an MCP stdio server that dispatches to the given tool crate.
@@ -28,10 +28,7 @@ pub fn run_stdio_mcp(
             Err(_) => continue,
         };
         let id = request.get("id").cloned();
-        let method = request
-            .get("method")
-            .and_then(Value::as_str)
-            .unwrap_or("");
+        let method = request.get("method").and_then(Value::as_str).unwrap_or("");
         let params = request
             .get("params")
             .cloned()

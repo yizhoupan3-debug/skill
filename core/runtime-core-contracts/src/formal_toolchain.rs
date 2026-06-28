@@ -41,6 +41,7 @@ pub fn ascii_lower_contains_formal_toolchain_tokens(c: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     fn lc(s: &str) -> String {

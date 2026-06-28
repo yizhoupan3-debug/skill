@@ -2,8 +2,8 @@
 //!
 //! Telemetry bootstrap (LogAggregator, TelemetryObserver) removed per v10 Wave 2d.
 use routing_engine::routing_runtime_watch;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Once;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time::Duration;
 
@@ -32,7 +32,7 @@ static BOOTSTRAP_ONCE: Once = Once::new();
 /// Idempotent B0 wiring (tokenizer DI + probes + route cache invalidator).
 pub fn ensure_kernel_bootstrap() {
     BOOTSTRAP_ONCE.call_once(|| {
-        bootstrap_core();        // tokenizer + probes (all modes need these)
+        bootstrap_core(); // tokenizer + probes (all modes need these)
         spawn_routing_runtime_cache_invalidator();
     });
 }

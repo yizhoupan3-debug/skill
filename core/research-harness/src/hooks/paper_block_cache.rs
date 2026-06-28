@@ -27,7 +27,11 @@ pub struct BlockCache {
 }
 
 impl BlockCache {
-    pub const fn new(rel_path: &'static str, prefix_line: &'static str, log_label: &'static str) -> Self {
+    pub const fn new(
+        rel_path: &'static str,
+        prefix_line: &'static str,
+        log_label: &'static str,
+    ) -> Self {
         Self {
             cache: Mutex::new(None),
             rel_path,
@@ -42,9 +46,7 @@ impl BlockCache {
     /// the last read, returns the cached content without re-reading.
     pub fn resolve(&self, repo_root: &Path, builtin: impl FnOnce() -> String) -> String {
         let path = repo_root.join(self.rel_path);
-        let mtime = fs::metadata(&path)
-            .ok()
-            .and_then(|m| m.modified().ok());
+        let mtime = fs::metadata(&path).ok().and_then(|m| m.modified().ok());
         {
             let guard = self.cache.lock().unwrap_or_else(|e| {
                 tracing::warn!("{} block cache poisoned, clearing cache", self.log_label);
@@ -53,13 +55,13 @@ impl BlockCache {
                 guard
             });
             if let Some(ref cached) = *guard
-                && cached.mtime == mtime {
-                    return cached.content.clone();
-                }
+                && cached.mtime == mtime
+            {
+                return cached.content.clone();
+            }
         }
         let content = match fs::read_to_string(&path) {
             Ok(t) => {
-                
                 if t.len() > MAX_BLOCK_BYTES {
                     tracing::warn!(
                         "{} block file exceeds {MAX_BLOCK_BYTES} bytes ({} B), using builtin",
@@ -92,7 +94,10 @@ impl BlockCache {
                 *guard = None;
                 guard
             });
-            *guard = Some(CachedBlock { content: content.clone(), mtime });
+            *guard = Some(CachedBlock {
+                content: content.clone(),
+                mtime,
+            });
         }
         content
     }
@@ -100,6 +105,7 @@ impl BlockCache {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use std::fs;
 
@@ -165,7 +171,10 @@ mod tests {
         let tmp = std::env::temp_dir().join("cache_test_valid");
         let _ = fs::remove_dir_all(&tmp);
         let cache = test_cache("VALID.txt");
-        prep_file(&tmp.join("VALID.txt"), format!("{TEST_PREFIX}\n\n{TEST_BODY}"));
+        prep_file(
+            &tmp.join("VALID.txt"),
+            format!("{TEST_PREFIX}\n\n{TEST_BODY}"),
+        );
         let result = cache.resolve(&tmp, test_builtin);
         assert!(result.contains(TEST_BODY));
         assert!(result.contains(TEST_PREFIX));

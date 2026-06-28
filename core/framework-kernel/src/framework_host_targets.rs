@@ -1,10 +1,10 @@
 //! Host projection identifiers and `--to` tool names aligned with
 //! `configs/framework/RUNTIME_REGISTRY.json` → `host_targets.supported`.
 
-use core_errors::FrameworkError;
 use crate::runtime_registry::{
     HOST_ADAPTER_CONTRACT_PATH, RUNTIME_REGISTRY_PATH, load_runtime_registry_json,
 };
+use core_errors::FrameworkError;
 use serde_json::{Map, Value, json};
 use std::path::Path;
 
@@ -50,7 +50,10 @@ fn host_target_metadata<'a>(
 }
 
 /// Logical id in `host_targets.supported` → `framework host-integration --to …` spelling.
-pub fn skills_install_tool_for_host_id(registry: &Value, host_id: &str) -> Result<String, FrameworkError> {
+pub fn skills_install_tool_for_host_id(
+    registry: &Value,
+    host_id: &str,
+) -> Result<String, FrameworkError> {
     let id = host_id.trim();
     let tool = host_target_metadata(registry, id)?
         .get("install_tool")
@@ -61,7 +64,10 @@ pub fn skills_install_tool_for_host_id(registry: &Value, host_id: &str) -> Resul
     Ok(tool.to_string())
 }
 
-pub fn projection_status_for_host_id(registry: &Value, host_id: &str) -> Result<String, FrameworkError> {
+pub fn projection_status_for_host_id(
+    registry: &Value,
+    host_id: &str,
+) -> Result<String, FrameworkError> {
     let id = host_id.trim();
     let status = host_target_metadata(registry, id)?
         .get("projection_status")
@@ -215,13 +221,17 @@ pub fn validate_host_provider_mod_declarations(
         })?;
 
     for (host_id, entry) in manifest {
-        let entry = entry
-            .as_object()
-            .ok_or_else(|| FrameworkError::validation(format!("host_providers.{host_id} must be an object")))?;
+        let entry = entry.as_object().ok_or_else(|| {
+            FrameworkError::validation(format!("host_providers.{host_id} must be an object"))
+        })?;
         let cargo_feature = entry
             .get("cargo_feature")
             .and_then(Value::as_str)
-            .ok_or_else(|| FrameworkError::validation(format!("host_providers.{host_id}.cargo_feature required")))?;
+            .ok_or_else(|| {
+                FrameworkError::validation(format!(
+                    "host_providers.{host_id}.cargo_feature required"
+                ))
+            })?;
 
         if !cargo_toml_declares_feature(cargo_toml, cargo_feature) {
             return Err(FrameworkError::validation(format!(
@@ -243,7 +253,10 @@ fn cargo_toml_declares_feature(cargo_toml: &str, feature: &str) -> bool {
         .any(|line| line.trim().starts_with(&needle))
 }
 
-pub fn host_entrypoints_value_for_id(registry: &Value, host_id: &str) -> Result<Value, FrameworkError> {
+pub fn host_entrypoints_value_for_id(
+    registry: &Value,
+    host_id: &str,
+) -> Result<Value, FrameworkError> {
     let id = host_id.trim();
     let value = host_target_metadata(registry, id)?
         .get("host_entrypoints")
@@ -267,7 +280,7 @@ pub fn host_entrypoints_value_for_id(registry: &Value, host_id: &str) -> Result<
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
-    use crate::runtime_registry::{RUNTIME_REGISTRY_SCHEMA_VERSION, ALL_HOST_IDS};
+    use crate::runtime_registry::{ALL_HOST_IDS, RUNTIME_REGISTRY_SCHEMA_VERSION};
     use std::path::PathBuf;
 
     fn repo_root() -> PathBuf {
@@ -302,8 +315,7 @@ mod tests {
         let supported = host_targets_supported_host_ids(&reg).expect("supported");
         let mut sorted = supported.clone();
         sorted.sort();
-        let mut expected: Vec<&str> =
-            crate::runtime_registry::ALL_HOST_IDS.to_vec();
+        let mut expected: Vec<&str> = crate::runtime_registry::ALL_HOST_IDS.to_vec();
         expected.sort();
         assert_eq!(
             sorted, expected,
@@ -367,6 +379,9 @@ mod tests {
             .expect_err("new host without metadata must fail closed");
         assert!(err.to_string().contains("new-host"), "{err}");
         assert!(err.to_string().contains(RUNTIME_REGISTRY_PATH), "{err}");
-        assert!(err.to_string().contains(HOST_ADAPTER_CONTRACT_PATH), "{err}");
+        assert!(
+            err.to_string().contains(HOST_ADAPTER_CONTRACT_PATH),
+            "{err}"
+        );
     }
 }

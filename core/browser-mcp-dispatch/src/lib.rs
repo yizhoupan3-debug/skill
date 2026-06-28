@@ -73,6 +73,7 @@ pub fn hooks() -> &'static BrowserMcpHooks {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     #[test]
@@ -83,23 +84,28 @@ mod tests {
     #[test]
     fn set_hooks_accepts_valid_instance() {
         let h = BrowserMcpHooks {
-            evaluate_mcp_pre_guard: |_, _, _| McpPreGuardVerdict { blocked: false, reason: None },
+            evaluate_mcp_pre_guard: |_, _, _| McpPreGuardVerdict {
+                blocked: false,
+                reason: None,
+            },
             attach_runtime_event_transport: |_| Ok(serde_json::json!({})),
             inspect_trace_stream: |_| {
-                Ok(framework_kernel::stdio_payload_types::TraceStreamInspectResponsePayload {
-                    schema_version: "1".into(),
-                    authority: "test".into(),
-                    path: "/test".into(),
-                    source_kind: "browser".into(),
-                    event_count: 0,
-                    latest_event_id: None,
-                    latest_event_kind: None,
-                    latest_event_timestamp: None,
-                    latest_cursor: None,
-                    recovery: None,
-                    reroute_count: 0,
-                    retry_count: 0,
-                })
+                Ok(
+                    framework_kernel::stdio_payload_types::TraceStreamInspectResponsePayload {
+                        schema_version: "1".into(),
+                        authority: "test".into(),
+                        path: "/test".into(),
+                        source_kind: "browser".into(),
+                        event_count: 0,
+                        latest_event_id: None,
+                        latest_event_kind: None,
+                        latest_event_timestamp: None,
+                        latest_cursor: None,
+                        recovery: None,
+                        reroute_count: 0,
+                        retry_count: 0,
+                    },
+                )
             },
         };
         set_hooks(h);

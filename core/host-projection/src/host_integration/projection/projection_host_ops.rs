@@ -6,7 +6,10 @@ use super::*;
 
 pub fn project_narrative_path(roots: &ResolvedProjectionRoots, host_id: &str) -> PathBuf {
     let config_dir = framework_kernel::runtime_registry::host_private_config_dir(host_id);
-    roots.project_root.join(config_dir).join(format!("{:}.md", host_id.to_uppercase()))
+    roots
+        .project_root
+        .join(config_dir)
+        .join(format!("{:}.md", host_id.to_uppercase()))
 }
 
 pub fn settings_target(
@@ -51,8 +54,12 @@ pub fn value_contains_router_rs_hook(value: &Value, host_id: &str) -> bool {
                 || s.contains("router-rs-hook.sh")
                 || (s.contains("router-rs") && s.contains("hook"))
         }
-        Value::Array(items) => items.iter().any(|v| value_contains_router_rs_hook(v, host_id)),
-        Value::Object(map) => map.values().any(|v| value_contains_router_rs_hook(v, host_id)),
+        Value::Array(items) => items
+            .iter()
+            .any(|v| value_contains_router_rs_hook(v, host_id)),
+        Value::Object(map) => map
+            .values()
+            .any(|v| value_contains_router_rs_hook(v, host_id)),
         _ => false,
     }
 }
@@ -80,12 +87,20 @@ pub(super) const ALL_HOOK_EVENTS: &[&str] = &[
 pub fn merge_settings_hooks(existing: Option<Value>, host_id: &str) -> Result<Value> {
     let mut root = match existing {
         Some(Value::Object(map)) => map,
-        Some(_) => return Err(FrameworkError::validation("settings root must be a JSON object")),
+        Some(_) => {
+            return Err(FrameworkError::validation(
+                "settings root must be a JSON object",
+            ));
+        }
         None => Map::new(),
     };
     let mut hooks = match root.remove("hooks") {
         Some(Value::Object(map)) => map,
-        Some(_) => return Err(FrameworkError::validation("settings `hooks` must be a JSON object")),
+        Some(_) => {
+            return Err(FrameworkError::validation(
+                "settings `hooks` must be a JSON object",
+            ));
+        }
         None => Map::new(),
     };
     for &event in ALL_HOOK_EVENTS {
@@ -109,7 +124,10 @@ pub fn install_settings_hooks(settings_path: &Path, host_id: &str) -> Result<boo
 
 pub fn install_hook_env_if_absent(roots: &ResolvedProjectionRoots, host_id: &str) -> Result<bool> {
     let config_dir = framework_kernel::runtime_registry::host_private_config_dir(host_id);
-    let dest = roots.project_root.join(config_dir).join("router-rs-hook.env");
+    let dest = roots
+        .project_root
+        .join(config_dir)
+        .join("router-rs-hook.env");
     if dest.is_file() {
         return Ok(false);
     }
@@ -218,8 +236,10 @@ pub fn install_projection(
         "cursor" => {
             let mut managed_files = vec![target.to_string_lossy().to_string()];
             let mut managed_key_paths: Vec<String> = Vec::new();
-            let mut changed =
-                write_text_if_changed(&target, &render_framework_entrypoint(roots, scope, host_id)?)?;
+            let mut changed = write_text_if_changed(
+                &target,
+                &render_framework_entrypoint(roots, scope, host_id)?,
+            )?;
             let mcp_cfg = mcp_config_path(roots, host_id, scope)?;
             let mut mcp = json!({
                 "managed": false,
@@ -248,8 +268,13 @@ pub fn install_projection(
                     "skipped_user_owned": mcp_install.skipped_user_owned,
                 });
             }
-            let manifest_changed =
-                write_projection_manifest(roots, host_id, scope, &managed_files, &managed_key_paths)?;
+            let manifest_changed = write_projection_manifest(
+                roots,
+                host_id,
+                scope,
+                &managed_files,
+                &managed_key_paths,
+            )?;
             Ok(json!({
                 "status": "installed",
                 "changed": changed || manifest_changed,
@@ -268,13 +293,18 @@ pub fn install_projection(
             }))
         }
         "codex" => {
-            let changed =
-                write_text_if_changed(&target, &render_framework_entrypoint(roots, scope, host_id)?)?;
+            let changed = write_text_if_changed(
+                &target,
+                &render_framework_entrypoint(roots, scope, host_id)?,
+            )?;
             let mcp_changed = ensure_research_mcp_toml(roots, host_id)?;
             let config_dir = framework_kernel::runtime_registry::host_private_config_dir(host_id);
             let prompt_entrypoints_root = if scope == "user" {
-                roots.host_home_root(host_id)
-                    .ok_or_else(|| format!("{host_id} host must be registered in projection roots"))?
+                roots
+                    .host_home_root(host_id)
+                    .ok_or_else(|| {
+                        format!("{host_id} host must be registered in projection roots")
+                    })?
                     .clone()
             } else {
                 roots.project_root.join(config_dir)
@@ -315,7 +345,10 @@ pub fn install_projection(
         "opencode" => {
             let mcp_path = mcp_config_path(roots, host_id, scope)?;
             let mcp_dir = mcp_path.parent().ok_or_else(|| {
-                format!("cannot determine parent directory of {}", mcp_path.display())
+                format!(
+                    "cannot determine parent directory of {}",
+                    mcp_path.display()
+                )
             })?;
             std::fs::create_dir_all(mcp_dir)
                 .map_err(|err| format!("failed to create {}: {err}", mcp_dir.display()))?;
@@ -350,8 +383,10 @@ pub fn install_projection(
         _ => {
             // claude-like (default) implementation
             let settings_path = settings_target(roots, scope, host_id)?;
-            let changed =
-                write_text_if_changed(&target, &render_framework_entrypoint(roots, scope, host_id)?)?;
+            let changed = write_text_if_changed(
+                &target,
+                &render_framework_entrypoint(roots, scope, host_id)?,
+            )?;
             let narrative_changed = if scope == "project" {
                 write_text_if_changed(
                     &project_narrative_path(roots, host_id),
@@ -366,7 +401,10 @@ pub fn install_projection(
             // MCP injection: write router-rs-framework + browser-mcp + paperplain + codegraph
             let mcp_path = mcp_config_path(roots, host_id, "user")?;
             let mcp_dir = mcp_path.parent().ok_or_else(|| {
-                format!("cannot determine parent directory of {}", mcp_path.display())
+                format!(
+                    "cannot determine parent directory of {}",
+                    mcp_path.display()
+                )
             })?;
             std::fs::create_dir_all(mcp_dir)
                 .map_err(|err| format!("failed to create {}: {err}", mcp_dir.display()))?;
@@ -428,11 +466,7 @@ pub fn install_projection(
     }
 }
 
-
-pub fn projection_status(
-    roots: &ResolvedProjectionRoots,
-    host_id: &str,
-) -> Result<Value> {
+pub fn projection_status(roots: &ResolvedProjectionRoots, host_id: &str) -> Result<Value> {
     match host_id {
         "cursor" => {
             let user_target = entrypoint_target(roots, "user", host_id)?;
@@ -551,7 +585,6 @@ pub fn projection_status(
     }
 }
 
-
 pub fn remove_projection(
     roots: &ResolvedProjectionRoots,
     scope: &str,
@@ -593,13 +626,15 @@ pub fn remove_projection(
                 false
             };
             let any_changed = changed || manifest_removed || mcp_changed;
-            let would_remove_any = would_remove_projection || would_remove_manifest || mcp_would_remove;
+            let would_remove_any =
+                would_remove_projection || would_remove_manifest || mcp_would_remove;
             let mut skipped_user_owned_paths = Vec::new();
             if !would_remove_projection && target.exists() {
                 skipped_user_owned_paths.push(Value::String(target.to_string_lossy().into_owned()));
             }
             if mcp_skipped_user_owned {
-                skipped_user_owned_paths.push(Value::String(mcp_path.to_string_lossy().into_owned()));
+                skipped_user_owned_paths
+                    .push(Value::String(mcp_path.to_string_lossy().into_owned()));
             }
             let mut removed_paths =
                 removed_projection_paths(changed, &target, manifest_removed, &manifest_path);
@@ -677,19 +712,28 @@ pub fn remove_projection(
             } else {
                 roots.project_root.join(".mcp.json").is_file()
             };
-            let any_changed = changed || manifest_removed || settings_removal.changed || mcp_cleaned;
+            let any_changed =
+                changed || manifest_removed || settings_removal.changed || mcp_cleaned;
             let would_remove_any =
                 would_remove_projection || would_remove_manifest || settings_removal.would_change;
             let mut removed_paths =
                 removed_projection_paths(changed, &target, manifest_removed, &manifest_path);
-            append_mcp_path(&mut removed_paths, settings_removal.removed_file, &settings_path);
+            append_mcp_path(
+                &mut removed_paths,
+                settings_removal.removed_file,
+                &settings_path,
+            );
             let mut would_remove_paths = removed_projection_paths(
                 would_remove_projection,
                 &target,
                 would_remove_manifest,
                 &manifest_path,
             );
-            append_mcp_path(&mut would_remove_paths, settings_removal.would_remove_file, &settings_path);
+            append_mcp_path(
+                &mut would_remove_paths,
+                settings_removal.would_remove_file,
+                &settings_path,
+            );
             Ok(json!({
                 "status": if dry_run && would_remove_any { "would-remove" } else if any_changed { "removed" } else { "not-installed-or-user-owned" },
                 "changed": any_changed,
@@ -711,13 +755,16 @@ pub fn remove_projection(
     }
 }
 
-
 use super::projection_ops_trait::HostProjectionOps;
 
-include!(concat!(env!("OUT_DIR"), "/generated_projection_ops_structs.rs"));
+include!(concat!(
+    env!("OUT_DIR"),
+    "/generated_projection_ops_structs.rs"
+));
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use serde_json::json;
 
@@ -726,23 +773,39 @@ mod tests {
     #[test]
     fn core_hook_events_are_subset_of_all() {
         for event in CORE_HOOK_EVENTS {
-            assert!(ALL_HOOK_EVENTS.contains(event), "{event} missing in ALL_HOOK_EVENTS");
+            assert!(
+                ALL_HOOK_EVENTS.contains(event),
+                "{event} missing in ALL_HOOK_EVENTS"
+            );
         }
     }
 
     #[test]
     fn optional_hook_events_are_subset_of_all() {
         for event in OPTIONAL_HOOK_EVENTS {
-            assert!(ALL_HOOK_EVENTS.contains(event), "{event} missing in ALL_HOOK_EVENTS");
+            assert!(
+                ALL_HOOK_EVENTS.contains(event),
+                "{event} missing in ALL_HOOK_EVENTS"
+            );
         }
     }
 
     #[test]
     fn all_hook_events_contains_expected() {
-        let expected = ["PreToolUse", "UserPromptSubmit", "PostToolUse", "Stop",
-                         "SessionStart", "SubagentStart", "SubagentStop"];
+        let expected = [
+            "PreToolUse",
+            "UserPromptSubmit",
+            "PostToolUse",
+            "Stop",
+            "SessionStart",
+            "SubagentStart",
+            "SubagentStop",
+        ];
         for event in &expected {
-            assert!(ALL_HOOK_EVENTS.contains(event), "{event} not in ALL_HOOK_EVENTS");
+            assert!(
+                ALL_HOOK_EVENTS.contains(event),
+                "{event} not in ALL_HOOK_EVENTS"
+            );
         }
         assert_eq!(ALL_HOOK_EVENTS.len(), expected.len());
     }
@@ -754,7 +817,10 @@ mod tests {
         let cmd = build_router_rs_hook_command("Stop", "claude");
         assert!(cmd.contains("claude"), "should contain host_id");
         assert!(cmd.contains("Stop"), "should contain event");
-        assert!(cmd.contains("router-rs-hook"), "should contain hook script ref");
+        assert!(
+            cmd.contains("router-rs-hook"),
+            "should contain hook script ref"
+        );
     }
 
     // ── value_contains_router_rs_hook ──
@@ -860,10 +926,13 @@ mod tests {
         let hooks = result.get("hooks").unwrap().as_object().unwrap();
         let entries = hooks.get("PreToolUse").unwrap().as_array().unwrap();
         // Router-rs entry replaced, user entry preserved alongside managed hook
-        assert!(entries.iter().any(|e| {
-            let s = serde_json::to_string(e).unwrap_or_default();
-            s.contains("user-own-script")
-        }), "user entry should be preserved");
+        assert!(
+            entries.iter().any(|e| {
+                let s = serde_json::to_string(e).unwrap_or_default();
+                s.contains("user-own-script")
+            }),
+            "user entry should be preserved"
+        );
         // Should contain user entry + managed hook = 2 entries
         assert_eq!(entries.len(), 2, "should contain user entry + managed hook");
     }
@@ -923,7 +992,10 @@ mod tests {
         std::fs::write(&path, content.to_string()).unwrap();
         let result = remove_settings_hooks(&path, true, "claude").unwrap();
         assert!(result.would_change, "dry_run should report would_change");
-        assert!(result.would_remove_file, "file should be empty after removal");
+        assert!(
+            result.would_remove_file,
+            "file should be empty after removal"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -941,7 +1013,10 @@ mod tests {
         });
         std::fs::write(&path, content.to_string()).unwrap();
         let result = remove_settings_hooks(&path, true, "claude").unwrap();
-        assert!(!result.would_change, "should not change non-router-rs hooks");
+        assert!(
+            !result.would_change,
+            "should not change non-router-rs hooks"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 

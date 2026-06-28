@@ -2,7 +2,7 @@
 
 pub mod mcp;
 
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{Context, Result, anyhow, bail};
 use clap::ValueEnum;
 use regex::Regex;
 use serde::Serialize;
@@ -1220,9 +1220,8 @@ mod tests {
 
     #[test]
     fn claim_lint_flags_dense_sentence() {
-        let findings =
-            lint_claims("A broad sentence ends with too many sources [1, 2, 3].", 3)
-                .expect("lint findings");
+        let findings = lint_claims("A broad sentence ends with too many sources [1, 2, 3].", 3)
+            .expect("lint findings");
 
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].citation_count, 3);

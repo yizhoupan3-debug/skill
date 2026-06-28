@@ -18,14 +18,8 @@ use std::sync::Mutex;
 
 /// Route task with manifest fallback: (records_json, host_id, query, session_id, allow_overlay, first_turn) -> Result<RouteDecision>
 /// `records_json` is a JSON-serialized slice of SkillRecord values (avoids L5→L1 dep on routing_engine).
-type RouteTaskFn = fn(
-    &[serde_json::Value],
-    Option<&str>,
-    &str,
-    &str,
-    bool,
-    bool,
-) -> Result<RouteDecision>;
+type RouteTaskFn =
+    fn(&[serde_json::Value], Option<&str>, &str, &str, bool, bool) -> Result<RouteDecision>;
 
 /// Build automatic continuity checkpoint payload: (repo_root, task_id, session_id, current_query, allow_overlay, first_turn) -> Value
 type BuildCheckpointFn = fn(&Path, &str, &str, Option<&str>, bool, bool) -> Value;
@@ -179,7 +173,9 @@ pub fn read_stdin_limited<R: std::io::Read>(reader: &mut R) -> Result<String> {
         let inner = limited.into_inner();
         let mut probe = [0u8; 1];
         if inner.read(&mut probe).map_err(FrameworkError::Io)? > 0 {
-            return Err(FrameworkError::validation("stdin payload exceeds 4 MiB limit"));
+            return Err(FrameworkError::validation(
+                "stdin payload exceeds 4 MiB limit",
+            ));
         }
     }
     Ok(input)
@@ -202,7 +198,6 @@ runtime_hook_proxy! { fn extract_post_tool_duration_ms(event: &Value) -> Option<
 runtime_hook_proxy! { fn post_tool_call_succeeded(event: &Value) -> bool = true; }
 runtime_hook_proxy! { fn closeout_stop_followup_for_completion_text(repo_root: &Path, text: &str) -> Option<String> = None; }
 
-
 // ── hook_outbound_protect: removed from hooks proxy layer ──
 //
 // The authoritative implementation lives in runtime-core-contracts
@@ -220,8 +215,7 @@ pub fn synthetic_post_tool_evidence_shape(_event: &Value) -> Value {
 
 #[cfg(test)]
 pub use crate::test_helpers::{
-    register_hook_posttool_normalize,
-    synthetic_post_tool_evidence_shape,
+    register_hook_posttool_normalize, synthetic_post_tool_evidence_shape,
 };
 
 // ── ship_readiness: removed from hooks proxy layer ──
@@ -249,7 +243,6 @@ runtime_hook_proxy! { fn maybe_record_research_activity(repo_root: &Path, tool_n
 // ── Skill routing bridge: removed ──
 // Was never registered in production (register_skill_routing_bridge not called).
 // Route decision goes through route_task_with_manifest_fallback instead.
-
 
 // ────────────────────────────────────────────────────────────────
 // kernel_bootstrap: RuntimeHooks proxy (Phase C)
@@ -300,7 +293,6 @@ runtime_hook_proxy! { fn evaluate_mcp_pre_guard_safe(tool_name: &str, arguments:
 
 // ── Test-only re-exports from test_helpers (for host_extensions::cursor test code) ──
 
-
 /// Research tool dispatch: injected at startup by runtime-core
 /// to break the L3→L6 dependency direction.
 type ResearchToolDispatchFn = fn(&str, &Value) -> std::result::Result<String, FrameworkError>;
@@ -318,9 +310,11 @@ pub fn get_research_tool_dispatch() -> Option<ResearchToolDispatchFn> {
 // JSON — no routing-engine types cross the boundary.
 
 /// MCP tool skill route: route a query to the best matching skill.
-type McpToolSkillRouteFn = fn(query: &str, host_id: &str, first_turn: bool, repo_root: &str) -> Result<String>;
+type McpToolSkillRouteFn =
+    fn(query: &str, host_id: &str, first_turn: bool, repo_root: &str) -> Result<String>;
 /// MCP tool search skills: search skills by query string.
-type McpToolSearchSkillsFn = fn(query: &str, limit: usize, effective_host: &str, repo_root: &str) -> Result<String>;
+type McpToolSearchSkillsFn =
+    fn(query: &str, limit: usize, effective_host: &str, repo_root: &str) -> Result<String>;
 
 runtime_hook_proxy! { fn mcp_tool_skill_route(query: &str, host_id: &str, first_turn: bool, repo_root: &str) -> Result<String> = err("MCP_TOOL_SKILL_ROUTE not registered — runtime-core boot required"); }
 runtime_hook_proxy! { fn mcp_tool_search_skills(query: &str, limit: usize, effective_host: &str, repo_root: &str) -> Result<String> = err("MCP_TOOL_SEARCH_SKILLS not registered — runtime-core boot required"); }
@@ -332,18 +326,22 @@ type BrowserDispatchFn = fn(framework_kernel::cli_args::BrowserSubcommand) -> Re
 pub fn dispatch_browser_command(
     command: framework_kernel::cli_args::BrowserSubcommand,
 ) -> Result<()> {
-    get_runtime_hooks().map(|h| (h.browser_dispatch)(command))
-        .unwrap_or_else(|| Err(FrameworkError::validation(
-            "browser-mcp dispatch not registered; set via modify_runtime_hooks() at startup",
-        )))
+    get_runtime_hooks()
+        .map(|h| (h.browser_dispatch)(command))
+        .unwrap_or_else(|| {
+            Err(FrameworkError::validation(
+                "browser-mcp dispatch not registered; set via modify_runtime_hooks() at startup",
+            ))
+        })
 }
 
 // ── Runtime trace transport proxies (break browser-mcp L3→L4 dep) ──
 
 type AttachRuntimeEventTransportFn = fn(Value) -> Result<Value>;
-type InspectTraceStreamFn = fn(
-    framework_kernel::stdio_payload_types::TraceStreamInspectRequestPayload,
-) -> Result<framework_kernel::stdio_payload_types::TraceStreamInspectResponsePayload>;
+type InspectTraceStreamFn =
+    fn(
+        framework_kernel::stdio_payload_types::TraceStreamInspectRequestPayload,
+    ) -> Result<framework_kernel::stdio_payload_types::TraceStreamInspectResponsePayload>;
 
 runtime_hook_proxy! { fn attach_runtime_event_transport(payload: Value) -> Result<Value> = err("ATTACH_RUNTIME_EVENT_TRANSPORT not registered — runtime-core boot required"); }
 runtime_hook_proxy! { fn inspect_trace_stream(payload: framework_kernel::stdio_payload_types::TraceStreamInspectRequestPayload) -> Result<framework_kernel::stdio_payload_types::TraceStreamInspectResponsePayload> = err("INSPECT_TRACE_STREAM not registered — runtime-core boot required"); }
@@ -354,9 +352,12 @@ runtime_hook_proxy! { fn inspect_trace_stream(payload: framework_kernel::stdio_p
 // multi-source evaluation) out of host-projection's tool handlers into runtime-core.
 // host-projection retains MCP parameter type-checking; runtime-core owns domain logic.
 
-type GoalStateManageDispatchFn = fn(&Value, &Path, &str) -> std::result::Result<String, FrameworkError>;
-type CloseoutRecordWriteDispatchFn = fn(&Value, &Path) -> std::result::Result<String, FrameworkError>;
-type CloseoutGateEvaluateFn = fn(&Value, &Path, &str) -> std::result::Result<String, FrameworkError>;
+type GoalStateManageDispatchFn =
+    fn(&Value, &Path, &str) -> std::result::Result<String, FrameworkError>;
+type CloseoutRecordWriteDispatchFn =
+    fn(&Value, &Path) -> std::result::Result<String, FrameworkError>;
+type CloseoutGateEvaluateFn =
+    fn(&Value, &Path, &str) -> std::result::Result<String, FrameworkError>;
 
 runtime_hook_proxy! { fn tool_goal_state_manage_dispatch(args: &Value, repo_root: &Path, session_id: &str) -> Result<String> = err("GOAL_STATE_MANAGE_DISPATCH not registered — runtime-core boot required"); }
 runtime_hook_proxy! { fn tool_closeout_record_write_dispatch(args: &Value, repo_root: &Path) -> Result<String> = err("CLOSEOUT_RECORD_WRITE_DISPATCH not registered — runtime-core boot required"); }
@@ -515,5 +516,3 @@ mod mirror_type_tests {
         assert_eq!(_host, "codex");
     }
 }
-
-

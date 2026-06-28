@@ -47,7 +47,11 @@ impl GateChecker for StatisticalChecker {
                         .to_string(),
                 ),
             });
-            return CheckResult { checker_id: self.id().to_string(), passed: true, findings };
+            return CheckResult {
+                checker_id: self.id().to_string(),
+                passed: true,
+                findings,
+            };
         };
 
         // GRIM test
@@ -65,8 +69,13 @@ impl GateChecker for StatisticalChecker {
                             if passed { "consistent" } else { "inconsistent" }
                         ),
                         location: None,
-                        suggestion: if passed { None } else {
-                            Some("mean is not granular-compatible with sample size — check data".to_string())
+                        suggestion: if passed {
+                            None
+                        } else {
+                            Some(
+                                "mean is not granular-compatible with sample size — check data"
+                                    .to_string(),
+                            )
                         },
                     });
                 }
@@ -105,8 +114,12 @@ impl GateChecker for StatisticalChecker {
         // Multiple comparison correction
         if let Some(mc) = data.get("multiple_comparison") {
             let num_tests = mc.get("num_tests").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
-            let correction_applied = mc.get("correction_applied").and_then(|v| v.as_bool()).unwrap_or(false);
-            let passed = statistical::check_multiple_comparison_correction(num_tests, correction_applied);
+            let correction_applied = mc
+                .get("correction_applied")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+            let passed =
+                statistical::check_multiple_comparison_correction(num_tests, correction_applied);
             findings.push(Finding {
                 id: "statistical_multicomp".to_string(),
                 severity: if passed { Severity::C } else { Severity::Warning },
@@ -124,23 +137,38 @@ impl GateChecker for StatisticalChecker {
         // Effect size reporting
         if let Some(es) = data.get("effect_size") {
             let effect_size = es.get("effect_size").and_then(|v| v.as_f64());
-            let test_type = es.get("test_type").and_then(|v| v.as_str()).unwrap_or("unknown");
+            let test_type = es
+                .get("test_type")
+                .and_then(|v| v.as_str())
+                .unwrap_or("unknown");
             let reported = statistical::check_effect_size_reported(effect_size, test_type);
             findings.push(Finding {
                 id: "statistical_effect_size".to_string(),
-                severity: if reported { Severity::C } else { Severity::Warning },
+                severity: if reported {
+                    Severity::C
+                } else {
+                    Severity::Warning
+                },
                 description: format!(
                     "Effect size for {test_type}: {}",
                     if reported { "reported" } else { "missing" }
                 ),
                 location: None,
-                suggestion: if reported { None } else {
+                suggestion: if reported {
+                    None
+                } else {
                     Some(format!("report effect size for {test_type} test"))
                 },
             });
         }
 
-        let passed = findings.iter().all(|f| matches!(f.severity, Severity::C | Severity::Warning));
-        CheckResult { checker_id: self.id().to_string(), passed, findings }
+        let passed = findings
+            .iter()
+            .all(|f| matches!(f.severity, Severity::C | Severity::Warning));
+        CheckResult {
+            checker_id: self.id().to_string(),
+            passed,
+            findings,
+        }
     }
 }

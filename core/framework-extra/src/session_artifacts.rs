@@ -6,16 +6,16 @@ use fr_utils::constants::{
     TERMINAL_VERIFICATION_STATUSES,
 };
 use fr_utils::json_io::read_json_strict;
-use fr_utils::json_value::{
-    build_task_id, safe_slug, value_bool_or_none, value_text,
-};
-use fr_utils::util::{defaulted_payload_text, required_payload_text};
+use fr_utils::json_value::{build_task_id, safe_slug, value_bool_or_none, value_text};
 use fr_utils::types::TaskRegistryEntry;
+use fr_utils::util::{defaulted_payload_text, required_payload_text};
 use serde_json::{Value, json};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-fn resolve_session_repo_root_for_task_ledger(payload: &Value) -> Result<Option<PathBuf>, FrameworkError> {
+fn resolve_session_repo_root_for_task_ledger(
+    payload: &Value,
+) -> Result<Option<PathBuf>, FrameworkError> {
     let rr = value_text(payload.get("repo_root"));
     if rr.is_empty() {
         return Ok(None);
@@ -24,7 +24,9 @@ fn resolve_session_repo_root_for_task_ledger(payload: &Value) -> Result<Option<P
     if !path.is_dir() {
         fs::create_dir_all(&path)?;
     }
-    Ok(Some(framework_kernel::repo_roots::resolve_repo_root_arg(Some(path.as_path()))?))
+    Ok(Some(framework_kernel::repo_roots::resolve_repo_root_arg(
+        Some(path.as_path()),
+    )?))
 }
 
 /// Write framework session artifacts — limited to TASK_POINTERS.json + EVIDENCE_INDEX.json.
@@ -89,7 +91,10 @@ pub fn write_framework_session_artifacts(payload: Value) -> Result<Value, Framew
                 },
             )? {
                 changed_paths.push(
-                    mirror_root.join(TASK_POINTERS_FILENAME).display().to_string(),
+                    mirror_root
+                        .join(TASK_POINTERS_FILENAME)
+                        .display()
+                        .to_string(),
                 );
             }
         }

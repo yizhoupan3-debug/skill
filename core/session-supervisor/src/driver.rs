@@ -1,5 +1,6 @@
 use crate::hooks;
 use crate::types::DriverCommandSpec;
+use core_errors::FrameworkError;
 
 pub fn is_safe_worktree_slug(name: &str) -> bool {
     !name.is_empty()
@@ -30,8 +31,7 @@ pub fn resolve_worktree_cwd(
             return path.to_string();
         }
         let resolved = std::path::Path::new(cwd).join(p);
-        let check =
-            std::fs::canonicalize(&resolved).unwrap_or_else(|_| resolved.clone());
+        let check = std::fs::canonicalize(&resolved).unwrap_or_else(|_| resolved.clone());
         if check
             .components()
             .any(|c| matches!(c, std::path::Component::ParentDir))
@@ -45,7 +45,10 @@ pub fn resolve_worktree_cwd(
             return cwd.to_string();
         }
         let wt_path = std::path::Path::new(cwd)
-            .join(std::env::var("ROUTER_RS_WORKTREE_DIR").unwrap_or_else(|_| ".router-rs/worktrees".to_string()))
+            .join(
+                std::env::var("ROUTER_RS_WORKTREE_DIR")
+                    .unwrap_or_else(|_| ".router-rs/worktrees".to_string()),
+            )
             .join(name);
         return wt_path.to_string_lossy().to_string();
     }
@@ -61,7 +64,7 @@ pub fn build_driver_command(
     resume_only: bool,
     worktree_name: Option<String>,
     worktree_path: Option<String>,
-) -> Result<DriverCommandSpec, String> {
+) -> Result<DriverCommandSpec, FrameworkError> {
     let effective_cwd =
         resolve_worktree_cwd(cwd, worktree_name.as_deref(), worktree_path.as_deref());
 
@@ -76,9 +79,10 @@ pub fn build_driver_command(
             resume_only,
             worktree_name.clone(),
             worktree_path.clone(),
-        ) {
-            return result;
-        }
+        )
+    {
+        return result;
+    }
 
     // Fallback: smoke-shell test host (not in provider registry).
     let lowered = host.trim().to_ascii_lowercase();
@@ -135,9 +139,10 @@ pub fn build_driver_command(
 
 pub fn driver_id_for_host(host: &str) -> &'static str {
     if let Some(h) = hooks::hooks()
-        && let Some(id) = (h.driver_id_for_host)(host) {
-            return id;
-        }
+        && let Some(id) = (h.driver_id_for_host)(host)
+    {
+        return id;
+    }
     "unknown_driver"
 }
 

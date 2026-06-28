@@ -57,15 +57,33 @@ impl GenericHostConfig {
 }
 
 impl HostHookConfig for GenericHostConfig {
-    fn host_id(&self) -> &'static str { self.id }
-    fn state_dir_leaf(&self) -> &'static str { self.state_dir }
-    fn hook_state_unreadable_tag(&self) -> &'static str { self.unreadable_tag }
-    fn session_namespace_env(&self) -> &'static str { self.namespace_env }
-    fn log_label(&self) -> &'static str { self.label }
-    fn additional_context_max_bytes(&self) -> usize { self.max_context_bytes }
-    fn supports_session_start(&self) -> bool { self.session_start }
-    fn supports_subagent_start(&self) -> bool { self.subagent_start }
-    fn supports_subagent_stop(&self) -> bool { self.subagent_stop }
+    fn host_id(&self) -> &'static str {
+        self.id
+    }
+    fn state_dir_leaf(&self) -> &'static str {
+        self.state_dir
+    }
+    fn hook_state_unreadable_tag(&self) -> &'static str {
+        self.unreadable_tag
+    }
+    fn session_namespace_env(&self) -> &'static str {
+        self.namespace_env
+    }
+    fn log_label(&self) -> &'static str {
+        self.label
+    }
+    fn additional_context_max_bytes(&self) -> usize {
+        self.max_context_bytes
+    }
+    fn supports_session_start(&self) -> bool {
+        self.session_start
+    }
+    fn supports_subagent_start(&self) -> bool {
+        self.subagent_start
+    }
+    fn supports_subagent_stop(&self) -> bool {
+        self.subagent_stop
+    }
 }
 
 /// Macro to generate a complete `HostHookConfig` implementation from just a host_id.
@@ -75,14 +93,20 @@ impl HostHookConfig for GenericHostConfig {
 #[macro_export]
 macro_rules! impl_host_config {
     ($id:expr, $label:expr) => {
-        fn host_id(&self) -> &'static str { $id }
-        fn state_dir_leaf(&self) -> &'static str { concat!(".", $id) }
+        fn host_id(&self) -> &'static str {
+            $id
+        }
+        fn state_dir_leaf(&self) -> &'static str {
+            concat!(".", $id)
+        }
         fn hook_state_unreadable_tag(&self) -> &'static str {
             framework_kernel::runtime_registry::hook_state_unreadable_tag($id)
         }
         fn session_namespace_env(&self) -> &'static str {
             framework_kernel::runtime_registry::session_namespace_env($id)
         }
-        fn log_label(&self) -> &'static str { $label }
+        fn log_label(&self) -> &'static str {
+            $label
+        }
     };
 }

@@ -23,14 +23,18 @@ pub fn serialize_blueprint(bp: &Blueprint) -> Result<String, FrameworkError> {
 pub fn deserialize_blueprint(json: &str) -> Result<Blueprint, FrameworkError> {
     let wrapper: serde_json::Value = serde_json::from_str(json)?;
 
-    let schema = wrapper.get("schema_version").and_then(|v| v.as_str()).unwrap_or("unknown");
+    let schema = wrapper
+        .get("schema_version")
+        .and_then(|v| v.as_str())
+        .unwrap_or("unknown");
     if schema != SERIALIZATION_SCHEMA_VERSION {
         return Err(FrameworkError::validation(format!(
             "schema version mismatch: expected {SERIALIZATION_SCHEMA_VERSION}, got {schema}"
         )));
     }
 
-    let bp_val = wrapper.get("blueprint")
+    let bp_val = wrapper
+        .get("blueprint")
         .cloned()
         .ok_or_else(|| FrameworkError::validation("missing 'blueprint' field"))?;
     let bp: Blueprint = serde_json::from_value(bp_val)?;
@@ -46,11 +50,15 @@ pub fn apply_update(bp: &mut Blueprint, update: &serde_json::Value) -> Result<()
         match action {
             "verify" => bp.verify(),
             "backtrack" => {
-                let node_id = update.get("node_id").and_then(|v| v.as_str())
+                let node_id = update
+                    .get("node_id")
+                    .and_then(|v| v.as_str())
                     .ok_or(FrameworkError::validation("backtrack requires 'node_id'"))?;
                 bp.backtrack(node_id)
             }
-            _ => Err(FrameworkError::validation(format!("unknown action: {action}"))),
+            _ => Err(FrameworkError::validation(format!(
+                "unknown action: {action}"
+            ))),
         }
     } else {
         Err(FrameworkError::validation("update requires 'action' field"))
@@ -59,15 +67,18 @@ pub fn apply_update(bp: &mut Blueprint, update: &serde_json::Value) -> Result<()
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use crate::proof_dag::{Blueprint, DagNode, VerificationBackend};
 
     #[test]
     fn test_serialize_roundtrip() {
         let mut bp = Blueprint::new("test goal", "test_name");
-        let children = vec![
-            DagNode::Leaf { id: "c1".into(), claim: "step 1".into(), backend: VerificationBackend::Z3 },
-        ];
+        let children = vec![DagNode::Leaf {
+            id: "c1".into(),
+            claim: "step 1".into(),
+            backend: VerificationBackend::Z3,
+        }];
         bp.decompose("root", children, false).unwrap();
         bp.verify().unwrap();
 
@@ -83,7 +94,12 @@ mod tests {
         let bad_json = r#"{"schema_version": "proof-dag-v0", "blueprint": {}}"#;
         let result = deserialize_blueprint(bad_json);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("schema version mismatch"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("schema version mismatch")
+        );
     }
 
     #[test]

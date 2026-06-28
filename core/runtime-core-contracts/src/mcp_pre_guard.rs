@@ -65,6 +65,7 @@ pub fn evaluate_mcp_pre_guard_safe(
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use std::path::PathBuf;
 

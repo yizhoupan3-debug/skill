@@ -61,7 +61,11 @@ pub fn render_index_row(entry: &Entry, tags: &[String]) -> String {
     };
     format!(
         "| {} | {} | {} | {} | {} |\n",
-        entry.created_at.split('T').next().unwrap_or(&entry.created_at),
+        entry
+            .created_at
+            .split('T')
+            .next()
+            .unwrap_or(&entry.created_at),
         entry.direction,
         entry.question.chars().take(48).collect::<String>(),
         tag_str,
@@ -76,7 +80,12 @@ pub fn render_index_header() -> String {
 
 /// 写入可选的 Markdown 文本层到文件系统。
 /// 仅用于 `log:render --write` 命令，不再作为默认写入路径。
-pub fn write_entry_md(root: &Path, entry: &Entry, findings: &[Finding], tags: &[String]) -> Result<PathBuf> {
+pub fn write_entry_md(
+    root: &Path,
+    entry: &Entry,
+    findings: &[Finding],
+    tags: &[String],
+) -> Result<PathBuf> {
     let date = entry.created_at.split('T').next().unwrap_or("unknown");
     let month = &date[..date.len().saturating_sub(3)];
     let dir = root.join(month);
@@ -97,6 +106,7 @@ pub fn write_entry_md(root: &Path, entry: &Entry, findings: &[Finding], tags: &[
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     fn test_entry() -> Entry {
@@ -126,14 +136,15 @@ mod tests {
     #[test]
     fn render_entry_with_findings() {
         let entry = test_entry();
-        let findings = vec![
-            Finding {
-                id: 1, entry_id: "e1".into(), kind: "finding".into(),
-                content: "accuracy improved by 5%".into(),
-                confidence: Some(0.85), metadata: None,
-                created_at: "2026-01-15T10:00:00Z".into(),
-            },
-        ];
+        let findings = vec![Finding {
+            id: 1,
+            entry_id: "e1".into(),
+            kind: "finding".into(),
+            content: "accuracy improved by 5%".into(),
+            confidence: Some(0.85),
+            metadata: None,
+            created_at: "2026-01-15T10:00:00Z".into(),
+        }];
         let md = render_entry(&entry, &findings, &[]);
         assert!(md.contains("accuracy improved"));
         assert!(md.contains("85%"));

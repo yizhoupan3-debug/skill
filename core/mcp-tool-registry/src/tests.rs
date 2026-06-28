@@ -12,9 +12,7 @@ use std::fs;
 use std::path::PathBuf;
 
 use crate::resolve_tool_registry_path;
-use crate::tool_registry::{
-    invalidate_tool_cache, load_tool_records, load_tool_records_cached,
-};
+use crate::tool_registry::{invalidate_tool_cache, load_tool_records, load_tool_records_cached};
 use crate::tool_types::{McpToolInputSchema, McpToolRecord};
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -322,8 +320,7 @@ fn test_cache_hit_invalidate_and_repeated_calls() {
     invalidate_tool_cache();
     let records = load_tool_records_cached(&path).unwrap();
     assert_eq!(
-        records[0].slug,
-        "modified_tool",
+        records[0].slug, "modified_tool",
         "expected fresh data after invalidation"
     );
 

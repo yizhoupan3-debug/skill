@@ -1,7 +1,7 @@
 //! MCP tool definitions and dispatch for pdf_tool_rs.
 
 use anyhow::Result;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::path::Path;
 
 /// Maximum pages per single MCP request before pagination kicks in.
@@ -56,10 +56,7 @@ fn tool_pdf_read(args: &Value) -> Result<Value, anyhow::Error> {
         .get("max_chars")
         .and_then(Value::as_u64)
         .unwrap_or(8000) as usize;
-    let pages_spec = args
-        .get("pages")
-        .and_then(Value::as_str)
-        .unwrap_or("all");
+    let pages_spec = args.get("pages").and_then(Value::as_str).unwrap_or("all");
 
     let pdf_path = Path::new(path);
     let total_pages = crate::read::page_count(pdf_path)? as u64;

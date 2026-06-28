@@ -1,8 +1,7 @@
 use super::common::*;
 use super::*;
 
-use serde_json::{json, Value};
-
+use serde_json::{Value, json};
 
 #[test]
 fn execution_kernel_metadata_shape_consistency_regression_for_primary_and_dry_run() {
@@ -34,7 +33,6 @@ fn execution_kernel_metadata_shape_consistency_regression_for_primary_and_dry_ru
     assert_eq!(contracts.len(), 2);
 }
 
-
 #[test]
 fn execution_kernel_metadata_contract_is_rust_owned() {
     let contract = build_execution_kernel_metadata_contract();
@@ -59,7 +57,6 @@ fn execution_kernel_metadata_contract_is_rust_owned() {
         ])
     );
 }
-
 
 #[test]
 fn execute_request_dry_run_returns_rust_owned_contract() {
@@ -95,7 +92,6 @@ fn execute_request_dry_run_returns_rust_owned_contract() {
     );
 }
 
-
 #[test]
 fn live_execute_prompt_builder_produces_rust_owned_contract_prompt() {
     let mut payload = sample_execute_request();
@@ -118,7 +114,6 @@ fn live_execute_prompt_builder_produces_rust_owned_contract_prompt() {
     assert!(prompt.contains("Trigger phrase matched: 直接做代码."));
 }
 
-
 #[test]
 fn live_execute_prompt_builder_treats_none_as_native_runtime() {
     let mut payload = sample_execute_request();
@@ -137,7 +132,6 @@ fn live_execute_prompt_builder_treats_none_as_native_runtime() {
     assert!(!prompt.contains("Primary focus: none"));
     assert!(!prompt.contains("Use the selected skill"));
 }
-
 
 #[test]
 fn live_execute_prompt_builder_caps_task_cues_to_five_lines() {
@@ -163,7 +157,6 @@ fn live_execute_prompt_builder_caps_task_cues_to_five_lines() {
     assert!(!prompt.contains("- cue-6"));
 }
 
-
 #[test]
 fn live_execute_prompt_builder_does_not_add_removed_planning_contract() {
     let mut payload = sample_execute_request();
@@ -182,7 +175,6 @@ fn live_execute_prompt_builder_does_not_add_removed_planning_contract() {
     assert!(!prompt.contains("<proposed_plan>"));
 }
 
-
 #[test]
 fn live_execute_prompt_builder_uses_deep_mode_contract_when_requested() {
     let mut payload = sample_execute_request();
@@ -192,7 +184,6 @@ fn live_execute_prompt_builder_uses_deep_mode_contract_when_requested() {
 
     let prompt = build_live_execute_prompt(&payload);
 }
-
 
 #[test]
 fn live_execute_infer_deep_from_task_deep_dive_phrase() {
@@ -204,7 +195,6 @@ fn live_execute_infer_deep_from_task_deep_dive_phrase() {
 
     let prompt = build_live_execute_prompt(&payload);
 }
-
 
 #[test]
 fn live_execute_infer_deep_from_reason_literature_review_phrase() {
@@ -218,7 +208,6 @@ fn live_execute_infer_deep_from_reason_literature_review_phrase() {
     let prompt = build_live_execute_prompt(&payload);
 }
 
-
 #[test]
 fn live_execute_infer_deep_from_reason_depth_research_zh_only() {
     let mut payload = sample_execute_request();
@@ -230,7 +219,6 @@ fn live_execute_infer_deep_from_reason_depth_research_zh_only() {
 
     let prompt = build_live_execute_prompt(&payload);
 }
-
 
 #[test]
 fn live_execute_infer_quick_when_task_is_bare_external_research_api() {
@@ -244,7 +232,6 @@ fn live_execute_infer_quick_when_task_is_bare_external_research_api() {
     assert!(prompt.contains("Keep the default reply short;"));
 }
 
-
 #[test]
 fn live_execute_infer_quick_when_external_research_with_stack_trace_only() {
     let mut payload = sample_execute_request();
@@ -255,7 +242,6 @@ fn live_execute_infer_quick_when_external_research_with_stack_trace_only() {
 
     let prompt = build_live_execute_prompt(&payload);
 }
-
 
 #[test]
 fn live_execute_infer_quick_when_external_research_with_structured_logging_jargon() {
@@ -268,7 +254,6 @@ fn live_execute_infer_quick_when_external_research_with_structured_logging_jargo
     let prompt = build_live_execute_prompt(&payload);
 }
 
-
 #[test]
 fn live_execute_infer_deep_when_external_research_plus_literature_cue() {
     let mut payload = sample_execute_request();
@@ -279,7 +264,6 @@ fn live_execute_infer_deep_when_external_research_plus_literature_cue() {
 
     let prompt = build_live_execute_prompt(&payload);
 }
-
 
 #[test]
 fn live_execute_ignores_caller_supplied_prompt_preview() {
@@ -351,7 +335,6 @@ fn live_execute_ignores_caller_supplied_prompt_preview() {
     );
 }
 
-
 #[test]
 fn extract_chat_completion_content_accepts_string_and_part_arrays() {
     let string_payload = serde_json::json!({
@@ -379,7 +362,6 @@ fn extract_chat_completion_content_accepts_string_and_part_arrays() {
     );
 }
 
-
 #[test]
 fn validate_live_execute_aggregator_base_url_accepts_public_https_domain() {
     with_execute_allowlist_env(None, || {
@@ -388,36 +370,32 @@ fn validate_live_execute_aggregator_base_url_accepts_public_https_domain() {
     });
 }
 
-
 #[test]
 fn validate_live_execute_aggregator_base_url_rejects_http_scheme() {
     with_execute_allowlist_env(None, || {
         let err = validate_live_execute_aggregator_base_url("http://api.openai.com/v1")
             .expect_err("http scheme should be rejected");
-        assert!(err.contains("requires https"));
+        assert!(err.to_string().contains("requires https"));
     });
 }
-
 
 #[test]
 fn validate_live_execute_aggregator_base_url_rejects_localhost() {
     with_execute_allowlist_env(None, || {
         let err = validate_live_execute_aggregator_base_url("https://localhost:8443/v1")
             .expect_err("localhost should be rejected");
-        assert!(err.contains("blocks localhost"));
+        assert!(err.to_string().contains("blocks localhost"));
     });
 }
-
 
 #[test]
 fn validate_live_execute_aggregator_base_url_rejects_private_ip_literal() {
     with_execute_allowlist_env(None, || {
         let err = validate_live_execute_aggregator_base_url("https://10.10.10.2/v1")
             .expect_err("private IP literal should be rejected");
-        assert!(err.contains("unsafe aggregator_base_url host IP"));
+        assert!(err.to_string().contains("unsafe aggregator_base_url host IP"));
     });
 }
-
 
 #[test]
 fn validate_live_execute_aggregator_base_url_allowlist_match_passes() {
@@ -427,16 +405,14 @@ fn validate_live_execute_aggregator_base_url_allowlist_match_passes() {
     });
 }
 
-
 #[test]
 fn validate_live_execute_aggregator_base_url_allowlist_miss_rejects() {
     with_execute_allowlist_env(Some("allowed.example.com"), || {
         let err = validate_live_execute_aggregator_base_url("https://api.openai.com/v1")
             .expect_err("non-allowlisted host should be rejected");
-        assert!(err.contains("not in allowlist"));
+        assert!(err.to_string().contains("not in allowlist"));
     });
 }
-
 
 #[test]
 fn validate_live_execute_aggregator_base_url_without_allowlist_preserves_behavior() {
@@ -445,7 +421,6 @@ fn validate_live_execute_aggregator_base_url_without_allowlist_preserves_behavio
             .expect("public https domain should remain allowed without allowlist");
     });
 }
-
 
 #[test]
 fn live_execute_deep_length_continuation_success_accumulates_usage_and_metadata() {
@@ -523,7 +498,6 @@ fn live_execute_deep_length_continuation_success_accumulates_usage_and_metadata(
     assert_eq!(response.metadata["continuation_error"], Value::Null);
 }
 
-
 #[test]
 fn live_execute_deep_length_continuation_failure_fails_open() {
     let mut payload = sample_execute_request();
@@ -559,20 +533,23 @@ fn live_execute_deep_length_continuation_failure_fails_open() {
     assert_eq!(live_result.output_tokens, 5);
     assert_eq!(live_result.total_tokens, 13);
     assert_eq!(live_result.continuation_status.as_deref(), Some("http_502"));
-    assert!(live_result
-        .continuation_error
-        .as_deref()
-        .unwrap_or_default()
-        .contains("HTTP 502"));
+    assert!(
+        live_result
+            .continuation_error
+            .as_deref()
+            .unwrap_or_default()
+            .contains("HTTP 502")
+    );
     let response = build_live_execute_response(&payload, None, live_result);
     assert_eq!(response.metadata["continuation_attempted"], json!(true));
     assert_eq!(response.metadata["continuation_status"], json!("http_502"));
-    assert!(response.metadata["continuation_error"]
-        .as_str()
-        .unwrap_or_default()
-        .contains("HTTP 502"));
+    assert!(
+        response.metadata["continuation_error"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("HTTP 502")
+    );
 }
-
 
 #[test]
 fn live_execute_retries_first_round_before_success() {
@@ -608,7 +585,6 @@ fn live_execute_retries_first_round_before_success() {
     assert!(!live_result.continuation_attempted);
 }
 
-
 #[test]
 fn normalize_chat_completions_endpoint_keeps_existing_path() {
     assert_eq!(
@@ -621,7 +597,6 @@ fn normalize_chat_completions_endpoint_keeps_existing_path() {
     );
 }
 
-
 #[test]
 fn live_execute_http_client_is_process_cached() {
     let first = live_execute_http_client().expect("first client");
@@ -629,5 +604,3 @@ fn live_execute_http_client_is_process_cached() {
 
     assert!(std::ptr::eq(first, second));
 }
-
-

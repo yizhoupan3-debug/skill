@@ -17,7 +17,8 @@ static BIB_KEY_RE: LazyLock<Regex> = LazyLock::new(|| {
 });
 static LATEX_CITE_RE: LazyLock<Regex> = LazyLock::new(|| {
     #[allow(clippy::expect_used)]
-    Regex::new(r"\\cite[a-zA-Z*]*\s*(?:\[[^\]]*\]\s*){0,2}\{([^}]*)\}").expect("invalid LATEX_CITE_RE regex")
+    Regex::new(r"\\cite[a-zA-Z*]*\s*(?:\[[^\]]*\]\s*){0,2}\{([^}]*)\}")
+        .expect("invalid LATEX_CITE_RE regex")
 });
 static PANDOC_CITE_RE: LazyLock<Regex> = LazyLock::new(|| {
     #[allow(clippy::expect_used)]
@@ -80,6 +81,7 @@ fn extract_cited_keys(text: &str) -> Result<Vec<String>> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     #[test]

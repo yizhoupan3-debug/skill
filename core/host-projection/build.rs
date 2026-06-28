@@ -72,7 +72,11 @@ fn main() {
             .get(id)
             .and_then(|m| m.get(field))
             .and_then(serde_json::Value::as_array)
-            .map(|arr| arr.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                    .collect()
+            })
             .unwrap_or_default()
     };
 
@@ -108,7 +112,10 @@ fn main() {
 
     // ── HostToolExecutor (empty, all hosts) ──
     for id in &supported {
-        out.push_str(&format!("impl HostToolExecutor for {}HostProvider {{}}\n", pascal(id)));
+        out.push_str(&format!(
+            "impl HostToolExecutor for {}HostProvider {{}}\n",
+            pascal(id)
+        ));
     }
     out.push('\n');
 
@@ -119,25 +126,36 @@ fn main() {
         // Build method overrides
         let mut methods = String::new();
         methods.push_str(&format!(
-            "{}    fn profile_id(&self) -> &'static str {{ \"{}\" }}", nl, meta_str(id, "profile_id")
+            "{}    fn profile_id(&self) -> &'static str {{ \"{}\" }}",
+            nl,
+            meta_str(id, "profile_id")
         ));
         methods.push_str(&format!(
-            "{}    fn session_supervisor_driver(&self) -> &'static str {{ \"{}\" }}", nl, meta_str(id, "session_supervisor_driver")
+            "{}    fn session_supervisor_driver(&self) -> &'static str {{ \"{}\" }}",
+            nl,
+            meta_str(id, "session_supervisor_driver")
         ));
         methods.push_str(&format!(
-            "{}    fn context_file(&self) -> &'static str {{ \"{}\" }}", nl, meta_str(id, "context_file")
+            "{}    fn context_file(&self) -> &'static str {{ \"{}\" }}",
+            nl,
+            meta_str(id, "context_file")
         ));
         methods.push_str(&format!(
-            "{}    fn driver_binary(&self) -> &'static str {{ \"{}\" }}", nl, meta_str(id, "driver_binary")
+            "{}    fn driver_binary(&self) -> &'static str {{ \"{}\" }}",
+            nl,
+            meta_str(id, "driver_binary")
         ));
         methods.push_str(&format!(
-            "{}    fn driver_supports_resume(&self) -> bool {{ {} }}", nl, meta_bool(id, "driver_supports_resume")
+            "{}    fn driver_supports_resume(&self) -> bool {{ {} }}",
+            nl,
+            meta_bool(id, "driver_supports_resume")
         ));
 
         let hooks_path = meta_str(id, "hooks_manifest_path");
         if !hooks_path.is_empty() {
             methods.push_str(&format!(
-                "{}    fn hooks_manifest_path(&self) -> Option<&'static str> {{ Some(\"{}\") }}", nl, hooks_path
+                "{}    fn hooks_manifest_path(&self) -> Option<&'static str> {{ Some(\"{}\") }}",
+                nl, hooks_path
             ));
         }
 
@@ -145,7 +163,8 @@ fn main() {
         if !review_types.is_empty() {
             methods.push_str(&format!(
                 "{}    fn subagent_review_types(&self) -> &'static [&'static str] {{ {} }}",
-                nl, render_arr(&review_types)
+                nl,
+                render_arr(&review_types)
             ));
         }
 
@@ -153,7 +172,8 @@ fn main() {
         if !events.is_empty() {
             methods.push_str(&format!(
                 "{}    fn registered_hook_events(&self) -> &'static [&'static str] {{ {} }}",
-                nl, render_arr(&events)
+                nl,
+                render_arr(&events)
             ));
         }
 
@@ -166,11 +186,15 @@ fn main() {
                  {0}    ) -> Option<(Vec<String>, String)> {{\
                  {0}        super::capability_overrides::build_driver_args(\
                  self.host_id(), cwd, prompt, resume_target, resume_mode, resume_only)\
-                 {0}    }}", nl
+                 {0}    }}",
+                nl
             ));
         }
 
-        out.push_str(&format!("impl HostLifecycle for {sn} {{{methods}{nl}}}{nl}", methods = methods));
+        out.push_str(&format!(
+            "impl HostLifecycle for {sn} {{{methods}{nl}}}{nl}",
+            methods = methods
+        ));
     }
 
     // ── HostTelemetry ──
@@ -178,13 +202,16 @@ fn main() {
         let sn = format!("{}HostProvider", pascal(id));
         let mut methods = String::new();
         methods.push_str(&format!(
-            "{}    fn hook_telemetry_surface(&self) -> &'static str {{ \"{}\" }}", nl, meta_str(id, "hook_telemetry_surface")
+            "{}    fn hook_telemetry_surface(&self) -> &'static str {{ \"{}\" }}",
+            nl,
+            meta_str(id, "hook_telemetry_surface")
         ));
 
         let obs = meta_str(id, "observation_host_id");
         if !obs.is_empty() {
             methods.push_str(&format!(
-                "{}    fn observation_host_id(&self) -> Option<&'static str> {{ Some(\"{}\") }}", nl, obs
+                "{}    fn observation_host_id(&self) -> Option<&'static str> {{ Some(\"{}\") }}",
+                nl, obs
             ));
         }
 
@@ -195,17 +222,27 @@ fn main() {
 
         if !obs_followup_keys.is_empty() {
             // Build followup key chain: output.get("k1").or_else(|| output.get("k2"))...
-            let key_checks: String = obs_followup_keys.iter().map(|k| {
-                format!("output.get(\"{k}\")")
-            }).collect::<Vec<_>>().join(".or_else(|| ");
+            let key_checks: String = obs_followup_keys
+                .iter()
+                .map(|k| format!("output.get(\"{k}\")"))
+                .collect::<Vec<_>>()
+                .join(".or_else(|| ");
             let close_parens: String = (0..obs_followup_keys.len() - 1).map(|_| ')').collect();
-            let key_chain = format!("{key_checks}{close_parens}.and_then(serde_json::Value::as_str).map(|s| s.to_string())");
+            let key_chain = format!(
+                "{key_checks}{close_parens}.and_then(serde_json::Value::as_str).map(|s| s.to_string())"
+            );
 
             // Build additional extraction
-            let additional = if obs_additional_fallback.is_empty() || obs_additional_fallback == "null" {
-                format!("output.pointer(\"{obs_additional_pointer}\").and_then(serde_json::Value::as_str).map(|s| s.to_string())")
+            let additional = if obs_additional_fallback.is_empty()
+                || obs_additional_fallback == "null"
+            {
+                format!(
+                    "output.pointer(\"{obs_additional_pointer}\").and_then(serde_json::Value::as_str).map(|s| s.to_string())"
+                )
             } else {
-                format!("output.pointer(\"{obs_additional_pointer}\").or_else(|| output.get(\"{obs_additional_fallback}\")).and_then(serde_json::Value::as_str).map(|s| s.to_string())")
+                format!(
+                    "output.pointer(\"{obs_additional_pointer}\").or_else(|| output.get(\"{obs_additional_fallback}\")).and_then(serde_json::Value::as_str).map(|s| s.to_string())"
+                )
             };
 
             methods.push_str(&format!(
@@ -217,7 +254,10 @@ fn main() {
             ));
         }
 
-        out.push_str(&format!("impl HostTelemetry for {sn} {{{methods}{nl}}}{nl}", methods = methods));
+        out.push_str(&format!(
+            "impl HostTelemetry for {sn} {{{methods}{nl}}}{nl}",
+            methods = methods
+        ));
     }
 
     // ── HostProvider ──
@@ -228,19 +268,35 @@ fn main() {
         let trans = meta_str(id, "transport_type");
         let cfg = meta_str(id, "config_path");
 
-        let caps = [("batch_execution", meta_bool(id, "batch_execution")),
+        let caps = [
+            ("batch_execution", meta_bool(id, "batch_execution")),
             ("cron_execution", meta_bool(id, "cron_execution")),
             ("ci_runner", meta_bool(id, "ci_runner")),
-            ("non_interactive_entrypoint", meta_bool(id, "non_interactive_entrypoint")),
-            ("external_session_supervisor", meta_bool(id, "external_session_supervisor")),
-            ("rate_limit_auto_resume", meta_bool(id, "rate_limit_auto_resume"))];
-        let caps_lines: String = caps.iter()
+            (
+                "non_interactive_entrypoint",
+                meta_bool(id, "non_interactive_entrypoint"),
+            ),
+            (
+                "external_session_supervisor",
+                meta_bool(id, "external_session_supervisor"),
+            ),
+            (
+                "rate_limit_auto_resume",
+                meta_bool(id, "rate_limit_auto_resume"),
+            ),
+        ];
+        let caps_lines: String = caps
+            .iter()
             .map(|(k, v)| format!("{nl}            {k}: {v},"))
             .collect();
 
         out.push_str(&format!("impl HostProvider for {sn} {{"));
-        out.push_str(&format!("{nl}    fn host_id(&self) -> &'static str {{ \"{id}\" }}"));
-        out.push_str(&format!("{nl}    fn install_tool(&self) -> &'static str {{ \"{tool}\" }}"));
+        out.push_str(&format!(
+            "{nl}    fn host_id(&self) -> &'static str {{ \"{id}\" }}"
+        ));
+        out.push_str(&format!(
+            "{nl}    fn install_tool(&self) -> &'static str {{ \"{tool}\" }}"
+        ));
         out.push_str(&format!(
             "{nl}    fn capabilities(&self) -> HostCapabilities {{{nl}        HostCapabilities {{{nl}            mcp_config_key: \"{mcp}\",{nl}            transport_type: \"{trans}\",{nl}            config_path: \"{cfg}\",{caps_lines}{nl}            ..Default::default()\
              {nl}        }}{nl}    }}"
@@ -276,7 +332,8 @@ fn main() {
     }
 
     // ── Registry ──
-    let push_body: String = supported.iter()
+    let push_body: String = supported
+        .iter()
         .map(|id| format!("    providers.push(Box::new({}HostProvider));", pascal(id)))
         .collect::<Vec<_>>()
         .join("\n");
@@ -334,8 +391,14 @@ impl HostProjectionOps for {pascal}ProjectionOps {{\n\
     let out_dir = PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR"));
     fs::write(out_dir.join("generated_host_providers.rs"), out)
         .expect("write generated_host_providers.rs");
-    fs::write(out_dir.join("generated_projection_ops_structs.rs"), struct_out)
-        .expect("write generated_projection_ops_structs.rs");
-    fs::write(out_dir.join("generated_projection_ops_registry.rs"), proj_out)
-        .expect("write generated_projection_ops_registry.rs");
+    fs::write(
+        out_dir.join("generated_projection_ops_structs.rs"),
+        struct_out,
+    )
+    .expect("write generated_projection_ops_structs.rs");
+    fs::write(
+        out_dir.join("generated_projection_ops_registry.rs"),
+        proj_out,
+    )
+    .expect("write generated_projection_ops_registry.rs");
 }
