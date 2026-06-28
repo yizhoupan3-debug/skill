@@ -18,6 +18,7 @@ pub(super) use crate::cli::args::{
 pub(super) use crate::cli::route_task_with_manifest_fallback;
 pub(super) use crate::route::ROUTE_REPORT_SCHEMA_VERSION;
 pub(super) use framework_kernel::stdio_payload_types::BackgroundControlRequestPayload;
+pub(super) use core_errors::FrameworkError;
 
 pub(super) fn execution_kernel_contract_shape_fields(shape: &Value) -> Vec<String> {
     let object = shape.as_object().expect("contract shape object");
