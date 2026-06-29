@@ -147,6 +147,11 @@ core/router-rs/.claude/
 # Claude framework runtime artifacts
 .claude/scheduled_tasks.lock
 .claude/worktrees/
+.claude/scratch/
+.claude/workflows/
+
+# Runtime-generated state artifacts
+.last_idle_trigger
 
 # Agent health monitor state (host-agnostic, generated at runtime)
 .framework/agent-health/
