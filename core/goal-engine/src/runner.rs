@@ -1059,4 +1059,218 @@ mod tests {
         assert_eq!(actions.len(), 1);
         assert_eq!(actions[0].safety, "L1");
     }
+
+    // ── parse_discovery_output ──────────────────────────────────────────
+
+    #[test]
+    fn parse_discovery_valid_json_array() {
+        let entry = make_entry("loop-auto");
+        let output = r#"some preamble text
+[
+  {"action_id": "fix-bug-1", "type": "fix", "scope_paths": ["src/a.rs"], "safety": "L2", "description": "fix bug"},
+  {"action_id": "refactor-2", "type": "refactor", "scope_paths": [], "description": "refactor module"}
+]
+some trailing text"#;
+        let actions = parse_discovery_output(output, &entry, "L1").unwrap();
+        assert_eq!(actions.len(), 2);
+        assert_eq!(actions[0].action_id, "fix-bug-1");
+        assert_eq!(actions[0].action_type, "fix");
+        assert_eq!(actions[0].scope_paths, vec!["src/a.rs"]);
+        assert_eq!(actions[0].safety, "L2");
+        assert_eq!(actions[1].action_id, "refactor-2");
+        assert_eq!(actions[1].safety, "L1"); // default safety
+    }
+
+    #[test]
+    fn parse_discovery_empty_array() {
+        let entry = make_entry("loop-auto");
+        let actions = parse_discovery_output("[]", &entry, "L1").unwrap();
+        assert!(actions.is_empty());
+    }
+
+    #[test]
+    fn parse_discovery_no_json_array() {
+        let entry = make_entry("loop-auto");
+        let result = parse_discovery_output("no json here", &entry, "L1");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_discovery_invalid_json() {
+        let entry = make_entry("loop-auto");
+        // finds [ and ] but content is not valid JSON
+        let actions = parse_discovery_output("[not valid json]", &entry, "L1").unwrap();
+        assert!(actions.is_empty()); // falls back to empty
+    }
+
+    #[test]
+    fn parse_discovery_skips_items_missing_required_fields() {
+        let entry = make_entry("loop-auto");
+        let output = r#"[
+          {"action_id": "a1", "type": "fix"},
+          {"action_id": "a2"},
+          {"type": "fix"},
+          {"action_id": "a3", "type": "fix", "safety": "L3"}
+        ]"#;
+        let actions = parse_discovery_output(output, &entry, "L1").unwrap();
+        assert_eq!(actions.len(), 2);
+        assert_eq!(actions[0].action_id, "a1");
+        assert_eq!(actions[1].action_id, "a3");
+        assert_eq!(actions[1].safety, "L3");
+    }
+
+    // ── check_budget_preflight ──────────────────────────────────────────
+
+    #[test]
+    fn budget_preflight_no_budget() {
+        let profile = LoopProfileConfig {
+            profile: "loop-auto".into(),
+            loop_capable: true,
+            closeout_mode: "hard-block".into(),
+            review_gate: "mandatory".into(),
+            spawn_first_nudge: true,
+            cost_budget: None,
+            escalation: None,
+        };
+        assert!(check_budget_preflight(&profile).is_ok());
+    }
+
+    #[test]
+    fn budget_preflight_within_limit() {
+        let profile = LoopProfileConfig {
+            profile: "loop-auto".into(),
+            loop_capable: true,
+            closeout_mode: "hard-block".into(),
+            review_gate: "mandatory".into(),
+            spawn_first_nudge: true,
+            cost_budget: Some(crate::types::CostBudgetConfig {
+                tokens_per_run: Some(100_000),
+                daily_tokens: None,
+            }),
+            escalation: None,
+        };
+        assert!(check_budget_preflight(&profile).is_ok());
+    }
+
+    #[test]
+    fn budget_preflight_exceeds_hard_limit() {
+        let profile = LoopProfileConfig {
+            profile: "loop-auto".into(),
+            loop_capable: true,
+            closeout_mode: "hard-block".into(),
+            review_gate: "mandatory".into(),
+            spawn_first_nudge: true,
+            cost_budget: Some(crate::types::CostBudgetConfig {
+                tokens_per_run: Some(u64::MAX),
+                daily_tokens: None,
+            }),
+            escalation: None,
+        };
+        let result = check_budget_preflight(&profile);
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), LoopError::BudgetExceeded(_)));
+    }
+
+    // ── BarrierResult ──────────────────────────────────────────────────
+
+    #[test]
+    fn barrier_result_should_resume() {
+        let br = BarrierResult { candidates: vec!["a".into()], will_resume: true };
+        assert!(br.should_resume());
+    }
+
+    #[test]
+    fn barrier_result_no_candidates() {
+        let br = BarrierResult { candidates: vec![], will_resume: true };
+        assert!(!br.should_resume());
+    }
+
+    #[test]
+    fn barrier_result_will_not_resume() {
+        let br = BarrierResult { candidates: vec!["a".into()], will_resume: false };
+        assert!(!br.should_resume());
+    }
+
+    // ── discover_barrier_candidates ─────────────────────────────────────
+
+    #[test]
+    fn barrier_candidates_empty_dir() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let candidates = discover_barrier_candidates(tmp.path());
+        assert!(candidates.is_empty());
+    }
+
+    #[test]
+    fn barrier_candidates_no_barrier_dir() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        // no artifacts/research-barrier/ directory at all
+        let candidates = discover_barrier_candidates(tmp.path());
+        assert!(candidates.is_empty());
+    }
+
+    #[test]
+    fn barrier_candidates_with_report() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let barrier_dir = tmp.path().join("artifacts/research-barrier/2026-06-29T12-00-00Z");
+        std::fs::create_dir_all(&barrier_dir).unwrap();
+        let report = serde_json::json!({
+            "candidates": ["candidate-1", "candidate-2"]
+        });
+        std::fs::write(
+            barrier_dir.join("BARRIER_REPORT.json"),
+            serde_json::to_string_pretty(&report).unwrap(),
+        ).unwrap();
+        let candidates = discover_barrier_candidates(tmp.path());
+        assert_eq!(candidates.len(), 2);
+        assert!(candidates.contains(&"candidate-1".to_string()));
+        assert!(candidates.contains(&"candidate-2".to_string()));
+    }
+
+    // ── read_goal_snapshot ──────────────────────────────────────────────
+
+    #[test]
+    fn read_goal_snapshot_no_file() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let entry = make_entry("loop-auto");
+        let snapshot = read_goal_snapshot(tmp.path(), &entry);
+        assert!(snapshot.is_none());
+    }
+
+    #[test]
+    fn read_goal_snapshot_valid_goal() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let entry = make_entry("loop-auto");
+        let goal_dir = tmp.path().join("artifacts/current/test");
+        std::fs::create_dir_all(&goal_dir).unwrap();
+        let goal = serde_json::json!({
+            "goal": "Implement feature X",
+            "status": "active"
+        });
+        let goal_path = goal_dir.join("GOAL_STATE.json");
+        std::fs::write(&goal_path, serde_json::to_string_pretty(&goal).unwrap()).unwrap();
+        let snapshot = read_goal_snapshot(tmp.path(), &entry);
+        assert_eq!(snapshot.as_deref(), Some("Implement feature X"));
+    }
+
+    #[test]
+    fn read_goal_snapshot_no_goal_field() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let entry = make_entry("loop-auto");
+        let goal_dir = tmp.path().join("artifacts/current/test");
+        std::fs::create_dir_all(&goal_dir).unwrap();
+        let goal = serde_json::json!({ "status": "active" });
+        std::fs::write(
+            goal_dir.join("GOAL_STATE.json"),
+            serde_json::to_string_pretty(&goal).unwrap(),
+        ).unwrap();
+        let snapshot = read_goal_snapshot(tmp.path(), &entry);
+        assert!(snapshot.is_none());
+    }
+
+    // ── default_max_depth ───────────────────────────────────────────────
+
+    #[test]
+    fn default_max_depth_is_five() {
+        assert_eq!(RunContext::default_max_depth(), 5);
+    }
 }
