@@ -260,6 +260,16 @@ fn collect_missing_skill_paths(
                 errors.push(format!("{label}: absolute skill_path not allowed: {rel}"));
                 continue;
             }
+            // Also reject ParentDir components (path traversal)
+            if std::path::Path::new(rel)
+                .components()
+                .any(|c| matches!(c, std::path::Component::ParentDir))
+            {
+                errors.push(format!(
+                    "{label}: skill_path '{rel}' contains '..' traversal"
+                ));
+                continue;
+            }
             let full = repo_root.join(rel);
             if !full.is_file() {
                 errors.push(format!("{label}: missing skill_path file {rel}"));
@@ -368,6 +378,14 @@ fn check_frontmatter_vs_registry(
             // Convert strong-typed frontmatter field to JSON Value for comparison
             let fm_val = frontmatter_field_to_value(fm, yaml_key);
 
+            // Skip default scene comparison: both frontmatter default ("general")
+            // and registry null are equivalent.
+            if yaml_key == "scene" {
+                if fm_val.is_none() || fm_val == Some(Value::String("general".into())) {
+                    continue;
+                }
+            }
+
             match (reg_val, fm_val) {
                 // Both non-null and different → value mismatch
                 (Some(reg), Some(fm_v)) if !reg.is_null() && reg != &fm_v => {
@@ -440,14 +458,7 @@ fn frontmatter_field_to_value(
             .approval_required_tools
             .as_ref()
             .map(|v| Value::Array(v.iter().map(|s| Value::String(s.clone())).collect())),
-        "kind" => fm.kind.and_then(|k| match k {
-            crate::frontmatter::RecordKind::Skill => None,
-            crate::frontmatter::RecordKind::FrameworkCommand => {
-                Some(Value::String("framework_command".into()))
-            }
-            crate::frontmatter::RecordKind::Reference => None,
-            crate::frontmatter::RecordKind::Runtime => None,
-        }),
+        "kind" => fm.kind.map(|k| Value::String(k.as_str().to_string())),
         "scene" => fm.scene.as_ref().map(|s| Value::String(s.clone())),
         "sub_scene" => fm.sub_scene.as_ref().map(|s| Value::String(s.clone())),
         _ => None,
@@ -456,8 +467,8 @@ fn frontmatter_field_to_value(
 
 /// Return true if a JSON value is null/empty/zero-length.
 fn is_empty_value(v: &Value) -> bool {
-    v.is_null()
-        || (v.is_string() && v.as_str().unwrap_or("").is_empty())
-        || (v.is_array() && v.as_array().is_none_or(|a| a.is_empty()))
-        || (v.is_object() && v.as_object().is_none_or(|o| o.is_empty()))
+    matches!(v, Value::Null)
+        || v.as_str().map(|s| s.trim().is_empty()).unwrap_or(false)
+        || v.as_object().map(|o| o.is_empty()).unwrap_or(false)
+        || v.as_array().map(|a| a.is_empty()).unwrap_or(false)
 }

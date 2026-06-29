@@ -123,8 +123,8 @@ pub fn refresh_skills(cmd: &SkillsCommand) -> Result<(), FrameworkError> {
         return Ok(());
     }
     write_skill_tiers_from_surface_policy(&cmd.repo_root)?;
-    generate_health_manifest(&cmd.repo_root)?;
-    validate_skills(&cmd.repo_root)
+    validate_skills(&cmd.repo_root)?;
+    generate_health_manifest(&cmd.repo_root)
 }
 
 /// Generate health manifest and approval policy.

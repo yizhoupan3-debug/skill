@@ -2,6 +2,7 @@
 
 use crate::constants;
 use core_errors::FrameworkError;
+use fs2::FileExt;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::fs;
@@ -46,6 +47,18 @@ pub fn generate_health_manifest(repo_root: &Path) -> Result<()> {
     let skills_root = crate::paths::skills_root(repo_root);
     let manifest_path = crate::paths::health_json(repo_root);
 
+    // Exclusive advisory lock guard — prevents concurrent processes from
+    // reading a partially-written manifest or writing simultaneously.
+    let lock_path = manifest_path.with_extension("json.lock");
+    let lock_file = std::fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .read(true)
+        .open(&lock_path)?;
+    let _lock = lock_file.lock_exclusive().map_err(|e| {
+        FrameworkError::lock(format!("health manifest lock: {e}"))
+    })?;
+
     // Try to read existing manifest
     let mut skills = HashMap::new();
     if manifest_path.exists() {
@@ -73,6 +86,15 @@ pub fn generate_health_manifest(repo_root: &Path) -> Result<()> {
                         continue;
                     }
                     found_slugs.insert(slug.clone());
+                    // TODO(#gh-XXXX): Health scoring not yet implemented.
+                    // blended_score and status are placeholders — they should
+                    // be computed from route counts and registration data
+                    // in a follow-up.
+                    if !skills.contains_key(&slug) {
+                        tracing::warn!(
+                            "health entry for `{slug}`: blended_score=0 status=Unknown (TODO: score not implemented)"
+                        );
+                    }
                     skills.entry(slug).or_insert_with(|| HealthEntry {
                         blended_score: 0.0,
                         status: "Unknown".into(),

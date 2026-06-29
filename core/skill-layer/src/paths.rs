@@ -69,6 +69,10 @@ pub fn loadouts_json(repo_root: &Path) -> PathBuf {
 
 /// `repo_root/skills/{slug}/SKILL.md`
 pub fn skill_md(repo_root: &Path, slug: &str) -> PathBuf {
+    // Validate slug to prevent path traversal
+    if slug.is_empty() || slug.starts_with('/') || slug.contains("..") {
+        tracing::warn!("invalid slug '{slug}' passed to skill_md");
+    }
     skills_root(repo_root).join(slug).join("SKILL.md")
 }
 

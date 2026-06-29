@@ -45,7 +45,9 @@ pub fn extract_body(text: &str) -> Option<&str> {
     let rest = &trimmed[3..];
     let end = rest.find("\n---").or_else(|| rest.find("\r\n---"))?;
     // Skip past the closing --- and the newline(s) after it
-    let after_close = &rest[end + 4..]; // 4 = \n + ---
+    // Check for CRLF delimiter (\r\n---) vs LF (\n---)
+    let skip = if rest[end..].starts_with("\r\n---") { 5 } else { 4 };
+    let after_close = &rest[end + skip..];
     let after_close = after_close
         .trim_start_matches('\n')
         .trim_start_matches('\r');
@@ -215,7 +217,7 @@ pub fn parse_frontmatter(
             Some(v) => Some(parse_enum("kind", Some(&v))?),
             None => None,
         },
-        scene: Some(raw.scene.unwrap_or_else(|| "general".to_string())),
+        scene: raw.scene,
         sub_scene: raw.sub_scene,
     })
 }

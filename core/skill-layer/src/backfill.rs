@@ -11,7 +11,6 @@
 //!
 //! Columns NOT backfilled (no frontmatter source): when_to_use, do_not_use
 
-use crate::frontmatter::RecordKind;
 use crate::frontmatter_parser;
 use crate::paths;
 use core_errors::FrameworkError;
@@ -51,6 +50,9 @@ const BACKFILLABLE_FIELDS: &[(&str, &str)] = &[
     ("network_access", "network_access"),
     ("approval_required_tools", "approval_required_tools"),
     ("kind", "kind"),
+    ("scene", "scene"),
+    ("source", "source"),
+    ("sub_scene", "sub_scene"),
 ];
 
 /// Returns true if a Value should be treated as non-null for backfill purposes.
@@ -92,12 +94,10 @@ fn frontmatter_field_to_value(
             .approval_required_tools
             .as_ref()
             .map(|v| Value::Array(v.iter().map(|s| Value::String(s.clone())).collect())),
-        "kind" => fm.kind.and_then(|k| match k {
-            RecordKind::Skill => None,
-            RecordKind::FrameworkCommand => Some(Value::String("framework_command".into())),
-            RecordKind::Reference => None,
-            RecordKind::Runtime => None,
-        }),
+        "kind" => fm.kind.map(|k| Value::String(k.as_str().to_string())),
+        "scene" => fm.scene.as_ref().map(|v| Value::String(v.clone())),
+        "source" => fm.source.as_ref().map(|v| Value::String(v.clone())),
+        "sub_scene" => fm.sub_scene.as_ref().map(|v| Value::String(v.clone())),
         _ => None,
     }
 }
