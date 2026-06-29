@@ -7,6 +7,7 @@ use std::collections::HashMap;
 pub struct ToolCallContext {
     pub repo_root: std::path::PathBuf,
     pub host_id: String,
+    pub connection_session_id: String,
 }
 
 /// Trait for a group of related MCP tools.
@@ -152,6 +153,38 @@ impl ToolHandler for TaskCrudTools {
             "task_chain_advance" => Ok(tool_task_chain_advance(args, &ctx.repo_root)?),
             _ => Err(FrameworkError::not_found(format!(
                 "TaskCrudTools: unknown tool: {tool_name}"
+            ))),
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// GoalCloseoutTools (4 tools: closeout_gate, closeout_record_write, goal_state_manage, goal_state_read)
+// ---------------------------------------------------------------------------
+
+pub struct GoalCloseoutTools;
+impl ToolHandler for GoalCloseoutTools {
+    fn tool_names(&self) -> &[&'static str] {
+        &[
+            "closeout_gate",
+            "closeout_record_write",
+            "goal_state_manage",
+            "goal_state_read",
+        ]
+    }
+    fn dispatch(
+        &self,
+        tool_name: &str,
+        args: &Value,
+        ctx: &ToolCallContext,
+    ) -> Result<String, FrameworkError> {
+        match tool_name {
+            "closeout_gate" => tool_closeout_gate(args, &ctx.repo_root, &ctx.host_id),
+            "closeout_record_write" => tool_closeout_record_write(args, &ctx.repo_root, &ctx.host_id),
+            "goal_state_manage" => tool_goal_state_manage(args, &ctx.repo_root, &ctx.connection_session_id),
+            "goal_state_read" => tool_goal_state_read(args, &ctx.repo_root),
+            _ => Err(FrameworkError::not_found(format!(
+                "GoalCloseoutTools: unknown tool: {tool_name}"
             ))),
         }
     }

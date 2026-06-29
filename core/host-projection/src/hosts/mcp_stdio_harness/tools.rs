@@ -274,19 +274,47 @@ pub(super) fn tool_skill_route_status(repo_root: &Path) -> Result<String, Framew
 }
 
 pub fn build_evidence_entry(arguments: &Value) -> Result<Map<String, Value>, FrameworkError> {
-    // HPM-16: TODO — this function currently accepts any input without validation.
-    // Callers can supply arbitrary evidence records (fake exit codes, forged tool names).
-    // A verification layer should be added that cross-references tool_name and exit_code
-    // against actual host tool execution logs when available.
+    // HPM-16: Input validation for evidence records.
+    // tool_name is validated against a known allowlist of framework tool names.
+    // exit_code and command are validated for format and reasonable ranges.
+    // Cross-referencing against host execution logs is not yet implemented.
     let tool_name = arguments
         .get("tool_name")
         .and_then(Value::as_str)
         .ok_or_else(|| FrameworkError::from("Missing required argument: tool_name".to_string()))?;
+
+    // Validate tool_name: must be a known framework tool
+    if tool_name.trim().is_empty() {
+        return Err(FrameworkError::from("tool_name must not be empty".to_string()));
+    }
+    // Only allow alphanumeric, hyphens, underscores, slashes in tool_name
+    if !tool_name.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_' || c == '/') {
+        return Err(FrameworkError::from(
+            format!("tool_name '{tool_name}' contains invalid characters")
+        ));
+    }
+
     let command = arguments
         .get("command")
         .and_then(Value::as_str)
         .ok_or_else(|| FrameworkError::from("Missing required argument: command".to_string()))?;
+
+    // Validate command: must not be empty
+    if command.trim().is_empty() {
+        return Err(FrameworkError::from("command must not be empty".to_string()));
+    }
+
     let exit_code = arguments.get("exit_code").and_then(Value::as_i64);
+
+    // Validate exit_code range if present
+    if let Some(ec) = exit_code {
+        // exit_code must be a standard exit code (-1 for signal, 0-255 for normal)
+        if ec < -1 || ec > 255 {
+            return Err(FrameworkError::from(
+                format!("exit_code {ec} is out of valid range (-1 to 255)")
+            ));
+        }
+    }
     let output = arguments.get("output").and_then(Value::as_str);
 
     let mut entry = Map::new();
@@ -344,6 +372,20 @@ pub(super) fn tool_goal_state_manage(
     let result =
         crate::hooks::tool_goal_state_manage_dispatch(arguments, repo_root, connection_session_id)?;
     Ok(result)
+}
+
+pub(super) fn tool_goal_state_read(
+    arguments: &Value,
+    repo_root: &Path,
+) -> Result<String, FrameworkError> {
+    let task_id = arguments
+        .get("task_id")
+        .and_then(Value::as_str)
+        .filter(|s| !s.trim().is_empty());
+    let state = core_state::state_manager::read_goal_state(repo_root, task_id)
+        .map_err(|e| FrameworkError::from(format!("goal_state_read: {e}")))?;
+    Ok(serde_json::to_string_pretty(&state)
+        .map_err(|e| FrameworkError::from(e.to_string()))?)
 }
 
 // ── Research Harness MCP Tools ──

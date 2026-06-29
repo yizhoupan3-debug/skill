@@ -208,11 +208,14 @@ pub(crate) fn closeout_gate_evaluate(
         .join("current")
         .join(if task_id.is_empty() { "" } else { task_id })
         .join("SESSION_SUMMARY.md");
+    let summary_rel = summary_path
+        .strip_prefix(repo_root)
+        .unwrap_or_else(|_| Path::new(summary_path.file_name().unwrap_or_default()));
     let has_summary = summary_path.is_file();
     if !has_summary {
         findings.push(format!(
             "checkpoint: missing SESSION_SUMMARY at {}",
-            summary_path.display()
+            summary_rel.display()
         ));
     } else {
         findings.push("checkpoint: SESSION_SUMMARY.md on disk".to_string());
@@ -345,11 +348,14 @@ pub(crate) fn evaluate_closeout_gate_hook(
         .join("current")
         .join(if tid.is_empty() { "" } else { tid })
         .join("SESSION_SUMMARY.md");
+    let summary_rel = summary_path
+        .strip_prefix(repo_root)
+        .unwrap_or_else(|_| Path::new(summary_path.file_name().unwrap_or_default()));
     let has_summary = summary_path.is_file();
     if !has_summary {
         findings.push(format!(
             "checkpoint: missing SESSION_SUMMARY at {}",
-            summary_path.display()
+            summary_rel.display()
         ));
     } else {
         findings.push("checkpoint: SESSION_SUMMARY.md on disk".to_string());

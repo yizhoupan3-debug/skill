@@ -240,7 +240,7 @@ pub(super) fn dispatch_tool(
     args: &Value,
     repo_root: &Path,
     host_id: &str,
-    _connection_session_id: &str,
+    connection_session_id: &str,
 ) -> Result<String, FrameworkError> {
     // CLI-routed tools: spawn as subprocess (process isolation for blocking I/O).
     // Mapped via mcp_server="router-rs-cli" in MCP_TOOL_REGISTRY.
@@ -254,9 +254,9 @@ pub(super) fn dispatch_tool(
     let registry = REGISTRY.get_or_init(|| {
         let mut r = CompositeRegistry::new();
         r.register(RoutingTools);
-        r.register(RoutingTools);
         r.register(ToolDomainTools);
         r.register(TaskCrudTools);
+        r.register(GoalCloseoutTools);
         r
     });
 
@@ -269,12 +269,13 @@ pub(super) fn dispatch_tool(
         let a = args.clone();
         let repo_root = repo_root.to_path_buf();
         let host_id = host_id.to_string();
+        let connection_session_id = connection_session_id.to_string();
         let (tx, rx) = mpsc::channel();
         std::thread::spawn(move || {
             let reg = REGISTRY
                 .get()
                 .unwrap_or_else(|| panic!("REGISTRY not initialized before dispatch"));
-            let ctx = ToolCallContext { repo_root, host_id };
+            let ctx = ToolCallContext { repo_root, host_id, connection_session_id };
             let result = reg.dispatch(&tn, &a, &ctx);
             let _ = tx.send(result);
         });
@@ -1006,8 +1007,16 @@ fn spawn_cli_tool(
             unsafe {
                 libc::kill(pid as i32, libc::SIGTERM);
             }
-            // Wait for the reaper thread to finish
-            let _ = rx.recv();
+            // Wait briefly for graceful shutdown, then force kill
+            let wait_result = rx.recv_timeout(Duration::from_secs(5));
+            if wait_result.is_err() {
+                #[cfg(unix)]
+                unsafe {
+                    libc::kill(pid as i32, libc::SIGKILL);
+                }
+                // Final wait (no timeout — child must die after SIGKILL)
+                let _ = rx.recv();
+            }
             return Err(FrameworkError::from(format!(
                 "router-rs-cli {} timed out after {}s",
                 tool_name,
@@ -1033,12 +1042,29 @@ fn spawn_cli_tool(
     }
 
     if !status.success() {
+        // Log stderr for diagnostics, but don't return it to the caller
+        // to prevent leaking internal paths/config in MCP responses.
+        if !stderr.trim().is_empty() {
+            tracing::warn!(
+                "[spawn_cli_tool] {} stderr output (logged, not returned): {}",
+                tool_name,
+                stderr.trim()
+            );
+        }
         return Err(FrameworkError::from(format!(
-            "router-rs-cli {} failed ({}): {}",
+            "router-rs-cli {} failed: {}",
             tool_name,
             status,
-            stderr.trim()
         )));
+    }
+
+    // Log stderr on success too for diagnostics (not returned to caller)
+    if !stderr.trim().is_empty() {
+        tracing::warn!(
+            "[spawn_cli_tool] {} stderr omitted from response: {}",
+            tool_name,
+            stderr.trim()
+        );
     }
 
     Ok(stdout)
