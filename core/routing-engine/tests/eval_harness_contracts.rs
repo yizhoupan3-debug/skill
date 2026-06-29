@@ -109,7 +109,7 @@ fn routing_accuracy_meets_baseline() {
         trigger_rate >= 70.0,
         "trigger_hit rate too low: {trigger_rate:.1}% (want >= 70%)\n\
          Note: baseline lowered after 5 skill deletions (email-template, infographic, \
-         diagramming, algo-trading, scientific-figure-plotting); \
+         diagramming, algo-trading, tikz-paper-figure); \
          new cases must stay at 100% trigger hit."
     );
     assert!(

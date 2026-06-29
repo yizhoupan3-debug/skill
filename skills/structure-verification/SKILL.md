@@ -92,7 +92,7 @@ research_harness::verification::structure::check_figure_references(tex_path)
 ## References
 
 - citation-management skill：[`../citation-management/SKILL.md`](../citation-management/SKILL.md)（引用一致性检查）
-- scientific-figure-plotting skill：[`../scientific-figure-plotting/SKILL.md`](../scientific-figure-plotting/SKILL.md)（图表规范）
+- tikz-paper-figure skill：[`../tikz-paper-figure/SKILL.md`](../tikz-paper-figure/SKILL.md)（图表规范）
 - claim-evidence-ladder：[`../paper-workbench/references/claim-evidence-ladder.md`](../paper-workbench/references/claim-evidence-ladder.md)
 - claim-spine-and-section-contract：[`../paper-workbench/references/claim-spine-and-section-contract.md`](../paper-workbench/references/claim-spine-and-section-contract.md)
 

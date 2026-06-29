@@ -8,10 +8,10 @@ Tracked files that taught **operator-facing** `pip`, `uv pip`, or `python -m pip
 | aligned | `skills/jupyter-notebook/SKILL.md` |
 | aligned | `skills/youtube-summarizer/SKILL.md` |
 | aligned | `skills/pdf/references/detailed-guide.md` |
-| aligned | `skills/scientific-figure-plotting/references/style-libraries.md` |
-| aligned | `skills/scientific-figure-plotting/references/plotnine-guide.md` |
-| aligned | `skills/scientific-figure-plotting/references/stat-annotations.md` |
-| aligned | `skills/scientific-figure-plotting/references/cjk-font-guide.md` |
+| aligned | `skills/tikz-paper-figure/references/style-libraries.md` |
+| aligned | `skills/tikz-paper-figure/references/plotnine-guide.md` |
+| aligned | `skills/tikz-paper-figure/references/stat-annotations.md` |
+| aligned | `skills/tikz-paper-figure/references/cjk-font-guide.md` |
 
 **Replacement patterns**
 

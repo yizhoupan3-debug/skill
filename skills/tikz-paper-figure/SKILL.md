@@ -72,7 +72,7 @@ one-off screenshot. It is:
 ## Do Not Use
 
 - For Mermaid or Graphviz/DOT source diagrams: use `diagramming`.
-- For matplotlib/seaborn/plotnine data charts: use `scientific-figure-plotting`.
+- For matplotlib/seaborn/plotnine data charts: use `tikz-paper-figure`.
 - For generic LaTeX build speed or externalization tuning: use
   `latex-compile-acceleration`.
 - For raster illustration generation where TikZ source is not required: use the

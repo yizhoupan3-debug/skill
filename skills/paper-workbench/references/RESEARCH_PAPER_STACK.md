@@ -17,7 +17,7 @@
 | 表达 | `$paper-writing` | claim 边界已冻结下的局部/授权范围内润色与叙事 |
 | 引用真源 | `$citation-management` | `.bib`、参考文献表、DOI/格式、文后一致性 |
 
-**邻接技能**（按artifact 并入，不替代前门）：`statistical-analysis`（统计深度）、`experiment-reproducibility`（可复现）、`scientific-figure-plotting` / `tikz-paper-figure`（作图代码）、`visual-review` / `pdf`（成稿视觉与版式）、`math-derivation`（推导，窄）。
+**邻接技能**（按artifact 并入，不替代前门）：`statistical-analysis`（统计深度）、`experiment-reproducibility`（可复现）、`tikz-paper-figure`（作图代码）、`visual-review` / `pdf`（成稿视觉与版式）、`math-derivation`（推导，窄）。
 
 ## Reference 下钻顺序（渐进披露）
 
