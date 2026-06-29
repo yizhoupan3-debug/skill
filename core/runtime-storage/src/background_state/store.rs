@@ -483,9 +483,7 @@ impl BackgroundStateStore {
 
     pub(super) fn compact_terminal_over_capacity(&mut self, capacity_limit: Option<usize>) {
         let limit = self.resolved_capacity_limit(capacity_limit);
-        // Loop in case a single pass cannot remove enough terminal jobs to
-        // reach the limit (e.g. 200 terminal + 800 active, limit=500 →
-        // first pass removes 200, totals 800, still over).
+        let mut reaped_any = false;
         loop {
             if self.jobs.len() <= limit {
                 break;
@@ -508,14 +506,14 @@ impl BackgroundStateStore {
                 break; // No more terminal jobs to remove.
             }
             terminal_jobs.sort();
-            // Only remove the minimum number of terminal jobs needed to get
-            // under the capacity limit (oldest first), avoiding overshoot.
             let to_remove = excess.min(terminal_jobs.len());
             for (_, job_id) in terminal_jobs.into_iter().take(to_remove) {
                 self.jobs.remove(&job_id);
+                reaped_any = true;
             }
-            // Re-check; may need another pass if active jobs transitioned
-            // to terminal between now and the next load cycle.
+        }
+        if reaped_any {
+            self.reaped_dirty = true;
         }
     }
 
