@@ -49,12 +49,12 @@ pub(crate) fn goal_state_manage_dispatch(
             // Auto-fill contract fields when drive_until_done=true and not explicitly provided
             if drive_until_done {
                 if arguments.get("non_goals").is_none() {
-                    payload["non_goals"] = json!(["不处理此 goal 范围外的功能"]);
+                    payload["non_goals"] = json!(["features outside this goal's scope"]);
                 }
                 if arguments.get("done_when").is_none() {
                     payload["done_when"] = json!([
-                        format!("goal 已完成: {goal}"),
-                        "cargo check / test 通过".to_string(),
+                        format!("goal completed: {goal}"),
+                        "cargo check / test passing".to_string(),
                     ]);
                 }
                 if arguments.get("validation_commands").is_none() {
@@ -166,6 +166,15 @@ pub(crate) fn goal_state_manage_dispatch(
             }
             if let Some(kp) = arguments.get("keep_progress").and_then(Value::as_bool) {
                 payload["keep_progress"] = json!(kp);
+            }
+            if let Some(dud) = arguments.get("drive_until_done").and_then(|v| v.as_bool()) {
+                payload["drive_until_done"] = json!(dud);
+            }
+            if let Some(cg) = arguments.get("completion_gates") {
+                payload["completion_gates"] = cg.clone();
+            }
+            if let Some(md) = arguments.get("metadata") {
+                payload["metadata"] = md.clone();
             }
         }
         _ => {

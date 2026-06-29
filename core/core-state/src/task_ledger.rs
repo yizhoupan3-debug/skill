@@ -59,7 +59,7 @@ pub fn write_state_checkpoint(
     });
 
     let tx = LedgerTransaction {
-        ts: iso_now(),
+        ts: framework_kernel::time::now_iso(),
         tx_type: STATE_CHECKPOINT_TX_TYPE.to_string(),
         payload,
         idempotency_key: None,
@@ -76,16 +76,6 @@ pub fn write_state_checkpoint(
     writeln!(file, "{}", serialized)?;
     file.sync_all()?;
     Ok(())
-}
-
-/// Generate an ISO-8601 timestamp string from system time.
-fn iso_now() -> String {
-    let secs = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs();
-    // Same format used by other ledger callers: seconds since UNIX epoch.
-    secs.to_string()
 }
 
 pub fn task_ledger_path(repo_root: &Path, task_id: &str) -> Result<PathBuf, FrameworkError> {

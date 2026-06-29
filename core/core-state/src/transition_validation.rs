@@ -13,7 +13,6 @@
 
 #![deny(clippy::unwrap_used, clippy::expect_used)]
 
-use serde_json::Value;
 use std::path::Path;
 
 /// The type of task transition being validated.
@@ -82,25 +81,18 @@ fn validate_complete_transition(repo_root: &Path, task_id: &str) -> TransitionVe
         return TransitionVerdict::blocked("task_id is empty");
     }
 
-    // D5: Empty task list = no fraud possible → auto-pass.
-    // Check if task_id exists in TASK_POINTERS; if not, no tasks were created
-    // and there's nothing to validate.
-    // Global TASK_POINTERS.json — shared across all tasks.
-    let global_pointers_path = repo_root.join("artifacts/current/TASK_POINTERS.json");
-    let task_exists = global_pointers_path.is_file()
-        && std::fs::read_to_string(&global_pointers_path)
-            .ok()
-            .and_then(|raw| serde_json::from_str::<Value>(&raw).ok())
-            .map(|v| {
-                v.get("tasks")
-                    .and_then(Value::as_array)
-                    .map(|tasks| tasks.iter().any(|t| t.get("task_id").and_then(Value::as_str) == Some(tid)))
-                    .unwrap_or(false)
-            })
-            .unwrap_or(false);
-    if !task_exists {
+    // D5: No GOAL_STATE.json or task directory = no active task → auto-pass.
+    // Check GOAL_STATE.json existence directly rather than TASK_POINTERS.tasks array,
+    // because write_active_task_pointer does not populate the tasks array.
+    // (TASK_POINTERS.tasks is only populated by write_focus_task_pointer_minimal.)
+    // Direct GOAL_STATE check is authoritative and avoids the array-hollowing vulnerability.
+    let goal_state_path = repo_root
+        .join("artifacts/current")
+        .join(tid)
+        .join("GOAL_STATE.json");
+    if !goal_state_path.is_file() {
         return TransitionVerdict::allowed(
-            "no task created for this goal round — empty task list, D5 auto-pass",
+            "no GOAL_STATE.json found for this task — D5 auto-pass",
         );
     }
 
@@ -158,15 +150,18 @@ mod tests {
         fs::write(&path, serde_json::to_string_pretty(&index).unwrap()).expect("write evidence");
     }
 
-    /// Write a minimal TASK_POINTERS.json at the global path to simulate task creation.
-    fn write_task_pointers(dir: &Path) {
-        let pointers = serde_json::json!({
-            "schema_version": "task-pointers-v1",
-            "tasks": [{"task_id": "test-task", "task": "Test Task", "updated_at": "2026-01-01T00:00:00Z"}]
+    /// Write a minimal GOAL_STATE.json to simulate task existence for evidence checks.
+    fn write_task_goal_state(dir: &Path) {
+        let goal_state = serde_json::json!({
+            "schema_version": "router-rs-goal-v1",
+            "status": "running",
+            "goal": "test",
         });
-        let path = dir.join("artifacts/current/TASK_POINTERS.json");
-        fs::write(&path, serde_json::to_string_pretty(&pointers).unwrap())
-            .expect("write task pointers");
+        let goal_dir = dir.join("artifacts/current/test-task");
+        fs::create_dir_all(&goal_dir).expect("mkdir goal dir");
+        let path = goal_dir.join("GOAL_STATE.json");
+        fs::write(&path, serde_json::to_string_pretty(&goal_state).unwrap())
+            .expect("write GOAL_STATE.json");
     }
 
     #[test]
@@ -184,18 +179,18 @@ mod tests {
     }
 
     #[test]
-    fn complete_transition_no_task_list_d5_auto_pass() {
-        // D5: no TASK_POINTERS.json = no tasks created = empty task list = auto-pass.
-        let dir = test_dir("d5-empty-task-list");
+    fn complete_transition_no_task_goal_state_d5_auto_pass() {
+        // D5: no GOAL_STATE.json = no active task = auto-pass.
+        let dir = test_dir("d5-no-goal-state");
         let v = validate_transition(&dir, "test-task", TaskTransition::Complete);
-        assert!(v.passed, "D5: empty task list should auto-pass");
-        assert!(v.reason.contains("D5"), "reason should mention D5");
+        assert!(v.passed, "D5: no GOAL_STATE.json should auto-pass");
+        assert!(v.reason.contains("D5"), "reason should mention D5: {}", v.reason);
     }
 
     #[test]
     fn complete_transition_has_task_but_no_evidence_blocked() {
         let dir = test_dir("has-task-no-evidence");
-        write_task_pointers(&dir);
+        write_task_goal_state(&dir);
         let v = validate_transition(&dir, "test-task", TaskTransition::Complete);
         assert!(!v.passed);
         assert!(v.reason.contains("no evidence"));
@@ -211,7 +206,7 @@ mod tests {
     #[test]
     fn complete_transition_with_successful_evidence_allowed() {
         let dir = test_dir("success-evidence");
-        write_task_pointers(&dir);
+        write_task_goal_state(&dir);
         write_evidence(&dir, &[("artifact-1", true)]);
         let v = validate_transition(&dir, "test-task", TaskTransition::Complete);
         assert!(v.passed);
@@ -220,7 +215,7 @@ mod tests {
     #[test]
     fn complete_transition_all_failed_blocked() {
         let dir = test_dir("all-failed");
-        write_task_pointers(&dir);
+        write_task_goal_state(&dir);
         write_evidence(&dir, &[("artifact-1", false), ("artifact-2", false)]);
         let v = validate_transition(&dir, "test-task", TaskTransition::Complete);
         assert!(!v.passed);

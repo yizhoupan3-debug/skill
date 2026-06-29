@@ -84,16 +84,33 @@ pub fn trigger(
 
     // CROSS-001: Check for self-attested evidence (all success entries are
     // mcp_record_evidence self-attested, no host-bound verification).
-    if has_evidence && evidence_ok {
-        let self_attested =
-            core_state::state_manager::task_evidence_success_only_self_attested(repo_root, task_id);
-        if self_attested {
+    // P2-007: Store the advisory so it can be included in GateVerdict.
+    let self_attested_advisory = if has_evidence && evidence_ok {
+        let sa = core_state::state_manager::task_evidence_success_only_self_attested(repo_root, task_id);
+        if sa {
             tracing::warn!(
                 task_id = %task_id,
                 "QGEntry Stage 1: all successful evidence is self-attested (no host-bound verification)"
             );
+            Some(Finding {
+                id: "self_attested_evidence".to_string(),
+                severity: Severity::Warning,
+                description: format!(
+                    "all successful evidence for task '{task_id}' is self-attested \
+                     (via mcp_record_evidence) without host-bound verification"
+                ),
+                location: None,
+                suggestion: Some(
+                    "ensure a host-bound evidence collector has verified the artifacts independently"
+                        .to_string(),
+                ),
+            })
+        } else {
+            None
         }
-    }
+    } else {
+        None
+    };
 
     // ═══════════════════════════════════════════════════════════════════
     // Stage 2: Quality gate (scene-dispatched checker evaluation)
@@ -121,7 +138,14 @@ pub fn trigger(
         output_data,
     };
 
-    evaluate_qg_route(scene, &ctx)
+    let mut verdict = evaluate_qg_route(scene, &ctx);
+
+    // Append self-attested evidence advisory to verdict (P2-007)
+    if let Some(advisory) = self_attested_advisory {
+        verdict.advisories.push(advisory);
+    }
+
+    verdict
 }
 
 /// Hook-compatible quality gate evaluation wrapper.

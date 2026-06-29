@@ -21,11 +21,11 @@ pub(crate) fn tool_task_create(
         .get("task_id")
         .and_then(Value::as_str)
         .ok_or_else(|| {
-            FrameworkError::from("task_create: missing required argument 'task_id'".to_string())
+            FrameworkError::validation("task_create: missing required argument 'task_id'".to_string())
         })?
         .trim();
     if task_id.is_empty() {
-        return Err(FrameworkError::from(
+        return Err(FrameworkError::validation(
             "task_create: task_id must not be empty".to_string(),
         ));
     }
@@ -94,6 +94,48 @@ pub(crate) fn tool_task_create(
                 }
             }
             return Ok(false);
+        }
+
+        // P2-003: Extra guard — check if task already exists in TASK_POINTERS.tasks
+        // before set_task_focus. Prevents pointer drift when ledger file is missing
+        // (e.g., after crash/cleanup) but directory and pointers data remain.
+        {
+            let pointers_path = repo_root_owned.join("artifacts/current/TASK_POINTERS.json");
+            if let Ok(pointers_raw) = std::fs::read_to_string(&pointers_path) {
+                if let Ok(pointers_val) = serde_json::from_str::<Value>(&pointers_raw) {
+                    let already_in_tasks = pointers_val.get("tasks")
+                        .and_then(Value::as_array)
+                        .map(|tasks| tasks.iter().any(|t| t.get("task_id").and_then(Value::as_str) == Some(task_id)))
+                        .unwrap_or(false);
+                    if already_in_tasks {
+                        let current_focus = pointers_val.get("focus_task_id").and_then(Value::as_str);
+                        if current_focus != Some(task_id) {
+                            tracing::warn!(
+                                "task_create: task '{task_id}' already exists in TASK_POINTERS.tasks \
+                                 but focus_task_id='{:?}' — skipping set_task_focus to prevent pointer drift",
+                                current_focus,
+                            );
+                            // Still append the ledger entry for consistency
+                            append_transaction_assuming_l1_held(
+                                &repo_root_owned,
+                                &task_id_owned,
+                                LedgerTransaction {
+                                    ts: framework_kernel::time::now_iso(),
+                                    tx_type: "task_created".to_string(),
+                                    payload: json!({
+                                        "task_id": &task_id_owned,
+                                        "title": &title_owned,
+                                    }),
+                                    idempotency_key: Some(format!("task_create:{task_id_owned}")),
+                                    seq: None,
+                                    schema_version: None,
+                                },
+                            )?;
+                            return Ok(true);
+                        }
+                    }
+                }
+            }
         }
 
         core_state::state_manager::set_task_focus(&repo_root_owned, &task_id_owned, &title_owned)?;
@@ -219,43 +261,68 @@ pub(crate) fn tool_task_complete(
     arguments: &Value,
     repo_root: &Path,
 ) -> std::result::Result<String, FrameworkError> {
-    let task_id = arguments
+    // Keep the explicit task_id separate from pointer-resolved task_id
+    // so the non-goal path can re-resolve inside the lock (P2-001).
+    let explicit_task_id = arguments
         .get("task_id")
         .and_then(Value::as_str)
         .map(str::trim)
         .filter(|s| !s.is_empty())
-        .map(str::to_string)
-        .or_else(|| core_state::state_manager::read_active_task_id(repo_root))
-        .ok_or_else(|| {
-            FrameworkError::from(
-                "task_complete: no task_id provided and no active task".to_string(),
-            )
-        })?;
+        .map(str::to_string);
 
-    let task_id_owned = task_id.clone();
+    let task_id_owned = explicit_task_id.clone().or_else(|| {
+        core_state::state_manager::read_active_task_id(repo_root)
+    })
+    .ok_or_else(|| {
+        FrameworkError::validation(
+            "task_complete: no task_id provided and no active task".to_string(),
+        )
+    })?;
 
-    // Move has_goal check inside the task write lock along with goal_drive
+    // Check goal existence OUTSIDE the task write lock to avoid nested flock
+    // (framework_goal_drive acquires its own lock internally).
+    // On Linux, nested flock on the same fd-description returns EWOULDBLOCK.
+    let task_dir = repo_root.join("artifacts/current").join(&task_id_owned);
+    let goal_path = task_dir.join("GOAL_STATE.json");
+    let has_goal = goal_path.is_file()
+        && fs::read_to_string(&goal_path)
+            .ok()
+            .and_then(|raw| serde_json::from_str::<Value>(&raw).ok())
+            .is_some_and(|v| v.get("archived").and_then(Value::as_bool) != Some(true));
+
+    if has_goal {
+        // Goal path: framework_goal_drive acquires its own task write lock.
+        // No nested flock since we checked outside the outer lock.
+        let result = core_state::state_manager::framework_goal_drive(json!({
+            "repo_root": repo_root.display().to_string(),
+            "operation": "complete",
+            "task_id": &task_id_owned,
+        }))?;
+        return Ok(result.to_string());
+    }
+
+    // No GOAL_STATE → evidence check + pointer neutralization + ledger under lock.
+    // Re-resolve task_id inside the lock for the non-goal path to prevent
+    // TOCTOU with concurrent task_create/task_focus (P2-001).
+    // When task_id was explicitly provided, no re-resolution needed.
     let repo_root_owned = repo_root.to_path_buf();
-    let result: Option<String> = apply_task_ledger_mutation(repo_root, || {
-        let task_dir = repo_root_owned.join("artifacts/current").join(&task_id_owned);
-        let goal_path = task_dir.join("GOAL_STATE.json");
-        let has_goal_internal = goal_path.is_file()
-            && fs::read_to_string(&goal_path)
-                .ok()
-                .and_then(|raw| serde_json::from_str::<Value>(&raw).ok())
-                .is_some_and(|v| v.get("archived").and_then(Value::as_bool) != Some(true));
+    apply_task_ledger_mutation(repo_root, || {
+        // Resolve the authoritative task_id inside the lock (P2-001)
+        // If explicit_task_id was provided, use it; otherwise re-resolve from pointer.
+        let id = match explicit_task_id.clone() {
+            Some(tid) => tid,
+            None => {
+                core_state::state_manager::read_active_task_id(&repo_root_owned)
+                    .ok_or_else(|| {
+                        FrameworkError::validation(
+                            "task_complete: no task_id and no active task (resolved inside lock)"
+                        )
+                    })?
+            }
+        };
 
-        if has_goal_internal {
-            let result = core_state::state_manager::framework_goal_drive(json!({
-                "repo_root": repo_root_owned.display().to_string(),
-                "operation": "complete",
-                "task_id": &task_id_owned,
-            }))?;
-            return Ok(Some(result.to_string()));
-        }
-
-        // No GOAL_STATE → evidence check + pointer neutralization + ledger
-        let transition_v = validate_transition(&repo_root_owned, &task_id_owned, TaskTransition::Complete);
+        // Non-goal path: evidence check + pointer cleanup + ledger
+        let transition_v = validate_transition(&repo_root_owned, &id, TaskTransition::Complete);
         if !transition_v.passed {
             return Err(FrameworkError::validation(format!(
                 "task_complete blocked by evidence gate: {}",
@@ -265,30 +332,26 @@ pub(crate) fn tool_task_complete(
 
         core_state::state_manager::neutralize_task_pointers_for_task(
             &repo_root_owned,
-            &task_id_owned,
+            &id,
         )?;
 
         append_transaction_assuming_l1_held(
             &repo_root_owned,
-            &task_id_owned,
+            &id,
             LedgerTransaction {
                 ts: framework_kernel::time::now_iso(),
                 tx_type: "task_completed".to_string(),
                 payload: json!({
-                    "task_id": &task_id_owned,
+                    "task_id": &id,
                 }),
-                idempotency_key: Some(format!("task_complete:{task_id_owned}")),
+                idempotency_key: Some(format!("task_complete:{id}")),
                 seq: None,
                 schema_version: None,
             },
         )?;
 
-        Ok(None)
+        Ok(())
     })?;
-
-    if let Some(goal_result) = result {
-        return Ok(goal_result);
-    }
 
     // TASK_STATE.json aggregate was removed in Wave 2b.
 
@@ -315,48 +378,49 @@ pub(crate) fn tool_task_focus(
         .get("task_id")
         .and_then(Value::as_str)
         .ok_or_else(|| {
-            FrameworkError::from("task_focus: missing required argument 'task_id'".to_string())
+            FrameworkError::validation("task_focus: missing required argument 'task_id'".to_string())
         })?
         .trim();
     if task_id.is_empty() {
-        return Err(FrameworkError::from(
+        return Err(FrameworkError::validation(
             "task_focus: task_id must not be empty".to_string(),
         ));
     }
 
     // Validate task_id is a safe path component before using it in filesystem ops
     let task_id = core_state_utils::path_guard::validate_task_id_component(task_id)
-        .map_err(|_| FrameworkError::from(format!("task_focus: invalid task_id '{task_id}'")))?;
-
-    // Validate directory exists (cheap read — outside the lock)
-    let task_dir = repo_root.join("artifacts/current").join(task_id);
-    if !task_dir.is_dir() {
-        return Err(FrameworkError::from(format!(
-            "task_focus: task directory '{task_id}' does not exist. Use task_create first."
-        )));
-    }
+        .map_err(|_| FrameworkError::validation(format!("task_focus: invalid task_id '{task_id}'")))?;
+    let task_id_owned = task_id.to_string();
 
     // Acquire task write lock: prevents RMW race on TASK_POINTERS.json with
     // concurrent set_task_focus / neutralize_task_pointers_for_task.
+    // Directory existence check is inside the lock to prevent TOCTOU (P3-003).
+    let repo_root_owned = repo_root.to_path_buf();
     apply_task_ledger_mutation(repo_root, || {
+        let task_dir = repo_root_owned.join("artifacts/current").join(&task_id_owned);
+        if !task_dir.is_dir() {
+            return Err(FrameworkError::validation(format!(
+                "task_focus: task directory '{task_id_owned}' does not exist. Use task_create first."
+            )));
+        }
         let goal_path = task_dir.join("GOAL_STATE.json");
         let label = if goal_path.is_file() {
             fs::read_to_string(&goal_path)
                 .ok()
                 .and_then(|raw| serde_json::from_str::<Value>(&raw).ok())
                 .and_then(|v| v.get("goal").and_then(Value::as_str).map(str::to_string))
-                .unwrap_or_else(|| task_id.to_string())
+                .unwrap_or_else(|| task_id_owned.clone())
         } else {
-            task_id.to_string()
+            task_id_owned.clone()
         };
 
-        core_state::state_manager::set_task_focus(repo_root, task_id, &label)?;
+        core_state::state_manager::set_task_focus(repo_root, &task_id_owned, &label)?;
         Ok(())
     })?;
 
     Ok(json!({
         "ok": true,
-        "task_id": task_id,
+        "task_id": task_id_owned,
         "focused": true,
     })
     .to_string())
@@ -380,15 +444,33 @@ pub(crate) fn tool_task_chain_advance(
     let repo_root_owned = repo_root.to_path_buf();
     let result = apply_task_ledger_mutation(repo_root, || {
         // Loop-goal check moved inside the lock to prevent TOCTOU
+        // Verify that the active task is actually a loop goal (P2-004)
         let (active, _) = core_state::state_manager::read_task_pointer_pair(&repo_root_owned);
         if let Some(ref tid) = active {
-            return Ok(json!({
-                "ok": true,
-                "status": "loop_goal_skipped",
-                "message": "current task follows loop semantics — task chain advance skipped",
-                "task_id": tid,
-            })
-            .to_string());
+            let goal_path = repo_root_owned.join("artifacts/current").join(tid).join("GOAL_STATE.json");
+            let is_loop_goal = goal_path.is_file()
+                && std::fs::read_to_string(goal_path)
+                    .ok()
+                    .and_then(|raw| serde_json::from_str::<serde_json::Value>(&raw).ok())
+                    .and_then(|v| v.get("goal_type").and_then(|g| g.as_str()).map(|g| g == "loop"))
+                    .unwrap_or(false);
+            if is_loop_goal {
+                return Ok(json!({
+                    "ok": true,
+                    "status": "loop_goal_skipped",
+                    "message": "current task has loop semantics — task chain advance skipped",
+                    "task_id": tid,
+                })
+                .to_string());
+            } else {
+                return Ok(json!({
+                    "ok": true,
+                    "status": "active_task_exists",
+                    "message": "current task has an active goal — task chain advance skipped (non-loop)",
+                    "task_id": tid,
+                })
+                .to_string());
+            }
         }
 
         let raw =

@@ -33,7 +33,12 @@ fn merge_or_replace_array(map: &mut Map<String, Value>, key: &str, new_items: &[
             return; // nothing to merge
         }
         if let Some(existing) = map.get_mut(key).and_then(|v| v.as_array_mut()) {
-            existing.extend(new_items.iter().cloned());
+            // P3-008: Deduplicate on merge — only append items not already present
+            for item in new_items.iter() {
+                if !existing.contains(item) {
+                    existing.push(item.clone());
+                }
+            }
         } else {
             map.insert(key.to_string(), json!(new_items));
         }
@@ -449,7 +454,7 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
             let drive_until_done = payload
                 .get("drive_until_done")
                 .and_then(Value::as_bool)
-                .unwrap_or(false);
+                .unwrap_or(true);
             let requires_completion_evidence = if drive_until_done {
                 true
             } else {
@@ -656,6 +661,56 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
                 crate::task_state::validate_goal_completion_gates(&view, &gates)?;
             }
 
+            // ── GOAL-008: max_iterations check (before QG) ──
+            // Check BEFORE the QG gate so that iteration limits are not masked
+            // by a consistently-blocking QG (P1-008).
+            if let Some(max_iter) = state.get("max_iterations").and_then(Value::as_u64) {
+                let current = state.get("iteration_count").and_then(Value::as_u64).unwrap_or(0);
+                let next_count = current + 1;
+                if next_count >= max_iter {
+                    // Increment iteration_count so that retry→complete will see
+                    // next_count >= max_iter and pass through (P1-004 livelock fix).
+                    // Without this increment, retry resets status to running but
+                    // iteration_count stays the same, causing an infinite loop.
+                    let goal_path = goal_state_path_for_task(&repo_root, &task_id)?;
+                    let mut pending = state;
+                    if let Some(obj) = pending.as_object_mut() {
+                        obj.insert("status".to_string(), json!("review_pending"));
+                        obj.insert("iteration_count".to_string(), json!(next_count));
+                        let blockers = vec![json!({
+                            "finding": "max_iterations reached",
+                            "severity": "info",
+                        })];
+                        obj.insert("blockers".to_string(), json!(blockers.clone()));
+                        obj.insert(
+                            "updated_at".to_string(),
+                            json!(framework_kernel::time::now_iso()),
+                        );
+                    }
+                    // GOAL-001: Strip stale annotations before write
+                    strip_stale_annotations(&mut pending);
+                    write_atomic_json(&goal_path, &pending)?;
+                    let tx = crate::task_ledger::LedgerTransaction {
+                        ts: framework_kernel::time::now_iso(),
+                        tx_type: "goal_state".to_string(),
+                        payload: pending.clone(),
+                        idempotency_key: None,
+                        seq: None,
+                        schema_version: Some(1),
+                    };
+                    crate::task_ledger::append_transaction_assuming_l1_held(&repo_root, &task_id, tx)
+                        .map_err(|e| {
+                            FrameworkError::validation(format!("TASK_LEDGER append failed: {e}"))
+                        })?;
+                    return Ok(json!({
+                        "ok": true,
+                        "operation": "max_iterations_reached",
+                        "task_id": task_id,
+                        "blockers": pending.get("blockers"),
+                    }));
+                }
+            }
+
             // ── D4/D9: Auto-trigger QGEntry on goal complete ──
             // Two-stage exit gate: Stage 1 anti-fraud + Stage 2 scene-dispatched checker chain.
             // If the QG gate blocks, transition to review_pending instead of completing the iteration.
@@ -732,52 +787,27 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
                         )));
                     }
                 }
-            }
-
-            // GOAL-008: Optional max_iterations check — convert to review_pending if limit reached
-            if let Some(max_iter) = state.get("max_iterations").and_then(Value::as_u64) {
-                let current = state.get("iteration_count").and_then(Value::as_u64).unwrap_or(0);
-                if current + 1 >= max_iter {
-                    let goal_path = goal_state_path_for_task(&repo_root, &task_id)?;
-                    let mut pending = state;
-                    if let Some(obj) = pending.as_object_mut() {
-                        obj.insert("status".to_string(), json!("review_pending"));
-                        let blockers = vec![json!({
-                            "finding": "max_iterations reached",
-                            "severity": "info",
-                        })];
-                        obj.insert("blockers".to_string(), json!(blockers.clone()));
-                        obj.insert(
-                            "updated_at".to_string(),
-                            json!(framework_kernel::time::now_iso()),
-                        );
-                    }
-                    // GOAL-001: Strip stale annotations before write
-                    strip_stale_annotations(&mut pending);
-                    write_atomic_json(&goal_path, &pending)?;
-                    let tx = crate::task_ledger::LedgerTransaction {
-                        ts: framework_kernel::time::now_iso(),
-                        tx_type: "goal_state".to_string(),
-                        payload: pending.clone(),
-                        idempotency_key: None,
-                        seq: None,
-                        schema_version: Some(1),
-                    };
-                    crate::task_ledger::append_transaction_assuming_l1_held(&repo_root, &task_id, tx)
-                        .map_err(|e| {
-                            FrameworkError::validation(format!("TASK_LEDGER append failed: {e}"))
-                        })?;
-                    return Ok(json!({
-                        "ok": true,
-                        "operation": "max_iterations_reached",
-                        "task_id": task_id,
-                        "blockers": pending.get("blockers"),
-                    }));
-                }
+            } else {
+                // P1-003: hooks not available — log warning but continue (fail-open by design)
+                tracing::warn!(
+                    "QG auto-trigger: RuntimeCoreHooks not registered — quality gate skipped. \
+                     QG checkers will NOT run for this complete. \
+                     Set up hooks in RUNTIME_REGISTRY.json to enable QG evaluation."
+                );
             }
 
             // Complete = iteration complete, NOT goal termination.
             // Keep status=running, do NOT archive or neutralize pointers.
+
+            // P3-011: Warn on rapid consecutive completes (same timestamp)
+            if let Some(last) = state.get("last_iteration_completed_at").and_then(Value::as_str) {
+                if last == framework_kernel::time::now_iso() {
+                    tracing::warn!(
+                        "rapid consecutive complete detected for task '{task_id}'                          — last_iteration_completed_at is identical; iteration_count may inflate"
+                    );
+                }
+            }
+
             let goal_path = goal_state_path_for_task(&repo_root, &task_id)?;
             let mut loop_state = state; // reuse the single read from above
             if let Some(obj) = loop_state.as_object_mut() {
@@ -992,6 +1022,41 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
                 }
             }
 
+            // P3-014: Amend metadata and completion_gates
+            if let Some(cg) = payload.get("completion_gates")
+                && !cg.is_null()
+            {
+                obj.insert("completion_gates".to_string(), cg.clone());
+                has_amend = true;
+            }
+            if let Some(extra) = payload.get("metadata").cloned() {
+                obj.insert("metadata".to_string(), extra);
+                has_amend = true;
+            }
+
+            // P2-020: Amend drive_until_done field
+            if let Some(dud) = payload.get("drive_until_done").and_then(Value::as_bool) {
+                obj.insert("drive_until_done".to_string(), json!(dud));
+                // Recompute requires_completion_evidence when drive_until_done changes:
+                // if drive_until_done is now true, evidence is required.
+                if dud {
+                    obj.insert(REQUIRES_COMPLETION_EVIDENCE_KEY.to_string(), json!(true));
+                }
+                has_amend = true;
+            }
+
+            // P2-017: Prevent contradiction — drive_until_done=true with requires_completion_evidence=false
+            let current_drive = obj.get("drive_until_done").and_then(Value::as_bool).unwrap_or(false);
+            if current_drive {
+                let current_evidence = obj.get(REQUIRES_COMPLETION_EVIDENCE_KEY).and_then(Value::as_bool).unwrap_or(true);
+                if !current_evidence {
+                    return Err(FrameworkError::validation(format!(
+                        "framework_goal_drive amend: drive_until_done=true requires {} to be true",
+                        REQUIRES_COMPLETION_EVIDENCE_KEY,
+                    )));
+                }
+            }
+
             if !keep_progress {
                 obj.insert("checkpoints".to_string(), json!([]));
             }
@@ -999,7 +1064,7 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
             if !has_amend {
                 return Err(FrameworkError::validation(
                     "framework_goal_drive amend requires at least one field to update: \
-                     goal, non_goals, done_when, or validation_commands",
+                     goal, non_goals, done_when, validation_commands, or drive_until_done",
                 ));
             }
 
@@ -1081,6 +1146,21 @@ fn clear_goal_state(
     })?;
     let path = goal_state_path_for_task(repo_root, &task_id)?;
     let existed = path.is_file();
+
+    // P2-015: Stale guard — check before clearing (consistent with all other mutation ops).
+    // Stale goals owned by another session should not be silently cleared.
+    if existed {
+        if let Ok(Some(state)) = read_goal_state(repo_root, Some(&task_id)) {
+            if state.get("stale").and_then(Value::as_bool) == Some(true) {
+                // Stale guard: require force flag to clear stale goals
+                return Err(FrameworkError::validation(
+                    "cannot clear a stale goal — session_id does not match current session. \
+                     Use force=true to override."
+                ));
+            }
+        }
+    }
+
     if existed {
         fs::remove_file(&path)?;
     }
@@ -1112,6 +1192,25 @@ fn resume_goal_running(
     if state.get("stale").and_then(Value::as_bool) == Some(true) {
         return Err(FrameworkError::validation(
             "cannot resume a stale goal — session_id does not match current session",
+        ));
+    }
+
+    // P1-005: State guard — only allow resume on paused goals.
+    // Reject resume on running, blocked, or review_pending goals.
+    let status = state.get("status").and_then(Value::as_str).unwrap_or("");
+    if status == "running" {
+        return Err(FrameworkError::validation(
+            "cannot resume a goal already in 'running' status — goal is already active",
+        ));
+    }
+    if status == "blocked" {
+        return Err(FrameworkError::validation(
+            "cannot resume a blocked goal — use unblock or clear instead",
+        ));
+    }
+    if status == "review_pending" {
+        return Err(FrameworkError::validation(
+            "cannot resume a goal in 'review_pending' status — use retry instead",
         ));
     }
 
@@ -1214,7 +1313,18 @@ fn set_terminal_flags(
     // Only running, paused, and blocked are mutable operational states.
     // 'completed' is reserved for future state machine use; currently unreachable
     // since loop semantics keep goals at "running" after iteration complete.
+    // P2-019: Also guard against completed/archived, consistent with amend path.
     let current = obj.get("status").and_then(Value::as_str).unwrap_or("");
+    if current == "completed" {
+        return Err(FrameworkError::validation(format!(
+            "cannot set status '{status}' on a completed goal"
+        )));
+    }
+    if obj.get("archived").and_then(Value::as_bool).unwrap_or(false) {
+        return Err(FrameworkError::validation(format!(
+            "cannot set status '{status}' on an archived goal"
+        )));
+    }
     if current == "review_pending" {
         return Err(FrameworkError::validation(format!(
             "cannot set status '{status}' on a goal in '{current}' state"
@@ -1225,6 +1335,18 @@ fn set_terminal_flags(
         return Err(FrameworkError::validation(format!(
             "goal is already in '{status}' state"
         )));
+    }
+    // P2-016: Cross-state transition guard — only allow running → {paused,blocked}.
+    // Reject paused→blocked and blocked→paused as unreachable intermediate states.
+    if current == "paused" && status == "blocked" {
+        return Err(FrameworkError::validation(
+            "cannot block a paused goal — resume first, then block if needed"
+        ));
+    }
+    if current == "blocked" && status == "paused" {
+        return Err(FrameworkError::validation(
+            "cannot pause a blocked goal — resolve the blocker first, then pause if needed"
+        ));
     }
     obj.insert("status".to_string(), json!(status));
     if let Some(d) = drive_until_done {

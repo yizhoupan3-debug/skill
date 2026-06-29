@@ -378,26 +378,37 @@ mod tests {
     }
 
     #[test]
-    fn goal_start_without_drive_defaults_to_false() {
-        // New goals should start without requiring drive_until_done contract fields.
-        // drive_until_done now defaults to false so users can create lightweight goals.
+    fn goal_start_without_drive_defaults_to_true() {
+        // New goals default to drive_until_done=true (P0-002 fix),
+        // requiring the drive contract (non_goals, done_when, validation_commands).
         let suffix = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("time")
             .as_nanos();
-        let repo = std::env::temp_dir().join(format!("router-rs-goal-default-false-{suffix}"));
+        let repo = std::env::temp_dir().join(format!("router-rs-goal-default-true-{suffix}"));
         let _ = fs::remove_dir_all(&repo);
         fs::create_dir_all(repo.join("artifacts/current")).expect("mkdir");
         let rr = repo.display().to_string();
 
-        // Start without drive_until_done → must succeed (defaults to false).
-        let out = framework_goal_drive(json!({
+        // Start without drive_until_done → now defaults to true, so must provide contract fields.
+        let err = framework_goal_drive(json!({
             "repo_root": rr.clone(),
             "operation": "start",
             "task_id": "lite-task",
             "goal": "do something simple",
         }))
-        .expect("start should succeed without explicit drive_until_done");
+        .expect_err("start should fail without drive contract when drive_until_done defaults to true");
+        assert!(err.to_string().contains("non_goals"), "expected non_goals requirement: {err}");
+
+        // Start with explicit drive_until_done=false still works
+        let out = framework_goal_drive(json!({
+            "repo_root": rr.clone(),
+            "operation": "start",
+            "task_id": "lite-task",
+            "goal": "do something simple",
+            "drive_until_done": false,
+        }))
+        .expect("start with explicit drive_until_done=false should succeed");
         assert_eq!(out["ok"], json!(true));
 
         // Verify the goal was created with drive_until_done=false
@@ -1523,6 +1534,7 @@ mod tests {
             "operation": "start",
             "task_id": "rs-drive",
             "goal": "lightweight goal",
+            "drive_until_done": false,
         }))
         .expect("start");
 

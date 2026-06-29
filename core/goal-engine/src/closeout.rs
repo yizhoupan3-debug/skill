@@ -95,7 +95,9 @@ fn delegate_to_framework_runtime(record: &serde_json::Value) -> CloseoutVerifica
     }
 }
 
-/// Verify that an evidence index exists and contains at least one artifact for the given task.
+/// Verify that an evidence index exists and contains at least one successful artifact
+/// (exit_code=0 or success=true). This is stricter than the earlier check which only
+/// verified the array was non-empty — consistent with R8 behavior in closeout_validation.rs.
 pub fn verify_evidence_index(repo_root: &Path, task_id: &str) -> bool {
     let path = repo_root
         .join("artifacts")
@@ -113,10 +115,19 @@ pub fn verify_evidence_index(repo_root: &Path, task_id: &str) -> bool {
         Ok(v) => v,
         Err(_) => return false,
     };
-    val.get("artifacts")
-        .and_then(|v| v.as_array())
-        .map(|a| !a.is_empty())
-        .unwrap_or(false)
+    let artifacts = match val.get("artifacts").and_then(|v| v.as_array()) {
+        Some(a) => a,
+        None => return false,
+    };
+    if artifacts.is_empty() {
+        return false;
+    }
+    // Must have at least one successful artifact (exit_code=0 or success=true),
+    // consistent with R8 and QGEntry Stage 1's definition of "evidence_ok".
+    artifacts.iter().any(|entry| {
+        entry.get("exit_code").and_then(|c| c.as_i64()) == Some(0)
+            || entry.get("success").and_then(|s| s.as_bool()) == Some(true)
+    })
 }
 
 /// Verify a closeout record against both structural rules (via `verify_closeout_value`)

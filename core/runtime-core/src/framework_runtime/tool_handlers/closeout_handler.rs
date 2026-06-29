@@ -123,13 +123,29 @@ pub(crate) fn closeout_record_write_dispatch(
         "violations": violations,
     });
 
-    // Write to disk after evaluation
+    // Write to disk after evaluation — only if closeout is allowed
     let record_path = host_projection::hooks::closeout_record_path_for_task(repo_root, task_id)?;
-    if let Some(parent) = record_path.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(FrameworkError::Io)?;
+    if !closeout_allowed {
+        // Write failed record with .failed suffix for diagnostics, without polluting
+        // the normal closeout path.
+        let failed_path = {
+            let mut p = record_path.clone();
+            let name = p.file_stem().unwrap_or_default().to_string_lossy().to_string();
+            p.set_file_name(format!("{}.failed.json", name));
+            p
+        };
+        if let Some(parent) = failed_path.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(FrameworkError::Io)?;
+        }
+        core_state_utils::atomic_write::write_atomic_json(&failed_path, &record_value)?;
+    } else {
+        if let Some(parent) = record_path.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(FrameworkError::Io)?;
+        }
+        core_state_utils::atomic_write::write_atomic_json(&record_path, &record_value)?;
     }
-    core_state_utils::atomic_write::write_atomic_json(&record_path, &record_value)?;
 
     Ok(serde_json::to_string_pretty(&result)
         .map_err(FrameworkError::Json)?)
@@ -363,12 +379,27 @@ pub(crate) fn evaluate_closeout_gate_hook(
         .goal_state
         .as_ref()
         .is_some_and(check_goal_suggests_review);
+    let review_goal = task_view
+        .goal_state
+        .as_ref()
+        .is_some_and(check_goal_suggests_review);
+    // P2-008: Optional reviewer_lane/fork_context from hook payload
+    let has_review_evidence = payload
+        .get("reviewer_lane")
+        .and_then(|v| v.as_str())
+        .is_some()
+        || payload.get("fork_context").is_some();
+
     if review_goal {
-        findings.push(
-            "WARN: review_gate: GOAL suggests review work but hook path has no reviewer evidence — \
-             use closeout_gate MCP tool instead"
-                .to_string(),
-        );
+        if !has_review_evidence {
+            findings.push(
+                "WARN: review_gate: GOAL suggests review work but hook path has no reviewer evidence \
+                 — pass reviewer_lane + fork_context in payload"
+                    .to_string(),
+            );
+        } else {
+            findings.push("review_gate: GOAL suggests review; reviewer evidence attested".to_string());
+        }
     }
 
     let all_clear = compute_closeout_all_clear(
@@ -378,8 +409,15 @@ pub(crate) fn evaluate_closeout_gate_hook(
     );
     let passed = all_clear;
 
+    // P2-012: Three-level verdict matching the MCP tool path.
+    // checkpoint-only means only SESSION_SUMMARY.md is missing.
+    let checkpoint_only =
+        !all_clear && goal_present && evidence_success && (!review_goal || false);
+
     let verdict_label = if all_clear {
         "PASS: all closeout gates satisfied"
+    } else if checkpoint_only {
+        "ADVISORY: checkpoint missing — call session_checkpoint before complete"
     } else {
         "ADVISORY: closeout gates not satisfied"
     };

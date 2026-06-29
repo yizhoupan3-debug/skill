@@ -816,6 +816,8 @@ mod tests {
         fs::create_dir_all(&task_dir).unwrap();
         fs::write(
             task_dir.join("GOAL_STATE.json"),
+            // P3-005: Legacy TASK_STATE.json — this test verifies backward-compat
+            // hydration of the removed aggregate format.
             serde_json::to_string_pretty(&json!({
                 "schema_version": "router-rs-goal-v1",
                 "drive_until_done": true,

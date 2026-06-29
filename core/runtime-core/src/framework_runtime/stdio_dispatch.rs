@@ -470,7 +470,7 @@ fn dispatch_framework_stdio_request(op: &str, payload: Value) -> Result<Value, F
                 goal,
                 sub_scene,
                 round,
-                None,
+                tokio::runtime::Handle::try_current().ok(),
                 output_data,
             );
             Ok(serde_json::to_value(&verdict)?)

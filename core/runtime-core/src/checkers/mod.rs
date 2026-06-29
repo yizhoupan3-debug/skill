@@ -13,7 +13,8 @@
 //! - `slides`      → OverflowChecker
 //! - `visual`      → ScreenshotLayoutChecker
 //!
-//! Note: EvidenceChecker 不在 Stage 2 注册——Stage 1 反欺诈门已做证据完整性验证。
+//! Note: EvidenceChecker 已在 Stage 2 注册为 scene=GENERAL 的 checker，
+//! 与 Stage 1 反欺诈门形成双重验证（Stage 1 检查证据存在性，Stage 2 做更深层评估）。
 //!
 //! ## RESEARCH scene checkers
 //! Research verification checkers are registered via the extern mechanism

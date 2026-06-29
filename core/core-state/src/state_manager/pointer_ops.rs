@@ -143,12 +143,17 @@ fn upsert_tasks_array_entry(
 }
 
 /// Write `artifacts/current/active_task.json` (`{"task_id":…}` only).
+/// Always upserts the `tasks` array to prevent D5 auto-pass vulnerability
+/// (validate_complete_transition checks task existence via GOAL_STATE.json,
+/// but maintaining a consistent tasks array is good practice).
 pub fn write_active_task_pointer(repo_root: &Path, task_id: &str) -> Result<(), FrameworkError> {
     crate::utils::path_guard::validate_task_id_component(task_id)?;
     let mut pointers = load_task_pointers_json(repo_root)?;
+    let updated_at = framework_kernel::time::now_iso();
     if let Some(obj) = pointers.as_object_mut() {
         obj.insert("schema_version".to_string(), json!("task-pointers-v1"));
         obj.insert("active_task_id".to_string(), json!(task_id));
+        upsert_tasks_array_entry(obj, task_id, task_id, &updated_at);
     }
     write_atomic_json(
         &repo_root.join("artifacts/current/TASK_POINTERS.json"),
@@ -206,17 +211,30 @@ fn goal_drive_set_focus_from_payload(payload: &Value) -> bool {
 }
 
 /// After `start`/`resume`, keep continuity pointers aligned with the task that owns GOAL_STATE.
+/// Single atomic write: sets active_task_id, conditionally sets focus_task_id,
+/// and always updates the tasks array. Avoids the intermediate state that
+/// two separate writes would expose to readers (P2-002).
 pub fn sync_task_pointers_after_goal_drive(
     repo_root: &Path,
     task_id: &str,
     goal_label: &str,
     payload: &Value,
 ) -> Result<(), FrameworkError> {
-    write_active_task_pointer(repo_root, task_id)?;
-    if goal_drive_set_focus_from_payload(payload) {
-        write_focus_task_pointer_minimal(repo_root, task_id, goal_label)?;
+    crate::utils::path_guard::validate_task_id_component(task_id)?;
+    let mut pointers = load_task_pointers_json(repo_root)?;
+    let updated_at = framework_kernel::time::now_iso();
+    if let Some(obj) = pointers.as_object_mut() {
+        obj.insert("schema_version".to_string(), json!("task-pointers-v1"));
+        obj.insert("active_task_id".to_string(), json!(task_id));
+        upsert_tasks_array_entry(obj, task_id, goal_label, &updated_at);
+        if goal_drive_set_focus_from_payload(payload) {
+            obj.insert("focus_task_id".to_string(), json!(task_id));
+        }
     }
-    Ok(())
+    write_atomic_json(
+        &repo_root.join("artifacts/current/TASK_POINTERS.json"),
+        &pointers,
+    )
 }
 
 /// Remove active/focus pointers when they reference `task_id` (complete / clear).

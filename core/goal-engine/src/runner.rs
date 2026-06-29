@@ -283,7 +283,7 @@ fn run_loop_inner(
     // ── Quality Gate (verify_quality_gate) ──
     // Two-stage exit gate: Stage 1 anti-fraud evidence check + Stage 2 scene-dispatched checker evaluation.
     // If the QG gate blocks, the aggregate is downgraded to "fail".
-    if entry.verify_quality_gate.unwrap_or(false) && aggregate.overall_status == "pass" {
+    if entry.verify_quality_gate.unwrap_or(true) && aggregate.overall_status == "pass" {
         let task_id = actions
             .first()
             .map(|a| {
@@ -294,11 +294,18 @@ fn run_loop_inner(
             })
             .unwrap_or_default();
         if !task_id.is_empty() {
+            // Read scene from goal state instead of hardcoding "general" (P2-005)
+            let scene = core_state::state_manager::read_goal_state(ctx.repo_root, Some(&task_id))
+                .ok()
+                .flatten()
+                .and_then(|s| s.get("scene").and_then(|v| v.as_str()).map(|s| s.to_string()))
+                .unwrap_or_else(|| "general".to_string());
+
             if let Some(qg_hooks) = framework_kernel::runtime_hooks::try_hooks() {
                 let qg_payload = serde_json::json!({
                     "repo_root": ctx.repo_root.to_string_lossy().to_string(),
                     "task_id": task_id,
-                    "scene": "general",
+                    "scene": scene,
                     "goal": entry.loop_id,
                     "round": 1,
                 });
@@ -330,8 +337,14 @@ fn run_loop_inner(
                         }
                     }
                     Err(e) => {
-                        tracing::warn!("Quality gate hook error (verify_quality_gate=true): {e}");
-                        // Hook failure does not block the loop
+                        // P1-007: Fail-closed on QG hook error, consistent with goal_ops.rs
+                        // (which returns Err on QG hook failure). In runner context, downgrade
+                        // the aggregate to "fail" so the caller is aware of the blocked gate.
+                        tracing::error!(
+                            "Quality gate hook error (verify_quality_gate=true): {e} — \
+                             downgrading aggregate to fail (fail-closed)"
+                        );
+                        aggregate.overall_status = "fail".to_string();
                     }
                 }
             } else {
@@ -345,7 +358,7 @@ fn run_loop_inner(
     // ── Closeout Gate (verify_closeout_gate) ──
     // Readiness check for goal_state, evidence, session_summary.
     // Results are advisory only — does not downgrade aggregate.
-    if entry.verify_closeout_gate.unwrap_or(false) && aggregate.overall_status == "pass" {
+    if entry.verify_closeout_gate.unwrap_or(true) && aggregate.overall_status == "pass" {
         let task_id = actions
             .first()
             .map(|a| {
@@ -495,13 +508,12 @@ fn run_loop_inner(
                 ) {
                     goal_state["updated_at"] =
                         serde_json::json!(framework_kernel::time::now_iso());
-                    if let Err(e) = core_state_utils::atomic_write::write_atomic_json(
+                    // P1-006: Propagate write errors to prevent silent divergence
+                    // between GOAL_STATE and LOOP_RUN_STATE timestamps.
+                    core_state_utils::atomic_write::write_atomic_json(
                         &path, &goal_state,
-                    ) {
-                        tracing::warn!(
-                            "[goal-engine] GOAL_STATE sync atomic_write failed: {e}"
-                        );
-                    }
+                    )
+                    .map_err(|e| LoopError::Io(format!("GOAL_STATE sync write failed: {e}")))?;
                 }
             }
         }
@@ -970,11 +982,10 @@ pub fn run_loop_kill_all(repo_root: &Path) -> Result<(), LoopError> {
 
 /// Read the current goal text from GOAL_STATE.json for drift comparison.
 fn read_goal_snapshot(repo_root: &Path, entry: &LoopRegistryEntry) -> Option<String> {
-    let goal_path = repo_root
-        .join("artifacts")
-        .join("current")
-        .join(&entry.loop_id)
-        .join("GOAL_STATE.json");
+    let goal_path = core_state::state_manager::goal_state_path_for_task(
+        repo_root,
+        &entry.loop_id,
+    ).ok()?;
     if !goal_path.is_file() {
         return None;
     }
