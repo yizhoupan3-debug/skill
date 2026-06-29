@@ -1,0 +1,77 @@
+# 科研 / 手稿技能栈索引（真源地图）
+
+面向维护者与模型实现方：**先读本节再下钻**，避免在同一任务里平行打开过多 reference 导致「合规压过行动」。
+
+## 第一性原理（减法一句话）
+
+**用户要**：稿子能不能投、差什么证据、下一步改哪 —— **不是**技能拓扑考试。
+**默认入口一个**：`$paper-workbench`；其余专科为**内部分片**（`disable-model-invocation`），除非用户点名。
+
+## 技能层（谁拥有什么）
+
+| 角色 | Skill | 何时加载 |
+|------|--------|----------|
+| 前门 / 编排 | `$paper-workbench` | 任何手稿级模糊请求；ref-first；先审再改；workflow 抱怨 |
+| 判断 | `$paper-reviewer` | 审稿、严审、能不能投、单维度审；**不改稿**除非用户切换 |
+| 执行 | `$paper-workbench` (inline revision) | findings/审稿意见已就绪、要动稿；遵守 `edit_scope` |
+| 表达 | `$paper-writing` | claim 边界已冻结下的局部/授权范围内润色与叙事 |
+| 引用真源 | `$citation-management` | `.bib`、参考文献表、DOI/格式、文后一致性 |
+
+**邻接技能**（按artifact 并入，不替代前门）：`statistical-analysis`（统计深度）、`experiment-reproducibility`（可复现）、`scientific-figure-plotting` / `tikz-paper-figure`（作图代码）、`visual-review` / `pdf`（成稿视觉与版式）、`math-derivation`（推导，窄）。
+
+## Reference 下钻顺序（渐进披露）
+
+| 层级 | 何时需要 | 读什么 |
+|------|----------|--------|
+| **L0** | 每一轮手稿任务 | [`../SKILL.md`](../SKILL.md) 正文 + **Progressive disclosure** |
+| **L1** | 即将改稿 | [`edit-scope-gate.md`](edit-scope-gate.md)（`surgical` 默认） |
+| **L1** | 证据与主张不匹配 | [`claim-evidence-ladder.md`](claim-evidence-ladder.md)（先补证据再缩口径） |
+| **L1** | 落笔 / 语言问题 | [`research-language-norms.md`](research-language-norms.md) + [`prose-quality-gate.md`](prose-quality-gate.md)（`language_register` / ladder / `prose_qc`） |
+| **L1** | 全链路写作（路由→审→改→写→验收） | [`prose-chain-contract.md`](prose-chain-contract.md) |
+| **L1** | 坏→好结构对照 | [`prose-exemplars.md`](prose-exemplars.md) |
+| **L2** | 顶刊/顶会栏 | [`top-tier-paper-standard.md`](top-tier-paper-standard.md) |
+| **L2** | 整篇严审 / exhaustive 深链 | [`paper-exhaustive-audit.md`](paper-exhaustive-audit.md) |
+| **L2** | Claim card + 章节 handoff | [`claim-spine-and-section-contract.md`](claim-spine-and-section-contract.md) |
+| **L2** | 先学 ref 再写 | [`ref-first-writing-workflow.md`](ref-first-writing-workflow.md) |
+| **L2** | Lane 语义速查 | [`paper-lanes.md`](paper-lanes.md) |
+| **L2** | 用户话术 → lane 最小对照 | [`user-phrases-to-lanes.md`](user-phrases-to-lanes.md) |
+| **L3** | 多轮冻结、并行 sidecar、磁盘门控 | [`paper-gate-protocol.md`](paper-gate-protocol.md) |
+
+**纪律**：单轮交互**不要**默认展开 L3；用户要持久化状态或并行 batch 时再打开协议。
+
+## 横切规则（避免重复真源）
+
+- **编辑范围**：只信 [`edit-scope-gate.md`](edit-scope-gate.md)。
+- **主张 vs 证据**：只信 [`claim-evidence-ladder.md`](claim-evidence-ladder.md)。
+- **用语 / 内部口径 / 防御式堆叠**：只信 [`research-language-norms.md`](research-language-norms.md)。
+- **严重度 / Warning**：只信 [`severity-spec.md`](severity-spec.md)（含 exhaustive 模式 `Warning` 层）。
+- **Exhaustive 查稿步骤与输出信封**：只信 [`paper-exhaustive-audit.md`](paper-exhaustive-audit.md)。
+- **RFV（代码）vs PAPER_GATE（手稿）**：协议首段 —— 勿混 PASS 语义。
+
+## 已收敛的断裂
+
+- **不存在** `skills/literature-synthesis/`：目标期刊语料与 `ref_learning_brief` 在 **`$paper-workbench` 内**完成，见 [`ref-first-writing-workflow.md`](ref-first-writing-workflow.md)。
+- `literature-synthesis` slug 在仓库政策中视为 **retired**（勿复活目录）；编译器侧勿再当作 runtime workflow slug。
+
+## 科研纪录与仓库连续性
+
+长周期科研与改稿应把**可冷启动叙事**落在仓库里，而不是只留在对话里：
+
+- **框架连续性目录**：[`artifacts/current/`](../../../artifacts/current/) 下的 `SESSION_SUMMARY` / `NEXT_ACTIONS` / `EVIDENCE_INDEX`（及同层相关指针）是跨会话接力的机器可读真源；分层与开关以 [`docs/README.md`](../../../docs/README.md) 为准。
+- **手稿主张帐本**：`paper_story/CLAIM_LEDGER.md`（与 `EVIDENCE_ANCHOR_MAP` 等）冻结 claim 天花板与证据锚；主张—证据纪律只信 [`claim-evidence-ladder.md`](claim-evidence-ladder.md)。
+- **手稿 prose 轮次账（可选）**：`paper_story/PROSE_QC_LOG.md`（模板见 [`prose-chain-contract.md`](prose-chain-contract.md)）；全链路见同文件。
+- **阴性结果**：与阳性结果同等记录（失败条件、为何仍信息量足够、是否影响 claim 收窄）；避免「只写成功路径」造成不可复核的故事线。
+- **计划 vs 实际**：预注册/分析计划与事后偏离须在方法或补充材料中可追踪；执行面契约与验收形状见 [`skills/SKILL_FRAMEWORK_PROTOCOLS.md`](../../SKILL_FRAMEWORK_PROTOCOLS.md)（与 harness 文档互补，不重复第二真源）。
+- **可复现实验最低纪录**：环境、数据标识、软件 pin、主分析 vs 探索性分析的边界，见 [`../../experiment-reproducibility/references/research-record-minimum.md`](../../experiment-reproducibility/references/research-record-minimum.md)。
+
+## 宿主与专科入口（真源一段）
+
+手稿专科（`paper-workbench` / `paper-writing` / `paper-reviewer` 等）的**叙事与门控 prose 宿主无关**：热路由 owner 以 [`../../../skills/SKILL_ROUTING_RUNTIME.json`](../../../skills/SKILL_ROUTING_RUNTIME.json) 为准（当前仅 `paper-workbench` + `paper-writing` 热表；`paper-reviewer` 内联）；技能安装与宿主投影以 **`router-rs framework host-integration install --to <host>`**（及宿主文档中的 sync 子命令）为准，勿在文档里硬编码单宿主路径当第二真源。扩展规则见 [`docs/README.md`](../../../docs/README.md)。
+
+- **`$paper-workbench`**：在**所有宿主**上均为**用户可显式 invocation 的前门**（`user-invocable`，宿主以各环境 `SKILL.md` / 路由为准）。
+- **`$paper-writing` / `$paper-reviewer`**：保持 **`disable-model-invocation: true`** 与既有元数据语义，表示它们**不是**与 workbench 并列的「第二个用户入口」，而是 workbench **在任一支宿主上内联调用的专科契约**（审稿、润色 lane）。revision 由 workbench 自身 inline 处理（`edit_scope` gate）。这与「只有一个手稿前门」不矛盾：**用户只打 workbench；模型在对话内按 lane 加载专科 SKILL**。
+
+## 可选工具
+
+- 并行 lane：本仓库不提供必需的 scaffold 脚本；需要时按 `paper-gate-protocol.md` 的
+  Lane Manifest Contract 手工创建 `lane_manifest.md` 与各 lane 子目录。
