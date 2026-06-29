@@ -450,7 +450,7 @@
     "task": {
       "disable_spawn_first_nudge": true,
       "closeout_mode": "advisory",
-      "review_gate": "suppressed",
+      "review_gate": "advisory",
       "goal_continuation": "manual-boards-only",
       "loop_capable": false
     },
