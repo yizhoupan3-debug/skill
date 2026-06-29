@@ -1259,7 +1259,7 @@ pub fn dispatch_web_command(command: WebCommand) -> Result<(), FrameworkError> {
 }
 
 fn dispatch_web_fetch(args: WebFetchCommand) -> Result<(), FrameworkError> {
-    use rt_core_contracts::web_fetch_guard;
+    use runtime_core::web_fetch_guard;
     use std::io::Read;
 
     let max_bytes = args.max_bytes.unwrap_or(50000).min(50000);

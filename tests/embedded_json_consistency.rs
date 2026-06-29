@@ -53,7 +53,7 @@ fn nl_route_adjustments_embedded_matches_disk() {
 
 #[test]
 fn hook_observation_rules_embedded_matches_disk() {
-    let embedded = rt_core_contracts::hook_observation_rules::embedded_schema_version();
+    let embedded = runtime_core::hook_observation_rules::embedded_schema_version();
     let disk = disk_schema_version(
         &repo_root().join("configs/framework/ROUTER_RS_HOOK_OBSERVATION_RULES.json"),
     );

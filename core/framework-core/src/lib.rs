@@ -39,6 +39,9 @@ pub mod stdio_payload_types;
 pub mod time;
 pub mod tokenizer;
 
+// ── from runtime-core-contracts (migrated for DAG decoupling) ──
+pub mod formal_toolchain;
+
 // ── re-exports from core-policy ──
 pub use dev_exempt::{EXEMPT_PATH_PREFIXES, should_dev_exempt};
 pub use env_flags::{

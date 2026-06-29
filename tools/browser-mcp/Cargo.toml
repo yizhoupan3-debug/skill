@@ -15,7 +15,7 @@ mcp-tool-registry = { path = "../../core/mcp-tool-registry" }
 core-errors = { path = "../../core/core-errors" }
 framework-core = { path = "../../core/framework-core" }
 http-util = { path = "../../core/http-util" }
-runtime-core-contracts = { path = "../../core/runtime-core-contracts" }
+runtime-core = { path = "../../core/runtime-core" }
 base64.workspace = true
 chrono.workspace = true
 anyhow.workspace = true

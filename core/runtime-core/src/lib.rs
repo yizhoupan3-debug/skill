@@ -45,11 +45,16 @@ pub use fr_runtime::router_env_flags::{
 };
 pub use runtime_infra::{kernel_bootstrap, kernel_utils, stdio_transport};
 
-// ── re-exports from rt_core_contracts (remaining pure contract modules) ──
-pub use rt_core_contracts::{
-    formal_toolchain, harness_context_signals, harness_contract, hook_event_routing,
-    hook_observation_rules, mcp_pre_guard, web_fetch_guard,
-};
+// ── runtime-core-contracts modules (merged) ──
+// formal_toolchain is in framework-core (framework-extra dependency decoupling)
+pub mod harness_context_signals;
+pub mod harness_contract;
+pub mod hook_event_routing;
+pub mod hook_observation_rules;
+pub mod hook_outbound_protect;
+pub mod mcp_pre_guard;
+pub mod web_fetch_guard;
+pub use framework_core::formal_toolchain;
 
 // ── re-exports from core-state (flattened) ──
 pub use core_state::{state_manager as goal_drive, step_ledger, task_state};

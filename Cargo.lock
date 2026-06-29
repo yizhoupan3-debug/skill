@@ -326,7 +326,7 @@ dependencies = [
  "http-util",
  "mcp-tool-registry",
  "reqwest",
- "runtime-core-contracts",
+ "runtime-core",
  "rusqlite",
  "serde",
  "serde_json",
@@ -1171,7 +1171,6 @@ dependencies = [
  "host-projection",
  "insta",
  "routing-engine",
- "runtime-core-contracts",
  "runtime-storage",
  "serde",
  "serde_json",
@@ -3217,7 +3216,6 @@ dependencies = [
  "research-harness",
  "routing-engine",
  "runtime-core",
- "runtime-core-contracts",
  "rusqlite",
  "serde",
  "serde_json",
@@ -3283,10 +3281,10 @@ dependencies = [
  "insta",
  "mcp-tool-registry",
  "quality-gate",
+ "regex",
  "reqwest",
  "routing-core",
  "routing-engine",
- "runtime-core-contracts",
  "runtime-infra",
  "runtime-storage",
  "serde",
@@ -3298,21 +3296,6 @@ dependencies = [
  "tokio",
  "tool-routing-engine",
  "trace-runtime",
- "tracing",
-]
-
-[[package]]
-name = "runtime-core-contracts"
-version = "0.1.0"
-dependencies = [
- "core-errors",
- "framework-core",
- "insta",
- "regex",
- "reqwest",
- "serde",
- "serde_json",
- "serial_test",
  "tracing",
 ]
 
@@ -3666,7 +3649,7 @@ dependencies = [
  "framework-core",
  "regex",
  "routing-engine",
- "runtime-core-contracts",
+ "runtime-core",
  "rusqlite",
  "serde_json",
  "serde_yml",

@@ -20,7 +20,6 @@ framework-core = { path = "../framework-core" }
 framework-runtime = { path = "../framework-runtime" }
 
 # L4
-runtime-core-contracts = { path = "../runtime-core-contracts" }
 runtime-storage = { path = "../runtime-storage" }
 routing-engine = { path = "../routing-engine" }
 host-projection = { path = "../host-projection" }

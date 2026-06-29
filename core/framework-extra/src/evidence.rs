@@ -463,7 +463,7 @@ fn shell_command_looks_like_verification(command_lower: &str) -> bool {
         || command_lower.contains("task test")
         || command_lower.contains("task check")
         // Formal / math toolchains: shared with `harness_context_signals` (`formal_toolchain`).
-        || rt_core_contracts::formal_toolchain::ascii_lower_contains_formal_toolchain_tokens(command_lower)
+        || framework_core::formal_toolchain::ascii_lower_contains_formal_toolchain_tokens(command_lower)
 }
 
 pub(super) fn detect_and_verify_physical_artifact(repo_root: &Path, command_lower: &str) -> bool {

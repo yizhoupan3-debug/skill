@@ -28,7 +28,6 @@ goal-engine = { path = "../goal-engine" }
 browser-mcp = { path = "../../tools/browser-mcp", optional = true }
 mcp-tool-registry = { path = "../mcp-tool-registry" }
 research-harness = { path = "../research-harness", optional = true }
-rt-core-contracts = { path = "../runtime-core-contracts", package = "runtime-core-contracts" }
 libc.workspace = true
 chrono.workspace = true
 clap.workspace = true

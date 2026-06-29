@@ -5,7 +5,6 @@
 //! host-projection). Only leaf crates (core-state, core-policy, framework-kernel)
 //! or external crates are allowed.
 
-pub mod formal_toolchain;
 pub mod harness_context_signals;
 pub mod harness_contract;
 pub mod hook_event_routing;
