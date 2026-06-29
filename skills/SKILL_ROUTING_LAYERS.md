@@ -50,7 +50,8 @@ L0  agent-swarm-orchestration, gh-address-comments, gh-fix-ci, sentry,
     skill-framework-developer, systematic-debugging, update
 L1  deepinterview, plan-mode, goalx
 L2  code-review-deep, citation-management, deep-research, gitx,
-    paper-workbench, research-discovery, research-execution
+    good-question, good-story, paper-workbench, research-discovery,
+    research-execution
 L3  design-md, doc, experiment-reproducibility, mcp-server-management, pdf,
     slides, spreadsheets, tikz-paper-figure, visual-review
 L4  formal-verification, literature-verification, math-derivation,
@@ -93,6 +94,9 @@ Runtime lanes  planning, execution/code, language/framework, platform/integratio
 - `slides` native PPTX lane → 通用 PPT / 现有 deck artifact gate / 显式 `deck.plan.json` / Rust PPTX 源码工作流
 - research retrieval runtime vs `gh-address-comments` → repo / issue / PR / timeline 深挖 vs 当前 PR 状态汇总
 - research retrieval runtime vs `skill-framework-developer` external scout mode → 通用调研 vs 为本地 skill 库做吸收式对标
+- `good-question` vs `research-discovery` → 具体边界见 [`docs/routing/good-skill-overlap-resolution.md`](../docs/routing/good-skill-overlap-resolution.md) §2（question: 模糊兴趣→问题卡 / discovery: 具体问题→调研）
+- `good-story` vs `paper-workbench` → 具体边界见 [`docs/routing/good-skill-overlap-resolution.md`](../docs/routing/good-skill-overlap-resolution.md) §1（story: 零散结果→Story Card / workbench: 完整手稿→审稿/改写）
+- `good-story` vs `good-question` → 具体边界见 [`docs/routing/good-skill-overlap-resolution.md`](../docs/routing/good-skill-overlap-resolution.md) §3（question: 管线最前选题 / story: 管线中后叙事组织）
 - `runtime checklist planning` vs `runtime checklist execution` → 生成/整理 execution-ready checklist vs 按 checklist 执行
 
 ## 重路由信号

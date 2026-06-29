@@ -22,7 +22,9 @@
       "plan-mode",
       "research-discovery",
       "research-execution",
-      "math-derivation"
+      "math-derivation",
+      "good-story",
+      "good-question"
     ],
     "lean_default_owners": [],
     "tier_activation_defaults": {

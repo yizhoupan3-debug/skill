@@ -8,7 +8,7 @@
       "hot_first_turn_owners_from_policy": true
     },
     "research_loadout": {
-      "description": "Default research harness: discovery + execution + workspace + manuscript + citation + stats + repro + deep research.",
+      "description": "Default research harness: discovery + execution + workspace + manuscript + citation + stats + repro + deep research + question + story.",
       "tier_activation": "default",
       "skill_slugs": [
         "research-discovery",
@@ -20,6 +20,8 @@
         "experiment-reproducibility",
         "math-derivation",
         "deep-research",
+        "good-question",
+        "good-story",
         "pdf",
         "plan-mode",
         "research-knowledge-graph",

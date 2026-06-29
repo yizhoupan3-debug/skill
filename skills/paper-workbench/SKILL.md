@@ -301,6 +301,31 @@ When lanes require structured verification, load the corresponding skill:
 - Literature/citation integrity checks → [`../literature-verification/SKILL.md`](../literature-verification/SKILL.md)
 - Statistical methodology checks → [`../statistical-verification/SKILL.md`](../statistical-verification/SKILL.md)
 
+## Upstream skill integration: good-story
+
+When the user provides **raw results, figures, data summaries, or early drafts** before the manuscript's story is settled, call `$good-story` first to produce a Story Card before entering the review/revision pipeline.
+
+**When to route upstream**:
+- User has results/tables/figures but no clear manuscript direction → `$good-story` for story diagnosis first
+- User has a draft but the story is weak or unfocused → `$good-story` for story spine diagnosis, then feed the Story Card into `@lane:reviewer`
+- User asks for "story" or "narrative" → route to `$good-story` as the owner, not paper-workbench
+
+**Consuming the Story Card**:
+The Story Card (output of `$good-story`) provides structured input for paper-workbench:
+- `Best story` / `Why this story works` → shapes the reviewer's claim-evidence evaluation
+- `Evidence map` (claim → evidence → boundary) → seeds `@lane:reviewer` evidence-chain checks
+- `Weak points` → pre-populates reviewer's finding list for verification
+- `Figure order` → guides `@lane:reviewer` figure/table audit depth
+
+**Boundary**:
+- `$good-story` replaces paper-workbench when the task is "find the story" not "review/rewrite an existing draft"
+- If a draft exists AND story is unclear, run `$good-story` first, then paper-workbench on the rewritten manuscript
+- Do not route to `$good-story` when: the manuscript is already structured and the user only wants review/rewrite without restructuring the narrative
+
+**Downstream**:
+- `$good-story` does not require paper-workbench; it can work standalone for users who only need story diagnosis
+- paper-workbench remains the front door for manuscript submission/review/revision; `$good-story` is a pre-processing step
+
 ## Research Harness MCP tools（Rust 加速路径）
 
 论文审稿/返修流程可通过 `research-harness` crate 的 MCP tools 加速。

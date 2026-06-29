@@ -127,6 +127,32 @@ result "verified", "严审通过", or "research-grade" on prose alone.
 - `$citation-management`: citation metadata truth, DOI/BibTeX/reference-list consistency.
 - `$paper-workbench`: manuscript-level review, revision, writing, target-venue strategy, or submission readiness.
 
+## Upstream skill integration: good-question
+
+When the user has a **vague interest, rough idea, or unclear research direction** rather than a specific question or a surveyable topic, call `$good-question` first to sharpen the question before entering discovery.
+
+**When to route upstream**:
+- User has a broad area but no clear question → `$good-question` for problem sharpening first
+- User has a literature gap but hasn't verified if it's consequential → `$good-question` to stress-test the gap
+- User says "选题", "开题", "想法不成形", or "问题打磨" → `$good-question` is the owner, not research-discovery
+- After `$good-question` outputs a Good Question Card, research-discovery can take the sharpened question and do targeted literature survey
+
+**Consuming the Good Question Card**:
+The Good Question Card (output of `$good-question`) provides structured input for research-discovery:
+- `Core assumption challenged` → seeds the literature survey's hypothesis scope
+- `Competing hypotheses` → frames the contradiction-finding and closest-work identification
+- `Key discriminating evidence` → focuses the retrieval on decisive experiments/data
+- `Two-week pilot` → defines the feasible scope for discovery work
+
+**Boundary**:
+- `$good-question` replaces research-discovery when the task is "find the right question" not "survey an existing question or theory area"
+- If the user already has a concrete question (or even a rough prototype), research-discovery is the right front door first, with `$good-question` as optional refinement later
+- Do not route to `$good-question` when: the user already has a settled research question and only needs literature/theory survey
+
+**Downstream**:
+- `$good-question` does not require research-discovery; it can work standalone for users who only need question sharpening
+- research-discovery remains the front door for literature survey and theory landscape; `$good-question` is a pre-processing step
+
 ## Discovery vs. execution boundary
 
 This skill owns the **discovery phase** of research work. When a task crosses
