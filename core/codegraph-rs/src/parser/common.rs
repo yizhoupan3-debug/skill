@@ -74,7 +74,8 @@ mod tests {
 
     #[test]
     fn should_index_markdown_in_docs() {
-        assert_eq!(detect_language("docs/README.md"), Some("markdown"));
+        // README.md is excluded by should_index_markdown (see should_skip_noise_markdown_files)
+        assert_eq!(detect_language("docs/README.md"), None);
         assert_eq!(detect_language("docs/guide.md"), Some("markdown"));
         assert_eq!(
             detect_language("skills/code-review-deep/SKILL.md"),
