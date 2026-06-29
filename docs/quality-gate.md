@@ -109,6 +109,8 @@ pub struct GateVerdict {
 - 任何 `A`/`B` → gate 失败
 - 全部 `≤ Warning`（或空）→ gate 通过
 
+**自证证据警告**（v7.2）：Stage 1 检测到所有成功证据均为 MCP 自证（`mcp_record_evidence`，无 host-bound `tool_call_id`）时，添加 `Severity::Warning` 级别 advisory 到 `advisories` 列表。调用方可通过 `advisories` 感知自证风险。（对应 P2-007）
+
 ### 2.6 `CheckContext`
 
 每次 checker 评估传入的上下文：

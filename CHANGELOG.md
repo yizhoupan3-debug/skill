@@ -56,6 +56,51 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `framework_runtime/json_payload.rs` (merged into json_value.rs)
 - `cursor_hooks/tests_review_gate.rs` 5254-line monolith (split into 3 sub-modules)
 
+## [v7.2] — 2026-06-29
+
+### Task Engine / Goal Management / Exit Gates — 对抗性 Review 全修复（46 项 findings 闭环）
+
+#### Security 修复
+- **P0-001**: D5 证据门禁绕过 — `validate_complete_transition` 改为直接检查 GOAL_STATE.json，不依赖 TASK_POINTERS.tasks 数组（该数组在 set_focus=false 时为空洞）
+- **P2-003**: `task_create` 幂等性间隙 — 在 set_task_focus 前检查 TASK_POINTERS.tasks 防止指针漂移
+
+#### 行为修复
+- **P0-002**: `drive_until_done` 默认值统一为 `true`（MCP/CLI 路径一致）
+- **P1-001**: `closeout_record_write` 失败记录写入 `.failed.json` 后缀，不污染验证路径
+- **P1-002**: 嵌套 flock 锁 — `tool_task_complete` goal 路径移至锁外调用 `framework_goal_drive`
+- **P1-004**: `max_iterations` 重试活锁 — 阻断前先递增 iteration_count，retry 可正常通过
+- **P1-005**: `resume_goal_running` 添加 running/blocked/review_pending 状态守卫
+- **P1-008**: `max_iterations` 检查移至 QG 之前，防止 QG 持续阻断导致迭代上限守卫失效
+- **P2-001**: `tool_task_complete` 锁内重解析 task_id 修复 TOCTOU
+- **P2-004**: `chain_advance` 区分 loop_goal/non-loop（检查 goal_type），不再误报 loop_goal_skipped
+- **P2-005**: runner QG 场景从硬编码 `"general"` 改为读取 goal state 的 scene 字段
+- **P2-010**: `verify_evidence_index` 检查 `has_successful_verification` 而非仅检查数组非空
+- **P2-014**: runner QG/closeout gate 默认启用（`unwrap_or(true)`）
+- **P2-015**: `clear_goal_state` 添加 stale guard，与会话隔离机制一致
+- **P2-016**: `set_terminal_flags` 阻止 paused→blocked/blocked→paused 跨状态转换
+- **P2-017**: 防止 `drive_until_done=true` + `requires_completion_evidence=false` 矛盾配置
+- **P2-020**: amend 支持 `drive_until_done` 更新（含合约再验证）
+
+#### Gate 完整性修复
+- **P1-003**: QG 自动触发在 hooks 未注册时添加 `tracing::warn!` 日志警告
+- **P1-006**: runner GOAL_STATE 心跳同步错误从 warn 升级为 Err 传播，防止静默发散
+- **P1-007**: runner QG hook 错误统一为 fail-closed（降级 aggregate 为 "fail"）
+- **P2-006**: stdio_dispatch QG 路径传入 `tokio::runtime::Handle`
+- **P2-007**: QGEntry 自证证据警告纳入 `GateVerdict.advisories`（原仅 tracing::warn!）
+- **P2-008**: `evaluate_closeout_gate_hook` 支持 `reviewer_lane`/`fork_context` 转发
+- **P2-012**: closeout hook 路径添加 checkpoint-only 三级区分（PASS/ADVISORY-checkpoint/ADVISORY-general）
+
+#### 互操作修复
+- **P2-002**: `sync_task_pointers_after_goal_drive` 合并为单次原子写入
+- **P2-013**: 自证证据处理三路径统一（QGEntry/closeout_tool/closeout_hook）
+- **P2-019**: `set_terminal_flags` 增加 completed/archived 守卫
+
+#### 清理与维护
+- 全 workspace `cargo check --workspace --all-targets` 零 error 零 warning
+- 移除 dead function `write_focus_task_pointer_minimal`
+- 清理 96MB codegraph 缓存 + 6 个跟踪的测试生成文件
+- .gitignore 更新：`scratch/`, `workflows/`, `codegraph/`, `research-log/`, `last_idle_trigger`
+
 ## [v7.1] — 2026-06-25
 
 ### Tool Routing — 全面对抗审计重构（29 项 findings 闭环）
