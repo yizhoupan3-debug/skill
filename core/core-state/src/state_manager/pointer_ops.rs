@@ -85,7 +85,16 @@ fn load_task_pointers_json(repo_root: &Path) -> Result<Value, FrameworkError> {
     fs::create_dir_all(&mirror)?;
     let pointers_path = mirror.join("TASK_POINTERS.json");
     Ok(match fs::read_to_string(&pointers_path) {
-        Ok(raw) => serde_json::from_str::<Value>(&raw)?,
+        Ok(raw) => match serde_json::from_str::<Value>(&raw) {
+            Ok(v) => v,
+            Err(e) => {
+                tracing::warn!(
+                    "TASK_POINTERS.json parse failed ({}), resetting to empty state",
+                    e
+                );
+                json!({})
+            }
+        },
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => json!({}),
         Err(e) => return Err(FrameworkError::Io(e)),
     })
@@ -105,6 +114,7 @@ fn upsert_tasks_array_entry(
             if entry.get("task_id").and_then(Value::as_str) == Some(task_id) {
                 if let Some(e) = entry.as_object_mut() {
                     e.insert("task".to_string(), json!(task_label));
+                    e.insert("label".to_string(), json!(task_label));
                     e.insert("updated_at".to_string(), json!(updated_at));
                 }
                 found = true;
@@ -115,6 +125,7 @@ fn upsert_tasks_array_entry(
             tasks.push(json!({
                 "task_id": task_id,
                 "task": task_label,
+                "label": task_label,
                 "updated_at": updated_at,
             }));
         }
@@ -124,6 +135,7 @@ fn upsert_tasks_array_entry(
             json!([{
                 "task_id": task_id,
                 "task": task_label,
+                "label": task_label,
                 "updated_at": updated_at,
             }]),
         );
@@ -216,7 +228,10 @@ pub fn neutralize_task_pointers_for_task(
     let pointers_path = repo_root.join("artifacts/current/TASK_POINTERS.json");
     if pointers_path.is_file() {
         let raw = fs::read_to_string(&pointers_path).map_err(FrameworkError::Io)?;
-        let mut data: Value = serde_json::from_str(&raw)?;
+        let mut data: Value = serde_json::from_str(&raw).unwrap_or_else(|e| {
+            tracing::warn!("TASK_POINTERS.json parse failed in neutralize ({e}), treating as empty");
+            json!({})
+        });
         let mut changed = false;
         if let Some(obj) = data.as_object_mut() {
             if obj.get("active_task_id").and_then(Value::as_str) == Some(task_id) {

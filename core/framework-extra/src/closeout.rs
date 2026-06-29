@@ -18,11 +18,18 @@ use std::time::SystemTime;
 
 /// Whether programmatic closeout enforcement is enabled in the current process.
 ///
-/// - **Enabled** in CI / GitHub Actions by default.
-/// - **Disabled** locally when `ROUTER_RS_CLOSEOUT_ENFORCEMENT` is unset.
-/// - Explicitly disable with `ROUTER_RS_CLOSEOUT_ENFORCEMENT=0|false|off|no`.
+/// - **Always enabled** by default in relaxed (advisory) mode.
+/// - Explicitly **disable** with `ROUTER_RS_CLOSEOUT_ENFORCEMENT=skip`.
 pub(crate) fn closeout_programmatic_enforcement_enabled() -> bool {
-    !closeout_disabled_by_env()
+    if std::env::var("ROUTER_RS_CLOSEOUT_ENFORCEMENT").as_deref() == Ok("skip") {
+        return false;
+    }
+    // CI: always enforce
+    if std::env::var("GITHUB_ACTIONS").is_ok() || std::env::var("CI").is_ok() {
+        return true;
+    }
+    // Local development: enable by default in relaxed (advisory) mode
+    true
 }
 
 /// Default location for a task's closeout record.
@@ -137,6 +144,7 @@ pub fn closeout_stop_followup_for_completion_text(repo_root: &Path, text: &str) 
         .or_else(|| first_task_id_from_registry(repo_root));
     let tid = tid?;
     if !closeout_programmatic_enforcement_enabled() {
+        tracing::debug!("closeout enforcement disabled via ROUTER_RS_CLOSEOUT_ENFORCEMENT=skip");
         return None;
     }
     let record_path = closeout_record_path_for_task(repo_root, &tid).ok()?;
@@ -198,32 +206,4 @@ pub fn evaluate_closeout_record_file_for_task(
     evaluate_closeout_record_value_with_context(record, &ctx).map_err(|err| {
         FrameworkError::validation(format!("closeout record evaluation failed: {err}"))
     })
-}
-
-fn in_ci_like_environment() -> bool {
-    if std::env::var("GITHUB_ACTIONS").as_deref() == Ok("true") {
-        return true;
-    }
-    match std::env::var("CI") {
-        Ok(v) => {
-            let t = v.trim().to_ascii_lowercase();
-            !t.is_empty() && !is_false_ci_value(&t)
-        }
-        Err(_) => false,
-    }
-}
-
-#[inline]
-fn is_false_ci_value(s: &str) -> bool {
-    s == "0" || s == "false" || s == "off" || s == "no"
-}
-
-fn closeout_disabled_by_env() -> bool {
-    match std::env::var("ROUTER_RS_CLOSEOUT_ENFORCEMENT") {
-        Ok(v) => {
-            let t = v.trim().to_ascii_lowercase();
-            is_false_ci_value(&t)
-        }
-        Err(_) => !in_ci_like_environment(),
-    }
 }

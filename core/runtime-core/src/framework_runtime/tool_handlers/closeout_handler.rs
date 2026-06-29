@@ -71,23 +71,27 @@ pub(crate) fn closeout_record_write_dispatch(
         record.insert("notes".to_string(), json!(notes));
     }
 
-    let record_path = host_projection::hooks::closeout_record_path_for_task(repo_root, task_id)
-        .map_err(|e| format!("invalid task_id: {e}"))?;
-    if let Some(parent) = record_path.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|e| format!("create closeout directory failed: {e}"))?;
-    }
-
     let record_value = serde_json::Value::Object(record);
-    core_state_utils::atomic_write::write_atomic_json(&record_path, &record_value)
-        .map_err(|e| format!("write closeout record failed: {e}"))?;
 
-    // Evaluate the record
-    let eval_result = host_projection::hooks::evaluate_closeout_record_file_for_task(
-        repo_root,
-        task_id,
-        &record_path,
+    // Evaluate BEFORE writing to disk (evaluate-then-write pattern)
+    let (_, has_success) =
+        core_state::state_manager::task_evidence_artifacts_summary_for_task(repo_root, task_id);
+    let goal_state = core_state::state_manager::read_goal_state(repo_root, Some(task_id))
+        .ok()
+        .flatten();
+    let goal_prediction = goal_state
+        .as_ref()
+        .and_then(core_state::goal_prediction::read_goal_prediction);
+    let ctx = core_state::closeout_validation::CloseoutEvidenceContext {
+        task_id: Some(task_id.to_string()),
+        has_successful_verification: has_success,
+        goal_prediction,
+    };
+    let eval_result = core_state::closeout_validation::evaluate_closeout_record_value_with_context(
+        record_value.clone(),
+        &ctx,
     );
+
     let eval = match eval_result {
         Ok(v) => v,
         Err(e) => json!({"error": e.to_string()}),
@@ -118,6 +122,16 @@ pub(crate) fn closeout_record_write_dispatch(
         "closeout_allowed": closeout_allowed,
         "violations": violations,
     });
+
+    // Write to disk after evaluation
+    let record_path = host_projection::hooks::closeout_record_path_for_task(repo_root, task_id)
+        .map_err(|e| format!("invalid task_id: {e}"))?;
+    if let Some(parent) = record_path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("create closeout directory failed: {e}"))?;
+    }
+    core_state_utils::atomic_write::write_atomic_json(&record_path, &record_value)
+        .map_err(|e| format!("write closeout record failed: {e}"))?;
 
     Ok(serde_json::to_string_pretty(&result)
         .map_err(|e| format!("serialize closeout result failed: {e}"))?)
@@ -226,8 +240,11 @@ pub(crate) fn closeout_gate_evaluate(
         findings.push("review_gate: GOAL suggests review; reviewer evidence attested".to_string());
     }
 
-    let all_clear =
-        goal_present && evidence_success && has_summary && (!review_goal || has_review_evidence);
+    let all_clear = compute_closeout_all_clear(
+        goal_present, evidence_success, has_summary,
+        review_goal,
+        has_review_evidence,
+    );
     let checkpoint_only =
         !all_clear && goal_present && evidence_success && (!review_goal || has_review_evidence);
 
@@ -338,7 +355,23 @@ pub(crate) fn evaluate_closeout_gate_hook(
         findings.push("checkpoint: SESSION_SUMMARY.md on disk".to_string());
     }
 
-    let all_clear = goal_present && evidence_success && has_summary;
+    let review_goal = task_view
+        .goal_state
+        .as_ref()
+        .is_some_and(check_goal_suggests_review);
+    if review_goal {
+        findings.push(
+            "WARN: review_gate: GOAL suggests review work but hook path has no reviewer evidence — \
+             use closeout_gate MCP tool instead"
+                .to_string(),
+        );
+    }
+
+    let all_clear = compute_closeout_all_clear(
+        goal_present, evidence_success, has_summary,
+        review_goal,
+        false, // hook path has no reviewer evidence args
+    );
     let passed = all_clear;
 
     let verdict_label = if all_clear {
@@ -353,6 +386,24 @@ pub(crate) fn evaluate_closeout_gate_hook(
         "result": result,
         "findings": findings,
     }))
+}
+
+/// Shared all-clear computation for closeout gate evaluation.
+/// Used by both the MCP tool path and the hook path.
+fn compute_closeout_all_clear(
+    goal_present: bool,
+    evidence_success: bool,
+    has_summary: bool,
+    needs_review_evidence: bool,
+    has_review_evidence: bool,
+) -> bool {
+    if !goal_present || !evidence_success || !has_summary {
+        return false;
+    }
+    if needs_review_evidence && !has_review_evidence {
+        return false;
+    }
+    true
 }
 
 /// Minimal check: does the goal mention review-related work?

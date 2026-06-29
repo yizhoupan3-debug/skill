@@ -13,6 +13,7 @@
 
 #![deny(clippy::unwrap_used, clippy::expect_used)]
 
+use serde_json::Value;
 use std::path::Path;
 
 /// The type of task transition being validated.
@@ -84,11 +85,20 @@ fn validate_complete_transition(repo_root: &Path, task_id: &str) -> TransitionVe
     // D5: Empty task list = no fraud possible → auto-pass.
     // Check if task_id exists in TASK_POINTERS; if not, no tasks were created
     // and there's nothing to validate.
-    let task_pointers_path = repo_root
-        .join("artifacts/current")
-        .join(tid)
-        .join("TASK_POINTERS.json");
-    if !task_pointers_path.is_file() {
+    // Global TASK_POINTERS.json — shared across all tasks.
+    let global_pointers_path = repo_root.join("artifacts/current/TASK_POINTERS.json");
+    let task_exists = global_pointers_path.is_file()
+        && std::fs::read_to_string(&global_pointers_path)
+            .ok()
+            .and_then(|raw| serde_json::from_str::<Value>(&raw).ok())
+            .map(|v| {
+                v.get("tasks")
+                    .and_then(Value::as_array)
+                    .map(|tasks| tasks.iter().any(|t| t.get("task_id").and_then(Value::as_str) == Some(tid)))
+                    .unwrap_or(false)
+            })
+            .unwrap_or(false);
+    if !task_exists {
         return TransitionVerdict::allowed(
             "no task created for this goal round — empty task list, D5 auto-pass",
         );
@@ -148,14 +158,13 @@ mod tests {
         fs::write(&path, serde_json::to_string_pretty(&index).unwrap()).expect("write evidence");
     }
 
-    /// Write a minimal TASK_POINTERS.json to simulate task creation.
+    /// Write a minimal TASK_POINTERS.json at the global path to simulate task creation.
     fn write_task_pointers(dir: &Path) {
         let pointers = serde_json::json!({
             "schema_version": "task-pointers-v1",
-            "task_id": "test-task",
-            "entries": []
+            "tasks": [{"task_id": "test-task", "task": "Test Task", "updated_at": "2026-01-01T00:00:00Z"}]
         });
-        let path = dir.join("artifacts/current/test-task/TASK_POINTERS.json");
+        let path = dir.join("artifacts/current/TASK_POINTERS.json");
         fs::write(&path, serde_json::to_string_pretty(&pointers).unwrap())
             .expect("write task pointers");
     }

@@ -140,8 +140,10 @@ pub fn append_transaction_assuming_l1_held(
                     if line.is_empty() {
                         continue;
                     }
-                    // Cheap substring pre-filter: only pay for full deserialisation
-                    // when the raw JSON line actually contains the key string.
+                    // Substring pre-filter: safe because the exact-match parse follows.
+                    // Keys that happen to be substrings of other keys are resolved correctly
+                    // by the full deserialisation check — the pre-filter is just an optimisation
+                    // to avoid O(n) full parse for every line.
                     if !line.contains(new_key.as_str()) {
                         continue;
                     }
@@ -153,8 +155,13 @@ pub fn append_transaction_assuming_l1_held(
                 }
             }
 
-            // --- seq: count non-empty lines (no deserialisation needed) ---
-            let line_count = content.lines().filter(|l| !l.trim().is_empty()).count() as u64;
+            // --- seq: count valid JSON lines (ignore empty lines) ---
+            let line_count = content.lines()
+                .filter(|l| {
+                    let trimmed = l.trim();
+                    !trimmed.is_empty() && trimmed.starts_with('{')
+                })
+                .count() as u64;
 
             let mut final_tx = tx;
             final_tx.seq = Some(line_count);

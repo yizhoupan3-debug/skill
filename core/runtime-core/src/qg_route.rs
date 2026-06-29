@@ -56,7 +56,15 @@ pub fn init_qg_route() {
 /// preventing silent fail-open behavior.
 pub fn evaluate_qg_route(scene: &str, ctx: &CheckContext) -> GateVerdict {
     match QG_ROUTE.get() {
-        Some(registry) => registry.evaluate(scene, ctx),
+        Some(registry) => {
+            let result = registry.evaluate(scene, ctx);
+            if result.checkers_ran == 0 {
+                tracing::warn!(
+                    "QG route evaluated scene '{scene}' with no registered checkers — gate passed by default"
+                );
+            }
+            result
+        }
         None => {
             tracing::warn!(
                 "evaluate_qg_route called before init_qg_route() — returning blocked (fail-closed)"

@@ -128,7 +128,22 @@ pub(crate) fn goal_state_manage_dispatch(
                 })?;
             payload["blocker"] = json!(blocker);
         }
-        "pause" | "resume" | "complete" | "clear" => {}
+        "resume" => {
+            // Forward drive_until_done and contract fields to goal_ops
+            if let Some(v) = arguments.get("drive_until_done").and_then(|v| v.as_bool()) {
+                payload["drive_until_done"] = json!(v);
+            }
+            if let Some(v) = arguments.get("non_goals") {
+                payload["non_goals"] = v.clone();
+            }
+            if let Some(v) = arguments.get("done_when") {
+                payload["done_when"] = v.clone();
+            }
+            if let Some(v) = arguments.get("validation_commands") {
+                payload["validation_commands"] = v.clone();
+            }
+        }
+        "pause" | "complete" | "clear" => {}
         "amend" => {
             if let Some(ng) = arguments.get("non_goals").and_then(Value::as_array) {
                 payload["non_goals"] = json!(ng);

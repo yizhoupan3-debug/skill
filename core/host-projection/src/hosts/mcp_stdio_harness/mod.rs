@@ -60,7 +60,11 @@ fn list_known_task_ids(repo_root: &Path) -> Vec<String> {
         .filter_map(|entry| entry.ok())
         .filter(|entry| entry.path().is_dir())
         .filter_map(|entry| entry.file_name().into_string().ok())
-        .filter(|name| name != "review-lanes" && !name.starts_with('.'))
+        .filter(|name| {
+            name != "review-lanes"
+                && !name.starts_with('.')
+                && current.join(name).join("TASK_LEDGER.jsonl").is_file()
+        })
         .collect();
     ids.sort();
     ids

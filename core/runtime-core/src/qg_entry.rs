@@ -48,6 +48,12 @@ pub fn trigger(
 ) -> GateVerdict {
     // ═══════════════════════════════════════════════════════════════════
     // Stage 1: Anti-fraud gate (evidence chain verification)
+    //
+    // Note: This check may overlap with validate_transition called in
+    // goal_ops.rs and the legacy evidence check in framework_goal_drive(complete).
+    // The triple check is intentional for now — trigger() can be called
+    // independently from multiple paths (goal_ops, runner, stdio dispatch),
+    // so each call site must verify evidence independently.
     // ═══════════════════════════════════════════════════════════════════
     let (has_evidence, evidence_ok) =
         core_state::state_manager::task_evidence_artifacts_summary_for_task(repo_root, task_id);
@@ -76,6 +82,19 @@ pub fn trigger(
 
     // No evidence or all evidence OK → proceed to Stage 2.
 
+    // CROSS-001: Check for self-attested evidence (all success entries are
+    // mcp_record_evidence self-attested, no host-bound verification).
+    if has_evidence && evidence_ok {
+        let self_attested =
+            core_state::state_manager::task_evidence_success_only_self_attested(repo_root, task_id);
+        if self_attested {
+            tracing::warn!(
+                task_id = %task_id,
+                "QGEntry Stage 1: all successful evidence is self-attested (no host-bound verification)"
+            );
+        }
+    }
+
     // ═══════════════════════════════════════════════════════════════════
     // Stage 2: Quality gate (scene-dispatched checker evaluation)
     // ═══════════════════════════════════════════════════════════════════
@@ -86,6 +105,9 @@ pub fn trigger(
         round,
         repo_root: repo_root.to_path_buf(),
         task_id: task_id.to_string(),
+        // Evidence path consistent with Stage 1 internal resolution
+        // (task_evidence_artifacts_summary_for_task uses the same base:
+        //  repo_root / "artifacts/current" / task_id).
         evidence_path: Some(
             repo_root
                 .join("artifacts/current")
@@ -133,6 +155,7 @@ pub(crate) fn evaluate_quality_gate_hook(
     let round = payload.get("round").and_then(|v| v.as_u64()).unwrap_or(1);
     let output_data = payload.get("output_data").cloned();
 
+    let runtime_handle = tokio::runtime::Handle::try_current().ok();
     let verdict = trigger(
         repo_root,
         task_id,
@@ -140,7 +163,7 @@ pub(crate) fn evaluate_quality_gate_hook(
         goal,
         sub_scene,
         round,
-        None,
+        runtime_handle,
         output_data,
     );
     serde_json::to_value(&verdict)

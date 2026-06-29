@@ -155,6 +155,21 @@ pub fn read_goal_state(
     Ok(Some(value))
 }
 
+/// 读 GOAL_STATE.json，不注入 stale 标注。用于写操作路径。
+pub fn read_goal_state_raw(
+    repo_root: &Path,
+    task_id: &str,
+) -> Result<Option<Value>, FrameworkError> {
+    crate::utils::path_guard::validate_task_id_component(task_id)?;
+    let path = goal_state_path_for_task(repo_root, task_id)?;
+    if !path.is_file() {
+        return Ok(None);
+    }
+    let raw = fs::read_to_string(&path)?;
+    let value: Value = serde_json::from_str(&raw)?;
+    Ok(Some(value))
+}
+
 pub fn read_goal_state_pair_if_valid(repo_root: &Path, task_id: &str) -> Option<(Value, String)> {
     if task_id.trim().is_empty() {
         return None;
@@ -759,9 +774,9 @@ mod tests {
             "operation": "complete",
             "task_id": "paused",
         }))
-        .expect_err("paused drive goal still requires evidence");
+        .expect_err("cannot complete a paused goal");
         assert!(
-            err.to_string().contains("validate_transition blocked"),
+            err.to_string().contains("cannot complete a goal in 'paused' status"),
             "err={err}"
         );
         let st = read_goal_state(&repo, Some("paused"))
@@ -792,6 +807,13 @@ mod tests {
             r#"{"schema_version":"router-rs-goal-v1","goal":"legacy","status":"running","drive_until_done":false,"done_when":["d1"],"validation_commands":["cargo test -q"],"checkpoints":[]}"#,
         )
         .expect("legacy goal");
+        // Write global TASK_POINTERS.json so validate_transition performs the evidence check
+        // instead of auto-passing via D5 (empty task list).
+        fs::write(
+            repo.join("artifacts/current/TASK_POINTERS.json"),
+            r#"{"schema_version":"task-pointers-v1","tasks":[{"task_id":"legacy","task":"Legacy Task","updated_at":"2026-01-01T00:00:00Z"}]}"#,
+        )
+        .expect("global task pointers");
         let err = framework_goal_drive(json!({
             "repo_root": repo.display().to_string(),
             "operation": "complete",

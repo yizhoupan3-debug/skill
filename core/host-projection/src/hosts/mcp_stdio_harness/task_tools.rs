@@ -36,6 +36,8 @@ pub(crate) fn tool_task_create(
         .unwrap_or(task_id);
 
     let task_id_owned = task_id.to_string();
+    // Validate task_id is a safe path component before any filesystem ops
+    let _validated = core_state_utils::path_guard::validate_task_id_component(task_id)?;
     let title_owned = title.to_string();
     let repo_root_owned = repo_root.to_path_buf();
 
@@ -43,9 +45,31 @@ pub(crate) fn tool_task_create(
         let task_dir =
             core_state::state_manager::ensure_task_directory(&repo_root_owned, &task_id_owned)?;
 
-        // Idempotent: if task directory already has a TASK_LEDGER.jsonl, skip creation.
-        let ledger_path = task_dir.join("TASK_LEDGER.jsonl");
-        if ledger_path.is_file() {
+        // Idempotent: check if task_created entry already exists in ledger
+        let task_ledger_path = task_dir.join("TASK_LEDGER.jsonl");
+        let task_already_created = task_ledger_path.is_file()
+            && std::fs::read_to_string(&task_ledger_path)
+                .ok()
+                .map(|content| {
+                    content.lines().any(|line| {
+                        let line = line.trim();
+                        if line.is_empty() {
+                            return false;
+                        }
+                        serde_json::from_str::<serde_json::Value>(line)
+                            .ok()
+                            .and_then(|v| {
+                                v.get("tx_type")
+                                    .and_then(|t| t.as_str())
+                                    .map(|s| s.to_string())
+                            })
+                            .map(|tx_type| tx_type == "task_created")
+                            .unwrap_or(false)
+                    })
+                })
+                .unwrap_or(false);
+
+        if task_already_created {
             // HPM-18: check title consistency on idempotent create
             let pointers_path = repo_root_owned.join("artifacts/current/TASK_POINTERS.json");
             if let Ok(pointers_raw) = std::fs::read_to_string(&pointers_path) {
@@ -209,36 +233,36 @@ pub(crate) fn tool_task_complete(
         })?;
 
     let task_id_owned = task_id.clone();
+
+    // Move has_goal check inside the task write lock along with goal_drive
     let repo_root_owned = repo_root.to_path_buf();
+    let result: Option<String> = apply_task_ledger_mutation(repo_root, || {
+        let task_dir = repo_root_owned.join("artifacts/current").join(&task_id_owned);
+        let goal_path = task_dir.join("GOAL_STATE.json");
+        let has_goal_internal = goal_path.is_file()
+            && fs::read_to_string(&goal_path)
+                .ok()
+                .and_then(|raw| serde_json::from_str::<Value>(&raw).ok())
+                .is_some_and(|v| v.get("archived").and_then(Value::as_bool) != Some(true));
 
-    // Check if GOAL_STATE exists → delegate to framework_goal_drive
-    let task_dir = repo_root.join("artifacts/current").join(&task_id);
-    let goal_path = task_dir.join("GOAL_STATE.json");
-    let has_goal = goal_path.is_file()
-        && fs::read_to_string(&goal_path)
-            .ok()
-            .and_then(|raw| serde_json::from_str::<Value>(&raw).ok())
-            .is_some_and(|v| v.get("archived").and_then(Value::as_bool) != Some(true));
+        if has_goal_internal {
+            let result = core_state::state_manager::framework_goal_drive(json!({
+                "repo_root": repo_root_owned.display().to_string(),
+                "operation": "complete",
+                "task_id": &task_id_owned,
+            }))?;
+            return Ok(Some(result.to_string()));
+        }
 
-    if has_goal {
-        let payload = json!({
-            "repo_root": repo_root.display().to_string(),
-            "operation": "complete",
-            "task_id": &task_id_owned,
-        });
-        let result = core_state::state_manager::framework_goal_drive(payload)?;
-        return Ok(result.to_string());
-    }
+        // No GOAL_STATE → evidence check + pointer neutralization + ledger
+        let transition_v = validate_transition(&repo_root_owned, &task_id_owned, TaskTransition::Complete);
+        if !transition_v.passed {
+            return Err(FrameworkError::validation(format!(
+                "task_complete blocked by evidence gate: {}",
+                transition_v.reason
+            )));
+        }
 
-    // No GOAL_STATE → evidence check + pointer neutralization + ledger
-    let transition_v = validate_transition(repo_root, &task_id, TaskTransition::Complete);
-    if !transition_v.passed {
-        return Err(FrameworkError::validation(format!(
-            "task_complete blocked by evidence gate: {}",
-            transition_v.reason
-        )));
-    }
-    apply_task_ledger_mutation(repo_root, || {
         core_state::state_manager::neutralize_task_pointers_for_task(
             &repo_root_owned,
             &task_id_owned,
@@ -259,8 +283,12 @@ pub(crate) fn tool_task_complete(
             },
         )?;
 
-        Ok(())
+        Ok(None)
     })?;
+
+    if let Some(goal_result) = result {
+        return Ok(goal_result);
+    }
 
     // TASK_STATE.json aggregate was removed in Wave 2b.
 
@@ -347,27 +375,52 @@ pub(crate) fn tool_task_chain_advance(
         ));
     }
 
-    // Goals always follow loop semantics (GoalType::Linear removed in v10).
-    // Chain advance is skipped — loop iteration is managed by explicit tool call.
-    let (active, _) = core_state::state_manager::read_task_pointer_pair(repo_root);
-    if let Some(ref tid) = active {
-        return Ok(json!({
-            "ok": true,
-            "status": "loop_goal_skipped",
-            "message": "current task follows loop semantics — task chain advance skipped",
-            "task_id": tid,
-        })
-        .to_string());
-    }
-
     // Wrap the read-modify-write cycle in the task lock to prevent concurrent
     // chain_advance calls from corrupting TASK_CHAIN.json.
     let repo_root_owned = repo_root.to_path_buf();
     let result = apply_task_ledger_mutation(repo_root, || {
+        // Loop-goal check moved inside the lock to prevent TOCTOU
+        let (active, _) = core_state::state_manager::read_task_pointer_pair(&repo_root_owned);
+        if let Some(ref tid) = active {
+            return Ok(json!({
+                "ok": true,
+                "status": "loop_goal_skipped",
+                "message": "current task follows loop semantics — task chain advance skipped",
+                "task_id": tid,
+            })
+            .to_string());
+        }
+
         let raw =
             std::fs::read_to_string(&repo_root_owned.join("artifacts/current/TASK_CHAIN.json"))
                 .map_err(FrameworkError::Io)?;
         let mut chain: Value = serde_json::from_str(&raw).map_err(FrameworkError::Json)?;
+
+        // Validate chain structure before mutation
+        if let Some(tasks) = chain["tasks"].as_array() {
+            if tasks.is_empty() {
+                return Err(FrameworkError::validation("TASK_CHAIN.json: 'tasks' array is empty"));
+            }
+            let mut seen_ids = std::collections::HashSet::new();
+            for (i, task) in tasks.iter().enumerate() {
+                let tid = task.get("task_id").and_then(Value::as_str)
+                    .ok_or_else(|| FrameworkError::config(
+                        format!("TASK_CHAIN.json: task at index {i} missing 'task_id'")
+                    ))?;
+                if !seen_ids.insert(tid.to_string()) {
+                    return Err(FrameworkError::config(
+                        format!("TASK_CHAIN.json: duplicate task_id '{tid}'")
+                    ));
+                }
+            }
+        } else {
+            return Err(FrameworkError::config("TASK_CHAIN.json: missing 'tasks' array"));
+        }
+
+        if chain.get("current_index").and_then(Value::as_u64).is_none() {
+            return Err(FrameworkError::config("TASK_CHAIN.json: missing or invalid 'current_index'"));
+        }
+
         let current_index = chain["current_index"].as_u64().unwrap_or(0) as usize;
         let tasks_len = chain["tasks"].as_array().map(|a| a.len()).unwrap_or(0);
 
@@ -529,7 +582,7 @@ mod tests {
     fn task_focus_rejects_missing_dir() {
         let repo = unique_test_dir("focus-missing");
         let err = tool_task_focus(&json!({"task_id": "nope"}), &repo).unwrap_err();
-        assert!(err.contains("does not exist"), "err={err}");
+        assert!(err.to_string().contains("does not exist"), "err={err}");
         let _ = fs::remove_dir_all(&repo);
     }
 

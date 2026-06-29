@@ -21,8 +21,37 @@ pub struct CloseoutVerificationResponse {
 ///
 /// This replaces the former independent 6-rule implementation, ensuring
 /// the same closeout JSON produces the same `closeout_allowed` on both paths.
-pub fn verify_closeout_value(record: &serde_json::Value) -> CloseoutVerificationResponse {
-    delegate_to_framework_runtime(record)
+///
+/// When `repo_root` and `task_id` are provided, also checks R8:
+/// if `verification_status=passed` with no `commands_run`, verifies that
+/// `EVIDENCE_INDEX.json` has at least one artifact (evidence index rows).
+pub fn verify_closeout_value(
+    record: &serde_json::Value,
+    repo_root: Option<&Path>,
+    task_id: Option<&str>,
+) -> CloseoutVerificationResponse {
+    let mut response = delegate_to_framework_runtime(record);
+    // R8: When verification_status=passed with no commands_run, check
+    // that EVIDENCE_INDEX.json has at least one artifact.
+    if let (Some(repo), Some(tid)) = (repo_root, task_id) {
+        if response.closeout_allowed {
+            let is_passed = record
+                .get("verification_status")
+                .and_then(|v| v.as_str())
+                == Some("passed");
+            if is_passed {
+                let commands = record.get("commands_run").and_then(|v| v.as_array());
+                let has_commands = commands.map(|c| !c.is_empty()).unwrap_or(false);
+                if !has_commands && !verify_evidence_index(repo, tid) {
+                    response
+                        .violations
+                        .push("evidence_index_missing_or_empty".to_string());
+                    response.closeout_allowed = false;
+                }
+            }
+        }
+    }
+    response
 }
 
 /// Internal helper: call fr-contracts' `evaluate_closeout_record_value`
@@ -97,7 +126,10 @@ pub fn verify_closeout_with_evidence(
     repo_root: &Path,
     task_id: &str,
 ) -> CloseoutVerificationResponse {
-    let mut response = verify_closeout_value(record);
+    let mut response = verify_closeout_value(record, Some(repo_root), Some(task_id));
+    // Belt-and-suspenders: also check evidence index unconditionally.
+    // This catches broader cases beyond the R8 scoped check in verify_closeout_value
+    // (e.g. non-"passed" verification_status where evidence index is still expected).
     if !verify_evidence_index(repo_root, task_id) {
         response
             .violations
@@ -269,7 +301,7 @@ mod tests {
             "blockers": [],
             "risks": []
         });
-        let resp = verify_closeout_value(&record);
+        let resp = verify_closeout_value(&record, None, None);
         assert!(resp.closeout_allowed);
         assert!(resp.violations.is_empty());
     }
@@ -283,7 +315,7 @@ mod tests {
             "changed_files": ["a.rs"],
             "commands_run": []
         });
-        let resp = verify_closeout_value(&record);
+        let resp = verify_closeout_value(&record, None, None);
         assert!(!resp.closeout_allowed);
         assert!(
             resp.violations
@@ -302,7 +334,7 @@ mod tests {
             "changed_files": ["a.rs"],
             "commands_run": []
         });
-        let resp = verify_closeout_value(&record);
+        let resp = verify_closeout_value(&record, None, None);
         assert!(!resp.closeout_allowed);
         // fr-contracts emits "not_run_without_blockers_or_risks" or
         // "claimed_done_without_evidence" for not_run records.
@@ -321,7 +353,7 @@ mod tests {
             "blockers": [],
             "risks": []
         });
-        let resp = verify_closeout_value(&record);
+        let resp = verify_closeout_value(&record, None, None);
         assert!(!resp.closeout_allowed);
         // fr-contracts emits "verification_passed_with_failed_command" for this case.
         assert!(
@@ -397,7 +429,7 @@ mod tests {
             "risks": []
         });
         // Loop-engine path (delegates to fr-contracts)
-        let le_resp = verify_closeout_value(&record);
+        let le_resp = verify_closeout_value(&record, None, None);
         // Direct fr-contracts path
         let fr_resp =
             core_state::closeout_validation::evaluate_closeout_record_value(record.clone())
@@ -424,7 +456,7 @@ mod tests {
             "blockers": [],
             "risks": []
         });
-        let le_resp = verify_closeout_value(&record);
+        let le_resp = verify_closeout_value(&record, None, None);
         let fr_resp =
             core_state::closeout_validation::evaluate_closeout_record_value(record.clone())
                 .expect("fr-contracts should return Ok");

@@ -11,7 +11,36 @@ use std::path::{Path, PathBuf};
 use super::pointer_ops::{
     ensure_task_directory, neutralize_task_pointers_for_task, sync_task_pointers_after_goal_drive,
 };
-use super::{REQUIRES_COMPLETION_EVIDENCE_KEY, goal_state_path_for_task, read_goal_state};
+use super::{
+    REQUIRES_COMPLETION_EVIDENCE_KEY, goal_state_path_for_task, read_goal_state,
+};
+
+/// 从 goal state 中剥离运行时注入的临时字段（stale/stale_reason），
+/// 防止它们被持久化到 GOAL_STATE.json 中。
+fn strip_stale_annotations(state: &mut Value) {
+    if let Some(obj) = state.as_object_mut() {
+        obj.remove("stale");
+        obj.remove("stale_reason");
+    }
+}
+
+/// Merge or replace array fields during amend (GOAL-009).
+/// When `merge` is true, new items are appended to the existing array.
+/// When `merge` is false (default), the existing array is replaced entirely.
+fn merge_or_replace_array(map: &mut Map<String, Value>, key: &str, new_items: &[Value], merge: bool) {
+    if merge {
+        if new_items.is_empty() {
+            return; // nothing to merge
+        }
+        if let Some(existing) = map.get_mut(key).and_then(|v| v.as_array_mut()) {
+            existing.extend(new_items.iter().cloned());
+        } else {
+            map.insert(key.to_string(), json!(new_items));
+        }
+    } else {
+        map.insert(key.to_string(), json!(new_items));
+    }
+}
 
 fn resolve_task_id_strict(payload: &Value) -> Result<String, FrameworkError> {
     payload
@@ -508,6 +537,27 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
             let mut state = read_goal_state(&repo_root, Some(&task_id))?.ok_or_else(|| {
                 FrameworkError::not_found(format!("GOAL_STATE missing at {}", path.display()))
             })?;
+
+            // GOAL-005: Stale guard — cannot checkpoint a stale goal
+            if state.get("stale").and_then(Value::as_bool) == Some(true) {
+                return Err(FrameworkError::validation(
+                    "cannot checkpoint a stale goal — session_id does not match current session",
+                ));
+            }
+
+            // GOAL-012: Checkpoint size limit
+            let max_checkpoints = 100u64;
+            if let Some(cps) = state.get("checkpoints").and_then(Value::as_array) {
+                if cps.len() as u64 > max_checkpoints {
+                    return Err(FrameworkError::validation(format!(
+                        "checkpoint limit reached ({max_checkpoints} max)"
+                    )));
+                }
+            }
+
+            // GOAL-001: Strip stale annotations before mutation+write
+            strip_stale_annotations(&mut state);
+
             let arr = state
                 .as_object_mut()
                 .and_then(|o| o.get_mut("checkpoints"))
@@ -571,6 +621,22 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
             let state = read_goal_state(&repo_root, Some(&task_id))?.ok_or_else(|| {
                 FrameworkError::validation("GOAL_STATE missing for completion gate check")
             })?;
+
+            // GOAL-002: Status guard
+            let status = state.get("status").and_then(Value::as_str).unwrap_or("");
+            if status != "running" && status != "review_pending" {
+                return Err(FrameworkError::validation(format!(
+                    "cannot complete a goal in '{status}' status — must be 'running' or 'review_pending'"
+                )));
+            }
+
+            // GOAL-002: Stale guard (check before stripping)
+            if state.get("stale").and_then(Value::as_bool) == Some(true) {
+                return Err(FrameworkError::validation(
+                    "cannot complete a stale goal — session_id does not match current session",
+                ));
+            }
+
             // Phase B: validate_transition is the authoritative blocking anti-fraud gate.
             // Only applies to goals that require completion evidence (drive_until_done,
             // validation_commands, done_when, or explicit requires_completion_evidence).
@@ -585,16 +651,6 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
                 }
             }
 
-            // Legacy evidence check (dual-write informational — kept for back-compat).
-            if goal_requires_completion_evidence(&state) {
-                let (_, evidence_ok) =
-                    task_evidence_artifacts_summary_for_task(&repo_root, task_id.as_str());
-                if !evidence_ok {
-                    return Err(FrameworkError::validation(
-                        "framework_goal_drive complete requires successful EVIDENCE_INDEX row",
-                    ));
-                }
-            }
             if let Some(gates) = crate::task_state::parse_goal_completion_gates(&state) {
                 let view = crate::task_state::resolve_task_view(&repo_root, Some(task_id.as_str()));
                 crate::task_state::validate_goal_completion_gates(&view, &gates)?;
@@ -637,10 +693,12 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
                                     json!(framework_kernel::time::now_iso()),
                                 );
                             }
+                            // GOAL-001: Strip stale annotations before write
+                            strip_stale_annotations(&mut qg_state);
                             write_atomic_json(&goal_path, &qg_state)?;
                             let tx = crate::task_ledger::LedgerTransaction {
                                 ts: framework_kernel::time::now_iso(),
-                                tx_type: "goal_state".to_string(),
+                                tx_type: "goal_iteration_blocked".to_string(),
                                 payload: qg_state,
                                 idempotency_key: None,
                                 seq: None,
@@ -665,12 +723,52 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
                         }
                     }
                     Err(e) => {
-                        tracing::warn!(
-                            framework_goal_drive = "complete",
-                            qg_error = %e,
-                            "QGEntry auto-trigger failed — continuing without quality gate"
+                        return Err(FrameworkError::hook(format!(
+                            "quality gate evaluation failed: {e}"
+                        )));
+                    }
+                }
+            }
+
+            // GOAL-008: Optional max_iterations check — convert to review_pending if limit reached
+            if let Some(max_iter) = state.get("max_iterations").and_then(Value::as_u64) {
+                let current = state.get("iteration_count").and_then(Value::as_u64).unwrap_or(0);
+                if current + 1 >= max_iter {
+                    let goal_path = goal_state_path_for_task(&repo_root, &task_id)?;
+                    let mut pending = state;
+                    if let Some(obj) = pending.as_object_mut() {
+                        obj.insert("status".to_string(), json!("review_pending"));
+                        let blockers = vec![json!({
+                            "finding": "max_iterations reached",
+                            "severity": "info",
+                        })];
+                        obj.insert("blockers".to_string(), json!(blockers.clone()));
+                        obj.insert(
+                            "updated_at".to_string(),
+                            json!(framework_kernel::time::now_iso()),
                         );
                     }
+                    // GOAL-001: Strip stale annotations before write
+                    strip_stale_annotations(&mut pending);
+                    write_atomic_json(&goal_path, &pending)?;
+                    let tx = crate::task_ledger::LedgerTransaction {
+                        ts: framework_kernel::time::now_iso(),
+                        tx_type: "goal_state".to_string(),
+                        payload: pending.clone(),
+                        idempotency_key: None,
+                        seq: None,
+                        schema_version: Some(1),
+                    };
+                    crate::task_ledger::append_transaction_assuming_l1_held(&repo_root, &task_id, tx)
+                        .map_err(|e| {
+                            FrameworkError::validation(format!("TASK_LEDGER append failed: {e}"))
+                        })?;
+                    return Ok(json!({
+                        "ok": true,
+                        "operation": "max_iterations_reached",
+                        "task_id": task_id,
+                        "blockers": pending.get("blockers"),
+                    }));
                 }
             }
 
@@ -693,6 +791,8 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
                     json!(framework_kernel::time::now_iso()),
                 );
             }
+            // GOAL-001: Strip stale annotations before write
+            strip_stale_annotations(&mut loop_state);
             write_atomic_json(&goal_path, &loop_state)?;
             let tx = crate::task_ledger::LedgerTransaction {
                 ts: framework_kernel::time::now_iso(),
@@ -714,12 +814,27 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
             }))
         }
         "continue_review" | "retry" => {
+            // GOAL-003: continue_review is a deprecated alias for retry
+            if operation == "continue_review" {
+                tracing::warn!("'continue_review' is a deprecated alias for 'retry' — use 'retry' instead");
+            }
             let task_id = resolve_task_id_strict(&payload)?;
             crate::utils::path_guard::validate_task_id_component(&task_id)?;
             let path = goal_state_path_for_task(&repo_root, &task_id)?;
             let mut state = read_goal_state(&repo_root, Some(&task_id))?.ok_or_else(|| {
                 FrameworkError::not_found(format!("GOAL_STATE missing at {}", path.display()))
             })?;
+
+            // GOAL-005: Stale guard
+            if state.get("stale").and_then(Value::as_bool) == Some(true) {
+                return Err(FrameworkError::validation(
+                    "cannot retry a stale goal — session_id does not match current session",
+                ));
+            }
+
+            // GOAL-001: Strip stale annotations before mutation+write
+            strip_stale_annotations(&mut state);
+
             let obj = state
                 .as_object_mut()
                 .ok_or_else(|| FrameworkError::validation("GOAL_STATE root must be object"))?;
@@ -753,9 +868,10 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
                 .and_then(Value::as_str)
                 .unwrap_or(task_id.as_str());
             sync_task_pointers_after_goal_drive(&repo_root, &task_id, goal_label, &payload)?;
+            let resp_op = if operation == "continue_review" { "continue_review" } else { "retry" };
             Ok(json!({
                 "ok": true,
-                "operation": "retry",
+                "operation": resp_op,
                 "task_id": task_id,
                 "goal_state_path": path.display().to_string(),
             }))
@@ -791,7 +907,9 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
                 .as_object_mut()
                 .ok_or_else(|| FrameworkError::validation("GOAL_STATE root must be object"))?;
 
-            // Only mutable states can be amended
+            // Only mutable states can be amended.
+            // 'completed' is reserved for future state machine use; currently unreachable
+            // since loop semantics keep goals at "running" after iteration complete.
             let status = obj.get("status").and_then(Value::as_str).unwrap_or("");
             if status == "completed"
                 || obj
@@ -814,6 +932,8 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
                 .get("keep_progress")
                 .and_then(Value::as_bool)
                 .unwrap_or(true);
+            // GOAL-009: merge flag — when true, append to existing arrays instead of replacing
+            let merge = payload.get("merge").and_then(Value::as_bool).unwrap_or(false);
             let mut has_amend = false;
 
             if let Some(v) = payload
@@ -831,7 +951,7 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
                     .filter_map(Value::as_str)
                     .map(|s| json!(s))
                     .collect();
-                obj.insert("non_goals".to_string(), json!(cleaned));
+                merge_or_replace_array(obj, "non_goals", &cleaned, merge);
                 has_amend = true;
             }
             if let Some(arr) = payload.get("done_when").and_then(Value::as_array) {
@@ -840,7 +960,7 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
                     .filter_map(Value::as_str)
                     .map(|s| json!(s))
                     .collect();
-                obj.insert("done_when".to_string(), json!(cleaned));
+                merge_or_replace_array(obj, "done_when", &cleaned, merge);
                 has_amend = true;
             }
             if let Some(arr) = payload.get("validation_commands").and_then(Value::as_array) {
@@ -849,7 +969,7 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
                     .filter_map(Value::as_str)
                     .map(|s| json!(s))
                     .collect();
-                obj.insert("validation_commands".to_string(), json!(cleaned));
+                merge_or_replace_array(obj, "validation_commands", &cleaned, merge);
                 has_amend = true;
             }
             if let Some(gt) = payload
@@ -919,6 +1039,9 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
                 json!(framework_kernel::time::now_iso()),
             );
 
+            // GOAL-001: Strip stale annotations before write
+            strip_stale_annotations(&mut state);
+
             write_atomic_json(&path, &state)?;
             let tx = crate::task_ledger::LedgerTransaction {
                 ts: framework_kernel::time::now_iso(),
@@ -980,6 +1103,17 @@ fn resume_goal_running(
     let mut state = read_goal_state(repo_root, Some(&task_id))?.ok_or_else(|| {
         FrameworkError::not_found(format!("GOAL_STATE missing at {}", path.display()))
     })?;
+
+    // GOAL-005: Stale guard — cannot resume a stale goal
+    if state.get("stale").and_then(Value::as_bool) == Some(true) {
+        return Err(FrameworkError::validation(
+            "cannot resume a stale goal — session_id does not match current session",
+        ));
+    }
+
+    // GOAL-001: Strip stale annotations before mutation+write
+    strip_stale_annotations(&mut state);
+
     let obj = state
         .as_object_mut()
         .ok_or_else(|| FrameworkError::validation("GOAL_STATE root must be object"))?;
@@ -1057,14 +1191,27 @@ fn set_terminal_flags(
     let mut state = read_goal_state(repo_root, Some(&task_id))?.ok_or_else(|| {
         FrameworkError::not_found(format!("GOAL_STATE missing at {}", path.display()))
     })?;
+
+    // GOAL-005: Stale guard — cannot pause/block a stale goal
+    if state.get("stale").and_then(Value::as_bool) == Some(true) {
+        return Err(FrameworkError::validation(
+            "cannot modify a stale goal — session_id does not match current session",
+        ));
+    }
+
+    // GOAL-001: Strip stale annotations before mutation+write
+    strip_stale_annotations(&mut state);
+
     let obj = state
         .as_object_mut()
         .ok_or_else(|| FrameworkError::validation("GOAL_STATE root must be object"))?;
 
     // Guard: cannot pause or block a goal in a terminal/review state.
     // Only running, paused, and blocked are mutable operational states.
+    // 'completed' is reserved for future state machine use; currently unreachable
+    // since loop semantics keep goals at "running" after iteration complete.
     let current = obj.get("status").and_then(Value::as_str).unwrap_or("");
-    if current == "completed" || current == "review_pending" {
+    if current == "review_pending" {
         return Err(FrameworkError::validation(format!(
             "cannot set status '{status}' on a goal in '{current}' state"
         )));

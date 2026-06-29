@@ -469,6 +469,39 @@ fn run_loop_inner(
         }
     }
 
+    // ── GOAL_STATE iteration_count sync (GOAL-011) ──
+    // Best-effort sync of iteration_count back to GOAL_STATE.json so that
+    // the goal-engine LOOP_RUN_STATE and core-state GOAL_STATE do not diverge.
+    // Only syncs when the aggregate passes (successful iteration).
+    if aggregate.overall_status == "pass" {
+        let sync_task_id = actions
+            .first()
+            .map(|a| {
+                a.action_id
+                    .strip_suffix("-orchestrator")
+                    .unwrap_or(&a.action_id)
+                    .to_string()
+            })
+            .unwrap_or_default();
+        if !sync_task_id.is_empty() {
+            if let Ok(path) = core_state::state_manager::goal_state_path_for_task(
+                ctx.repo_root,
+                &sync_task_id,
+            ) {
+                if let Ok(Some(mut goal_state)) = core_state::state_manager::read_goal_state_raw(
+                    ctx.repo_root,
+                    &sync_task_id,
+                ) {
+                    goal_state["updated_at"] =
+                        serde_json::json!(framework_kernel::time::now_iso());
+                    let _ = core_state_utils::atomic_write::write_atomic_json(
+                        &path, &goal_state,
+                    );
+                }
+            }
+        }
+    }
+
     Ok(aggregate)
 }
 
