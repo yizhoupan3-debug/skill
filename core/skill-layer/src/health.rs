@@ -48,6 +48,7 @@ struct HealthManifest {
 /// Minimal view of a routing runtime entry for health scoring.
 #[derive(Debug, Deserialize)]
 struct RoutingEntry {
+    #[allow(dead_code)] // stored for diagnostics, not read in scoring
     slug: String,
     layer: String,
     description: Option<String>,
@@ -57,7 +58,8 @@ struct RoutingEntry {
 #[derive(Debug, Deserialize)]
 struct RoutingRuntimeFile {
     keys: Vec<String>,
-    entries: Vec<Vec<serde_json::Value>>,
+    #[serde(alias = "entries")]
+    skills: Vec<Vec<serde_json::Value>>,
 }
 
 // ---------------------------------------------------------------------------
@@ -141,7 +143,7 @@ fn load_routing_lookup(repo_root: &Path) -> HashMap<String, RoutingEntry> {
     let keys: Vec<&str> = file.keys.iter().map(|s| s.as_str()).collect();
     let mut lookup = HashMap::new();
 
-    for row in &file.entries {
+    for row in &file.skills {
         let get_val = |key: &str| -> Option<&serde_json::Value> {
             let idx = keys.iter().position(|k| *k == key)?;
             row.get(idx)
