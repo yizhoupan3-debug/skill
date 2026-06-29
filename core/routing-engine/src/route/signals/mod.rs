@@ -30,7 +30,7 @@ pub mod tooling;
 pub use design::{
     has_beamer_slide_context, has_design_contract_context, has_design_contract_negation_context,
     has_design_output_audit_context, has_design_reference_context,
-    has_design_workflow_protocol_context, has_diagramming_context, has_quick_artifact_context,
+    has_design_workflow_protocol_context, has_quick_artifact_context,
     has_source_slide_format_context, has_visual_evidence_review_context,
 };
 pub use paper::{
@@ -46,7 +46,7 @@ pub use technical::{
     has_bounded_subagent_context, has_copywriting_context, has_github_pr_context,
     has_non_github_ci_provider_context, has_parallel_execution_context,
     has_parallel_review_candidate_context, has_pr_triage_summary_context,
-    has_runtime_lightweighting_context, has_scientific_figure_plotting_context, has_sentry_context,
+    has_runtime_lightweighting_context, has_sentry_context,
     has_skill_creator_context, has_skill_framework_maintenance_context,
     has_skill_installer_context, has_systematic_debug_context, has_token_budget_pressure,
     has_workflow_negation_context, has_workflow_orchestration_context, is_meta_routing_task,
