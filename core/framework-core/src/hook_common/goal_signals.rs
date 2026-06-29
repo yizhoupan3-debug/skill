@@ -26,7 +26,6 @@ pub const COMPLETION_DETECT_ZH_PHRASES: &[&str] = &[
     "完成了",
     "搞定",
     "任务完成",
-    "验证通过",
 ];
 
 /// 仅用于无磁盘 GOAL 时的聊天 progress/verify 提示（不进 closeout 词表）。
@@ -211,9 +210,6 @@ fn count_done_when_items(text: &str) -> usize {
         for raw in text.lines() {
             let line = raw.trim();
             if line.is_empty() {
-                if in_section {
-                    continue;
-                }
                 continue;
             }
             if !in_section {

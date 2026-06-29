@@ -368,11 +368,6 @@ pub fn is_reviewer_lane_normalized(lane: &str) -> bool {
     crate::registry_review_gate::is_reviewer_lane_from_registry(lane, None)
 }
 
-/// Countable deep-review gate lane（`review_gate.reviewer_lanes` 闭集；与 [`is_reviewer_lane_normalized`] 同义）。
-pub fn is_deep_review_gate_lane_normalized(lane: &str) -> bool {
-    is_reviewer_lane_normalized(lane)
-}
-
 #[cfg(test)]
 pub(crate) fn install_review_prompt_test_deps() {
     struct WhitespaceTokenizer;

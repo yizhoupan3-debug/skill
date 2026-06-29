@@ -258,6 +258,8 @@ pub fn validate_router_rs_binary_runnable(path: &Path) -> Result<(), FrameworkEr
 }
 
 /// Resolve the `router-rs-cli` binary for subprocess e2e tests (never falls back to the test harness exe).
+/// Intentionally not cfg-guarded: external integration tests (router-rs) need this at runtime.
+#[allow(clippy::panic)]
 pub fn resolve_router_rs_test_bin() -> PathBuf {
     if let Some(path) = option_env!("CARGO_BIN_EXE_router-rs-cli") {
         return PathBuf::from(path);
