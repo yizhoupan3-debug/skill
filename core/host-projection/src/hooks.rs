@@ -283,7 +283,7 @@ runtime_hook_proxy! { fn resolve_web_fetch_addresses(host: &str, port: u16) -> R
 
 // ── mcp_pre_guard ──
 
-runtime_hook_proxy! { fn evaluate_mcp_pre_guard_safe(tool_name: &str, arguments: &Value, repo_root: &Path) -> McpPreGuardVerdict = McpPreGuardVerdict { blocked: false, reason: None }; }
+runtime_hook_proxy! { fn evaluate_mcp_pre_guard_safe(tool_name: &str, arguments: &Value, repo_root: &Path) -> McpPreGuardVerdict = McpPreGuardVerdict { blocked: true, reason: Some("MCP pre-guard not initialized — rejected by default".to_string()) }; }
 
 // 7 fn pointer params in a registration pattern — below threshold=8, OK to keep.
 

@@ -210,11 +210,13 @@ fn tool_route_tool(
         .get("query")
         .and_then(|v| v.as_str())
         .ok_or_else(|| FrameworkError::from("route_tool: missing 'query' parameter".to_string()))?;
-    let effective_host = args
-        .get("host_id")
-        .and_then(Value::as_str)
-        .filter(|h| !h.is_empty())
-        .unwrap_or(host_id);
+    // P2 #03: reject caller-supplied host_id override; always use connection-level identity.
+    if let Some(override_host) = args.get("host_id").and_then(Value::as_str).filter(|h| !h.is_empty()) {
+        if override_host != host_id {
+            tracing::warn!("host_id override rejected: caller tried to override '{host_id}' with '{override_host}'");
+        }
+    }
+    let effective_host = host_id;
     let registry_path = resolve_tool_registry_path(ctx_repo_root);
     let decision =
         tool_routing_engine::routing::route_tool(query, &registry_path, Some(effective_host))?
@@ -237,11 +239,13 @@ fn tool_search_tools(
         FrameworkError::from("search_tools: missing 'query' parameter".to_string())
     })?;
     let top_k = args.get("top_k").and_then(|v| v.as_u64()).unwrap_or(5) as usize;
-    let effective_host = args
-        .get("host_id")
-        .and_then(Value::as_str)
-        .filter(|h| !h.is_empty())
-        .unwrap_or(host_id);
+    // P2 #03: reject caller-supplied host_id override; always use connection-level identity.
+    if let Some(override_host) = args.get("host_id").and_then(Value::as_str).filter(|h| !h.is_empty()) {
+        if override_host != host_id {
+            tracing::warn!("host_id override rejected: caller tried to override '{host_id}' with '{override_host}'");
+        }
+    }
+    let effective_host = host_id;
     let registry_path = resolve_tool_registry_path(ctx_repo_root);
     let records = mcp_tool_registry::load_tool_records_cached(&registry_path)
         .map_err(|e| FrameworkError::from(format!("search_tools: failed to load registry: {e}")))?;

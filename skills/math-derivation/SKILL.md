@@ -147,7 +147,7 @@ Minimal structure:
 
 For research-grade or multi-round math work, align with
 [math-reasoning-harness.md](../../docs/math-reasoning-harness.md):
-witnesses, checker-backed PASS/FAIL, dependency graph, counterexample probes, and (when exploring new structures) §D discovery → promotion → STEM falsify via [lane-templates.md](../../docs/routing/architecture.md).
+witnesses, checker-backed PASS/FAIL, dependency graph, counterexample probes, and (when exploring new structures) §D discovery → promotion → STEM falsify via [docs/routing/architecture.md](../../docs/routing/architecture.md).
 
 ## Common pitfalls
 

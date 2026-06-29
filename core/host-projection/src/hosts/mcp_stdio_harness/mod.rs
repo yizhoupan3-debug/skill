@@ -489,6 +489,18 @@ pub fn handle_mcp_request(
             }));
         }
     };
+    // Verify JSON-RPC 2.0 protocol version
+    if request.get("jsonrpc").and_then(Value::as_str) != Some("2.0") {
+        let id = request.get("id").cloned();
+        return Some(json!({
+            "jsonrpc": "2.0",
+            "id": id,
+            "error": {
+                "code": -32600,
+                "message": "Invalid Request: jsonrpc field must be '2.0'"
+            }
+        }));
+    }
     let id = request.get("id").cloned();
     let method = request.get("method").and_then(Value::as_str).unwrap_or("");
 

@@ -50,6 +50,11 @@ fn ledger_lock_abs_path(repo_root: &Path) -> std::path::PathBuf {
 }
 
 /// Acquire an exclusive cross-process lock for all task-ledger writers sharing this `repo_root`.
+///
+/// # TOCTOU safety
+/// This uses `OpenOptions::new().create(true).open(path)` (kernel-atomic create-or-open) followed
+/// by `flock(LOCK_EX|LOCK_NB)` via `fs2::FileExt::try_lock_exclusive()`. Both operations are
+/// kernel-level and atomic — there is no check-then-create window, so no TOCTOU race condition.
 pub fn acquire_task_ledger_repo_lock(
     repo_root: &Path,
     timeout: Duration,

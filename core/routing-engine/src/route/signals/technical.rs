@@ -99,13 +99,6 @@ pub fn has_systematic_debug_context(query_text: &str, query_token_list: &[String
     has_signal_by_name("systematic_debug", query_text, query_token_list)
 }
 
-pub fn has_scientific_figure_plotting_context(
-    query_text: &str,
-    query_token_list: &[String],
-) -> bool {
-    has_signal_by_name("scientific_figure_plotting", query_text, query_token_list)
-}
-
 pub fn has_copywriting_context(query_text: &str, query_token_list: &[String]) -> bool {
     has_signal_by_name("copywriting", query_text, query_token_list)
 }

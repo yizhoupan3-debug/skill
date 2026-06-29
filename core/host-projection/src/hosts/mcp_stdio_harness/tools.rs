@@ -6,11 +6,10 @@ use super::*;
 use framework_kernel::skill_repo::skill_routing_runtime_json;
 use serde_json::{Map, Value, json};
 use std::path::Path;
-use std::sync::atomic::{AtomicBool, Ordering};
 
-/// In-memory fallback for `first_turn` detection.
-/// Once `skill_route` succeeds once, this is set to `true`.
-static SKILL_ROUTE_EVER_CALLED: AtomicBool = AtomicBool::new(false);
+/// In-memory fallback for `first_turn` detection — **removed** (P2 #16).
+/// Cross-session state pollution risk from the per-process AtomicBool flag.
+/// Routing calls now treat all turns uniformly with first_turn=false.
 
 pub(super) fn handle_tools_call(
     id: Option<Value>,
@@ -97,9 +96,9 @@ pub(super) fn tool_skill_route(
         .and_then(Value::as_str)
         .ok_or_else(|| FrameworkError::from("Missing required argument: query".to_string()))?;
 
-    // Dynamically determine first_turn: true only if no routing tools have been called yet.
-    // This prevents stale routing behavior on subsequent calls within the same session.
-    let first_turn = !SKILL_ROUTE_EVER_CALLED.load(Ordering::Acquire);
+    // first_turn is always false: the per-process flag was removed to prevent
+    // cross-session state pollution (P2 #16). All calls are treated uniformly.
+    let first_turn = false;
 
     let route_result = crate::hooks::mcp_tool_skill_route(
         query,
@@ -108,10 +107,8 @@ pub(super) fn tool_skill_route(
         &repo_root.to_string_lossy(),
     )?;
 
-    // On success, mark that we've completed a route call.
-    // This ensures that if the tracker fails later, the in-memory fallback
-    // correctly reports first_turn=false.
-    SKILL_ROUTE_EVER_CALLED.store(true, Ordering::Release);
+    // (P2 #16): per-process SKILL_ROUTE_EVER_CALLED flag removed.
+    // No state to update after a successful route call.
 
     Ok(route_result)
 }
@@ -130,11 +127,13 @@ pub(super) fn tool_skill_search(
         .and_then(Value::as_u64)
         .unwrap_or(10)
         .clamp(1, 50) as usize;
-    // Allow caller to override host filter; fall back to connection-level host_id.
-    let effective_host = arguments
-        .get("host_id")
-        .and_then(Value::as_str)
-        .unwrap_or(host_id);
+    // P2 #03: reject caller-supplied host_id override; always use connection-level identity.
+    if let Some(override_host) = arguments.get("host_id").and_then(Value::as_str).filter(|h| !h.is_empty()) {
+        if override_host != host_id {
+            tracing::warn!("host_id override rejected: caller tried to override '{host_id}' with '{override_host}'");
+        }
+    }
+    let effective_host = host_id;
 
     let runtime_path = skill_routing_runtime_json(repo_root);
     if !runtime_path.is_file() {

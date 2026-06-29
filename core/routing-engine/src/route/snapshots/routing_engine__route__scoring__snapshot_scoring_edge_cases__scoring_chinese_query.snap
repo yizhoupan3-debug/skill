@@ -4,18 +4,19 @@ expression: "scores.into_iter().take(3).collect::<Vec<_>>()"
 ---
 [
   [
+    "systematic-debugging",
+    13.091287092917527,
+    [
+      "ngram_similarity:0.1",
+      "Session-start required boost applied (+8)."
+    ]
+  ],
+  [
     "slides",
     13.045643546458765,
     [
       "ngram_similarity:0.0",
       "Session-start required boost applied (+8)."
-    ]
-  ],
-  [
-    "systematic-debugging",
-    5.091287092917527,
-    [
-      "ngram_similarity:0.1"
     ]
   ],
   [

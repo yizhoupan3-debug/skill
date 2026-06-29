@@ -124,17 +124,15 @@ pub(crate) fn closeout_record_write_dispatch(
     });
 
     // Write to disk after evaluation
-    let record_path = host_projection::hooks::closeout_record_path_for_task(repo_root, task_id)
-        .map_err(|e| format!("invalid task_id: {e}"))?;
+    let record_path = host_projection::hooks::closeout_record_path_for_task(repo_root, task_id)?;
     if let Some(parent) = record_path.parent() {
         std::fs::create_dir_all(parent)
-            .map_err(|e| format!("create closeout directory failed: {e}"))?;
+            .map_err(FrameworkError::Io)?;
     }
-    core_state_utils::atomic_write::write_atomic_json(&record_path, &record_value)
-        .map_err(|e| format!("write closeout record failed: {e}"))?;
+    core_state_utils::atomic_write::write_atomic_json(&record_path, &record_value)?;
 
     Ok(serde_json::to_string_pretty(&result)
-        .map_err(|e| format!("serialize closeout result failed: {e}"))?)
+        .map_err(FrameworkError::Json)?)
 }
 
 /// closeout_gate_evaluate: multi-source closeout readiness evaluation.
@@ -260,7 +258,7 @@ pub(crate) fn closeout_gate_evaluate(
     };
 
     let formatted = format!("[Closeout Gate] {verdict_label}\n\n{}", findings.join("\n"));
-    Ok(serde_json::to_string(&json!({"result": formatted})).map_err(|e| e.to_string())?)
+    Ok(serde_json::to_string(&json!({"result": formatted})).map_err(FrameworkError::Json)?)
 }
 
 /// Hook-compatible closeout gate evaluation wrapper.

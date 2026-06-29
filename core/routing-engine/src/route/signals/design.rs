@@ -35,7 +35,3 @@ pub fn has_beamer_slide_context(query_text: &str, query_token_list: &[String]) -
 pub fn has_source_slide_format_context(query_text: &str, query_token_list: &[String]) -> bool {
     has_signal_by_name("source_slide_format", query_text, query_token_list)
 }
-
-pub fn has_diagramming_context(query_text: &str, query_token_list: &[String]) -> bool {
-    has_signal_by_name("diagramming", query_text, query_token_list)
-}
