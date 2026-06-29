@@ -102,6 +102,7 @@ impl SafetyLevel {
 /// Profile configuration snapshot loaded from RUNTIME_REGISTRY.json during PREFLIGHT.
 /// Determines loop behaviour (scheduling, closeout enforcement, review gating, budgets).
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct LoopProfileConfig {
     /// profile 标识符（"loop-auto" / "interactive"）
     pub profile: String,
@@ -243,6 +244,7 @@ pub struct LoopRegistryEntry {
 /// Research configuration for barrier escalation (§19.9).
 /// Used by research-aware loops to define escalation thresholds, auto-resume behaviour, and time limits.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ResearchConfig {
     #[serde(default = "default_barrier_threshold")]
     pub barrier_threshold: u32,
@@ -293,6 +295,7 @@ pub struct LoopTriggerConfig {
 /// validation is needed, introduce a serde `deserialize_with` custom deserializer
 /// that falls back gracefully.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct LoopRegistryRoot {
     pub schema_version: String,
     pub loops: Vec<LoopRegistryEntry>,

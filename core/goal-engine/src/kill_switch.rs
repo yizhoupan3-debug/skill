@@ -1,7 +1,7 @@
 use crate::state::{LOOP_LOCK_MAX_AGE_SECS, kill_signal_path, lock_path};
 use crate::types::LoopError;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Loop execution lock persisted as `.loop-active` in the repo root.
@@ -18,6 +18,37 @@ pub struct LoopLock {
 pub struct LockInfo {
     pub lock: LoopLock,
     pub acquired_epoch: u64,
+}
+
+/// RAII guard that automatically releases the loop lock on drop.
+/// Prevents lock leaks when the caller panics or forgets to call release_lock.
+pub struct LoopLockGuard {
+    pub(crate) lock_path: PathBuf,
+}
+
+impl Drop for LoopLockGuard {
+    fn drop(&mut self) {
+        match std::fs::remove_file(&self.lock_path) {
+            Ok(()) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => {
+                tracing::error!(
+                    "LoopLockGuard drop: failed to remove lock file {}: {e}",
+                    self.lock_path.display()
+                );
+            }
+        }
+    }
+}
+
+/// Acquire an exclusive loop lock and return an RAII guard.
+/// The lock is automatically released when the guard is dropped.
+/// See [`acquire_lock`] for lock semantics.
+pub fn acquire_lock_guarded(repo_root: &Path, loop_id: &str, run_id: &str) -> Result<LoopLockGuard, LoopError> {
+    acquire_lock(repo_root, loop_id, run_id)?;
+    Ok(LoopLockGuard {
+        lock_path: lock_path(repo_root),
+    })
 }
 
 /// Check whether a kill signal file exists for the given loop.
@@ -236,6 +267,41 @@ pub fn release_lock(repo_root: &Path) -> Result<(), LoopError> {
             path.display()
         ))),
     }
+}
+
+/// Refresh the lock file's mtime to prevent stale-lock takeover.
+/// Should be called periodically (e.g. every 5 minutes) during long-running
+/// loop executions so the lock does not exceed LOOP_LOCK_MAX_AGE_SECS.
+///
+/// # Error handling
+/// Returns `Ok(())` even if the lock file doesn't exist yet (this can happen
+/// if it was just released) — the goal is best-effort mtime refresh.
+pub fn refresh_lock(repo_root: &Path) -> Result<(), LoopError> {
+    let path = lock_path(repo_root);
+    if !path.is_file() {
+        return Ok(());
+    }
+    // Touch the file by opening for append with no content change.
+    // This updates the mtime without modifying the lock content.
+    use std::io::Write;
+    match std::fs::OpenOptions::new().append(true).open(&path) {
+        Ok(mut file) => {
+            // Write nothing — just opening + closing updates mtime on most systems.
+            // Explicitly sync to ensure the mtime change is durable.
+            let _ = file.write_all(b"");
+            let _ = file.sync_all();
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            // Lock already released — no action needed.
+        }
+        Err(e) => {
+            return Err(LoopError::Io(format!(
+                "refresh lock {}: {e}",
+                path.display()
+            )));
+        }
+    }
+    Ok(())
 }
 
 /// Return the current epoch seconds.

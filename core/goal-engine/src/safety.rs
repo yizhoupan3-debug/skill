@@ -46,7 +46,7 @@ fn parse_safety_level_or_warn(raw: &str, context: &str) -> SafetyLevel {
 }
 
 /// Assign a safety level to an action by evaluating its scope paths against the registry's
-/// scope-based safety rules. Returns the highest matching level across all scope paths.
+/// scope-based safety rules. Returns the strictest matching level across all scope paths.
 pub fn assign_safety_for_action(action: &LoopAction, entry: &LoopRegistryEntry) -> SafetyLevel {
     if action.scope_paths.is_empty() {
         return parse_safety_level_or_warn(
@@ -58,22 +58,22 @@ pub fn assign_safety_for_action(action: &LoopAction, entry: &LoopRegistryEntry) 
     let scope_rules = entry.scope_based_safety.as_ref();
     let default = entry.default_safety.as_deref().unwrap_or("L1");
 
-    let mut highest = parse_safety_level_or_warn(default, "entry_default");
+    let mut strictest = parse_safety_level_or_warn(default, "entry_default");
 
     if let Some(rules) = scope_rules {
         for path in &action.scope_paths {
             let file_level = assign_safety_for_file(path, rules, default);
-            if safety_rank(&file_level) > safety_rank(&highest) {
-                highest = file_level;
+            if safety_rank(&file_level) < safety_rank(&strictest) {
+                strictest = file_level;
             }
         }
     }
 
-    highest
+    strictest
 }
 
 /// Resolve a conflict between multiple safety levels using the given strategy
-/// (`strictest` picks the highest level, `report` always returns L1ReportOnly).
+/// (`strictest` picks the most restrictive level, `report` always returns L1ReportOnly).
 ///
 /// # Design: fail-safe fallback to L1ReportOnly
 /// When no strategy matches or the level list is empty, this function returns
@@ -89,7 +89,7 @@ pub fn resolve_conflict(levels: &[SafetyLevel], strategy: &str) -> SafetyLevel {
     match strategy {
         "strictest" => levels
             .iter()
-            .max_by_key(|l| safety_rank(l))
+            .min_by_key(|l| safety_rank(l))
             .cloned()
             .unwrap_or(SafetyLevel::L1ReportOnly),
         "report" => SafetyLevel::L1ReportOnly,
@@ -100,7 +100,7 @@ pub fn resolve_conflict(levels: &[SafetyLevel], strategy: &str) -> SafetyLevel {
             );
             levels
                 .iter()
-                .max_by_key(|l| safety_rank(l))
+                .min_by_key(|l| safety_rank(l))
                 .cloned()
                 .unwrap_or(SafetyLevel::L1ReportOnly)
         }
@@ -173,7 +173,20 @@ fn match_single_star_ext(path: &std::path::Path, path_str: &str, prefix: &str, e
     if prefix_trimmed.is_empty() || prefix_trimmed == "." {
         return file_name.ends_with(ext);
     }
-    path_str.starts_with(prefix_trimmed) && file_name.ends_with(ext)
+    if !path_str.starts_with(prefix_trimmed) || !file_name.ends_with(ext) {
+        return false;
+    }
+    // The `*` must not match across directory boundaries.
+    // e.g. `dir1/*.md` must NOT match `dir1/subdir/file.md`.
+    // For patterns like `dir1/*.ext`, ensure the filename appears immediately
+    // after the prefix directory (no intermediate path segment).
+    if prefix.ends_with('/') {
+        let after_dir = &path_str[prefix.len()..];
+        if after_dir != file_name.as_str() {
+            return false;
+        }
+    }
+    true
 }
 
 #[cfg(test)]
@@ -227,7 +240,7 @@ mod tests {
         let levels = vec![SafetyLevel::L1ReportOnly, SafetyLevel::L3Unattended];
         assert_eq!(
             resolve_conflict(&levels, "strictest"),
-            SafetyLevel::L3Unattended
+            SafetyLevel::L1ReportOnly
         );
     }
 

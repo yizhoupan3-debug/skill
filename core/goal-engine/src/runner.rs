@@ -2,7 +2,7 @@ use crate::closeout::{
     AggregateActionResult, build_aggregate, read_action_record, verify_closeout_with_evidence,
 };
 use crate::dispatcher::{self, SubagentResult};
-use crate::kill_switch::{self, acquire_lock, release_lock};
+use crate::kill_switch::{self, acquire_lock_guarded};
 use crate::report;
 use crate::safety::assign_safety_for_action;
 use crate::state::{
@@ -99,7 +99,7 @@ pub fn run_loop(ctx: &RunContext) -> Result<LoopCloseoutAggregate, LoopError> {
             return Ok(aggregate);
         }
 
-        acquire_lock(ctx.repo_root, loop_id, &run_id)?;
+        let _guard = acquire_lock_guarded(ctx.repo_root, loop_id, &run_id)?;
         let lock_start = Instant::now();
 
         let result = run_loop_inner(ctx, &mut state, &run_id, entry);
@@ -124,9 +124,6 @@ pub fn run_loop(ctx: &RunContext) -> Result<LoopCloseoutAggregate, LoopError> {
                 if let Err(e) = write_loop_state(ctx.repo_root, loop_id, &state) {
                     tracing::error!("failed to write loop state on success path: {e}");
                 }
-                if let Err(e) = release_lock(ctx.repo_root) {
-                    tracing::error!("failed to release lock on success path: {e}");
-                }
                 break Ok(agg);
             }
             Err(LoopError::ResearchEscalation(msg)) => {
@@ -136,10 +133,6 @@ pub fn run_loop(ctx: &RunContext) -> Result<LoopCloseoutAggregate, LoopError> {
                 if let Err(e) = write_loop_state(ctx.repo_root, loop_id, &state) {
                     tracing::error!("failed to write loop state on research escalation: {e}");
                 }
-                if let Err(e) = release_lock(ctx.repo_root) {
-                    tracing::error!("failed to release lock on research escalation: {e}");
-                }
-
                 if depth_remaining == 0 {
                     break Err(LoopError::ResearchEscalation(
                         "max recursion depth reached for research escalation auto-restart"
@@ -156,9 +149,6 @@ pub fn run_loop(ctx: &RunContext) -> Result<LoopCloseoutAggregate, LoopError> {
                 finish_run(&mut state, "escalated");
                 if let Err(write_err) = write_loop_state(ctx.repo_root, loop_id, &state) {
                     tracing::error!("failed to write loop state on error path: {write_err}");
-                }
-                if let Err(lock_err) = release_lock(ctx.repo_root) {
-                    tracing::error!("failed to release lock on error path: {lock_err}");
                 }
                 break Err(e);
             }
@@ -469,10 +459,12 @@ fn run_loop_inner(
         }
     }
 
-    // ── GOAL_STATE iteration_count sync (GOAL-011) ──
-    // Best-effort sync of iteration_count back to GOAL_STATE.json so that
-    // the goal-engine LOOP_RUN_STATE and core-state GOAL_STATE do not diverge.
-    // Only syncs when the aggregate passes (successful iteration).
+    // ── GOAL_STATE heartbeat sync (formerly iteration_count sync) ──
+    // Best-effort touch of GOAL_STATE.json to prevent the goal-engine's
+    // LOOP_RUN_STATE and core-state's GOAL_STATE from having wildly
+    // diverging timestamps. We do NOT sync iteration_count here because
+    // LoopCloseoutAggregate doesn't carry it — core-state is authoritative
+    // for iteration tracking.
     if aggregate.overall_status == "pass" {
         let sync_task_id = actions
             .first()
@@ -591,12 +583,24 @@ fn barrier_escalation(
             run_id,
         ])
         .current_dir(repo_root);
+
         #[cfg(unix)]
         unsafe {
             cmd.pre_exec(|| dispatcher::apply_subprocess_rlimits());
         }
-        cmd.output()
-            .map_err(|e| LoopError::ActionFailed(format!("barrier escalation failed: {e}")))?
+
+        let child = cmd
+            .spawn()
+            .map_err(|e| LoopError::SpawnFailed(format!("barrier autoresearch: {e}")))?;
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(300);
+        crate::dispatcher::poll_subprocess(
+            child,
+            repo_root,
+            loop_id,
+            "barrier-escalation",
+            deadline,
+            std::time::Duration::from_secs(300),
+        )?
     };
 
     if !output.status.success() {
