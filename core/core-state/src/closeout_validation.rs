@@ -123,14 +123,15 @@ pub fn closeout_record_schema_version() -> &'static str {
 
 #[derive(Debug, Clone, serde::Deserialize, Default)]
 #[serde(deny_unknown_fields)]
-#[allow(dead_code)]
 struct CloseoutRecord {
     #[serde(default)]
     schema_version: String,
     #[serde(default)]
     task_id: String,
+    #[allow(dead_code)] // deserialized for schema completeness, not read
     #[serde(default)]
     started_at: Option<String>,
+    #[allow(dead_code)]
     #[serde(default)]
     ended_at: Option<String>,
     #[serde(default)]
@@ -147,36 +148,40 @@ struct CloseoutRecord {
     risks: Vec<String>,
     #[serde(default)]
     summary: String,
+    #[allow(dead_code)]
     #[serde(default)]
     notes: Option<String>,
 }
 
 #[derive(Debug, Clone, serde::Deserialize, Default)]
 #[serde(deny_unknown_fields)]
-#[allow(dead_code)]
 struct CloseoutCommand {
     #[serde(default)]
     command: String,
     #[serde(default)]
     exit_code: i64,
+    #[allow(dead_code)]
     #[serde(default)]
     duration_ms: Option<i64>,
+    #[allow(dead_code)]
     #[serde(default)]
     stdout_summary: Option<String>,
+    #[allow(dead_code)]
     #[serde(default)]
     stderr_summary: Option<String>,
 }
 
 #[derive(Debug, Clone, serde::Deserialize, Default)]
 #[serde(deny_unknown_fields)]
-#[allow(dead_code)]
 struct CloseoutArtifact {
     #[serde(default)]
     path: String,
     #[serde(default)]
     exists: bool,
+    #[allow(dead_code)]
     #[serde(default)]
     size_bytes: Option<i64>,
+    #[allow(dead_code)]
     #[serde(default)]
     checks: Option<Vec<String>>,
 }

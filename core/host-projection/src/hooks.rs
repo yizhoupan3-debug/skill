@@ -196,10 +196,9 @@ runtime_hook_proxy! { fn closeout_stop_followup_for_completion_text(repo_root: &
 
 // ── hook_outbound_protect: removed from hooks proxy layer ──
 //
-// The authoritative implementation lives in runtime-core-contracts
-// (hook_outbound_protect.rs), whose functions are called directly by
-// consumers. The OnceLock proxy was never registered in production
-// (register only called from test_helpers).
+// The authoritative implementation lived in the now-deleted runtime-core-contracts
+// crate (hook_outbound_protect.rs). Functions are called directly by consumers.
+// The OnceLock proxy was never registered in production.
 
 // hook_posttool_normalize: default policy (register removed — was never called in production)
 // ────────────────────────────────────────────────────────────────

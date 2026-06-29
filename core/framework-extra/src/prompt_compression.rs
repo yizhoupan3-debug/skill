@@ -54,16 +54,6 @@ pub fn build_framework_prompt_compression_envelope(
             )
         })?;
 
-    // Check the lossless-mode env flag (default on).
-    let lossless = std::env::var("FRAMEWORK_COMPRESSION_LOSSLESS")
-        .ok()
-        .map(|v| v != "0" && v != "false")
-        .unwrap_or(true);
-
-    if !lossless {
-        return compress_legacy(&text, token_budget);
-    }
-
     let input_estimate = alias::estimate_token_count(&text);
     if token_budget == 0 {
         return Ok(zero_budget_output(input_estimate));
@@ -341,131 +331,6 @@ fn full_output(text: &str, estimate: usize) -> Value {
     })
 }
 
-// ── Legacy fallback (FRAMEWORK_COMPRESSION_LOSSLESS=false) ──────────────────────
-// TODO(v10+): Remove these legacy functions and the env-flag branch in
-// build_framework_prompt_compression_envelope. The lossless HTMC path is the
-// sole compression strategy going forward; the env flag was a rollout safety
-// valve and is no longer needed.
-
-fn compress_legacy(prompt: &str, token_budget: usize) -> Result<Value, FrameworkError> {
-    let input_token_estimate = alias::estimate_token_count(prompt);
-    if token_budget == 0 {
-        let output = "[omitted: token budget is zero]".to_string();
-        return Ok(legacy_payload(
-            input_token_estimate,
-            alias::estimate_token_count(&output),
-            &output,
-            "zero_budget",
-            true,
-            &["all".to_string()],
-        ));
-    }
-    if input_token_estimate <= token_budget {
-        return Ok(legacy_payload(
-            input_token_estimate,
-            input_token_estimate,
-            prompt,
-            "unchanged",
-            false,
-            &[],
-        ));
-    }
-
-    let lines = prompt.lines().collect::<Vec<_>>();
-    let target_chars = token_budget.saturating_mul(3).max(1);
-    let (output, strategy, omitted_sections) = if lines.len() >= 6 {
-        let head = lines
-            .iter()
-            .take(3)
-            .map(|l| (*l).to_string())
-            .collect::<Vec<_>>();
-        let tail = lines
-            .iter()
-            .rev()
-            .take(2)
-            .collect::<Vec<_>>()
-            .into_iter()
-            .rev()
-            .map(|l| (*l).to_string())
-            .collect::<Vec<_>>();
-        let omitted = lines.len().saturating_sub(head.len() + tail.len());
-        (
-            [
-                head,
-                vec![format!("[omitted {omitted} middle lines]")],
-                tail,
-            ]
-            .concat()
-            .join("\n"),
-            "structured_head_tail".to_string(),
-            vec![format!("middle_lines:{omitted}")],
-        )
-    } else {
-        let mut truncated = prompt.chars().take(target_chars).collect::<String>();
-        truncated.push_str("\n[truncated tail]");
-        (
-            truncated,
-            "tail_truncation".to_string(),
-            vec!["tail".to_string()],
-        )
-    };
-    let bounded = enforce_prompt_budget_legacy(output, token_budget);
-    Ok(legacy_payload(
-        input_token_estimate,
-        alias::estimate_token_count(&bounded),
-        &bounded,
-        &strategy,
-        true,
-        &omitted_sections,
-    ))
-}
-
-fn enforce_prompt_budget_legacy(output: String, token_budget: usize) -> String {
-    let max_chars = token_budget.saturating_mul(3).max(1);
-    let marker = "\n[truncated tail]";
-    if output.char_indices().nth(max_chars).is_none() {
-        return output;
-    }
-    let marker_char_count = marker.chars().count();
-    if max_chars <= marker_char_count {
-        return "[truncated]".chars().take(max_chars).collect();
-    }
-    let keep = max_chars - marker_char_count;
-    let split_byte = output
-        .char_indices()
-        .nth(keep)
-        .map(|(idx, _)| idx)
-        .unwrap_or(output.len());
-    format!("{}{}", &output[..split_byte], marker)
-}
-
-fn legacy_payload(
-    input_estimate: usize,
-    output_estimate: usize,
-    output: &str,
-    strategy: &str,
-    truncated: bool,
-    omitted_sections: &[String],
-) -> Value {
-    json!({
-        "schema_version": FRAMEWORK_PROMPT_COMPRESSION_SCHEMA_VERSION,
-        "authority": FRAMEWORK_PROMPT_COMPRESSION_AUTHORITY,
-        "compression": {
-            "schema_version": FRAMEWORK_PROMPT_COMPRESSION_SCHEMA_VERSION,
-            "policy_owner": "rust",
-            "prompt_policy_owner": "rust",
-            "input_token_estimate": input_estimate,
-            "output_token_estimate": output_estimate,
-            "output": output,
-            "compressed_prompt": output,
-            "strategy": strategy,
-            "truncated": truncated,
-            "omitted_sections": omitted_sections,
-            "artifact_offload_decision": false,
-        }
-    })
-}
-
 // ── Tests ──────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -557,15 +422,6 @@ mod tests {
     }
 
     #[test]
-    fn legacy_fallback_via_env() {
-        let text = "line1\nline2\nline3\nline4\nline5\nline6";
-        let result = compress_legacy(text, 5).expect("legacy");
-        let comp = &result["compression"];
-        assert_eq!(comp["strategy"], "structured_head_tail");
-        assert!(comp["truncated"].as_bool().unwrap());
-    }
-
-    #[test]
     fn roundtrip_via_content_store() {
         use crate::content_store::ContentStore;
         let dir = tempfile::tempdir().expect("tempdir");
@@ -607,13 +463,6 @@ mod tests {
         );
         assert!(hint.chars().count() <= 41); // max + ellipsis
         assert!(hint.ends_with('…'));
-    }
-
-    #[test]
-    fn legacy_tail_truncation() {
-        let text = "short text";
-        let output = enforce_prompt_budget_legacy(text.to_string(), 1);
-        assert!(output.len() <= 3);
     }
 
     #[test]
