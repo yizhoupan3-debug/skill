@@ -37,8 +37,8 @@ pub struct Finding {
 pub struct CheckResult {
     /// Checker identity (matches GateChecker::id()).
     pub checker_id: String,
-    /// True if the checker found no blocking issues.
-    /// The checker self-judges; aggregation uses findings, not `passed`.
+    /// Whether this checker passed. Note: aggregation logic uses `findings`
+    /// severity, not this field. Kept for backward compatibility.
     pub passed: bool,
     /// All findings produced by this checker.
     pub findings: Vec<Finding>,

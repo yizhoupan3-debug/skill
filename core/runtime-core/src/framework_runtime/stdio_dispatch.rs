@@ -333,8 +333,14 @@ fn dispatch_runtime_stdio_request(op: &str, payload: Value) -> Result<Value, Fra
         "background_state" => Err(FrameworkError::hook(
             "background_state requires L5 state feature (compile-time gate)",
         )),
+        // "session_supervisor" dispatch key also routes to orchestrator
+        // operations via the RuntimeCoreHooks handle_orchestrator_operation.
         "session_supervisor" => framework_kernel::runtime_hooks::try_hooks()
-            .ok_or_else(|| FrameworkError::hook("runtime hooks not registered"))?
+            .ok_or_else(|| {
+                FrameworkError::hook(
+                    "RuntimeCoreHooks not registered — call runtime_core::init_hooks() first",
+                )
+            })?
             .handle_orchestrator_operation(payload),
         "describe_transport" => build_trace_transport_descriptor(payload),
         "describe_handoff" => build_trace_handoff_descriptor(payload),

@@ -208,6 +208,10 @@ fn run_loop_inner(
                         .insert(action.action_id.clone(), "skipped".to_string());
                 }
             }
+            // L2 and L3 are currently handled identically: both dispatch the action
+            // to the subagent with the same timeout, kill-signal, and closeout flow.
+            // In a future enhancement, L3Unattended should skip the interactive
+            // review nudge and proceed with fully unattended execution.
             SafetyLevel::L2AssistedFix | SafetyLevel::L3Unattended => {
                 update_heartbeat(state);
                 if let Some(ref mut run) = state.current_run {
@@ -389,6 +393,11 @@ fn run_loop_inner(
     // Anti-drift check: after each review cycle, increment counter
     // and fire drift check every N cycles (default 3).
     state.anti_drift.review_cycle_count += 1;
+    // Cap at 10000 to prevent u32 overflow under extended execution.
+    // Reset to 0 if threshold is reached.
+    if state.anti_drift.review_cycle_count >= 10000 {
+        state.anti_drift.review_cycle_count = 0;
+    }
     let should_check = crate::drift::should_check_drift(&state.anti_drift);
     let current_goal = read_goal_snapshot(ctx.repo_root, entry);
     if current_goal.is_none() && should_check && state.anti_drift.original_goal_snapshot.is_some() {
@@ -446,10 +455,10 @@ fn run_loop_inner(
                     )));
                 } else {
                     transition_phase(state, LoopPhase::Escalated);
-                    return Err(LoopError::ActionFailed(
-                        "circuit breaker: escalated to research; awaiting human approval."
-                            .to_string(),
-                    ));
+                    return Err(LoopError::ActionFailed(format!(
+                        "circuit breaker: loop={} escalated to research; awaiting human approval.",
+                        entry.loop_id,
+                    )));
                 }
             } else {
                 return Err(LoopError::ActionFailed(
@@ -486,9 +495,13 @@ fn run_loop_inner(
                 ) {
                     goal_state["updated_at"] =
                         serde_json::json!(framework_kernel::time::now_iso());
-                    let _ = core_state_utils::atomic_write::write_atomic_json(
+                    if let Err(e) = core_state_utils::atomic_write::write_atomic_json(
                         &path, &goal_state,
-                    );
+                    ) {
+                        tracing::warn!(
+                            "[goal-engine] GOAL_STATE sync atomic_write failed: {e}"
+                        );
+                    }
                 }
             }
         }
@@ -647,13 +660,32 @@ fn discover_barrier_candidates(repo_root: &Path) -> Vec<String> {
     // but is only an approximation for truly chronological ordering. If barrier
     // directories use non-sortable names, this may select the wrong report.
     let mut entries: Vec<_> = match std::fs::read_dir(&barrier_dir) {
-        Ok(rd) => rd.filter_map(|e| e.ok()).collect(),
+        Ok(rd) => rd
+            .filter_map(|e| e.ok())
+            // Validate directory names as approximate timestamps before sorting.
+            // Lexicographic sort only works correctly for sortable timestamp names
+            // (e.g., "2026-06-20T12-00-00Z"). Filter out invalid names to prevent
+            // non-timestamp directories from polluting the ordering.
+            .filter(|e| {
+                let fname = e.file_name();
+                let name = fname.to_string_lossy();
+                // Accept ISO-like names (YYYY-MM-DD prefix) or all-numeric epoch timestamps
+                name.len() >= 10
+                    && (chrono::NaiveDate::parse_from_str(&name[..10], "%Y-%m-%d").is_ok()
+                        || name.chars().all(|c| c.is_ascii_digit()))
+            })
+            .collect(),
         Err(_) => return vec![],
     };
     entries.sort_by_key(|e| e.path());
     if let Some(latest) = entries.last() {
         let report_path = latest.path().join("BARRIER_REPORT.json");
         if report_path.exists()
+            // Freshness check: skip barrier reports older than 1 hour
+            && let Ok(metadata) = std::fs::metadata(&report_path)
+            && let Ok(modified) = metadata.modified()
+            && let Ok(age) = modified.elapsed()
+            && age < std::time::Duration::from_secs(3600)
             && let Ok(content) = std::fs::read_to_string(&report_path)
             && let Ok(report) = serde_json::from_str::<serde_json::Value>(&content)
             && let Some(candidates) = report.get("candidates").and_then(|c| c.as_array())
@@ -742,7 +774,11 @@ fn discover_actions(
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    let actions = parse_discovery_output(&stdout, entry, default_safety);
+    let actions = parse_discovery_output(&stdout, entry, default_safety)
+        .unwrap_or_else(|e| {
+            tracing::info!("discovery output: {e}");
+            Vec::new()
+        });
 
     if actions.is_empty() {
         tracing::info!("discovery returned no actions for loop {}", entry.loop_id);
@@ -755,28 +791,33 @@ fn parse_discovery_output(
     output: &str,
     _entry: &LoopRegistryEntry,
     default_safety: &str,
-) -> Vec<LoopAction> {
+) -> Result<Vec<LoopAction>, LoopError> {
     let json_start = output.find('[');
     let json_end = output.rfind(']');
     let json_str = match (json_start, json_end) {
         (Some(start), Some(end)) if end > start => &output[start..=end],
-        _ => return Vec::new(),
+        _ => {
+            return Err(LoopError::Serde(
+                "discovery output: no valid JSON array ('[...]') found".to_string(),
+            ));
+        }
     };
 
     let parsed: serde_json::Value = match serde_json::from_str(json_str) {
         Ok(v) => v,
         Err(e) => {
             tracing::warn!("failed to parse discovery output as JSON: {e}");
-            return Vec::new();
+            return Ok(Vec::new());
         }
     };
 
     let arr = match parsed.as_array() {
         Some(a) => a,
-        None => return Vec::new(),
+        None => return Ok(Vec::new()),
     };
 
-    arr.iter()
+    Ok(arr
+        .iter()
         .filter_map(|item| {
             let action_id = item.get("action_id")?.as_str()?;
             let action_type = item.get("type")?.as_str()?;
@@ -806,7 +847,7 @@ fn parse_discovery_output(
                 description,
             })
         })
-        .collect()
+        .collect())
 }
 
 fn assign_safety_levels(

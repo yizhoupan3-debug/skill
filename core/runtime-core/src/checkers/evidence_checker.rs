@@ -27,6 +27,13 @@ impl GateChecker for EvidenceChecker {
     }
 
     fn check(&self, ctx: &CheckContext) -> CheckResult {
+        // NOTE: This checker duplicates QGEntry Stage 1's anti-fraud evidence
+        //       gate check (qg_entry::trigger). Stage 1 blocks on P0 when
+        //       evidence exists but none indicates success. This checker runs
+        //       as part of the quality-gate scene dispatch (Stage 2) and
+        //       produces Warning/C findings for the same condition. Both checks
+        //       are currently intentional — Stage 1 is the hard gate, this
+        //       checker provides non-blocking advisory feedback for the report.
         let repo_root = &ctx.repo_root;
         let task_id = &ctx.task_id;
 

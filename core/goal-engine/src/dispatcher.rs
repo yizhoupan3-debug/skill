@@ -146,13 +146,21 @@ impl SubagentResult {
     }
 }
 
+/// Escape special characters in handoff text to prevent injection through
+/// action descriptions or scope paths that contain newlines or backslashes.
+fn sanitize_handoff_text(text: &str) -> String {
+    text.replace('\\', "\\\\")
+        .replace('\n', "\\n")
+        .replace('\r', "\\r")
+}
+
 /// Build a subagent handoff message from an action definition.
 /// The handoff includes the action description, scope constraints, closeout instructions, and kill-signal path.
 pub fn build_handoff(action: &LoopAction, loop_id: &str, run_id: &str) -> String {
     let scope_display = if action.scope_paths.is_empty() {
         "all files".to_string()
     } else {
-        action.scope_paths.join(", ")
+        sanitize_handoff_text(&action.scope_paths.join(", "))
     };
 
     format!(
@@ -171,9 +179,9 @@ pub fn build_handoff(action: &LoopAction, loop_id: &str, run_id: &str) -> String
          ## Safety\n\
          - 每 10000 tokens 检查 kill 信号（软防线）\n\
          - Kill 信号文件: .loop-kill/{loop_id}",
-        desc = action.description.as_deref().unwrap_or(&action.action_type),
+        desc = sanitize_handoff_text(action.description.as_deref().unwrap_or(&action.action_type)),
         scope = scope_display,
-        action_id = action.action_id,
+        action_id = sanitize_handoff_text(&action.action_id),
         loop_id = loop_id,
         run_id = run_id,
     )
@@ -182,6 +190,13 @@ pub fn build_handoff(action: &LoopAction, loop_id: &str, run_id: &str) -> String
 /// Apply process resource limits via setrlimit in the forked child (pre_exec).
 /// Prevents runaway subprocesses from exhausting system resources.
 /// Delegates to the shared implementation in `fr-utils`.
+///
+/// # Safety level equality
+/// Resource limits are applied uniformly across all safety levels (L1, L2, L3).
+/// There is no per-safety-level differentiation (e.g., stricter CPU/memory limits
+/// for L3 unattended actions). All subagents — discovery, dispatch, and barrier
+/// escalation — receive the same rlimit profile. If per-level limits are needed,
+/// introduce a `safety_level` parameter and route to level-specific limit profiles.
 #[cfg(unix)]
 pub(crate) fn apply_subprocess_rlimits() -> Result<(), std::io::Error> {
     fr_utils::process_utils::apply_subprocess_rlimits()
@@ -254,6 +269,14 @@ pub fn run_action_dry_run(action: &LoopAction, loop_id: &str, run_id: &str) -> S
 }
 
 /// Time-to-live for the cached `git diff` result (seconds).
+///
+/// # TTL window limitation
+/// The 10-second TTL is a trade-off between responsiveness and freshness.
+/// In tight poll loops (e.g., multi-action verification), this prevents
+/// spawning `git diff` on every call. However, during the TTL window,
+/// newly modified files are not detected. Extending this window increases
+/// the risk of stale scope compliance checks. For stricter freshness,
+/// reduce the TTL or bypass the cache entirely.
 const GIT_DIFF_CACHE_TTL_SECS: u64 = 10;
 
 /// Check that modified tracked files are within the allowed scope paths.

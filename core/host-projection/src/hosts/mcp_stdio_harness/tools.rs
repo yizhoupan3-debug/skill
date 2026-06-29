@@ -24,6 +24,18 @@ pub(super) fn handle_tools_call(
     let default_args = json!({});
     let arguments = params.get("arguments").unwrap_or(&default_args);
 
+    // Reject empty tool name before rate limiting and pre-guards
+    if tool_name.is_empty() {
+        return json!({
+            "jsonrpc": "2.0",
+            "id": id,
+            "result": {
+                "content": [{ "type": "text", "text": "Error: tool name must not be empty" }],
+                "isError": true,
+            },
+        });
+    }
+
     // Check rate limit before processing
     {
         let limiter = get_rate_limiter();

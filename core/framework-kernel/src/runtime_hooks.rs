@@ -172,6 +172,13 @@ pub struct RuntimeCoreHooks {
     pub generated_artifacts_status_for_repo: fn(repo_root: &Path) -> Result<String, FrameworkError>,
 
     // ── Kernel bootstrap ──
+    //
+    // NOTE [FNH-08/FNH-09]: Two hooks registration centers share this
+    // fn-pointer: framework-kernel's static `RuntimeCoreHooks` registry
+    // (this struct) and runtime-core's `ensure_kernel_bootstrap()`. Both
+    // reference the same underlying `RegisterKernelBootstrap` logic via
+    // the hook registration path. Keep the two registration sites
+    // consistent — init_hooks() in runtime-core must populate this field.
     pub ensure_kernel_bootstrap: fn(),
 
     // ── Quality Gate evaluation (wraps qg_entry::trigger) ──

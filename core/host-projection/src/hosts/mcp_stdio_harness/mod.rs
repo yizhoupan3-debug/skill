@@ -108,6 +108,11 @@ impl RateLimiter {
                 self.min_interval.as_millis()
             )));
         }
+        // Limit map size to prevent unbounded growth
+        if self.last_call.len() >= 200 {
+            self.last_call.clear();
+            tracing::debug!("rate limiter map cleared (capacity reached)");
+        }
         self.last_call.insert(tool_name.to_string(), now);
         Ok(())
     }
@@ -129,6 +134,10 @@ macro_rules! poison_safe_lock {
             Ok(guard) => Some(guard),
             Err(poisoned) => {
                 tracing::warn!("mutex poisoned, recovering (thread panicked while holding lock)");
+                // Note: into_inner() recovers the data even if the Mutex was poisoned.
+                // If the panic occurred during a HashMap insertion, the map may contain
+                // partial entries. A full rebuild (dropping and recreating the map) would
+                // be safer but is not currently done for performance reasons.
                 Some(poisoned.into_inner())
             }
         }
@@ -467,11 +476,11 @@ fn write_mcp_response<W: Write>(
 fn generate_connection_session_id(host_id: &str) -> String {
     static SESSION_COUNTER: AtomicU64 = AtomicU64::new(0);
     let counter = SESSION_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    let nanos = std::time::SystemTime::now()
+    let entropy: u64 = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_nanos();
-    format!("{host_id}-{nanos}-{counter}")
+        .map(|d| (d.as_nanos() as u64) ^ (d.as_secs() << 32))
+        .unwrap_or(0);
+    format!("{host_id}-{entropy:x}-{counter}")
 }
 
 pub fn handle_mcp_request(
@@ -521,7 +530,7 @@ pub fn handle_mcp_request(
         "resources/list" => Some(handle_resources_list(id, repo_root)),
         "resources/read" => Some(handle_resources_read(id, &request, repo_root)),
         "ping" => id.map(|id| json!({"jsonrpc": "2.0", "id": id, "result": {}})),
-        _ => Some(json!({
+        _ => id.map(|id| json!({
             "jsonrpc": "2.0",
             "id": id,
             "error": {"code": -32601, "message": format!("Method not found: {method}")},

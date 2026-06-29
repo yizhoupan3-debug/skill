@@ -108,6 +108,9 @@ pub fn trigger(
         // Evidence path consistent with Stage 1 internal resolution
         // (task_evidence_artifacts_summary_for_task uses the same base:
         //  repo_root / "artifacts/current" / task_id).
+        // NOTE: Keep this path in sync with core-state's
+        //       EVIDENCE_INDEX path resolution (core-state uses the same
+        //       repo_root.join("artifacts/current").join(task_id) base).
         evidence_path: Some(
             repo_root
                 .join("artifacts/current")

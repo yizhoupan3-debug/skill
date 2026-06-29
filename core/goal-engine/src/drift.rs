@@ -7,6 +7,11 @@
 use crate::types::{AntiDriftState, DriftCheckResult};
 use std::collections::HashSet;
 
+/// Drift detection threshold: score above this indicates goal drift has occurred.
+const DRIFT_DETECTION_THRESHOLD: f64 = 0.3;
+/// Scope expansion threshold: score above this indicates significant scope expansion.
+const SCOPE_EXPANSION_THRESHOLD: f64 = 0.6;
+
 /// Perform a drift check: compare original goal snapshot to current goal text.
 pub fn perform_drift_check(
     anti_drift: &mut AntiDriftState,
@@ -15,10 +20,10 @@ pub fn perform_drift_check(
     let original = anti_drift.original_goal_snapshot.as_deref().unwrap_or("");
 
     let drift_score = jaccard_drift(original, current_goal_text);
-    let drift_detected = drift_score > 0.3;
+    let drift_detected = drift_score > DRIFT_DETECTION_THRESHOLD;
     let drift_type = if !drift_detected {
         "none".to_string()
-    } else if drift_score > 0.6 {
+    } else if drift_score > SCOPE_EXPANSION_THRESHOLD {
         "scope_expansion".to_string()
     } else {
         "evidence_shift".to_string()

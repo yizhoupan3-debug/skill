@@ -41,6 +41,13 @@ impl LoopPhase {
 
     /// Return the set of valid next phases from this phase.
     /// When `other` is not in this set, the transition is unusual but not blocked.
+    ///
+    /// Note: `Escalated -> Discovering` is not listed here because it happens
+    /// indirectly through the outer `run_loop` restart mechanism. When a
+    /// `ResearchEscalation` error is returned, the outer loop re-reads the
+    /// loop state and restarts from `Pending` through `Discovering` on the
+    /// next iteration. This design keeps the phase machine simple while
+    /// allowing auto-restart after research escalation completes.
     pub fn valid_transitions(&self) -> &[LoopPhase] {
         match self {
             LoopPhase::Pending => &[LoopPhase::Discovering, LoopPhase::Interrupted],
@@ -72,6 +79,12 @@ impl LoopPhase {
     }
 }
 
+impl std::fmt::Display for LoopPhase {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
 // ── Safety Level ──
 
 /// Scope-based safety level (§6.1). Use to control whether a loop action reports only,
@@ -83,7 +96,10 @@ pub enum SafetyLevel {
     L1ReportOnly,
     /// L2 assisted-fix：修改 + 验证 + commit（不 merge）。
     L2AssistedFix,
-    /// L3 unattended：修改 + 验证 + commit（不 merge）。
+    /// L3 unattended：完全自动执行 — 修改 + 验证 + commit + 自动处理异常（不 merge）。
+    /// Designed for scenarios where human oversight is unavailable or excessive latency
+    /// is unacceptable. Unlike L2, there is no interactive review nudge — the action
+    /// proceeds with full autonomy within its safety scope.
     L3Unattended,
 }
 
@@ -94,6 +110,12 @@ impl SafetyLevel {
             SafetyLevel::L2AssistedFix => "L2",
             SafetyLevel::L3Unattended => "L3",
         }
+    }
+}
+
+impl std::fmt::Display for SafetyLevel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
     }
 }
 
