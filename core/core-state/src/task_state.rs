@@ -1030,7 +1030,7 @@ mod tests {
         )
         .unwrap();
 
-        let v = resolve_task_view(&tmp, Some(tid));
+        let _v = resolve_task_view(&tmp, Some(tid));
         let _ = fs::remove_dir_all(&tmp);
     }
 

@@ -1,6 +1,5 @@
 // `impl BrowserRuntime`（与 `frag_01_through_types.rs` 中类型同模块拼接）。
-#[cfg(test)]
-use core_errors::FrameworkError;
+// FrameworkError is already available via the parent module's imports.
 
 impl BrowserRuntime {
     #[cfg(test)]

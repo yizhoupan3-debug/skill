@@ -107,6 +107,7 @@ pub(crate) fn install_test_deps() {
                 .and_then(Value::as_str)
                 .map(str::to_string)
         }
+        #[allow(dead_code)]
         fn test_evidence_append(payload: Value) -> Result<Value, FrameworkError> {
             Ok(payload)
         }

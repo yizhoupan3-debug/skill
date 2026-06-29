@@ -379,10 +379,6 @@ pub(crate) fn evaluate_closeout_gate_hook(
         .goal_state
         .as_ref()
         .is_some_and(check_goal_suggests_review);
-    let review_goal = task_view
-        .goal_state
-        .as_ref()
-        .is_some_and(check_goal_suggests_review);
     // P2-008: Optional reviewer_lane/fork_context from hook payload
     let has_review_evidence = payload
         .get("reviewer_lane")

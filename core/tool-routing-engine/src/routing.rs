@@ -18,7 +18,7 @@ use mcp_tool_registry::McpToolRecord;
 use std::collections::HashSet;
 
 use crate::routing_logger::log_tool_decision;
-#[cfg(test)]
+#[allow(unused_imports)]
 use mcp_tool_registry::{DispatchDomain, ToolLayer, ToolOwner};
 
 const DECISION_SCHEMA_VERSION: &str = "1.0.0";
@@ -292,8 +292,7 @@ pub(crate) fn score_tool(
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
-    use mcp_tool_registry::{DispatchDomain, ToolLayer, ToolOwner};
-
+    
     fn test_tool_record(slug: &str, keywords: &[&str]) -> McpToolRecord {
         McpToolRecord {
             slug: slug.to_string(),

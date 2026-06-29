@@ -542,6 +542,8 @@ fn register_test_hooks() {
         run_eval_route: |_, _| Ok(serde_json::Value::Null),
         generated_artifacts_status_for_repo: |_| Ok(String::new()),
         ensure_kernel_bootstrap: || {},
+        evaluate_quality_gate: |_| Ok(serde_json::Value::Null),
+        evaluate_closeout_gate: |_| Ok(serde_json::Value::Null),
     });
 }
 

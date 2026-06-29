@@ -469,6 +469,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(non_snake_case)]
     fn test_parse_laTeX() {
         let ineq = parse_via_regex("x \\leq 2*y").unwrap();
         assert_eq!(ineq.sense, InequalitySense::Le);

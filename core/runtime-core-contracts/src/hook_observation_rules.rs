@@ -29,6 +29,7 @@ mod tests {
         "/../../configs/framework/ROUTER_RS_HOOK_OBSERVATION_RULES.json"
     ));
 
+    #[allow(dead_code)]
     struct ParsedRules {
         tokens: HashMap<String, String>,
         unknown_code: String,

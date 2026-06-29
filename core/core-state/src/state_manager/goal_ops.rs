@@ -1797,7 +1797,7 @@ mod tests {
         );
 
         // Pointers NOT neutralized
-        let (active, focus) = super::super::pointer_ops::read_task_pointer_pair(&repo);
+        let (active, _focus) = super::super::pointer_ops::read_task_pointer_pair(&repo);
         assert_eq!(
             active.as_deref(),
             Some("t-ce"),

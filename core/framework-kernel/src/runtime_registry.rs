@@ -9,37 +9,29 @@
 //! `EPHEMERAL_PATH_PATTERNS`, `EPHEMERAL_TASK_PREFIXES`) are **generated** from
 //! `configs/framework/RUNTIME_REGISTRY.json` at compile time. Adding a new host
 //! requires only editing the registry — the generated code stays in sync automatically.
-
 use core_errors::FrameworkError;
 use serde::Deserialize;
 use serde_json::Value;
 use std::fs;
 use std::path::{Path, PathBuf};
-
 // ── Generated host tables (compile-time from RUNTIME_REGISTRY.json) ──
 // Includes: ALL_KNOWN_HOST_DIRS, EPHEMERAL_PATH_PATTERNS, EPHEMERAL_TASK_PREFIXES,
 // is_ephemeral_task_id, host_home_dirs, host_private_config_dir, review_gate_disable_env,
 // paper_prose_env, paper_adversarial_env, settings_guarded_paths, generated_entrypoint_paths.
 include!(concat!(env!("OUT_DIR"), "/generated_host_tables.rs"));
-
 // ── Generated stdio op tables (compile-time from RUNTIME_REGISTRY.json) ──
 // Includes: classify_stdio_op_registry, STDIO_OP_DOMAINS.
 include!(concat!(env!("OUT_DIR"), "/generated_stdio_tables.rs"));
-
 pub const RUNTIME_REGISTRY_SCHEMA_VERSION: &str = "framework-runtime-registry-v2";
 pub const RUNTIME_REGISTRY_PATH: &str = "configs/framework/RUNTIME_REGISTRY.json";
-
 /// Canonical list of managed MCP server IDs. Used as fallback when registry is unavailable.
 pub const DEFAULT_MANAGED_MCP_SERVER_IDS: &[&str] =
     &["router-rs-framework", "browser-mcp", "paperplain"];
-
 /// Path to the host adapter contract spec (relative to framework root).
 pub const HOST_ADAPTER_CONTRACT_PATH: &str = "AGENTS.md";
-
 // ---------------------------------------------------------------------------
 // Typed registry subset (host integration)
 // ---------------------------------------------------------------------------
-
 #[derive(Debug, Clone, Deserialize)]
 pub struct RuntimeRegistry {
     #[serde(rename = "schema_version")]
@@ -47,19 +39,16 @@ pub struct RuntimeRegistry {
     #[serde(default)]
     pub workspace_bootstrap_defaults: RuntimeWorkspaceBootstrapDefaults,
 }
-
 #[derive(Debug, Clone, Deserialize, Default)]
 pub struct RuntimeWorkspaceBootstrapDefaults {
     #[serde(default)]
     pub skills: RuntimeSkillsDefaults,
 }
-
 #[derive(Debug, Clone, Deserialize, Default)]
 pub struct RuntimeSkillsDefaults {
     #[serde(default)]
     pub source_rel: Option<String>,
 }
-
 pub fn runtime_registry_path(repo_root: &Path) -> Result<PathBuf, FrameworkError> {
     let repo_candidate = repo_root.join(RUNTIME_REGISTRY_PATH);
     // Read-first pattern: check existence by attempting to read metadata,
@@ -78,7 +67,6 @@ pub fn runtime_registry_path(repo_root: &Path) -> Result<PathBuf, FrameworkError
         ))),
     }
 }
-
 pub fn load_runtime_registry_json(framework_root: &Path) -> Result<Value, FrameworkError> {
     let path = framework_root.join(RUNTIME_REGISTRY_PATH);
     // Read-first pattern: attempt to read directly, avoiding TOCTOU between is_file() and read_to_string().
@@ -122,7 +110,6 @@ pub fn load_runtime_registry_json(framework_root: &Path) -> Result<Value, Framew
     }
     Ok(parsed)
 }
-
 pub fn load_runtime_registry_payload(repo_root: &Path) -> Result<Value, FrameworkError> {
     load_runtime_registry_json(repo_root).map_err(|e| {
         FrameworkError::validation(format!(
@@ -131,13 +118,11 @@ pub fn load_runtime_registry_payload(repo_root: &Path) -> Result<Value, Framewor
         ))
     })
 }
-
 pub fn load_runtime_registry(repo_root: &Path) -> Result<RuntimeRegistry, FrameworkError> {
     let payload = load_runtime_registry_payload(repo_root)?;
     serde_json::from_value::<RuntimeRegistry>(payload)
         .map_err(|err| FrameworkError::validation(err.to_string()))
 }
-
 /// Map MCP stdio host spellings to `host_projections` keys (avoid `hosts` import cycle).
 ///
 /// Currently this only performs whitespace trimming.  In the future it may need
@@ -147,7 +132,6 @@ pub fn load_runtime_registry(repo_root: &Path) -> Result<RuntimeRegistry, Framew
 fn registry_projection_host_key(host_id: &str) -> &str {
     host_id.trim()
 }
-
 pub fn host_projection_object<'a>(
     registry: &'a Value,
     host_id: &str,
@@ -158,7 +142,6 @@ pub fn host_projection_object<'a>(
         .and_then(|v| v.get(key))
         .and_then(Value::as_object)
 }
-
 pub fn harness_capability_exception_entry<'a>(
     projection: &'a serde_json::Map<String, Value>,
     cap: &str,
@@ -171,7 +154,6 @@ pub fn harness_capability_exception_entry<'a>(
                 .find(|row| row.get("cap").and_then(Value::as_str) == Some(cap))
         })
 }
-
 pub fn harness_capability_exception_rationale(
     repo_root: &Path,
     host_id: &str,
@@ -187,7 +169,6 @@ pub fn harness_capability_exception_rationale(
         .filter(|s| !s.is_empty())
         .map(str::to_string)
 }
-
 /// Resolve a bare MCP tool name (e.g. `codegraph_search`) to a managed server id.
 pub(crate) fn managed_mcp_server_for_tool(registry: &Value, tool_name: &str) -> Option<String> {
     let normalized = tool_name.trim();
@@ -203,7 +184,6 @@ pub(crate) fn managed_mcp_server_for_tool(registry: &Value, tool_name: &str) -> 
     }
     None
 }
-
 /// Return all managed MCP server IDs from the registry.
 pub fn managed_mcp_server_ids(registry: &Value) -> Vec<String> {
     registry
@@ -212,7 +192,6 @@ pub fn managed_mcp_server_ids(registry: &Value) -> Vec<String> {
         .map(|obj| obj.keys().cloned().collect())
         .unwrap_or_default()
 }
-
 /// Parse Cursor-style MCP tool FQN: `mcp__{server_id}__{tool_name}`.
 pub(crate) fn parse_host_mcp_tool_fqn(fqn: &str) -> Option<(String, String)> {
     let rest = fqn.strip_prefix("mcp__")?;
@@ -222,7 +201,6 @@ pub(crate) fn parse_host_mcp_tool_fqn(fqn: &str) -> Option<(String, String)> {
     }
     Some((server_id.to_string(), tool_name.to_string()))
 }
-
 /// True when `tool_name` or host FQN resolves to a registry-managed MCP server.
 pub fn resolves_managed_mcp_tool(registry: &Value, tool_name_or_fqn: &str) -> bool {
     let raw = tool_name_or_fqn.trim();
@@ -235,12 +213,9 @@ pub fn resolves_managed_mcp_tool(registry: &Value, tool_name_or_fqn: &str) -> bo
     }
     managed_mcp_server_for_tool(registry, raw).is_some()
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
-
     #[test]
     fn registry_projection_host_key_passes_through_unknown() {
         assert_eq!(
@@ -250,6 +225,5 @@ mod tests {
         assert_eq!(registry_projection_host_key("claude"), "claude");
     }
 }
-
 // Review gate re-exports (core_policy::registry_review_gate) remain in
 // runtime-core to avoid adding core-policy as a framework-kernel dependency.

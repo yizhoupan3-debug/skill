@@ -182,7 +182,7 @@ fn live_execute_prompt_builder_uses_deep_mode_contract_when_requested() {
     payload.prompt_preview = None;
     payload.task = "/goal_drive deep 深度调研联网能力".to_string();
 
-    let prompt = build_live_execute_prompt(&payload);
+    let _prompt = build_live_execute_prompt(&payload);
 }
 
 #[test]
@@ -193,7 +193,7 @@ fn live_execute_infer_deep_from_task_deep_dive_phrase() {
     payload.task = "please do a deep dive on tokenizer failure modes".to_string();
     payload.selected_skill = "documentation-engineering".to_string();
 
-    let prompt = build_live_execute_prompt(&payload);
+    let _prompt = build_live_execute_prompt(&payload);
 }
 
 #[test]
@@ -205,7 +205,7 @@ fn live_execute_infer_deep_from_reason_literature_review_phrase() {
     payload.selected_skill = "research-execution".to_string();
     payload.reasons = vec!["lane: literature review".to_string()];
 
-    let prompt = build_live_execute_prompt(&payload);
+    let _prompt = build_live_execute_prompt(&payload);
 }
 
 #[test]
@@ -217,7 +217,7 @@ fn live_execute_infer_deep_from_reason_depth_research_zh_only() {
     payload.selected_skill = "research-execution".to_string();
     payload.reasons = vec!["用户要求：深度研究".to_string()];
 
-    let prompt = build_live_execute_prompt(&payload);
+    let _prompt = build_live_execute_prompt(&payload);
 }
 
 #[test]
@@ -240,7 +240,7 @@ fn live_execute_infer_quick_when_external_research_with_stack_trace_only() {
     payload.task = "Investigate failure: external research module prints stack trace".to_string();
     payload.selected_skill = "documentation-engineering".to_string();
 
-    let prompt = build_live_execute_prompt(&payload);
+    let _prompt = build_live_execute_prompt(&payload);
 }
 
 #[test]
@@ -251,7 +251,7 @@ fn live_execute_infer_quick_when_external_research_with_structured_logging_jargo
     payload.task = "Wire external research client with structured logging for ops.".to_string();
     payload.selected_skill = "documentation-engineering".to_string();
 
-    let prompt = build_live_execute_prompt(&payload);
+    let _prompt = build_live_execute_prompt(&payload);
 }
 
 #[test]
@@ -262,7 +262,7 @@ fn live_execute_infer_deep_when_external_research_plus_literature_cue() {
     payload.task = "external research literature review for the safety claim".to_string();
     payload.selected_skill = "documentation-engineering".to_string();
 
-    let prompt = build_live_execute_prompt(&payload);
+    let _prompt = build_live_execute_prompt(&payload);
 }
 
 #[test]

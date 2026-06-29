@@ -49,6 +49,7 @@ pub use runtime_core::route::{
     build_route_diff_report, build_route_policy, build_route_snapshot, load_records,
     load_records_cached_for_stdio, route_task, search_skills,
 };
+#[allow(unused_imports)]
 pub use runtime_core::runtime_envelope_ids::{
     BACKGROUND_CONTROL_AUTHORITY, BACKGROUND_CONTROL_SCHEMA_VERSION, DEFAULT_MAX_BACKGROUND_JOBS,
     DEFAULT_MAX_CONCURRENT_SUBAGENTS, RUNTIME_CONTROL_PLANE_AUTHORITY,
@@ -79,6 +80,7 @@ pub use runtime_core::trace_runtime::sha256_hex;
 pub use runtime_core::trace_runtime::{TraceRecordEventRequestPayload, record_trace_event};
 
 // observability/control-plane re-exports (from framework-extra)
+#[allow(unused_imports)]
 pub use framework_extra::orchestration_controller::{
     build_background_control_response, build_runtime_observability_exporter_descriptor,
     build_runtime_observability_health_snapshot,

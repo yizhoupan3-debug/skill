@@ -125,6 +125,7 @@ mod tests {
     use std::path::PathBuf;
     use std::sync::OnceLock;
 
+    #[allow(dead_code)]
     static TEST_INIT: OnceLock<()> = OnceLock::new();
 
     fn test_dir(name: &str) -> PathBuf {

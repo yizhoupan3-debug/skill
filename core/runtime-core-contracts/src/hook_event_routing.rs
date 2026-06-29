@@ -36,6 +36,6 @@ pub fn hook_event_routing_contract() -> Value {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
+    #![allow(clippy::unwrap_used, clippy::expect_used, unused_imports)]
     use super::*;
 }

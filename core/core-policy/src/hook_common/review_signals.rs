@@ -555,7 +555,6 @@ mod tests {
     }
 
     #[test]
-    #[test]
     fn review_gate_hard_block_disabled_false_when_not_task_profile() {
         let _lock = crate::test_env_sync::process_env_lock();
         crate::hook_common::set_test_task_override(Some(false));
