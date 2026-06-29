@@ -29,7 +29,7 @@ pub mod tool_types;
 use std::path::PathBuf;
 
 pub use tool_registry::{
-    EXPECTED_SCHEMA, invalidate_tool_cache, invalidate_tool_cache_for_path, load_tool_records,
+    EXPECTED_SCHEMA, load_tool_records,
     load_tool_records_cached,
 };
 pub use tool_types::{DispatchDomain, McpToolInputSchema, McpToolRecord, ToolLayer, ToolOwner};

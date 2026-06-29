@@ -220,7 +220,8 @@ pub fn load_tool_records_cached(
 
 /// Manually invalidate the TTL cache, forcing the next `load_tool_records_cached`
 /// call to reload from disk. Useful for testing or after explicit edits.
-pub fn invalidate_tool_cache() {
+#[cfg_attr(not(test), allow(dead_code))]
+pub(crate) fn invalidate_tool_cache() {
     match cache().write() {
         Ok(mut guard) => {
             guard.clear();
@@ -233,7 +234,8 @@ pub fn invalidate_tool_cache() {
 }
 
 /// Invalidate the cache entry for a specific path.
-pub fn invalidate_tool_cache_for_path(registry_path: &Path) {
+#[cfg_attr(not(test), allow(dead_code))]
+pub(crate) fn invalidate_tool_cache_for_path(registry_path: &Path) {
     let path_buf = registry_path.to_path_buf();
     match cache().write() {
         Ok(mut guard) => {
@@ -255,7 +257,10 @@ pub(crate) fn set_cache_entry_for_test(
     failures: u32,
     age: Duration,
 ) {
-    let mut guard = cache().write().unwrap();
+    let mut guard = cache().write().unwrap_or_else(|poisoned| {
+        tracing::warn!("tool registry cache write lock poisoned during test, recovering");
+        poisoned.into_inner()
+    });
     guard.insert(
         path,
         CacheEntry {

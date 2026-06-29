@@ -107,7 +107,6 @@ MCP 工具注册表、工具路由、框架内建工具实现、独立 MCP 服�
 |-------|------|-------------|------|
 | `tool-routing-engine` | `core/tool-routing-engine` | L4 | **工具路由引擎**：8 步评分管道、`route_tool()`、`search_tools()` |
 | `mcp-tool-registry` | `core/mcp-tool-registry` | L4 | **统一 MCP 工具注册表**：`McpToolRecord` 类型、JSON 加载、缓存 |
-| `browser-mcp-dispatch` | `core/browser-mcp-dispatch` | L0 | **浏览器 MCP 分派辅助** |
 
 **工具二进制实现**（独立的 MCP 服务器）：
 
@@ -149,7 +148,6 @@ MCP 工具注册表、工具路由、框架内建工具实现、独立 MCP 服�
 | Crate | 路径 | 说明 |
 |-------|------|------|
 | `core-state` | `core/core-state` | 任务状态机：goal_drive、step_ledger、task_ledger、closeout_validation |
-| `core-state-types` | `core/core-state-types` | 纯类型定义（零依赖，仅 serde） |
 | `core-state-utils` | `core/core-state-utils` | IO/路径/JSONL 辅助函数 |
 
 ### 6.2 Loop Goal（含退出门）
@@ -173,7 +171,6 @@ MCP 工具注册表、工具路由、框架内建工具实现、独立 MCP 服�
 | `core-errors` | `core/core-errors` | 通用 FrameworkError 类型（零依赖） |
 | `core-policy` | `core/core-policy` | Hook 策略、安全规则、环境标志、审查门 |
 | `runtime-storage` | `core/runtime-storage` | 存储后端（文件系统 + SQLite + 内存） |
-| `runtime-core-contracts` | `core/runtime-core-contracts` | 运行时契约：hook_event_routing、mcp_pre_guard、web_fetch_guard、outbound_protect |
 | `runtime-infra` | `core/runtime-infra` | 运行时基础设施：kernel_bootstrap、stdio_transport |
 | `trace-runtime` | `core/trace-runtime` | 追踪记录：event record、compact、compress |
 | `fr-utils` | `core/fr-utils` | IO 工具、常量、类型（无止义逻辑） |
@@ -205,23 +202,20 @@ MCP 工具注册表、工具路由、框架内建工具实现、独立 MCP 服�
 | 7 | `skill-layer` | Skill 层 | L2 | SKILL.md 解析、技能发现、健康清单 |
 | 8 | `tool-routing-engine` | 工具层 | L4 | Tool 路由引擎（评分/路由/搜索） |
 | 9 | `mcp-tool-registry` | 工具层 | L4 | 统一 MCP 工具注册表（记录/JSON/缓存） |
-| 10 | `browser-mcp-dispatch` | 工具层 | L0 | 浏览器 MCP 分派辅助 |
-| 11 | `core-state` | 运行层 | L4 | 任务状态机（GoalState/StepLedger/Closeout） |
-| 12 | `core-state-types` | 运行层 | L2 | 状态纯类型定义 |
-| 13 | `core-state-utils` | 运行层 | L0 | 状态 I/O 辅助函数 |
-| 14 | `goal-engine` | 运行层 | L6 | Loop Goal 状态机 |
-| 15 | `quality-gate` | 运行层 | L4 | QG Route（Checker trait + 注册表） |
-| 16 | `runtime-core` | 运行层 | L7 | 平台聚合器（init_hooks / framework_runtime） |
-| 17 | `framework-kernel` | 运行层 | L0 | 框架内核（注册表加载 / RuntimeCoreHooks / CLI） |
-| 18 | `core-errors` | 运行层 | L0 | FrameworkError 类型 |
-| 19 | `core-policy` | 运行层 | L0 | Hook 策略 / 安全规则 / env_flags |
-| 20 | `runtime-storage` | 运行层 | L1 | 存储后端：FS + SQLite + 内存 |
-| 21 | `runtime-core-contracts` | 运行层 | L2 | 运行时契约（hook_event_routing / guard） |
-| 22 | `runtime-infra` | 运行层 | B0 | kernel_bootstrap / stdio_transport |
-| 23 | `trace-runtime` | 运行层 | L1 | 追踪记录 + 压缩 |
-| 24 | `fr-utils` | 运行层 | L1 | IO 工具 / 常量 |
-| 25 | `fr-contracts` | 运行层 | L2 | 执行合约（PreExecutionGuard） |
-| 26 | `fr-exec` | 运行层 | L3 | 执行引擎 / trace_attach |
+| 10 | `core-state` | 运行层 | L4 | 任务状态机（GoalState/StepLedger/Closeout） |
+| 11 | `core-state-utils` | 运行层 | L0 | 状态 I/O 辅助函数 |
+| 12 | `goal-engine` | 运行层 | L6 | Loop Goal 状态机 |
+| 13 | `quality-gate` | 运行层 | L4 | QG Route（Checker trait + 注册表） |
+| 14 | `runtime-core` | 运行层 | L7 | 平台聚合器（init_hooks / framework_runtime） |
+| 15 | `framework-kernel` | 运行层 | L0 | 框架内核（注册表加载 / RuntimeCoreHooks / CLI） |
+| 16 | `core-errors` | 运行层 | L0 | FrameworkError 类型 |
+| 17 | `core-policy` | 运行层 | L0 | Hook 策略 / 安全规则 / env_flags |
+| 18 | `runtime-storage` | 运行层 | L1 | 存储后端：FS + SQLite + 内存 |
+| 19 | `runtime-infra` | 运行层 | B0 | kernel_bootstrap / stdio_transport |
+| 20 | `trace-runtime` | 运行层 | L1 | 追踪记录 + 压缩 |
+| 21 | `fr-utils` | 运行层 | L1 | IO 工具 / 常量 |
+| 22 | `fr-contracts` | 运行层 | L2 | 执行合约（PreExecutionGuard） |
+| 23 | `fr-exec` | 运行层 | L3 | 执行引擎 / trace_attach |
 | 27 | `framework-extra` | 运行层 | L6 | 编排控制（closeout / evidence） |
 | 28 | `framework-maint` | 运行层 | L6 | 框架维护（snapshot / maint） |
 | 29 | `research-harness` | 运行层 | L5 | 研究工具（review_loop / aigc_check） |

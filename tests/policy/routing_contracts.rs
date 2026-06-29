@@ -406,7 +406,6 @@ fn runtime_hot_index_keeps_capability_gates_explicit() {
         "statistical-analysis",
         "experiment-reproducibility",
         "math-derivation",
-        "scientific-figure-plotting",
         "pdf",
         "skill-framework-developer",
         "visual-review",

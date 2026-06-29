@@ -77,7 +77,6 @@ scope: architecture-reference
 |-------|------|------|------|
 | `tool-routing-engine` | `core/tool-routing-engine` | L4 | 工具路由引擎：8 步评分管道、`route_tool()`、`search_tools()` |
 | `mcp-tool-registry` | `core/mcp-tool-registry` | L4 | 统一 MCP 工具注册表：`McpToolRecord` 类型、JSON 加载、缓存 |
-| `browser-mcp-dispatch` | `core/browser-mcp-dispatch` | L0 | 浏览器 MCP 分派辅助 |
 
 **独立 MCP 服务器二进制**（在 `rust_tools/` 和 `tools/` 中实现）。
 
@@ -94,7 +93,6 @@ scope: architecture-reference
 | Crate | 路径 | 说明 |
 |-------|------|------|
 | `core-state` | `core/core-state` | 任务状态机：goal_drive、step_ledger、task_ledger、closeout_validation |
-| `core-state-types` | `core/core-state-types` | 纯类型定义（零依赖，仅 serde） |
 | `core-state-utils` | `core/core-state-utils` | IO/路径/JSONL 辅助函数 |
 
 **6.2 Loop Goal（含退出门）**
@@ -118,7 +116,6 @@ scope: architecture-reference
 | `core-errors` | `core/core-errors` | L0 | 通用 FrameworkError 类型（零依赖） |
 | `core-policy` | `core/core-policy` | L0 | Hook 策略、安全规则、环境标志、审查门 |
 | `runtime-storage` | `core/runtime-storage` | L1 | 存储后端（文件系统 + SQLite + 内存） |
-| `runtime-core-contracts` | `core/runtime-core-contracts` | L2 | 运行时契约：hook_event_routing、mcp_pre_guard、web_fetch_guard |
 | `runtime-infra` | `core/runtime-infra` | B0 | kernel_bootstrap、stdio_transport |
 | `trace-runtime` | `core/trace-runtime` | L1 | 追踪记录：event record、compact、compress |
 | `fr-utils` | `core/fr-utils` | L1 | IO 工具、常量、类型（无止义逻辑） |
