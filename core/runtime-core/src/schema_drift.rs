@@ -137,7 +137,7 @@ fn noop_host_hooks_json() -> Value {
 
 fn snapshot_all_host_hooks(repo_root: &Path) -> Value {
     let mut map = serde_json::Map::new();
-    for host_id in framework_kernel::runtime_registry::ALL_HOST_IDS {
+    for host_id in framework_core::runtime_registry::ALL_HOST_IDS {
         let cmd_fragment = format!("{host_id}-router-rs-hook.sh");
         let provider = host_projection::hosts::host_provider_for_id(host_id);
         let hooks_path = provider.and_then(|p| p.hooks_manifest_path());

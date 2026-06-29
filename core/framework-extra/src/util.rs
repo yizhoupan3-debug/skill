@@ -1,4 +1,4 @@
-//! Shared utility functions — re-exports from `fr_utils::util`.
+//! Shared utility functions — re-exports from `framework_runtime::util`.
 //!
 //! This is the single source of truth for these utility functions.
 //! All implementations live in `fr_utils/src/util.rs`.
@@ -7,7 +7,7 @@
 
 // ── Re-exports (canonical implementations in fr-utils) ──
 
-pub use fr_utils::util::{
+pub use framework_runtime::util::{
     count_evidence_rows, current_local_timestamp, defaulted_payload_text, hash_file_for_test,
     is_terminal, normalize_task_registry_rows, parse_session_summary, registry_rows_from_payload,
     required_payload_text, supervisor_contract, truncate_utf8_chars,

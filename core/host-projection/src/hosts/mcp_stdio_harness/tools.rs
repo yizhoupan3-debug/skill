@@ -3,7 +3,7 @@
 //! Extracted from mcp_stdio_harness.rs to keep file size ≤2000 lines.
 
 use super::*;
-use framework_kernel::skill_repo::skill_routing_runtime_json;
+use framework_core::skill_repo::skill_routing_runtime_json;
 use serde_json::{Map, Value, json};
 use std::path::Path;
 

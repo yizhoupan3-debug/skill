@@ -70,7 +70,7 @@ pub fn write_kill_signal(repo_root: &Path, loop_id: &str) -> Result<(), LoopErro
         "{{\"loop_id\":\"{}\",\"armed_at\":{},\"armed_at_iso\":\"{}\"}}",
         loop_id,
         now,
-        framework_kernel::time::now_iso(),
+        framework_core::time::now_iso(),
     );
     fs::write(&path, content)
         .map_err(|e| LoopError::Io(format!("write kill signal {}: {e}", path.display())))?;
@@ -200,7 +200,7 @@ pub fn acquire_lock(repo_root: &Path, loop_id: &str, run_id: &str) -> Result<(),
     let lock = LoopLock {
         loop_id: loop_id.to_string(),
         run_id: run_id.to_string(),
-        acquired_at: framework_kernel::time::now_iso(),
+        acquired_at: framework_core::time::now_iso(),
     };
     // Record PID and start timestamp for diagnostics and stale-lock analysis.
     let lock_meta = serde_json::json!({
@@ -208,7 +208,7 @@ pub fn acquire_lock(repo_root: &Path, loop_id: &str, run_id: &str) -> Result<(),
         "run_id": lock.run_id,
         "acquired_at": lock.acquired_at,
         "pid": std::process::id(),
-        "started_at": framework_kernel::time::now_iso(),
+        "started_at": framework_core::time::now_iso(),
     });
     let text = serde_json::to_string_pretty(&lock_meta)
         .map_err(|e| LoopError::Serde(format!("serialize lock: {e}")))?;

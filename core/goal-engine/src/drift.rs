@@ -30,7 +30,7 @@ pub fn perform_drift_check(
     };
 
     DriftCheckResult {
-        checked_at: framework_kernel::time::now_iso(),
+        checked_at: framework_core::time::now_iso(),
         review_cycle: anti_drift.review_cycle_count,
         drift_detected,
         drift_score,

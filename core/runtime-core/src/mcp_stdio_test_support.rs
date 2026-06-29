@@ -7,10 +7,10 @@
 use std::path::{Path, PathBuf};
 
 /// Allocate a unique directory under the system temp dir.
-/// Delegates to `core_policy::test_env_sync::unique_temp_repo` to share the same
+/// Delegates to `framework_core::test_env_sync::unique_temp_repo` to share the same
 /// sequence counter with `host-projection`.
 pub fn unique_temp_repo(prefix: &str) -> PathBuf {
-    core_policy::test_env_sync::unique_temp_repo(prefix)
+    framework_core::test_env_sync::unique_temp_repo(prefix)
 }
 
 /// Copy hot routing index into a temp repo for MCP routing tests.

@@ -149,7 +149,7 @@ fn upsert_tasks_array_entry(
 pub fn write_active_task_pointer(repo_root: &Path, task_id: &str) -> Result<(), FrameworkError> {
     crate::utils::path_guard::validate_task_id_component(task_id)?;
     let mut pointers = load_task_pointers_json(repo_root)?;
-    let updated_at = framework_kernel::time::now_iso();
+    let updated_at = framework_core::time::now_iso();
     if let Some(obj) = pointers.as_object_mut() {
         obj.insert("schema_version".to_string(), json!("task-pointers-v1"));
         obj.insert("active_task_id".to_string(), json!(task_id));
@@ -169,7 +169,7 @@ pub fn set_task_focus(
 ) -> Result<(), FrameworkError> {
     crate::utils::path_guard::validate_task_id_component(task_id)?;
     let mut pointers = load_task_pointers_json(repo_root)?;
-    let updated_at = framework_kernel::time::now_iso();
+    let updated_at = framework_core::time::now_iso();
     if let Some(obj) = pointers.as_object_mut() {
         obj.insert("schema_version".to_string(), json!("task-pointers-v1"));
         obj.insert("active_task_id".to_string(), json!(task_id));
@@ -201,7 +201,7 @@ pub fn sync_task_pointers_after_goal_drive(
 ) -> Result<(), FrameworkError> {
     crate::utils::path_guard::validate_task_id_component(task_id)?;
     let mut pointers = load_task_pointers_json(repo_root)?;
-    let updated_at = framework_kernel::time::now_iso();
+    let updated_at = framework_core::time::now_iso();
     if let Some(obj) = pointers.as_object_mut() {
         obj.insert("schema_version".to_string(), json!("task-pointers-v1"));
         obj.insert("active_task_id".to_string(), json!(task_id));

@@ -48,9 +48,9 @@ pub struct BrowserMcpHooks {
         fn(serde_json::Value) -> Result<serde_json::Value, FrameworkError>,
     /// Inspect a trace stream and return structured diagnostic data.
     pub inspect_trace_stream: fn(
-        framework_kernel::stdio_payload_types::TraceStreamInspectRequestPayload,
+        framework_core::stdio_payload_types::TraceStreamInspectRequestPayload,
     ) -> Result<
-        framework_kernel::stdio_payload_types::TraceStreamInspectResponsePayload,
+        framework_core::stdio_payload_types::TraceStreamInspectResponsePayload,
         FrameworkError,
     >,
 }
@@ -93,7 +93,7 @@ mod tests {
             attach_runtime_event_transport: |_| Ok(serde_json::json!({})),
             inspect_trace_stream: |_| {
                 Ok(
-                    framework_kernel::stdio_payload_types::TraceStreamInspectResponsePayload {
+                    framework_core::stdio_payload_types::TraceStreamInspectResponsePayload {
                         schema_version: "1".into(),
                         authority: "test".into(),
                         path: "/test".into(),

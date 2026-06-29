@@ -22,7 +22,7 @@ use crate::runtime_envelope_ids::{
     RUNTIME_CONTROL_PLANE_AUTHORITY, RUNTIME_STORAGE_AUTHORITY, RUNTIME_STORAGE_SCHEMA_VERSION,
 };
 use core_errors::FrameworkError;
-use framework_kernel::json_value::required_non_empty_string;
+use framework_core::json_value::required_non_empty_string;
 use serde_json::{Map, Value, json};
 use std::collections::HashSet;
 use std::fs;

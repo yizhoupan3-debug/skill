@@ -13,7 +13,7 @@ use std::sync::LazyLock;
 /// Check if the global operator inject flag is enabled.
 /// This is the shared gate for all paper hooks.
 pub fn operator_inject_globally_enabled() -> bool {
-    core_policy::env_flags::env_enabled_default_true("ROUTER_RS_OPERATOR_INJECT")
+    framework_core::env_flags::env_enabled_default_true("ROUTER_RS_OPERATOR_INJECT")
 }
 
 /// Append hook context if the hook is requested and the prompt signals relevance.

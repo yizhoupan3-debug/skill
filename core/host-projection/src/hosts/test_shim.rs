@@ -6,12 +6,12 @@
 use std::path::PathBuf;
 
 /// Acquire a lock on the process environment for test isolation.
-/// Delegates to `core_policy::test_env_sync` (single mutex across all crates).
-pub use core_policy::test_env_sync::process_env_lock;
+/// Delegates to `framework_core::test_env_sync` (single mutex across all crates).
+pub use framework_core::test_env_sync::process_env_lock;
 
 /// Create a unique temporary repo path for testing.
-/// Delegates to `core_policy::test_env_sync::unique_temp_repo` to share the same
+/// Delegates to `framework_core::test_env_sync::unique_temp_repo` to share the same
 /// sequence counter with `runtime-core`.
 pub fn unique_temp_repo(prefix: &str) -> PathBuf {
-    core_policy::test_env_sync::unique_temp_repo(prefix)
+    framework_core::test_env_sync::unique_temp_repo(prefix)
 }

@@ -99,7 +99,7 @@ pub(super) fn validate_transition(
 }
 impl BackgroundRunStatus {
     pub(super) fn claimed_placeholder(job_id: &str, session_id: &str) -> Self {
-        let now = framework_kernel::time::now_iso();
+        let now = framework_core::time::now_iso();
         BackgroundRunStatus {
             job_id: job_id.to_string(),
             session_id: Some(session_id.to_string()),
@@ -154,8 +154,8 @@ impl BackgroundJobStatusMutation {
                     .unwrap_or_else(default_multitask_strategy),
                 result: self.result.clone(),
                 error: self.error.clone(),
-                created_at: framework_kernel::time::now_iso(),
-                updated_at: framework_kernel::time::now_iso(),
+                created_at: framework_core::time::now_iso(),
+                updated_at: framework_core::time::now_iso(),
                 attempt: self.attempt.unwrap_or(DEFAULT_BACKGROUND_JOB_ATTEMPT),
                 retry_count: self
                     .retry_count
@@ -206,7 +206,7 @@ impl BackgroundJobStatusMutation {
                 result: self.result.clone().or_else(|| existing.result.clone()),
                 error: self.error.clone().or_else(|| existing.error.clone()),
                 created_at: existing.created_at.clone(),
-                updated_at: framework_kernel::time::now_iso(),
+                updated_at: framework_core::time::now_iso(),
                 attempt: self.attempt.unwrap_or(existing.attempt),
                 retry_count: self.retry_count.unwrap_or(existing.retry_count),
                 max_attempts: self.max_attempts.unwrap_or(existing.max_attempts),

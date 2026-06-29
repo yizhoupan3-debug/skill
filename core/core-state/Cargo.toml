@@ -8,10 +8,8 @@ workspace = true
 
 [dependencies]
 core-errors = { path = "../core-errors" }
-core-policy = { path = "../core-policy" }
-core-state-types = { path = "../core-state-types" }
+framework-core = { path = "../framework-core" }
 core-state-utils = { path = "../core-state-utils" }
-framework-kernel = { path = "../framework-kernel" }
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true

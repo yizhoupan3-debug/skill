@@ -1,0 +1,27 @@
+---
+source: core/framework-core/src/review_gate_engine.rs
+assertion_line: 401
+expression: matrix
+---
+[
+    (
+        "None, reviewer_lane=true",
+        true,
+    ),
+    (
+        "Some(true), reviewer_lane=true",
+        false,
+    ),
+    (
+        "Some(false), reviewer_lane=true",
+        true,
+    ),
+    (
+        "Some(false), reviewer_lane=false",
+        false,
+    ),
+    (
+        "None, reviewer_lane=false",
+        false,
+    ),
+]

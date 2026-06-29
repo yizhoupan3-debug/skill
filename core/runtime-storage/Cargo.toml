@@ -17,10 +17,9 @@ path = "src/lib.rs"
 
 [dependencies]
 chrono = { workspace = true }
-core-policy = { path = "../core-policy", features = ["test-sync"] }
 core-errors = { path = "../core-errors" }
+framework-core = { path = "../framework-core" }
 core-state-utils = { path = "../core-state-utils" }
-framework-kernel = { path = "../framework-kernel" }
 libc = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

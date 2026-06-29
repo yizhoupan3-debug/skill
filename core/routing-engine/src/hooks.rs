@@ -14,7 +14,7 @@ use std::sync::OnceLock;
 use core_errors::FrameworkError;
 
 // ---------------------------------------------------------------------------
-// ParallelReviewMarkers (mirrors core_policy::review_routing_signals)
+// ParallelReviewMarkers (mirrors framework_core::review_routing_signals)
 // ---------------------------------------------------------------------------
 
 /// Markers used by `has_parallel_review_candidate_context`.

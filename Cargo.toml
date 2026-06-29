@@ -8,7 +8,7 @@ description = "Integration test harness for the framework runtime"
 
 [dev-dependencies]
 routing-engine = { path = "core/routing-engine" }
-core-policy = { path = "core/core-policy" }
+framework-core = { path = "core/framework-core" }
 rt-core-contracts = { path = "core/runtime-core-contracts", package = "runtime-core-contracts" }
 serde_json.workspace = true
 serde_yml.workspace = true
@@ -22,20 +22,15 @@ members = [
     "core/core-errors",
     "core/core-state",
     "core/core-state-utils",
-    "core/core-state-types",
     "core/eval-route",
-    "core/fr-utils",
-    "core/fr-contracts",
-    "core/fr-exec",
-    "core/framework-kernel",
-    "core/core-policy",
+    "core/framework-runtime",
+    "core/framework-core",
     "core/routing-engine",
     "core/router-rs",
     "core/runtime-storage",
     "core/runtime-core",
     "core/runtime-core-contracts",
     "core/trace-runtime",
-    "core/browser-mcp-dispatch",
     "tools/browser-mcp",
     "core/host-projection",
     "core/framework-extra",

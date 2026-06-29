@@ -5,7 +5,7 @@
 use super::*;
 
 pub fn project_narrative_path(roots: &ResolvedProjectionRoots, host_id: &str) -> PathBuf {
-    let config_dir = framework_kernel::runtime_registry::host_private_config_dir(host_id);
+    let config_dir = framework_core::runtime_registry::host_private_config_dir(host_id);
     roots
         .project_root
         .join(config_dir)
@@ -23,13 +23,13 @@ pub fn settings_target(
             .ok_or_else(|| format!("{host_id} host must be registered in projection roots"))?
             .join("settings.json"))
     } else {
-        let dotdir = framework_kernel::runtime_registry::host_private_config_dir(host_id);
+        let dotdir = framework_core::runtime_registry::host_private_config_dir(host_id);
         Ok(roots.project_root.join(format!("{dotdir}/settings.json")))
     }
 }
 
 pub fn build_router_rs_hook_command(event: &str, host_id: &str) -> String {
-    let config_dir = framework_kernel::runtime_registry::host_private_config_dir(host_id);
+    let config_dir = framework_core::runtime_registry::host_private_config_dir(host_id);
     format!(
         "/usr/bin/env bash -c 'ROOT=\"${{CLAUDE_PROJECT_ROOT:-$PWD}}\"; FW=\"${{SKILL_FRAMEWORK_ROOT:-$ROOT}}\"; if [[ -r \"$ROOT/{config_dir}/router-rs-hook.env\" ]]; then set -a; . \"$ROOT/{config_dir}/router-rs-hook.env\"; set +a; fi; exec \"$FW/configs/framework/{host_id}-router-rs-hook.sh\" {event}'",
         host_id = host_id,
@@ -123,7 +123,7 @@ pub fn install_settings_hooks(settings_path: &Path, host_id: &str) -> Result<boo
 }
 
 pub fn install_hook_env_if_absent(roots: &ResolvedProjectionRoots, host_id: &str) -> Result<bool> {
-    let config_dir = framework_kernel::runtime_registry::host_private_config_dir(host_id);
+    let config_dir = framework_core::runtime_registry::host_private_config_dir(host_id);
     let dest = roots
         .project_root
         .join(config_dir)
@@ -298,7 +298,7 @@ pub fn install_projection(
                 &render_framework_entrypoint(roots, scope, host_id)?,
             )?;
             let mcp_changed = ensure_research_mcp_toml(roots, host_id)?;
-            let config_dir = framework_kernel::runtime_registry::host_private_config_dir(host_id);
+            let config_dir = framework_core::runtime_registry::host_private_config_dir(host_id);
             let prompt_entrypoints_root = if scope == "user" {
                 roots
                     .host_home_root(host_id)

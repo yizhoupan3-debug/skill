@@ -16,8 +16,8 @@ use std::path::Path;
 #[cfg(not(test))]
 use std::sync::OnceLock;
 
-// Re-export pure type definitions from core-state-types (L2) for backward compatibility.
-pub use core_state_types::task_state_types::*;
+// Re-export pure type definitions from core-state (L2) for backward compatibility.
+pub use crate::task_state_types::*;
 
 /// Macro: cached boolean environment variable checked once on first access.
 ///

@@ -5,7 +5,7 @@ use crate::policy::policy_helpers::{
     RETIRED_RUNTIME_OWNED_SKILL_SLUGS, allowed_python_control_plane_path, collect_files,
     collect_files_with_extension,
 };
-use core_policy::doc_registry;
+use framework_core::doc_registry;
 use std::collections::HashSet;
 use std::path::PathBuf;
 

@@ -56,7 +56,7 @@ pub fn is_host_private_path(path: &str) -> bool {
     if path.contains("/hook-state/") {
         return true;
     }
-    for dir in framework_kernel::runtime_registry::host_home_dirs() {
+    for dir in framework_core::runtime_registry::host_home_dirs() {
         if path.contains(&format!("/{dir}/")) {
             return true;
         }

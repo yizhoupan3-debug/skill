@@ -10,6 +10,40 @@ use core_errors::FrameworkError;
 use serde::Deserialize;
 use std::fmt;
 
+/// Maximum allowed nesting depth for YAML frontmatter — prevents stack overflow
+/// from malicious / deeply-nested YAML during recursive-descent parsing.
+const MAX_FRONTMATTER_DEPTH: usize = 32;
+
+/// Reject YAML blocks whose indentation depth exceeds `max_depth`.
+/// Uses a lightweight line-by-line scan (no full YAML parse) to detect
+/// excessively nested structures before handing them to serde_yml.
+fn check_frontmatter_depth(block: &str, max_depth: usize) -> Result<(), FrontmatterError> {
+    let mut depth = 0usize;
+    for line in block.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+        // Count leading whitespace as indentation depth (approximation:
+        // each 2-space level counts as 1 depth level; tab = 1 level).
+        let indent = line.len() - trimmed.len();
+        let level = if indent == 0 {
+            0
+        } else {
+            std::cmp::max(1, indent / 2)
+        };
+        if level > depth {
+            depth = level;
+        }
+        if depth > max_depth {
+            return Err(FrontmatterError::ParseError(format!(
+                "frontmatter nesting depth {depth} exceeds limit {max_depth}"
+            )));
+        }
+    }
+    Ok(())
+}
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -175,6 +209,10 @@ pub fn parse_frontmatter(
     let block = extract_frontmatter_block(text).ok_or(FrontmatterError::ParseError(
         "no YAML frontmatter block found".into(),
     ))?;
+
+    // Adversarial depth check: reject YAML blocks whose nesting exceeds MAX_FRONTMATTER_DEPTH
+    // before handing them to serde_yml (which recurses on the parser stack).
+    check_frontmatter_depth(block, MAX_FRONTMATTER_DEPTH)?;
 
     let raw: RawFrontmatter =
         serde_yml::from_str(block).map_err(|e| FrontmatterError::ParseError(e.to_string()))?;

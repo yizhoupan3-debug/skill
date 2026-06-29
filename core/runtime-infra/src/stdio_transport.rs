@@ -15,7 +15,7 @@ use rt_storage::runtime_envelope_ids::{
 };
 
 // Canonical StdioJson*Payload types — single source of truth in framework-runtime.
-pub use fr_utils::types::{StdioJsonRequestPayload, StdioJsonResponsePayload};
+pub use framework_runtime::types::{StdioJsonRequestPayload, StdioJsonResponsePayload};
 
 // ── Function pointer injection (decouples from cli/ per ADR §10.3) ──
 

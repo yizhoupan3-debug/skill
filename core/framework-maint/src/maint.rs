@@ -5,7 +5,7 @@
 //! Set `ROUTER_RS_UPDATE_RUN_AUTORESEARCH_CLI_TESTS=1` to also run `autoresearch_cli` (network / arXiv).
 
 use core_errors::FrameworkError;
-use framework_kernel::cli_args::{MaintRepoArgs, MaintRootsArgs, MaintSubcommand, UpdateAuditArgs};
+use framework_core::cli_args::{MaintRepoArgs, MaintRootsArgs, MaintSubcommand, UpdateAuditArgs};
 use host_projection::host_integration::{resolve_maint_roots, run_host_integration_from_args};
 use serde_json::{Value, json};
 use std::fs;
@@ -162,7 +162,7 @@ fn refresh_host_projections(args: MaintRootsArgs) -> Result<(), FrameworkError> 
 
     verify_installable_projections(&fw, &installable_tools)?;
     // Verify all installable hosts
-    for host_id in framework_kernel::runtime_registry::ALL_HOST_IDS {
+    for host_id in framework_core::runtime_registry::ALL_HOST_IDS {
         host_projection::hosts::host_extensions::schema_drift::verify_host_projection(
             &fw, host_id,
         )?;
@@ -182,7 +182,7 @@ fn maint_skip_user_projection() -> bool {
 /// Install scopes per tool from RUNTIME_REGISTRY.json host_targets.metadata.*.install_scopes.
 /// Fallback: ["project"].
 fn projection_install_scopes_for_tool(tool: &str) -> Vec<&'static str> {
-    let scopes = framework_kernel::runtime_registry::install_scopes(tool);
+    let scopes = framework_core::runtime_registry::install_scopes(tool);
     if scopes.is_empty() {
         return vec!["project"];
     }
@@ -194,7 +194,7 @@ fn projection_install_scopes_for_tool(tool: &str) -> Vec<&'static str> {
 }
 
 fn installable_projection_tools(repo_root: &Path) -> Result<Vec<String>, FrameworkError> {
-    let pairs = framework_kernel::framework_host_targets::installable_host_id_and_skills_install_tool_pairs(
+    let pairs = framework_core::framework_host_targets::installable_host_id_and_skills_install_tool_pairs(
         repo_root,
     )?;
     let mut tools = Vec::new();
@@ -216,7 +216,7 @@ fn verify_installable_projections(
     for tool in tools {
         // tool is an install_tool name (e.g. "cursor", "claude").
         // Resolve to host_id via registry, then verify.
-        let host_id = framework_kernel::framework_host_targets::installable_host_id_and_skills_install_tool_pairs(repo_root)?
+        let host_id = framework_core::framework_host_targets::installable_host_id_and_skills_install_tool_pairs(repo_root)?
             .iter()
             .find(|(_, t)| t == tool)
             .map(|(id, _)| id.clone())
@@ -300,7 +300,7 @@ fn update_one_shot(args: MaintRootsArgs) -> Result<(), FrameworkError> {
         );
         // Build host-home args dynamically from registry
         let mut host_home_args: Vec<String> = Vec::new();
-        for host_id in framework_kernel::runtime_registry::ALL_HOST_IDS {
+        for host_id in framework_core::runtime_registry::ALL_HOST_IDS {
             let home = host_home_path(host_id)?;
             host_home_args.push(format!("--{host_id}-home"));
             host_home_args.push(home.to_string_lossy().into_owned());
@@ -323,7 +323,7 @@ fn update_one_shot(args: MaintRootsArgs) -> Result<(), FrameworkError> {
         run_router(&fw, &skill_arg_refs)?;
 
         // Install host-specific projections for all hosts
-        for tool in framework_kernel::runtime_registry::ALL_HOST_IDS {
+        for tool in framework_core::runtime_registry::ALL_HOST_IDS {
             let home = host_home_path(tool)?;
             for scope in projection_install_scopes_for_tool(tool) {
                 let home_flag = format!("--{tool}-home");
@@ -680,7 +680,7 @@ fn cap_values(mut values: Vec<Value>, max: usize) -> Vec<Value> {
 /// Generic host home path resolution: checks `$HOST_HOME` env var,
 /// falls back to `$HOME/<config_dir>` from RUNTIME_REGISTRY.json.
 fn host_home_path(host_id: &str) -> Result<PathBuf, FrameworkError> {
-    let env_var = framework_kernel::runtime_registry::home_env_var(host_id);
+    let env_var = framework_core::runtime_registry::home_env_var(host_id);
     if !env_var.is_empty()
         && let Some(path) = std::env::var_os(env_var)
     {
@@ -688,7 +688,7 @@ fn host_home_path(host_id: &str) -> Result<PathBuf, FrameworkError> {
     }
     std::env::var_os("HOME")
         .map(|h| {
-            PathBuf::from(h).join(framework_kernel::runtime_registry::host_private_config_dir(
+            PathBuf::from(h).join(framework_core::runtime_registry::host_private_config_dir(
                 host_id,
             ))
         })
@@ -718,11 +718,11 @@ fn host_skills_publish_enabled() -> bool {
 }
 
 fn print_local_homes(fw: PathBuf) -> Result<(), FrameworkError> {
-    for host_dir in framework_kernel::runtime_registry::host_home_dirs() {
+    for host_dir in framework_core::runtime_registry::host_home_dirs() {
         let host_id = host_dir.trim_start_matches('.');
         let local = fw.join(format!(".local/{host_id}-home"));
         fs::create_dir_all(&local)?;
-        let env_var = framework_kernel::runtime_registry::home_env_var(host_id);
+        let env_var = framework_core::runtime_registry::home_env_var(host_id);
         let home = std::env::var_os(env_var)
             .map(PathBuf::from)
             .unwrap_or_else(|| local.clone());
@@ -866,8 +866,8 @@ mod tests {
 
     #[test]
     fn host_home_dirs_match_registry() {
-        let registry = framework_kernel::runtime_registry::host_home_dirs();
-        let all_known = framework_kernel::runtime_registry::ALL_KNOWN_HOST_DIRS;
+        let registry = framework_core::runtime_registry::host_home_dirs();
+        let all_known = framework_core::runtime_registry::ALL_KNOWN_HOST_DIRS;
         for host in registry {
             assert!(
                 all_known.contains(host),

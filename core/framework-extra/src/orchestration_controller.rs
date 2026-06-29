@@ -8,11 +8,11 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use core_errors::FrameworkError;
 use serde_json::{Value, json};
 
-use fr_utils::constants::{
+use framework_runtime::constants::{
     RUNTIME_EVENT_HANDOFF_SCHEMA_VERSION, RUNTIME_EVENT_SINK_SCHEMA_VERSION,
     RUNTIME_EVENT_STREAM_SCHEMA_VERSION,
 };
-use framework_kernel::stdio_payload_types::{
+use framework_core::stdio_payload_types::{
     BackgroundControlEffectPlanPayload, BackgroundControlRequestPayload,
     BackgroundControlResponsePayload,
 };

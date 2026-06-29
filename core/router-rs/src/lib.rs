@@ -38,7 +38,7 @@ pub(crate) mod hook_status {}
 
 // ── cli re-exports (from framework_runtime public API, not cli cfg(test) items) ──
 #[cfg(test)]
-pub(crate) use fr_utils::stdio_op_registry::{StdioOpDomain, classify_stdio_op};
+pub(crate) use framework_runtime::stdio_op_registry::{StdioOpDomain, classify_stdio_op};
 #[cfg(test)]
 pub(crate) use runtime_core::framework_runtime::stdio_dispatch::dispatch_stdio_json_request;
 // is_*_stdio_op helpers: local wrappers since the originals are cfg(test) in runtime-core
@@ -66,7 +66,7 @@ use execution_contract::{
     EXECUTION_PROMPT_PREVIEW_OWNER,
 };
 #[cfg(test)]
-use fr_utils::constants::FRAMEWORK_ALIAS_SCHEMA_VERSION;
+use framework_runtime::constants::FRAMEWORK_ALIAS_SCHEMA_VERSION;
 
 #[cfg(test)]
 #[ctor::ctor]

@@ -13,12 +13,11 @@ smoke = []
 [dependencies]
 # framework (leaf crates, no cycle risk)
 core-state-utils = { path = "../core-state-utils" }
-core-policy = { path = "../core-policy" }
 core-errors = { path = "../core-errors" }
+framework-core = { path = "../framework-core" }
+framework-runtime = { path = "../framework-runtime" }
 core-state = { path = "../core-state" }
-framework-kernel = { path = "../framework-kernel" }
 host-projection = { path = "../host-projection" }
-fr-utils = { path = "../fr-utils" }
 quality-gate = { path = "../quality-gate" }
 
 # common

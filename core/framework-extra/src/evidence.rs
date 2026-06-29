@@ -3,14 +3,14 @@
 //! Functions for extracting tool execution metadata, appending evidence to
 //! `EVIDENCE_INDEX.json`, and heuristics for detecting verification commands.
 
-use fr_utils::constants::{
+use framework_runtime::constants::{
     EVIDENCE_INDEX_FILENAME, EVIDENCE_INDEX_SCHEMA_VERSION,
     FRAMEWORK_SESSION_ARTIFACT_WRITE_AUTHORITY, HOOK_EVIDENCE_APPEND_SCHEMA_VERSION,
     TASK_POINTERS_FILENAME,
 };
-use fr_utils::json_io::read_json_strict;
-use fr_utils::json_value::value_text;
-use framework_kernel::repo_roots::resolve_repo_root_arg;
+use framework_runtime::json_io::read_json_strict;
+use framework_runtime::json_value::value_text;
+use framework_core::repo_roots::resolve_repo_root_arg;
 use serde_json::{Map, Value, json};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -257,7 +257,7 @@ pub fn append_evidence_index_merged_row(
     };
     if let Some(tid) = resolved_task_id {
         let tx = core_state::task_ledger::LedgerTransaction {
-            ts: framework_kernel::time::now_iso(),
+            ts: framework_core::time::now_iso(),
             tx_type: "evidence".to_string(),
             payload: tx_payload,
             idempotency_key: None,

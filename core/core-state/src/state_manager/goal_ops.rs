@@ -158,7 +158,7 @@ fn base_goal_object(
     m.insert("blocker".to_string(), Value::Null);
     m.insert(
         "updated_at".to_string(),
-        json!(framework_kernel::time::now_iso()),
+        json!(framework_core::time::now_iso()),
     );
     m
 }
@@ -505,7 +505,7 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
             let value = Value::Object(obj);
             write_atomic_json(&path, &value)?;
             let tx = crate::task_ledger::LedgerTransaction {
-                ts: framework_kernel::time::now_iso(),
+                ts: framework_core::time::now_iso(),
                 tx_type: "goal_state".to_string(),
                 payload: value.clone(),
                 idempotency_key: None,
@@ -569,7 +569,7 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
                 .and_then(|c| c.as_array_mut())
                 .ok_or_else(|| FrameworkError::validation("GOAL_STATE.checkpoints corrupt"))?;
             arr.push(json!({
-                "at": framework_kernel::time::now_iso(),
+                "at": framework_core::time::now_iso(),
                 "note": note,
                 "type": payload.get("checkpoint_type").and_then(Value::as_str).unwrap_or("milestone"),
                 "done_when_covers": payload.get("done_when_covers").cloned().unwrap_or(json!([])),
@@ -578,13 +578,13 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
             if let Some(o) = state.as_object_mut() {
                 o.insert(
                     "updated_at".to_string(),
-                    json!(framework_kernel::time::now_iso()),
+                    json!(framework_core::time::now_iso()),
                 );
                 crate::goal_prediction::merge_prediction_from_payload(o, &payload);
             }
             write_atomic_json(&path, &state)?;
             let tx = crate::task_ledger::LedgerTransaction {
-                ts: framework_kernel::time::now_iso(),
+                ts: framework_core::time::now_iso(),
                 tx_type: "goal_state".to_string(),
                 payload: state.clone(),
                 idempotency_key: None,
@@ -684,14 +684,14 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
                         obj.insert("blockers".to_string(), json!(blockers.clone()));
                         obj.insert(
                             "updated_at".to_string(),
-                            json!(framework_kernel::time::now_iso()),
+                            json!(framework_core::time::now_iso()),
                         );
                     }
                     // GOAL-001: Strip stale annotations before write
                     strip_stale_annotations(&mut pending);
                     write_atomic_json(&goal_path, &pending)?;
                     let tx = crate::task_ledger::LedgerTransaction {
-                        ts: framework_kernel::time::now_iso(),
+                        ts: framework_core::time::now_iso(),
                         tx_type: "goal_state".to_string(),
                         payload: pending.clone(),
                         idempotency_key: None,
@@ -714,7 +714,7 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
             // ── D4/D9: Auto-trigger QGEntry on goal complete ──
             // Two-stage exit gate: Stage 1 anti-fraud + Stage 2 scene-dispatched checker chain.
             // If the QG gate blocks, transition to review_pending instead of completing the iteration.
-            if let Some(hooks) = framework_kernel::runtime_hooks::try_hooks() {
+            if let Some(hooks) = framework_core::runtime_hooks::try_hooks() {
                 let goal_text = state.get("goal").and_then(Value::as_str).unwrap_or("");
                 let round = state
                     .get("iteration_count")
@@ -749,14 +749,14 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
                                 obj.insert("blockers".to_string(), blockers.clone());
                                 obj.insert(
                                     "updated_at".to_string(),
-                                    json!(framework_kernel::time::now_iso()),
+                                    json!(framework_core::time::now_iso()),
                                 );
                             }
                             // GOAL-001: Strip stale annotations before write
                             strip_stale_annotations(&mut qg_state);
                             write_atomic_json(&goal_path, &qg_state)?;
                             let tx = crate::task_ledger::LedgerTransaction {
-                                ts: framework_kernel::time::now_iso(),
+                                ts: framework_core::time::now_iso(),
                                 tx_type: "goal_iteration_blocked".to_string(),
                                 payload: qg_state,
                                 idempotency_key: None,
@@ -801,7 +801,7 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
 
             // P3-011: Warn on rapid consecutive completes (same timestamp)
             if let Some(last) = state.get("last_iteration_completed_at").and_then(Value::as_str) {
-                if last == framework_kernel::time::now_iso() {
+                if last == framework_core::time::now_iso() {
                     tracing::warn!(
                         "rapid consecutive complete detected for task '{task_id}'                          — last_iteration_completed_at is identical; iteration_count may inflate"
                     );
@@ -818,18 +818,18 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
                 obj.insert("iteration_count".to_string(), json!(count + 1));
                 obj.insert(
                     "last_iteration_completed_at".to_string(),
-                    json!(framework_kernel::time::now_iso()),
+                    json!(framework_core::time::now_iso()),
                 );
                 obj.insert(
                     "updated_at".to_string(),
-                    json!(framework_kernel::time::now_iso()),
+                    json!(framework_core::time::now_iso()),
                 );
             }
             // GOAL-001: Strip stale annotations before write
             strip_stale_annotations(&mut loop_state);
             write_atomic_json(&goal_path, &loop_state)?;
             let tx = crate::task_ledger::LedgerTransaction {
-                ts: framework_kernel::time::now_iso(),
+                ts: framework_core::time::now_iso(),
                 tx_type: "goal_iteration_completed".to_string(),
                 payload: loop_state.clone(),
                 idempotency_key: None,
@@ -882,11 +882,11 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
             obj.insert("blockers".to_string(), Value::Null);
             obj.insert(
                 "updated_at".to_string(),
-                json!(framework_kernel::time::now_iso()),
+                json!(framework_core::time::now_iso()),
             );
             write_atomic_json(&path, &state)?;
             let tx = crate::task_ledger::LedgerTransaction {
-                ts: framework_kernel::time::now_iso(),
+                ts: framework_core::time::now_iso(),
                 tx_type: "goal_state".to_string(),
                 payload: state.clone(),
                 idempotency_key: None,
@@ -1101,11 +1101,11 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
 
             obj.insert(
                 "amended_at".to_string(),
-                json!(framework_kernel::time::now_iso()),
+                json!(framework_core::time::now_iso()),
             );
             obj.insert(
                 "updated_at".to_string(),
-                json!(framework_kernel::time::now_iso()),
+                json!(framework_core::time::now_iso()),
             );
 
             // GOAL-001: Strip stale annotations before write
@@ -1113,7 +1113,7 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
 
             write_atomic_json(&path, &state)?;
             let tx = crate::task_ledger::LedgerTransaction {
-                ts: framework_kernel::time::now_iso(),
+                ts: framework_core::time::now_iso(),
                 tx_type: "goal_state".to_string(),
                 payload: state.clone(),
                 idempotency_key: None,
@@ -1224,7 +1224,7 @@ fn resume_goal_running(
     obj.insert("drive_until_done".to_string(), json!(drive_until_done));
     obj.insert(
         "updated_at".to_string(),
-        json!(framework_kernel::time::now_iso()),
+        json!(framework_core::time::now_iso()),
     );
 
     // Resume drive-contract revalidation:
@@ -1257,7 +1257,7 @@ fn resume_goal_running(
 
     write_atomic_json(&path, &state)?;
     let tx = crate::task_ledger::LedgerTransaction {
-        ts: framework_kernel::time::now_iso(),
+        ts: framework_core::time::now_iso(),
         tx_type: "goal_state".to_string(),
         payload: state.clone(),
         idempotency_key: None,
@@ -1359,11 +1359,11 @@ fn set_terminal_flags(
     };
     obj.insert(
         "updated_at".to_string(),
-        json!(framework_kernel::time::now_iso()),
+        json!(framework_core::time::now_iso()),
     );
     write_atomic_json(&path, &state)?;
     let tx = crate::task_ledger::LedgerTransaction {
-        ts: framework_kernel::time::now_iso(),
+        ts: framework_core::time::now_iso(),
         tx_type: "goal_state".to_string(),
         payload: state.clone(),
         idempotency_key: None,

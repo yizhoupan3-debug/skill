@@ -1,9 +1,9 @@
 //! Human-readable checks for `router-rs framework doctor`.
 
 use core_errors::FrameworkError;
-use core_policy::doc_registry;
+use framework_core::doc_registry;
 use core_state::task_state::resolve_task_view;
-use fr_exec::router_env_flags::router_rs_task_ledger_flock_enabled;
+use framework_runtime::router_env_flags::router_rs_task_ledger_flock_enabled;
 use serde_json::{Value, json};
 use std::fs;
 use std::path::Path;
@@ -70,7 +70,7 @@ fn check_symlinks(repo_root: &Path) {
 /// Check required framework files exist.
 fn check_paths(repo_root: &Path, warns: &mut Vec<String>) {
     println!("\n--- path checks ---");
-    match core_policy::registry_review_gate::check_review_gate_registry_snapshot(repo_root) {
+    match framework_core::registry_review_gate::check_review_gate_registry_snapshot(repo_root) {
         Ok(()) => println!("RUNTIME_REGISTRY review_gate snapshot: ok"),
         Err(e) => {
             let msg = format!("RUNTIME_REGISTRY review_gate snapshot failed: {e}");
@@ -78,9 +78,9 @@ fn check_paths(repo_root: &Path, warns: &mut Vec<String>) {
             warns.push(msg);
         }
     }
-    let review_mode = match core_policy::review_gate_engine::review_gate_mode() {
-        core_policy::review_gate_engine::ReviewGateMode::Lite => "lite",
-        core_policy::review_gate_engine::ReviewGateMode::Strict => "strict",
+    let review_mode = match framework_core::review_gate_engine::review_gate_mode() {
+        framework_core::review_gate_engine::ReviewGateMode::Lite => "lite",
+        framework_core::review_gate_engine::ReviewGateMode::Strict => "strict",
     };
     println!(
         "ROUTER_RS_REVIEW_GATE_MODE: {review_mode} (env ROUTER_RS_REVIEW_GATE_MODE; legacy per-host env variants for backward compat)"
@@ -192,13 +192,13 @@ fn check_md_conventions(
 fn check_host_install_projections(repo_root: &Path, warns: &mut Vec<String>) {
     println!("\n--- host install projections (optional in framework source repo) ---");
     let mut host_install_checks: Vec<(String, std::path::PathBuf)> = Vec::new();
-    if let Ok(reg) = framework_kernel::runtime_registry::load_runtime_registry_json(repo_root)
+    if let Ok(reg) = framework_core::runtime_registry::load_runtime_registry_json(repo_root)
         && let Ok(supported) =
-            framework_kernel::framework_host_targets::host_targets_supported_host_ids(&reg)
+            framework_core::framework_host_targets::host_targets_supported_host_ids(&reg)
     {
         for host_id in &supported {
             if let Ok(ep_value) =
-                framework_kernel::framework_host_targets::host_entrypoints_value_for_id(
+                framework_core::framework_host_targets::host_entrypoints_value_for_id(
                     &reg, host_id,
                 )
             {
@@ -244,7 +244,7 @@ fn check_host_install_projections(repo_root: &Path, warns: &mut Vec<String>) {
 
 /// Check for deprecated router-rs-hook.sh shims still present in host directories.
 fn check_deprecated_shims(repo_root: &Path, warns: &mut Vec<String>) {
-    for host_dir in framework_kernel::runtime_registry::host_home_dirs().iter() {
+    for host_dir in framework_core::runtime_registry::host_home_dirs().iter() {
         let deprecated_shim = repo_root
             .join(host_dir)
             .join("hooks")
@@ -280,7 +280,7 @@ fn print_info_reminders() {
     );
 
     println!("\n--- ephemeral Stop checkpoint rows (operator) ---");
-    const EPHEMERAL_PREFIXES: &[&str] = framework_kernel::runtime_registry::EPHEMERAL_TASK_PREFIXES;
+    const EPHEMERAL_PREFIXES: &[&str] = framework_core::runtime_registry::EPHEMERAL_TASK_PREFIXES;
     println!(
         "If task_registry.json lists many \"{}\" rows or focus drifted:",
         EPHEMERAL_PREFIXES.join("\" / \""),
@@ -310,7 +310,7 @@ fn print_info_reminders() {
 /// Check for hook duplication.
 fn check_hooks(repo_root: &Path, warns: &mut Vec<String>) {
     println!("\n--- Codex hooks duplication (operator) ---");
-    for line in framework_kernel::runtime_hooks::check_hook_duplicates(repo_root) {
+    for line in framework_core::runtime_hooks::check_hook_duplicates(repo_root) {
         println!("{line}");
         warns.push(line);
     }
@@ -562,7 +562,7 @@ pub fn run_continuity_audit(repo_root: &Path) -> Result<Value, FrameworkError> {
                                 .get("task_id")
                                 .and_then(|v| v.as_str())
                                 .unwrap_or_default();
-                            if framework_kernel::runtime_registry::is_ephemeral_task_id(tid)
+                            if framework_core::runtime_registry::is_ephemeral_task_id(tid)
                                 && tid
                                     != core_state::state_manager::CONTINUITY_SESSION_CHECKPOINT_TASK_ID
                             {
@@ -697,7 +697,7 @@ pub fn run_continuity_audit(repo_root: &Path) -> Result<Value, FrameworkError> {
 
 /// Report broken symlinks without removing them (diagnostic-only).
 pub(crate) fn report_broken_symlinks(repo_root: &Path) -> Result<usize, FrameworkError> {
-    let mut targets: Vec<&str> = framework_kernel::runtime_registry::ALL_KNOWN_HOST_DIRS.to_vec();
+    let mut targets: Vec<&str> = framework_core::runtime_registry::ALL_KNOWN_HOST_DIRS.to_vec();
     targets.push("artifacts");
     let mut broken_count = 0;
     for sub in &targets {

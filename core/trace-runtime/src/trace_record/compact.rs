@@ -212,7 +212,7 @@ pub fn compact_trace_stream(
     );
     snapshot.insert(
         "created_at".to_string(),
-        Value::String(framework_kernel::time::now_iso()),
+        Value::String(framework_core::time::now_iso()),
     );
     snapshot.insert(
         "watermark_event_id".to_string(),
@@ -262,7 +262,7 @@ pub fn compact_trace_stream(
         "delta_path": paths.deltas.display().to_string(),
         "artifact_index_path": paths.artifact_index.display().to_string(),
         "state_path": paths.state.display().to_string(),
-        "updated_at": framework_kernel::time::now_iso(),
+        "updated_at": framework_core::time::now_iso(),
     });
     let manifest_serialized = pretty_json_line(&manifest)?;
     let writes = vec![
@@ -441,7 +441,7 @@ fn build_artifact_ref(kind: &str, path: &Path, payload: &str, producer: &str) ->
         "uri": path.display().to_string(),
         "digest": sha256_hex(payload.as_bytes()),
         "size_bytes": payload.len(),
-        "created_at": framework_kernel::time::now_iso(),
+        "created_at": framework_core::time::now_iso(),
         "producer": producer,
     })
 }
@@ -454,7 +454,7 @@ fn build_external_artifact_ref(path: &str) -> Value {
         "uri": path,
         "digest": sha256_hex(path.as_bytes()),
         "size_bytes": path.len(),
-        "created_at": framework_kernel::time::now_iso(),
+        "created_at": framework_core::time::now_iso(),
         "producer": "runtime-trace-recorder-external",
     })
 }

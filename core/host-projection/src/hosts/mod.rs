@@ -51,7 +51,7 @@ pub fn run_agent_mcp_loop(
     repo_root_arg: Option<&Path>,
     host_id: &str,
 ) -> Result<(), FrameworkError> {
-    let repo_root = framework_kernel::repo_roots::resolve_repo_root_arg(repo_root_arg)?;
+    let repo_root = framework_core::repo_roots::resolve_repo_root_arg(repo_root_arg)?;
     let stdin = io::stdin();
     let stdout = io::stdout();
     mcp_stdio_harness::run_mcp_stdio(stdin.lock(), stdout.lock(), &repo_root, host_id)

@@ -532,7 +532,7 @@ pub fn reap_stale_teams(repo_root: &Path, retention_seconds: i64) -> Result<usiz
     }
     with_team_registry(repo_root, |registry| {
         let before = registry.teams.len();
-        let deadline = framework_kernel::time::now_iso();
+        let deadline = framework_core::time::now_iso();
 
         registry.teams.retain(|t| {
             if t.status != "completed" {

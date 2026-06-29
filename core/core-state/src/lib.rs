@@ -8,5 +8,6 @@ pub mod state_manager;
 pub mod step_ledger;
 pub mod task_ledger;
 pub mod task_state;
+pub mod task_state_types;
 pub mod transition_validation;
 pub mod utils;

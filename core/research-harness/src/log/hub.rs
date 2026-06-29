@@ -140,7 +140,7 @@ pub fn init_hub_at(hub_path: &Path) -> Result<Connection> {
 
 /// Register or update a workspace in the hub.
 pub fn register_workspace(hub: &Connection, workspace_path: &Path, name: &str) -> Result<i64> {
-    let now = framework_kernel::time::now_iso();
+    let now = framework_core::time::now_iso();
     hub.execute(
         "INSERT INTO workspace_index (workspace_path, workspace_name, created_at)
          VALUES (?1, ?2, ?3)
@@ -201,7 +201,7 @@ pub fn index_workspace(hub: &Connection, workspace_id: i64, log_root: &Path) -> 
     }
 
     // Update entry count and last indexed timestamp
-    let now = framework_kernel::time::now_iso();
+    let now = framework_core::time::now_iso();
     hub.execute(
         "UPDATE workspace_index SET entry_count=?1, last_indexed_at=?2 WHERE id=?3",
         params![count as i64, now, workspace_id],

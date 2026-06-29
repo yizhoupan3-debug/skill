@@ -185,7 +185,7 @@ pub fn filter_queries(
 /// Execute a single smoke test query against the appropriate source.
 pub fn execute_query(query: &SmokeQuery, client: &reqwest::blocking::Client) -> SmokeResult {
     let id = query.id.clone();
-    let timestamp = framework_kernel::time::now_iso();
+    let timestamp = framework_core::time::now_iso();
 
     let search_limit = query.expected_min_results.max(5);
     let results = match query.source.as_str() {

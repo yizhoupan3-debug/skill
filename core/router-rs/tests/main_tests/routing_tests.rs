@@ -564,7 +564,7 @@ fn framework_command_aliases_require_literal_entrypoints() {
     let team_alias_err = framework_extra::alias::build_framework_alias_envelope(
         &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.."),
         "team",
-        fr_utils::types::FrameworkAliasBuildOptions {
+        framework_runtime::types::FrameworkAliasBuildOptions {
             max_lines: 6,
             compact: true,
             host_id: Some("codex"),

@@ -185,9 +185,9 @@ pub fn entrypoint_target(
     scope: &str,
     host_id: &str,
 ) -> Result<PathBuf> {
-    let config_dir = framework_kernel::runtime_registry::host_private_config_dir(host_id);
-    let subdir = framework_kernel::runtime_registry::projection_entrypoint_subdir(host_id);
-    let filename = framework_kernel::runtime_registry::projection_entrypoint_filename(host_id);
+    let config_dir = framework_core::runtime_registry::host_private_config_dir(host_id);
+    let subdir = framework_core::runtime_registry::projection_entrypoint_subdir(host_id);
+    let filename = framework_core::runtime_registry::projection_entrypoint_filename(host_id);
     if scope == "user" {
         Ok(roots
             .host_home_root(host_id)
@@ -226,7 +226,7 @@ pub fn projection_manifest_path(
     }
     // Project scope: use .<host_dir> under project_root.
     // Host dir mapping from RUNTIME_REGISTRY.json host_targets.metadata.*.config_dir.
-    let host_dir = framework_kernel::runtime_registry::host_private_config_dir(host_projection);
+    let host_dir = framework_core::runtime_registry::host_private_config_dir(host_projection);
     let host_dir = if host_dir.is_empty() {
         format!(".{host_projection}")
     } else {
@@ -264,14 +264,14 @@ pub fn mcp_config_path(
     host_id: &str,
     scope: &str,
 ) -> Result<PathBuf> {
-    let rel = framework_kernel::runtime_registry::host_projection_mcp_relative(host_id, scope);
+    let rel = framework_core::runtime_registry::host_projection_mcp_relative(host_id, scope);
     if rel.is_empty() {
         return Err(FrameworkError::unsupported(format!(
             "no mcp config path for {host_id} scope {scope}"
         )));
     }
     if scope == "user" {
-        if framework_kernel::runtime_registry::host_projection_mcp_base_is_account(host_id, "user")
+        if framework_core::runtime_registry::host_projection_mcp_base_is_account(host_id, "user")
         {
             Ok(roots.account_home_root.join(rel))
         } else {
@@ -303,7 +303,7 @@ pub fn install_mcp_server(
     host_id: &str,
     scope: &str,
 ) -> Result<McpInstallOutcome> {
-    if framework_kernel::runtime_registry::host_mcp_config_format(host_id) == "snake_case" {
+    if framework_core::runtime_registry::host_mcp_config_format(host_id) == "snake_case" {
         install_mcp_impl_snake_case(roots, path, host_id)
     } else {
         install_mcp_impl_camel_case(roots, path, scope, host_id).map(|changed| McpInstallOutcome {
@@ -446,7 +446,7 @@ pub fn mcp_entry_is_framework_owned_stale(existing: &Value, framework_root: &Pat
 
 pub fn remove_mcp_server(path: &Path, framework_root: &Path, host_id: &str) -> Result<bool> {
     let format =
-        if framework_kernel::runtime_registry::host_mcp_config_format(host_id) == "snake_case" {
+        if framework_core::runtime_registry::host_mcp_config_format(host_id) == "snake_case" {
             McpConfigFormat::JSON_SNAKE_CASE
         } else {
             McpConfigFormat::JSON_CAMEL_CASE
@@ -660,10 +660,10 @@ pub fn render_framework_entrypoint(
         .map(|source_rel| format!("{source_rel}/SKILL_ROUTING_RUNTIME.json"))
         .unwrap_or_else(|_| "skills/SKILL_ROUTING_RUNTIME.json".to_string());
     let frontmatter_extra =
-        framework_kernel::runtime_registry::projection_entrypoint_frontmatter_extra(host_id);
+        framework_core::runtime_registry::projection_entrypoint_frontmatter_extra(host_id);
     let description =
-        framework_kernel::runtime_registry::projection_entrypoint_description(host_id);
-    let trailer = framework_kernel::runtime_registry::projection_entrypoint_trailer(host_id);
+        framework_core::runtime_registry::projection_entrypoint_description(host_id);
+    let trailer = framework_core::runtime_registry::projection_entrypoint_trailer(host_id);
     Ok(format!(
         "---\ndescription: Route framework tasks through the Rust-owned shared core.\n{frontmatter_extra}---\n\n<!-- managed_by: skill-framework -->\n<!-- projection_id: framework-root-entrypoint -->\n<!-- host_projection: {host_id} -->\n<!-- logical_entrypoint: framework -->\n<!-- framework_schema_version: {FRAMEWORK_PROJECTION_SCHEMA_VERSION} -->\n<!-- install_scope: {scope} -->\n\n{description}\n\n{gsd}\n\n{review}\n\n1) Start from `AGENTS.md`。\n2) Route via `{runtime_rel}`.\n3) Read only the matched `skill_path`.\n\nFramework root: `${{FRAMEWORK_ROOT}}`.\nProject root: `${{PROJECT_ROOT}}`.\n{trailer}",
         gsd = lifecycle_paragraph_for_host(&narrative, host_id),
@@ -750,7 +750,7 @@ pub fn canonical_tool_name(raw: &str, framework_root: &Path) -> Result<String> {
 
 pub fn projection_supported_tools_for_message(framework_root: &Path) -> Vec<String> {
     registry_projection_tools(framework_root).unwrap_or_else(|_| {
-        framework_kernel::runtime_registry::ALL_HOST_IDS
+        framework_core::runtime_registry::ALL_HOST_IDS
             .iter()
             .map(|s| s.to_string())
             .collect()

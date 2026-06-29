@@ -7,18 +7,18 @@ use std::path::Path;
 
 use super::args::*;
 use core_errors::FrameworkError;
-use core_policy::hook_policy::{
+use framework_core::hook_policy::{
     HookPolicyEvaluateRequest, evaluate_hook_policy, hook_policy_contract,
 };
 use core_state::closeout_validation::{
     CloseoutEvidenceContext, closeout_contract, evaluate_closeout_record_value,
     evaluate_closeout_record_value_with_context,
 };
-use fr_exec::trace_stream_io::{
+use framework_runtime::trace_stream_io::{
     inspect_trace_stream, replay_trace_stream, write_trace_compaction_delta, write_trace_metadata,
 };
-use fr_utils::json_io::{parse_json_input, print_json_value as raw_print_json_value};
-use fr_utils::types::FrameworkAliasBuildOptions;
+use framework_runtime::json_io::{parse_json_input, print_json_value as raw_print_json_value};
+use framework_runtime::types::FrameworkAliasBuildOptions;
 use framework_extra::alias::build_framework_alias_envelope;
 use framework_extra::contract_summary::build_framework_contract_summary_envelope;
 use framework_extra::evidence::framework_hook_evidence_append;
@@ -27,7 +27,7 @@ use framework_extra::prompt_compression::build_framework_prompt_compression_enve
 use framework_extra::session_artifacts::write_framework_session_artifacts;
 use framework_extra::snapshot::build_framework_runtime_snapshot_envelope_with_level;
 use framework_extra::statusline::build_framework_statusline;
-use framework_kernel::repo_roots::resolve_repo_root_arg;
+use framework_core::repo_roots::resolve_repo_root_arg;
 use host_projection::hooks;
 use host_projection::hooks::read_stdin_limited;
 use host_projection::host_entrypoint_sync::sync_host_entrypoints;
@@ -435,7 +435,7 @@ host_id: {hid}
         "session_supervisor_driver": "unsupported",
         "harness_capabilities": ["hot_runtime_routing", "l2_continuity_contract"],
         "capabilities": [],
-        "managed_mcp_server_ids": framework_kernel::runtime_registry::DEFAULT_MANAGED_MCP_SERVER_IDS,
+        "managed_mcp_server_ids": framework_core::runtime_registry::DEFAULT_MANAGED_MCP_SERVER_IDS,
     });
 
     Ok(serde_json::json!({
@@ -482,7 +482,7 @@ pub fn ensure_host_dispatchers_registered() {
     // Hook dispatchers — all hosts route to dispatch_host_hook
     use host_projection::hosts::HookDispatchFn;
     let hook_entries: Vec<(&'static str, HookDispatchFn)> =
-        framework_kernel::runtime_registry::ALL_HOST_IDS
+        framework_core::runtime_registry::ALL_HOST_IDS
             .iter()
             .map(|&host_id| {
                 (
@@ -496,7 +496,7 @@ pub fn ensure_host_dispatchers_registered() {
     // Agent dispatchers — all hosts delegate to generic run_agent_mcp_loop
     use host_projection::hosts::AgentDispatchFn;
     let agent_entries: Vec<(&'static str, AgentDispatchFn)> =
-        framework_kernel::runtime_registry::ALL_HOST_IDS
+        framework_core::runtime_registry::ALL_HOST_IDS
             .iter()
             .map(|&host_id| {
                 (
@@ -526,7 +526,7 @@ fn dispatch_host_hook(
     // Bootstrap for lifecycle events
     runtime_core::kernel_bootstrap::ensure_kernel_bootstrap();
     runtime_core::hook_timing::mark_hook_start();
-    let _registry_guard = core_policy::registry_review_gate::HookRegistryRepoGuard::new(&repo_root);
+    let _registry_guard = framework_core::registry_review_gate::HookRegistryRepoGuard::new(&repo_root);
 
     // Read stdin payload (shared 4 MiB limited reader)
     let mut stdin = std::io::stdin().lock();

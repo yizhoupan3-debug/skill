@@ -87,13 +87,13 @@ pub type PaperProseHookHost = &'static str;
 /// Per-host env var controlling prose hook injection.
 /// Generated from RUNTIME_REGISTRY.json host_targets.metadata.*.paper_prose_env.
 pub fn paper_prose_env_var(host: &str) -> &'static str {
-    framework_kernel::runtime_registry::paper_prose_env(host)
+    framework_core::runtime_registry::paper_prose_env(host)
 }
 
 /// Per-host env var controlling adversarial review hook injection.
 /// Generated from RUNTIME_REGISTRY.json host_targets.metadata.*.paper_adversarial_env.
 pub fn paper_adversarial_env_var(host: &str) -> &'static str {
-    framework_kernel::runtime_registry::paper_adversarial_env(host)
+    framework_core::runtime_registry::paper_adversarial_env(host)
 }
 
 // ────────────────────────────────────────────────────────────────
@@ -135,7 +135,7 @@ pub fn router_rs_review_gate_stop_max_nudges_cap() -> Option<u32> {
             return raw.parse().ok();
         }
     }
-    core_policy::env_flags::router_rs_review_gate_stop_max_nudges_cap()
+    framework_core::env_flags::router_rs_review_gate_stop_max_nudges_cap()
 }
 
 // ────────────────────────────────────────────────────────────────
@@ -316,11 +316,11 @@ runtime_hook_proxy! { fn mcp_tool_skill_route(query: &str, host_id: &str, first_
 runtime_hook_proxy! { fn mcp_tool_search_skills(query: &str, limit: usize, effective_host: &str, repo_root: &str) -> Result<String> = err("MCP_TOOL_SEARCH_SKILLS not registered — runtime-core boot required"); }
 
 // ── Browser dispatch (via RuntimeHooks, set via modify_runtime_hooks) ──
-type BrowserDispatchFn = fn(framework_kernel::cli_args::BrowserSubcommand) -> Result<()>;
+type BrowserDispatchFn = fn(framework_core::cli_args::BrowserSubcommand) -> Result<()>;
 
 /// Dispatch a browser subcommand. Returns `Err` if no dispatch function was registered.
 pub fn dispatch_browser_command(
-    command: framework_kernel::cli_args::BrowserSubcommand,
+    command: framework_core::cli_args::BrowserSubcommand,
 ) -> Result<()> {
     get_runtime_hooks()
         .map(|h| (h.browser_dispatch)(command))
@@ -336,11 +336,11 @@ pub fn dispatch_browser_command(
 type AttachRuntimeEventTransportFn = fn(Value) -> Result<Value>;
 type InspectTraceStreamFn =
     fn(
-        framework_kernel::stdio_payload_types::TraceStreamInspectRequestPayload,
-    ) -> Result<framework_kernel::stdio_payload_types::TraceStreamInspectResponsePayload>;
+        framework_core::stdio_payload_types::TraceStreamInspectRequestPayload,
+    ) -> Result<framework_core::stdio_payload_types::TraceStreamInspectResponsePayload>;
 
 runtime_hook_proxy! { fn attach_runtime_event_transport(payload: Value) -> Result<Value> = err("ATTACH_RUNTIME_EVENT_TRANSPORT not registered — runtime-core boot required"); }
-runtime_hook_proxy! { fn inspect_trace_stream(payload: framework_kernel::stdio_payload_types::TraceStreamInspectRequestPayload) -> Result<framework_kernel::stdio_payload_types::TraceStreamInspectResponsePayload> = err("INSPECT_TRACE_STREAM not registered — runtime-core boot required"); }
+runtime_hook_proxy! { fn inspect_trace_stream(payload: framework_core::stdio_payload_types::TraceStreamInspectRequestPayload) -> Result<framework_core::stdio_payload_types::TraceStreamInspectResponsePayload> = err("INSPECT_TRACE_STREAM not registered — runtime-core boot required"); }
 
 // ── Tool dispatch hooks: business logic extraction from L0 → L4 ──
 //

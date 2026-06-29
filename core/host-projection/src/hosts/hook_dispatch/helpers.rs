@@ -10,8 +10,8 @@ pub fn extract_session_key(
     repo_fallback: &str,
     scan_tool_input: bool,
 ) -> String {
-    core_policy::session_key::session_key_core(
-        &core_policy::session_key::SessionKeyConfig {
+    framework_core::session_key::session_key_core(
+        &framework_core::session_key::SessionKeyConfig {
             env_var,
             scan_tool_input,
         },
@@ -37,7 +37,7 @@ pub fn extract_session_key(
 
 /// Extract explicit session id from payload (tries shared SESSION_ID_FIELDS).
 fn extract_session_id_from_payload(event: &Value) -> Option<String> {
-    for key in core_policy::session_key::SESSION_ID_FIELDS {
+    for key in framework_core::session_key::SESSION_ID_FIELDS {
         if let Some(val) = event.get(*key).and_then(Value::as_str)
             && !val.is_empty()
         {
@@ -50,7 +50,7 @@ fn extract_session_id_from_payload(event: &Value) -> Option<String> {
 /// Extract parent session id from `tool_input` object (Cursor scan_tool_input path).
 fn extract_session_id_from_tool_input(tool_input: &Value) -> Option<String> {
     let obj = tool_input.as_object()?;
-    for key in core_policy::session_key::TOOL_INPUT_SESSION_ID_FIELDS {
+    for key in framework_core::session_key::TOOL_INPUT_SESSION_ID_FIELDS {
         if let Some(value) = obj.get(*key).and_then(Value::as_str) {
             let t = value.trim();
             if !t.is_empty() {
@@ -60,7 +60,7 @@ fn extract_session_id_from_tool_input(tool_input: &Value) -> Option<String> {
     }
     // Check nested metadata
     if let Some(meta) = obj.get("metadata").and_then(Value::as_object) {
-        for key in core_policy::session_key::TOOL_INPUT_METADATA_SESSION_ID_FIELDS {
+        for key in framework_core::session_key::TOOL_INPUT_METADATA_SESSION_ID_FIELDS {
             if let Some(value) = meta.get(*key).and_then(Value::as_str) {
                 let t = value.trim();
                 if !t.is_empty() {
@@ -76,7 +76,7 @@ fn extract_session_id_from_tool_input(tool_input: &Value) -> Option<String> {
 fn extract_session_id_from_nested(event: &Value) -> Option<String> {
     for nest in &["hookPayload", "metadata", "context"] {
         if let Some(nobj) = event.get(*nest).and_then(Value::as_object) {
-            for key in core_policy::session_key::SESSION_ID_FIELDS {
+            for key in framework_core::session_key::SESSION_ID_FIELDS {
                 if let Some(val) = nobj.get(*key).and_then(Value::as_str)
                     && !val.is_empty()
                 {

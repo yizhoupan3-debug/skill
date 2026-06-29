@@ -1,8 +1,8 @@
 use chrono::Local;
 use clap::{Parser, Subcommand};
 use core_errors::FrameworkError;
-use framework_kernel::repo_roots::{framework_root_from_executable_path, is_framework_root};
-use framework_kernel::runtime_registry::{load_runtime_registry, load_runtime_registry_payload};
+use framework_core::repo_roots::{framework_root_from_executable_path, is_framework_root};
+use framework_core::runtime_registry::{load_runtime_registry, load_runtime_registry_payload};
 use serde::Deserialize;
 use serde_json::{Map, Value, json};
 use std::collections::{BTreeMap, BTreeSet};
@@ -334,7 +334,7 @@ mod tests {
         assert_eq!(canonical_tool_name("claude", &root).unwrap(), "claude");
 
         let err = canonical_tool_name("unknown-host", &root).expect_err("unknown host must fail");
-        for &tool in framework_kernel::runtime_registry::ALL_HOST_IDS {
+        for &tool in framework_core::runtime_registry::ALL_HOST_IDS {
             assert!(
                 err.to_string().contains(tool),
                 "expected supported tool {tool} in error: {err}"
@@ -366,7 +366,7 @@ mod tests {
 
     #[test]
     fn runtime_registry_repo_root_registry_is_used() {
-        use framework_kernel::runtime_registry::RUNTIME_REGISTRY_SCHEMA_VERSION;
+        use framework_core::runtime_registry::RUNTIME_REGISTRY_SCHEMA_VERSION;
         let root = unique_test_root("runtime-registry-repo-local");
         let repo_registry = root.join("configs/framework/RUNTIME_REGISTRY.json");
         write_test_file(

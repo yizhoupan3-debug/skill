@@ -16,19 +16,17 @@ path = "src/lib.rs"
 [dependencies]
 core-state = { path = "../core-state" }
 core-state-utils = { path = "../core-state-utils" }
-framework-kernel = { path = "../framework-kernel" }
-core-policy = { path = "../core-policy", features = ["dev-exempt", "test-sync"] }
 routing-engine = { path = "../routing-engine" }
 skill-layer = { path = "../skill-layer" }
 runtime-core = { path = "../runtime-core", features = ["test-support"] }
 host-projection = { path = "../host-projection" }
 framework-extra = { path = "../framework-extra" }
 core-errors = { path = "../core-errors" }
-fr-utils = { path = "../fr-utils" }
-fr-exec = { path = "../fr-exec" }
+framework-core = { path = "../framework-core", features = ["dev-exempt", "test-sync"] }
+framework-runtime = { path = "../framework-runtime" }
 goal-engine = { path = "../goal-engine" }
 browser-mcp = { path = "../../tools/browser-mcp", optional = true }
-browser-mcp-dispatch = { path = "../browser-mcp-dispatch", optional = true }
+mcp-tool-registry = { path = "../mcp-tool-registry" }
 research-harness = { path = "../research-harness", optional = true }
 rt-core-contracts = { path = "../runtime-core-contracts", package = "runtime-core-contracts" }
 libc.workspace = true
@@ -67,7 +65,7 @@ host-cursor = []
 host-claude = []
 host-opencode = []
 host-codex = []
-browser = ["dep:browser-mcp", "dep:browser-mcp-dispatch"]
+browser = ["dep:browser-mcp"]
 codegraph = ["runtime-core/codegraph"]
 research = ["dep:research-harness", "research-harness/smoke"]
 

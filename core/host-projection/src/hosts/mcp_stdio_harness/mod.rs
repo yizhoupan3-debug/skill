@@ -177,7 +177,7 @@ impl ToolDispatchTable {
     /// Only includes tools handled by this MCP server process (router-rs, router-rs-framework, research-harness, router-rs-cli).
     fn from_registry() -> Self {
         let registry_path = mcp_tool_registry::resolve_tool_registry_path().unwrap_or_else(|| {
-            std::path::PathBuf::from(framework_kernel::constants::MCP_TOOL_REGISTRY_RELATIVE_PATH)
+            std::path::PathBuf::from(framework_core::constants::MCP_TOOL_REGISTRY_RELATIVE_PATH)
         });
         let records = match mcp_tool_registry::load_tool_records_cached(&registry_path) {
             Ok(records) => records,
@@ -574,7 +574,7 @@ pub fn handle_tools_list(id: Option<Value>) -> Value {
 /// with `domain:` or equal to `research`, excluding deprecated tools.
 fn build_tools_from_registry() -> Vec<Value> {
     let registry_path = mcp_tool_registry::resolve_tool_registry_path().unwrap_or_else(|| {
-        std::path::PathBuf::from(framework_kernel::constants::MCP_TOOL_REGISTRY_RELATIVE_PATH)
+        std::path::PathBuf::from(framework_core::constants::MCP_TOOL_REGISTRY_RELATIVE_PATH)
     });
 
     // Use cached loader for performance
@@ -705,7 +705,7 @@ fn handle_prompts_get(
                     .to_string();
             {
                 let lane_lines =
-                    core_policy::registry_review_gate::reviewer_lanes_prompt_lines(Some(repo_root));
+                    framework_core::registry_review_gate::reviewer_lanes_prompt_lines(Some(repo_root));
                 format!(
                     "[Review Gate -- {host_name} gating]\n\n\
                      This host uses MCP transport; there is no shell hook REVIEW_GATE observation.\n\n\

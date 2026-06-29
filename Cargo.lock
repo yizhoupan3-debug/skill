@@ -319,12 +319,12 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "base64",
- "browser-mcp-dispatch",
  "chrono",
  "core-errors",
  "ctor",
- "framework-kernel",
+ "framework-core",
  "http-util",
+ "mcp-tool-registry",
  "reqwest",
  "runtime-core-contracts",
  "rusqlite",
@@ -333,16 +333,6 @@ dependencies = [
  "serial_test",
  "tracing",
  "tungstenite",
-]
-
-[[package]]
-name = "browser-mcp-dispatch"
-version = "0.1.0"
-dependencies = [
- "core-errors",
- "framework-kernel",
- "serde_json",
- "tracing",
 ]
 
 [[package]]
@@ -652,44 +642,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "773648b94d0e5d620f64f280777445740e61fe701025087ec8b57f45c791888b"
 
 [[package]]
-name = "core-policy"
-version = "0.1.0"
-dependencies = [
- "core-errors",
- "core-state-utils",
- "framework-kernel",
- "insta",
- "mockall",
- "regex",
- "serde",
- "serde_json",
- "sha2 0.11.0",
- "tokio",
- "tracing",
-]
-
-[[package]]
 name = "core-state"
 version = "0.1.0"
 dependencies = [
  "core-errors",
- "core-policy",
- "core-state-types",
  "core-state-utils",
- "framework-kernel",
+ "framework-core",
  "proptest",
  "serde",
  "serde_json",
  "sha2 0.11.0",
  "tracing",
-]
-
-[[package]]
-name = "core-state-types"
-version = "0.2.0"
-dependencies = [
- "serde",
- "serde_json",
 ]
 
 [[package]]
@@ -1163,62 +1126,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "fr-contracts"
-version = "0.1.0"
-dependencies = [
- "core-errors",
- "core-policy",
- "ctor",
- "fr-utils",
- "framework-kernel",
- "hex",
- "serde",
- "serde_json",
- "sha2 0.11.0",
- "tracing",
-]
-
-[[package]]
-name = "fr-exec"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "core-errors",
- "core-policy",
- "core-state-types",
- "core-state-utils",
- "fr-contracts",
- "fr-utils",
- "framework-kernel",
- "http-util",
- "reqwest",
- "runtime-storage",
- "serde",
- "serde_json",
- "tempfile",
- "tokio",
- "trace-runtime",
- "tracing",
-]
-
-[[package]]
-name = "fr-utils"
-version = "0.1.0"
-dependencies = [
- "core-errors",
- "core-state-utils",
- "criterion",
- "framework-kernel",
- "fs2",
- "hex",
- "libc",
- "runtime-storage",
- "serde",
- "serde_json",
- "sha2 0.11.0",
-]
-
-[[package]]
 name = "fragile"
 version = "2.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1228,18 +1135,38 @@ dependencies = [
 ]
 
 [[package]]
+name = "framework-core"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "clap",
+ "core-errors",
+ "core-state-utils",
+ "insta",
+ "mockall",
+ "proptest",
+ "regex",
+ "serde",
+ "serde_json",
+ "serial_test",
+ "sha2 0.11.0",
+ "tempfile",
+ "tokio",
+ "tracing",
+ "which",
+]
+
+[[package]]
 name = "framework-extra"
 version = "0.1.0"
 dependencies = [
  "chrono",
  "codegraph-rs",
  "core-errors",
- "core-policy",
  "core-state",
  "core-state-utils",
- "fr-exec",
- "fr-utils",
- "framework-kernel",
+ "framework-core",
+ "framework-runtime",
  "hex",
  "host-projection",
  "insta",
@@ -1254,32 +1181,42 @@ dependencies = [
 ]
 
 [[package]]
-name = "framework-kernel"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "clap",
- "core-errors",
- "insta",
- "serde",
- "serde_json",
- "sha2 0.11.0",
- "tokio",
- "tracing",
- "which",
-]
-
-[[package]]
 name = "framework-maint"
 version = "0.1.0"
 dependencies = [
  "core-errors",
  "core-state",
  "core-state-utils",
+ "framework-core",
  "framework-extra",
- "framework-kernel",
  "host-projection",
  "serde_json",
+ "tracing",
+]
+
+[[package]]
+name = "framework-runtime"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "core-errors",
+ "core-state",
+ "core-state-utils",
+ "criterion",
+ "ctor",
+ "framework-core",
+ "fs2",
+ "hex",
+ "http-util",
+ "libc",
+ "reqwest",
+ "runtime-storage",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "tempfile",
+ "tokio",
+ "trace-runtime",
  "tracing",
 ]
 
@@ -1469,8 +1406,8 @@ dependencies = [
  "core-errors",
  "core-state",
  "core-state-utils",
- "fr-utils",
- "framework-kernel",
+ "framework-core",
+ "framework-runtime",
  "serde",
  "serde_json",
  "tempfile",
@@ -1547,11 +1484,9 @@ dependencies = [
  "chrono",
  "clap",
  "core-errors",
- "core-policy",
  "core-state",
- "core-state-types",
  "core-state-utils",
- "framework-kernel",
+ "framework-core",
  "fs2",
  "insta",
  "libc",
@@ -2248,6 +2183,7 @@ name = "mcp-tool-registry"
 version = "0.1.0"
 dependencies = [
  "core-errors",
+ "framework-core",
  "routing-core",
  "serde",
  "serde_json",
@@ -3212,11 +3148,10 @@ dependencies = [
  "chrono",
  "clap",
  "core-errors",
- "core-policy",
  "core-state",
  "core-state-utils",
- "fr-utils",
- "framework-kernel",
+ "framework-core",
+ "framework-runtime",
  "host-projection",
  "mcp-stdio-common",
  "minilp",
@@ -3258,25 +3193,23 @@ name = "router-rs"
 version = "0.1.0"
 dependencies = [
  "browser-mcp",
- "browser-mcp-dispatch",
  "chrono",
  "clap",
  "codegraph-rs",
  "core-errors",
- "core-policy",
  "core-state",
  "core-state-utils",
  "criterion",
  "ctor",
- "fr-exec",
- "fr-utils",
+ "framework-core",
  "framework-extra",
- "framework-kernel",
+ "framework-runtime",
  "fs2",
  "goal-engine",
  "hex",
  "host-projection",
  "libc",
+ "mcp-tool-registry",
  "mimalloc",
  "rayon",
  "regex",
@@ -3338,16 +3271,13 @@ version = "0.1.0"
 dependencies = [
  "codegraph-rs",
  "core-errors",
- "core-policy",
  "core-state",
  "core-state-utils",
  "eval-route",
- "fr-contracts",
- "fr-exec",
- "fr-utils",
+ "framework-core",
  "framework-extra",
- "framework-kernel",
  "framework-maint",
+ "framework-runtime",
  "hex",
  "host-projection",
  "insta",
@@ -3376,8 +3306,7 @@ name = "runtime-core-contracts"
 version = "0.1.0"
 dependencies = [
  "core-errors",
- "core-policy",
- "framework-kernel",
+ "framework-core",
  "insta",
  "regex",
  "reqwest",
@@ -3392,12 +3321,10 @@ name = "runtime-infra"
 version = "0.1.0"
 dependencies = [
  "core-errors",
- "core-policy",
  "core-state",
  "core-state-utils",
- "fr-exec",
- "fr-utils",
- "framework-kernel",
+ "framework-core",
+ "framework-runtime",
  "host-projection",
  "routing-engine",
  "runtime-storage",
@@ -3413,9 +3340,8 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "core-errors",
- "core-policy",
  "core-state-utils",
- "framework-kernel",
+ "framework-core",
  "fs2",
  "hex",
  "insta",
@@ -3636,11 +3562,10 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "core-errors",
- "core-policy",
  "core-state",
  "core-state-utils",
- "fr-utils",
- "framework-kernel",
+ "framework-core",
+ "framework-runtime",
  "libc",
  "regex",
  "runtime-storage",
@@ -3738,7 +3663,7 @@ dependencies = [
 name = "skill-rust-test-harness"
 version = "0.1.0"
 dependencies = [
- "core-policy",
+ "framework-core",
  "regex",
  "routing-engine",
  "runtime-core-contracts",
@@ -4096,7 +4021,7 @@ checksum = "8df9b6e13f2d32c91b9bd719c00d1958837bc7dec474d94952798cc8e69eeec3"
 name = "trace-runtime"
 version = "0.1.0"
 dependencies = [
- "framework-kernel",
+ "framework-core",
  "hex",
  "runtime-storage",
  "serde",

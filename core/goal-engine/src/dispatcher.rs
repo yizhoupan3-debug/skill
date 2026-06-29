@@ -199,7 +199,7 @@ pub fn build_handoff(action: &LoopAction, loop_id: &str, run_id: &str) -> String
 /// introduce a `safety_level` parameter and route to level-specific limit profiles.
 #[cfg(unix)]
 pub(crate) fn apply_subprocess_rlimits() -> Result<(), std::io::Error> {
-    fr_utils::process_utils::apply_subprocess_rlimits()
+    framework_runtime::process_utils::apply_subprocess_rlimits()
 }
 
 #[cfg(not(unix))]

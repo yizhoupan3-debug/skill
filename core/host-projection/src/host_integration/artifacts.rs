@@ -266,7 +266,7 @@ pub fn normalize_generated_artifact_text(content: &str, roots: &[&Path]) -> Stri
 }
 
 pub fn allowed_dot_generated_artifact(path: &str) -> bool {
-    use framework_kernel::runtime_registry::{
+    use framework_core::runtime_registry::{
         ALL_HOST_IDS, generated_entrypoint_paths, settings_guarded_paths,
     };
 
@@ -283,7 +283,7 @@ pub fn allowed_dot_generated_artifact(path: &str) -> bool {
             }
         }
         // Every host gets its own .framework-projection.json manifest.
-        let cfg = framework_kernel::runtime_registry::host_private_config_dir(host_id);
+        let cfg = framework_core::runtime_registry::host_private_config_dir(host_id);
         if !cfg.is_empty() {
             let manifest = format!("{cfg}/{FRAMEWORK_PROJECTION_MANIFEST_NAME}");
             if path == manifest {
@@ -685,7 +685,7 @@ pub fn resolve_router_rs_executable(repo_root: &Path) -> Result<PathBuf> {
             return Ok(path);
         }
     }
-    let installed = framework_kernel::router_self::default_router_rs_install_path();
+    let installed = framework_core::router_self::default_router_rs_install_path();
     if installed.is_file() {
         return Ok(installed);
     }

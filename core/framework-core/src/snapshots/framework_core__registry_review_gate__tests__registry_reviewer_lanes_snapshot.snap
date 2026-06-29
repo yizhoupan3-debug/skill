@@ -1,0 +1,17 @@
+---
+source: core/framework-core/src/registry_review_gate.rs
+assertion_line: 408
+expression: reviewer_lanes_sorted(None)
+---
+[
+    "best-of-n-runner",
+    "bestofnrunner",
+    "code-review",
+    "critic",
+    "deep-reviewer",
+    "deepreviewer",
+    "general-purpose",
+    "generalpurpose",
+    "review",
+    "reviewer",
+]

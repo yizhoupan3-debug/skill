@@ -1164,7 +1164,7 @@ mod tests {
             "validation_commands": [],
             "checkpoints": [],
             "blocker": null,
-            "updated_at": framework_kernel::time::now_iso(),
+            "updated_at": framework_core::time::now_iso(),
         });
         crate::utils::atomic_write::write_atomic_json(&goal_path, &goal_json).expect("write goal");
 
@@ -1224,7 +1224,7 @@ mod tests {
             "validation_commands": [],
             "checkpoints": [],
             "blocker": null,
-            "updated_at": framework_kernel::time::now_iso(),
+            "updated_at": framework_core::time::now_iso(),
         });
         crate::utils::atomic_write::write_atomic_json(&goal_path, &goal_json).expect("write goal");
 
@@ -1318,7 +1318,7 @@ mod tests {
             "validation_commands": [],
             "checkpoints": [],
             "blocker": null,
-            "updated_at": framework_kernel::time::now_iso(),
+            "updated_at": framework_core::time::now_iso(),
         });
         crate::utils::atomic_write::write_atomic_json(&goal_path, &goal_json).expect("write goal");
 

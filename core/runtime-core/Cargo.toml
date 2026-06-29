@@ -15,15 +15,12 @@ path = "src/lib.rs"
 [dependencies]
 core-state = { path = "../core-state" }
 core-state-utils = { path = "../core-state-utils" }
-core-policy = { path = "../core-policy", features = ["dev-exempt", "test-sync"] }
 core-errors = { path = "../core-errors" }
+framework-core = { path = "../framework-core", features = ["dev-exempt", "test-sync"] }
+fr-runtime = { path = "../framework-runtime", package = "framework-runtime" }
 framework-extra = { path = "../framework-extra" }
-framework-kernel = { path = "../framework-kernel" }
 framework-maint = { path = "../framework-maint" }
 host-projection = { path = "../host-projection" }
-fr-utils = { path = "../fr-utils" }
-fr-contracts = { path = "../fr-contracts" }
-fr-exec = { path = "../fr-exec" }
 routing-core = { path = "../routing-core" }
 routing-engine = { path = "../routing-engine" }
 session-supervisor = { path = "../session-supervisor" }

@@ -17,7 +17,7 @@ use std::path::Path;
 fn host_metadata() -> serde_json::Map<String, Value> {
     let framework_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../");
     let registry =
-        framework_kernel::runtime_registry::load_runtime_registry_payload(&framework_root)
+        framework_core::runtime_registry::load_runtime_registry_payload(&framework_root)
             .expect("load RUNTIME_REGISTRY.json");
     registry
         .get("host_targets")
@@ -33,7 +33,7 @@ fn test_repo_root() -> &'static Path {
 
 #[test]
 fn all_hosts_have_dispatcher() {
-    for host_id in framework_kernel::runtime_registry::ALL_HOST_IDS {
+    for host_id in framework_core::runtime_registry::ALL_HOST_IDS {
         let provider =
             host_provider_for_id(host_id).unwrap_or_else(|| panic!("no provider for {host_id}"));
         let _ = provider.dispatcher();
@@ -43,7 +43,7 @@ fn all_hosts_have_dispatcher() {
 #[test]
 fn session_start_support_matches_registry() {
     let metadata = host_metadata();
-    for host_id in framework_kernel::runtime_registry::ALL_HOST_IDS {
+    for host_id in framework_core::runtime_registry::ALL_HOST_IDS {
         let expected = metadata
             .get(*host_id)
             .and_then(|m| m.get("session_start"))
@@ -61,7 +61,7 @@ fn session_start_support_matches_registry() {
 #[test]
 fn subagent_start_stop_support_matches_registry() {
     let metadata = host_metadata();
-    for host_id in framework_kernel::runtime_registry::ALL_HOST_IDS {
+    for host_id in framework_core::runtime_registry::ALL_HOST_IDS {
         let m = metadata
             .get(*host_id)
             .unwrap_or_else(|| panic!("{host_id}: missing metadata"));
@@ -91,7 +91,7 @@ fn subagent_start_stop_support_matches_registry() {
 #[test]
 fn pretool_protection_matches_registry() {
     let metadata = host_metadata();
-    for host_id in framework_kernel::runtime_registry::ALL_HOST_IDS {
+    for host_id in framework_core::runtime_registry::ALL_HOST_IDS {
         let expected_protection = metadata
             .get(*host_id)
             .and_then(|m| m.get("pretool_path_protection"))
@@ -126,7 +126,7 @@ fn pretool_protection_matches_registry() {
 
 #[test]
 fn handle_stop_does_not_panic() {
-    for host_id in framework_kernel::runtime_registry::ALL_HOST_IDS {
+    for host_id in framework_core::runtime_registry::ALL_HOST_IDS {
         let provider =
             host_provider_for_id(host_id).unwrap_or_else(|| panic!("no provider for {host_id}"));
         let dispatcher = provider.dispatcher();
@@ -143,7 +143,7 @@ fn handle_stop_does_not_panic() {
 
 #[test]
 fn session_key_extraction_respects_scan_tool_input() {
-    for host_id in framework_kernel::runtime_registry::ALL_HOST_IDS {
+    for host_id in framework_core::runtime_registry::ALL_HOST_IDS {
         let provider = host_provider_for_id(host_id).unwrap();
         let dispatcher = provider.dispatcher();
         let event_with_tool_input = HookEvent {

@@ -860,7 +860,7 @@ fn cmd_barrier(
         "workspace": barrier_dir.display().to_string(),
         "drafted_claims": drafted_claims,
         "candidates": candidates,
-        "created_at": framework_kernel::time::now_iso(),
+        "created_at": framework_core::time::now_iso(),
     });
     let report_path = ws.join(format!(
         "artifacts/research-barrier/{}/BARRIER_REPORT.json",

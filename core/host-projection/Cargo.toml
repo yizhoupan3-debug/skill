@@ -15,12 +15,10 @@ default = []
 test-support = []
 
 [dependencies]
-core-state-utils = { path = "../core-state-utils" }
 core-state = { path = "../core-state" }
-core-state-types = { path = "../core-state-types" }
-core-policy = { path = "../core-policy" }
+core-state-utils = { path = "../core-state-utils" }
 core-errors = { path = "../core-errors" }
-framework-kernel = { path = "../framework-kernel" }
+framework-core = { path = "../framework-core" }
 chrono.workspace = true
 clap.workspace = true
 fs2.workspace = true
@@ -39,6 +37,5 @@ tool-routing-engine = { path = "../tool-routing-engine" }
 serde_json.workspace = true
 
 [dev-dependencies]
-core-policy = { path = "../core-policy", features = ["dev-exempt", "test-sync"] }
 insta.workspace = true
 serial_test = "3"

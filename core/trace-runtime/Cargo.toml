@@ -7,7 +7,7 @@ description = "L1 trace recording and compaction"
 workspace = true
 
 [dependencies]
-framework-kernel = { path = "../framework-kernel" }
+framework-core = { path = "../framework-core" }
 runtime-storage = { path = "../runtime-storage" }
 hex.workspace = true
 serde.workspace = true

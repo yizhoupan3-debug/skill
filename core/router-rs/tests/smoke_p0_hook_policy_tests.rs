@@ -1,7 +1,7 @@
 //! `hook_policy/{bash_guard,mcp_safety,contract}` coverage
 //! (physical module: `core-policy/hook_policy.rs`).
 
-use core_policy::hook_policy::{
+use framework_core::hook_policy::{
     HOOK_POLICY_AUTHORITY, HOOK_POLICY_SCHEMA_VERSION, HookPolicyEvaluateRequest,
     dangerous_bash_reason, dangerous_mcp_tool_reason, evaluate_hook_policy, hook_policy_contract,
 };

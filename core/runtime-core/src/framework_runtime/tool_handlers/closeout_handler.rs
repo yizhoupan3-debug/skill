@@ -166,7 +166,7 @@ pub(crate) fn closeout_gate_evaluate(
     let mut findings: Vec<String> = Vec::new();
 
     if let Some(rationale) =
-        framework_kernel::runtime_registry::harness_capability_exception_rationale(
+        framework_core::runtime_registry::harness_capability_exception_rationale(
             repo_root,
             host_id,
             "closeout_evidence_hooks",
@@ -175,7 +175,7 @@ pub(crate) fn closeout_gate_evaluate(
         findings.push(format!("harness: closeout_evidence_hooks — {rationale}"));
     }
     if let Some(rationale) =
-        framework_kernel::runtime_registry::harness_capability_exception_rationale(
+        framework_core::runtime_registry::harness_capability_exception_rationale(
             repo_root,
             host_id,
             "review_gate_router_observation",
@@ -305,7 +305,7 @@ pub(crate) fn evaluate_closeout_gate_hook(
     let mut findings: Vec<String> = Vec::new();
 
     if let Some(rationale) =
-        framework_kernel::runtime_registry::harness_capability_exception_rationale(
+        framework_core::runtime_registry::harness_capability_exception_rationale(
             repo_root,
             host_id,
             "closeout_evidence_hooks",
@@ -314,7 +314,7 @@ pub(crate) fn evaluate_closeout_gate_hook(
         findings.push(format!("harness: closeout_evidence_hooks — {rationale}"));
     }
     if let Some(rationale) =
-        framework_kernel::runtime_registry::harness_capability_exception_rationale(
+        framework_core::runtime_registry::harness_capability_exception_rationale(
             repo_root,
             host_id,
             "review_gate_router_observation",

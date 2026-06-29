@@ -8,11 +8,11 @@
 //! Storage layout (under `artifact_root/content-store/`):
 //!   {shard}/{hash}.json   — each file is `{"hash":"…","content":"…"}`
 //!
-//! Reuses `fr_utils::json_io::*` for all I/O (no new filesystem primitives).
+//! Reuses `framework_runtime::json_io::*` for all I/O (no new filesystem primitives).
 
 use core_errors::FrameworkError;
-use fr_utils::constants::CONTENT_STORE_DIR;
-use fr_utils::json_io::write_json_if_changed;
+use framework_runtime::constants::CONTENT_STORE_DIR;
+use framework_runtime::json_io::write_json_if_changed;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
@@ -34,7 +34,7 @@ struct ContentEntry {
 
 /// A lightweight, content-addressed store rooted at a given artifact directory.
 ///
-/// All I/O delegates to `fr_utils::json_io::write_json_if_changed` (which uses
+/// All I/O delegates to `framework_runtime::json_io::write_json_if_changed` (which uses
 /// atomic-rename writes) and `core_state_utils::json_io::read_json_if_exists`
 /// (which is re-exported through `fr_utils`).
 pub struct ContentStore {

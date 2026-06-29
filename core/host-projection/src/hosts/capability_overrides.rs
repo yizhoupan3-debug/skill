@@ -18,7 +18,7 @@ pub fn build_driver_args(
     resume_mode: &str,
     resume_only: bool,
 ) -> Option<(Vec<String>, String)> {
-    let binary_name = framework_kernel::runtime_registry::host_driver_binary(host_id);
+    let binary_name = framework_core::runtime_registry::host_driver_binary(host_id);
     match host_id {
         // Codex: -C <cwd> resume [--last|<session_id>] / <inline prompt>
         "codex" => {

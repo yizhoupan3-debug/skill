@@ -317,10 +317,10 @@ mod tests {
         let registry = host_provider_registry();
         assert_eq!(
             registry.len(),
-            framework_kernel::runtime_registry::ALL_HOST_IDS.len(),
+            framework_core::runtime_registry::ALL_HOST_IDS.len(),
             "HostProvider count must match registry host_targets.supported"
         );
-        for host_id in framework_kernel::runtime_registry::ALL_HOST_IDS {
+        for host_id in framework_core::runtime_registry::ALL_HOST_IDS {
             assert!(
                 host_provider_for_id(host_id).is_some(),
                 "missing provider for {host_id}"
@@ -331,7 +331,7 @@ mod tests {
     #[test]
     #[serial]
     fn install_tool_and_alias_resolution() {
-        for host_id in framework_kernel::runtime_registry::ALL_HOST_IDS {
+        for host_id in framework_core::runtime_registry::ALL_HOST_IDS {
             let provider = host_provider_for_install_tool(host_id)
                 .unwrap_or_else(|| panic!("install_tool for {host_id} must exist"));
             assert_eq!(
@@ -349,14 +349,14 @@ mod tests {
             .join("..")
             .join("..");
         let registry =
-            framework_kernel::runtime_registry::load_runtime_registry_payload(&framework_root)
+            framework_core::runtime_registry::load_runtime_registry_payload(&framework_root)
                 .expect("load RUNTIME_REGISTRY.json");
         let metadata = registry
             .get("host_targets")
             .and_then(|ht| ht.get("metadata"))
             .and_then(|m| m.as_object())
             .expect("host_targets.metadata");
-        for host_id in framework_kernel::runtime_registry::ALL_HOST_IDS {
+        for host_id in framework_core::runtime_registry::ALL_HOST_IDS {
             let host_meta = metadata
                 .get(*host_id)
                 .unwrap_or_else(|| panic!("metadata missing host_id `{host_id}`"));
@@ -400,7 +400,7 @@ mod tests {
     #[test]
     #[serial]
     fn strict_pre_tool_fallback_hint_matches_provider_metadata() {
-        for host_id in framework_kernel::runtime_registry::ALL_HOST_IDS {
+        for host_id in framework_core::runtime_registry::ALL_HOST_IDS {
             let hint = host_provider_strict_pre_tool_fallback_hint(host_id);
             assert_eq!(
                 hint,
@@ -420,7 +420,7 @@ mod tests {
     #[test]
     #[serial]
     fn p4_sub_trait_accessors_upcast_from_host_provider() {
-        for host_id in framework_kernel::runtime_registry::ALL_HOST_IDS {
+        for host_id in framework_core::runtime_registry::ALL_HOST_IDS {
             let lifecycle = host_lifecycle_for_id(host_id)
                 .unwrap_or_else(|| panic!("{host_id}: lifecycle upcast"));
             assert!(!lifecycle.profile_id().is_empty(), "{host_id}: profile_id");
@@ -440,7 +440,7 @@ mod tests {
 
     #[test]
     fn native_hook_glue_surfaces_manifest_and_events() {
-        for host_id in framework_kernel::runtime_registry::ALL_HOST_IDS {
+        for host_id in framework_core::runtime_registry::ALL_HOST_IDS {
             let lifecycle = host_lifecycle_for_id(host_id).expect(host_id);
             if let Some(manifest) = lifecycle.hooks_manifest_path() {
                 let events = lifecycle.registered_hook_events();

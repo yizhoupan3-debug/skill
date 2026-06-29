@@ -1,0 +1,43 @@
+---
+source: core/framework-core/src/hook_policy.rs
+assertion_line: 1485
+expression: hook_policy_contract()
+---
+Object {
+    "authority": String("rust-hook-policy"),
+    "mcp_safety_details": Object {
+        "arg_risk_coverage": Array [
+            String("browser_get_network"),
+            String("browser_fill"),
+            String("session_launch"),
+            String("session_mark_blocked"),
+            String("web_fetch"),
+            String("browser_save_session"),
+            String("browser_restore_session"),
+        ],
+        "high_risk_tools": Array [
+            String("session_launch"),
+            String("session_resume_due"),
+            String("session_terminate"),
+            String("background_terminate"),
+            String("preview_eval"),
+            String("preview_start"),
+        ],
+        "shell_injection_in_args": Bool(true),
+    },
+    "operations": Array [
+        String("bash-danger"),
+        String("validation-categories"),
+        String("file-category"),
+        String("protected-path"),
+        String("save-optimize-category"),
+        String("save-optimize-guard"),
+        String("mcp-tool-safety"),
+    ],
+    "protected_path_kinds": Array [
+        String("generated_host_entrypoint"),
+        String("retired_native_plugin_surface"),
+    ],
+    "provider_registry_policy": String("configs/framework/RUNTIME_PROVIDER_REGISTRY.json is document-only and does not drive hook execution ranking."),
+    "schema_version": String("router-rs-hook-policy-v1"),
+}

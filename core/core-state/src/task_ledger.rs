@@ -59,7 +59,7 @@ pub fn write_state_checkpoint(
     });
 
     let tx = LedgerTransaction {
-        ts: framework_kernel::time::now_iso(),
+        ts: framework_core::time::now_iso(),
         tx_type: STATE_CHECKPOINT_TX_TYPE.to_string(),
         payload,
         idempotency_key: None,

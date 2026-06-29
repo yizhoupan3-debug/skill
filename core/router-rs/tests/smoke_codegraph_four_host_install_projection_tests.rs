@@ -52,7 +52,7 @@ mod four_host_install_projection {
             project_root: project_root.clone(),
             artifact_root: project_root.join("artifacts"),
             account_home_root: home.clone(),
-            host_home_roots: framework_kernel::runtime_registry::ALL_HOST_IDS
+            host_home_roots: framework_core::runtime_registry::ALL_HOST_IDS
                 .iter()
                 .map(|id| (id.to_string(), home.join(format!(".{id}"))))
                 .collect(),

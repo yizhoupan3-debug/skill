@@ -301,7 +301,7 @@ fn run_loop_inner(
                 .and_then(|s| s.get("scene").and_then(|v| v.as_str()).map(|s| s.to_string()))
                 .unwrap_or_else(|| "general".to_string());
 
-            if let Some(qg_hooks) = framework_kernel::runtime_hooks::try_hooks() {
+            if let Some(qg_hooks) = framework_core::runtime_hooks::try_hooks() {
                 let qg_payload = serde_json::json!({
                     "repo_root": ctx.repo_root.to_string_lossy().to_string(),
                     "task_id": task_id,
@@ -368,7 +368,7 @@ fn run_loop_inner(
                     .to_string()
             })
             .unwrap_or_default();
-        if let Some(cg_hooks) = framework_kernel::runtime_hooks::try_hooks() {
+        if let Some(cg_hooks) = framework_core::runtime_hooks::try_hooks() {
             let closeout_payload = serde_json::json!({
                 "repo_root": ctx.repo_root.to_string_lossy().to_string(),
                 "task_id": task_id,
@@ -507,7 +507,7 @@ fn run_loop_inner(
                     &sync_task_id,
                 ) {
                     goal_state["updated_at"] =
-                        serde_json::json!(framework_kernel::time::now_iso());
+                        serde_json::json!(framework_core::time::now_iso());
                     // P1-006: Propagate write errors to prevent silent divergence
                     // between GOAL_STATE and LOOP_RUN_STATE timestamps.
                     core_state_utils::atomic_write::write_atomic_json(

@@ -134,7 +134,7 @@ fn extract_first_task_id_from_value(data: &Value) -> Option<String> {
 /// Evaluate a materialized closeout record JSON file, attaching an EvidenceContext (R8) when possible.
 /// Shared Stop/closeout guard when assistant or user text claims completion (Cursor/Codex parity).
 pub fn closeout_stop_followup_for_completion_text(repo_root: &Path, text: &str) -> Option<String> {
-    if text.trim().is_empty() || !core_policy::hook_common::contains_completion_claim_token(text) {
+    if text.trim().is_empty() || !framework_core::hook_common::contains_completion_claim_token(text) {
         return None;
     }
     // Pointer 机制已移除：先尝试 resolve_task_view，再回退到 task_registry.json

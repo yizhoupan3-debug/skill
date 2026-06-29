@@ -1,9 +1,9 @@
 use serde_json::{Value, json};
 use std::path::Path;
 
-use fr_exec::runtime_view;
-use fr_utils::constants::CURRENT_ARTIFACT_DIR;
-use fr_utils::types::FrameworkRuntimeView;
+use fr_runtime::runtime_view;
+use fr_runtime::constants::CURRENT_ARTIFACT_DIR;
+use fr_runtime::types::FrameworkRuntimeView;
 
 /// Thin wrappers to `runtime_view` kept in `mod.rs` for sibling-module access.
 pub fn load_framework_runtime_view(
@@ -38,13 +38,13 @@ pub(crate) fn build_automatic_continuity_checkpoint_payload_with_task_id(
     let task = if task_line.trim().is_empty() {
         "session-checkpoint".to_string()
     } else {
-        fr_utils::util::truncate_utf8_chars(task_line.trim(), 200)
+        fr_runtime::util::truncate_utf8_chars(task_line.trim(), 200)
     };
     let summary = if summary_text.trim().is_empty() {
         "Automatic continuity checkpoint. No summary text was provided; refine in the next turn."
             .to_string()
     } else {
-        fr_utils::util::truncate_utf8_chars(summary_text.trim(), 8000)
+        fr_runtime::util::truncate_utf8_chars(summary_text.trim(), 8000)
     };
     let mut payload = json!({
         "output_dir": output_dir.to_string_lossy(),

@@ -13,9 +13,9 @@ pub use trace_runtime;
 
 // ── migrated modules (B3) ──
 pub use core_state::closeout_validation;
-pub use fr_contracts::execution_contract;
+pub use fr_runtime::execution_contract;
 pub mod framework_runtime;
-pub use framework_kernel::framework_profile;
+pub use framework_core::framework_profile;
 
 // ── QG Route: scene-dispatched CheckerRegistry bridge ──
 mod checkers;
@@ -28,7 +28,7 @@ pub mod schema_drift;
 // ── subdomain module groups ──
 
 // │  backward-compatible re-exports from subdomain groups ─────────────────────
-pub use fr_exec::router_env_flags::{
+pub use fr_runtime::router_env_flags::{
     router_rs_cargo_check_sync_enabled, router_rs_continuity_post_tool_evidence_enabled,
     router_rs_env_enabled_default_false, router_rs_env_enabled_default_true,
     router_rs_hook_legacy_subtracted_events_enabled, router_rs_hook_outbound_context_max_bytes,
@@ -65,7 +65,7 @@ pub mod task_command;
 #[cfg(feature = "codegraph")]
 pub mod codegraph_mcp;
 pub use eval_route;
-pub use framework_kernel::framework_host_targets;
+pub use framework_core::framework_host_targets;
 pub use framework_maint;
 pub use host_projection::host_entrypoint_sync;
 pub use host_projection::host_integration;
@@ -73,9 +73,9 @@ pub use host_projection::hosts;
 pub use routing_engine::route;
 #[cfg(test)]
 mod route_metadata_tests;
-pub use framework_kernel::router_self;
-pub use framework_kernel::skill_repo;
-pub use framework_kernel::stdio_payload_types;
+pub use framework_core::router_self;
+pub use framework_core::skill_repo;
+pub use framework_core::stdio_payload_types;
 #[cfg(any(test, feature = "test-support"))]
 pub mod mcp_stdio_test_support;
 #[cfg(test)]
@@ -84,7 +84,7 @@ pub mod test_env_sync;
 // (removed: hook_posttool_normalize was dead code)
 
 // ── re-exports from core-policy (crate-internal only) ──
-pub(crate) use core_policy::hook_policy;
+pub(crate) use framework_core::hook_policy;
 
 // (removed: route_task_with_manifest_fallback re-export removed — callers use framework_extra::route_manifest_fallback directly)
 
@@ -117,14 +117,14 @@ pub fn init_hooks() {
     RUNTIME_INIT.get_or_init(|| {
         // 1. Routing-engine hooks
         routing_engine::hooks::register_hooks(
-            core_policy::hook_common::is_review_prompt,
+            framework_core::hook_common::is_review_prompt,
             hosts::host_provider::host_provider_routing_aliases,
             touch_test_kernel_bootstrap,
             kernel_bootstrap::ensure_kernel_bootstrap,
             skill_repo::discover_skill_policy_repo_root,
             skill_repo::skill_routing_runtime_json,
             || {
-                let m = core_policy::review_routing_signals::parallel_review_candidate_markers();
+                let m = framework_core::review_routing_signals::parallel_review_candidate_markers();
                 routing_engine::hooks::ParallelReviewMarkers {
                     review_markers: m.review_markers,
                     breadth_markers: m.breadth_markers,
@@ -137,12 +137,12 @@ pub fn init_hooks() {
         // 2. Routing config hooks
         routing_core::config_hooks::register_routing_config_hooks(
             || {
-                let path = std::path::PathBuf::from(framework_kernel::constants::MCP_TOOL_REGISTRY_RELATIVE_PATH);
+                let path = std::path::PathBuf::from(framework_core::constants::MCP_TOOL_REGISTRY_RELATIVE_PATH);
                 Some(path)
             },
             || {
                 let root = std::env::var("SKILL_FRAMEWORK_ROOT").ok()?;
-                Some(format!("{root}/{}", framework_kernel::constants::TOOL_SCORING_WEIGHTS_RELATIVE_PATH))
+                Some(format!("{root}/{}", framework_core::constants::TOOL_SCORING_WEIGHTS_RELATIVE_PATH))
             },
         )
         .ok();
@@ -183,7 +183,7 @@ pub fn init_hooks() {
                         checker_id: d.checker_id,
                     })?)
                 },
-                build_automatic_continuity_checkpoint_payload: framework_runtime::build_automatic_continuity_checkpoint_payload_with_task_id,
+                build_automatic_continuity_checkpoint_payload: crate::framework_runtime::build_automatic_continuity_checkpoint_payload_with_task_id,
                 append_evidence_index: framework_extra::evidence::append_evidence_index_merged_row,
                 closeout_record_schema_version: || closeout_validation::CLOSEOUT_RECORD_SCHEMA_VERSION,
                 // web_fetch_guard (3 fields)
@@ -215,7 +215,7 @@ pub fn init_hooks() {
                 // mcp_tool_routing (2 fields)
                 mcp_tool_skill_route: |query: &str, host_id: &str, first_turn: bool, repo_root: &str| {
                     let repo_root = std::path::Path::new(repo_root);
-                    let runtime_path = framework_kernel::skill_repo::skill_routing_runtime_json(repo_root);
+                    let runtime_path = framework_core::skill_repo::skill_routing_runtime_json(repo_root);
                     let records = routing_engine::route::load_records_cached_for_stdio(
                         Some(&runtime_path),
                     )?;
@@ -249,7 +249,7 @@ pub fn init_hooks() {
                 },
                 mcp_tool_search_skills: |query: &str, limit: usize, effective_host: &str, repo_root: &str| {
                     let repo_root = std::path::Path::new(repo_root);
-                    let runtime_path = framework_kernel::skill_repo::skill_routing_runtime_json(repo_root);
+                    let runtime_path = framework_core::skill_repo::skill_routing_runtime_json(repo_root);
                     let records = routing_engine::route::load_records_cached_for_stdio(
                         Some(&runtime_path),
                     )?;
@@ -263,21 +263,21 @@ pub fn init_hooks() {
                     Ok(serde_json::to_string(&results).map_err(|e| e.to_string())?)
                 },
                 // tool_dispatch (4 fields)
-                tool_goal_state_manage_dispatch: framework_runtime::tool_handlers::goal_state_manage_dispatch,
-                tool_closeout_record_write_dispatch: framework_runtime::tool_handlers::closeout_record_write_dispatch,
-                tool_closeout_gate_evaluate: framework_runtime::tool_handlers::closeout_gate_evaluate,
+                tool_goal_state_manage_dispatch: crate::framework_runtime::tool_handlers::goal_state_manage_dispatch,
+                tool_closeout_record_write_dispatch: crate::framework_runtime::tool_handlers::closeout_record_write_dispatch,
+                tool_closeout_gate_evaluate: crate::framework_runtime::tool_handlers::closeout_gate_evaluate,
                 // browser_dispatch (1 field) — default; set_browser_dispatch overrides via OnceLock
                 browser_dispatch: |_| Err(core_errors::FrameworkError::validation("browser-mcp dispatch not registered")),
                 // runtime_trace_transport (2 fields)
                 attach_runtime_event_transport:
-                    fr_exec::trace_attach::attach_runtime_event_transport,
-                inspect_trace_stream: fr_exec::trace_stream_io::inspect_trace_stream,
+                    fr_runtime::trace_attach::attach_runtime_event_transport,
+                inspect_trace_stream: fr_runtime::trace_stream_io::inspect_trace_stream,
             },
         );
 
-        // ── framework_kernel::runtime_hooks (pre_tool_use_guard, closeout, etc.) ──
-        framework_kernel::runtime_hooks::register(framework_kernel::runtime_hooks::RuntimeCoreHooks {
-            host_provider: framework_kernel::runtime_hooks::HostProviderHooks {
+        // ── framework_core::runtime_hooks (pre_tool_use_guard, closeout, etc.) ──
+        framework_core::runtime_hooks::register(framework_core::runtime_hooks::RuntimeCoreHooks {
+            host_provider: framework_core::runtime_hooks::HostProviderHooks {
                 for_routing_spelling: |host_id| {
                     host_id.and_then(|id| {
                         hosts::host_provider::host_provider_for_routing_spelling(id)
@@ -347,4 +347,4 @@ pub fn touch_test_kernel_bootstrap() {
 
 #[cfg(not(test))]
 pub fn touch_test_kernel_bootstrap() {}
-pub use fr_utils::constants::FRAMEWORK_RUNTIME_AUTHORITY;
+pub use fr_runtime::constants::FRAMEWORK_RUNTIME_AUTHORITY;

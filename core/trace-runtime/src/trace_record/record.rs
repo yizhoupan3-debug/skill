@@ -32,7 +32,7 @@ pub fn record_trace_event(
     event.insert("page_token".to_string(), Value::String(page_token));
     event.insert(
         "ts".to_string(),
-        Value::String(framework_kernel::time::now_iso()),
+        Value::String(framework_core::time::now_iso()),
     );
     event.insert("run_id".to_string(), Value::String(payload.run_id.clone()));
     event.insert(

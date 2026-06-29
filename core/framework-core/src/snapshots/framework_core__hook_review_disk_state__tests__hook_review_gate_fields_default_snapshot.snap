@@ -1,0 +1,11 @@
+---
+source: core/framework-core/src/hook_review_disk_state.rs
+assertion_line: 482
+expression: "HookReviewGateFields::default()"
+---
+HookReviewGateFields {
+    review_required: false,
+    review_override: false,
+    independent_reviewer_seen: false,
+    reject_reason_seen: false,
+}

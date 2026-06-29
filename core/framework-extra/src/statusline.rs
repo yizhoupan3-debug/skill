@@ -3,8 +3,8 @@ use serde_json::Value;
 use std::path::Path;
 use std::process::Command;
 
-use fr_exec::runtime_view::{classify_runtime_continuity, load_framework_runtime_view};
-use fr_utils::json_value::{value_string_list, value_text};
+use framework_runtime::runtime_view::{classify_runtime_continuity, load_framework_runtime_view};
+use framework_runtime::json_value::{value_string_list, value_text};
 
 pub fn build_framework_statusline(repo_root: &Path) -> Result<String, FrameworkError> {
     let snapshot = load_framework_runtime_view(repo_root, None, None);

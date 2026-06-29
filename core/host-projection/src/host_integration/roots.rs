@@ -153,7 +153,7 @@ pub fn normalize_path(path: &Path) -> Result<PathBuf> {
 }
 
 pub fn try_framework_root_from_workspace_env() -> Option<PathBuf> {
-    for name in framework_kernel::runtime_registry::ALL_HOST_WORKSPACE_ROOT_ENV_VARS {
+    for name in framework_core::runtime_registry::ALL_HOST_WORKSPACE_ROOT_ENV_VARS {
         let Some(raw) = std::env::var_os(name) else {
             continue;
         };
@@ -308,11 +308,11 @@ pub fn cargo_router_rs_executable(framework_root: &Path) -> Option<PathBuf> {
 }
 
 pub fn is_ephemeral_executable_path(path: &str) -> bool {
-    framework_kernel::router_self::is_ephemeral_router_rs_path(path)
+    framework_core::router_self::is_ephemeral_router_rs_path(path)
 }
 
 pub fn is_repo_build_executable_path(path: &str, framework_root: &Path) -> bool {
-    framework_kernel::router_self::is_repo_build_router_rs_path(path, framework_root)
+    framework_core::router_self::is_repo_build_router_rs_path(path, framework_root)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -341,7 +341,7 @@ pub fn resolve_mcp_router_rs_command(framework_root: &Path) -> McpRouterRsComman
             return McpRouterRsCommand::OnPath;
         }
     }
-    let installed = framework_kernel::router_self::default_router_rs_install_path();
+    let installed = framework_core::router_self::default_router_rs_install_path();
     if installed.is_file() {
         return McpRouterRsCommand::Absolute(installed);
     }
@@ -363,7 +363,7 @@ pub fn ensure_router_rs_installed_for_mcp_with_roots(
         resolve_mcp_router_rs_command(&roots.framework_root),
         McpRouterRsCommand::CargoBootstrap
     ) {
-        framework_kernel::router_self::ensure_router_rs_installed_for_runtime()?;
+        framework_core::router_self::ensure_router_rs_installed_for_runtime()?;
     }
     Ok(())
 }
@@ -543,9 +543,9 @@ pub fn resolve_projection_roots(
             .iter()
             .map(|(id, path)| (id.as_str(), Some(path.as_path())))
             .collect();
-        for host_id in framework_kernel::runtime_registry::ALL_HOST_IDS {
-            let env_var = framework_kernel::runtime_registry::home_env_var(host_id);
-            let default_leaf = framework_kernel::runtime_registry::host_private_config_dir(host_id);
+        for host_id in framework_core::runtime_registry::ALL_HOST_IDS {
+            let env_var = framework_core::runtime_registry::home_env_var(host_id);
+            let default_leaf = framework_core::runtime_registry::host_private_config_dir(host_id);
             if default_leaf.is_empty() {
                 continue;
             }

@@ -9,9 +9,9 @@ workspace = true
 [dependencies]
 # B0
 core-errors = { path = "../core-errors" }
+framework-core = { path = "../framework-core" }
 core-state = { path = "../core-state" }
 core-state-utils = { path = "../core-state-utils" }
-framework-kernel = { path = "../framework-kernel" }
 
 # L0
 host-projection = { path = "../host-projection" }

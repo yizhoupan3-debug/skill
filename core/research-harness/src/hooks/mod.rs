@@ -28,7 +28,7 @@ use std::time::{Duration, SystemTime};
 /// Check if a hook is enabled via environment variable.
 /// Default is enabled (true). Set to "0" or "false" to disable.
 pub fn is_hook_enabled(env_key: &str) -> bool {
-    core_policy::env_flags::env_enabled_default_true(env_key)
+    framework_core::env_flags::env_enabled_default_true(env_key)
 }
 
 /// Check if activity log hook is enabled.

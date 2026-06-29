@@ -27,7 +27,7 @@ pub fn synthetic_post_tool_evidence_shape(event: &Value) -> Value {
 // ── Test bootstrap: install tokenizer + review context probes ──
 
 /// Install a simple whitespace tokenizer and no-op review context probes so that
-/// `core_policy::hook_common` functions work in host-projection tests.
+/// `framework_core::hook_common` functions work in host-projection tests.
 /// This replaces the `kernel_bootstrap::ensure_kernel_bootstrap()` call that
 /// runtime-core tests rely on.
 pub(crate) fn install_test_deps() {
@@ -35,16 +35,16 @@ pub(crate) fn install_test_deps() {
     static ONCE: Once = Once::new();
     ONCE.call_once(|| {
         struct WhitespaceTokenizer;
-        impl framework_kernel::TokenizerProvider for WhitespaceTokenizer {
+        impl framework_core::TokenizerProvider for WhitespaceTokenizer {
             fn tokenize_query(&self, text: &str) -> Vec<String> {
                 text.split_whitespace()
                     .map(|s| s.to_ascii_lowercase())
                     .collect()
             }
         }
-        framework_kernel::install_tokenizer_provider(Box::new(WhitespaceTokenizer));
+        framework_core::install_tokenizer_provider(Box::new(WhitespaceTokenizer));
         // Install no-op review context probes (the test version in core-policy is cfg(test)-only).
-        core_policy::review_context_signals::install_review_context_probes(
+        framework_core::review_context_signals::install_review_context_probes(
             |_text, _tokens| false,
             |_text, _tokens| false,
         );
@@ -121,7 +121,7 @@ pub(crate) fn install_test_deps() {
             repo_root: &std::path::Path,
             text: &str,
         ) -> Option<String> {
-            if text.trim().is_empty() || !core_policy::hook_common::contains_completion_claim_token(text) {
+            if text.trim().is_empty() || !framework_core::hook_common::contains_completion_claim_token(text) {
                 return None;
             }
             if !test_closeout_enabled() {
@@ -225,14 +225,14 @@ pub(crate) fn install_test_deps() {
             contexts: &mut Vec<String>,
             host: &'static str,
         ) {
-            if !core_policy::env_flags::router_rs_operator_inject_globally_enabled() {
+            if !framework_core::env_flags::router_rs_operator_inject_globally_enabled() {
                 return;
             }
-            let env_var = framework_kernel::runtime_registry::paper_prose_env(host);
+            let env_var = framework_core::runtime_registry::paper_prose_env(host);
             if env_var.is_empty() {
                 return;
             }
-            if !core_policy::env_flags::env_enabled_default_true(env_var) {
+            if !framework_core::env_flags::env_enabled_default_true(env_var) {
                 return;
             }
             if !prompt_signals_prose_work(prompt_text) {
@@ -251,10 +251,10 @@ pub(crate) fn install_test_deps() {
             use_followup_message: bool,
             _host: &'static str,
         ) {
-            if !core_policy::env_flags::router_rs_operator_inject_globally_enabled() {
+            if !framework_core::env_flags::router_rs_operator_inject_globally_enabled() {
                 return;
             }
-            if !core_policy::env_flags::env_enabled_default_true("ROUTER_RS_CURSOR_PAPER_PROSE_HOOK") {
+            if !framework_core::env_flags::env_enabled_default_true("ROUTER_RS_CURSOR_PAPER_PROSE_HOOK") {
                 return;
             }
             if !prompt_signals_prose_work(prompt_text) {

@@ -1,9 +1,0 @@
----
-source: core/core-policy/src/review_gate_engine.rs
-expression: facts
----
-ReviewGateFacts {
-    review_required: true,
-    review_override: false,
-    independent_reviewer_seen: false,
-}

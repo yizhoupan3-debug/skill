@@ -25,10 +25,10 @@ use serde_json::{Value, json};
 use std::path::Path;
 use std::time::Duration;
 
-use fr_utils::constants::{
+use framework_runtime::constants::{
     FRAMEWORK_PROMPT_COMPRESSION_AUTHORITY, FRAMEWORK_PROMPT_COMPRESSION_SCHEMA_VERSION,
 };
-use fr_utils::json_value::value_text;
+use framework_runtime::json_value::value_text;
 
 // ── Exposed entry point ────────────────────────────────────────────────────────
 

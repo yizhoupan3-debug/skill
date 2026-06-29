@@ -100,10 +100,10 @@ macro_rules! impl_host_config {
             concat!(".", $id)
         }
         fn hook_state_unreadable_tag(&self) -> &'static str {
-            framework_kernel::runtime_registry::hook_state_unreadable_tag($id)
+            framework_core::runtime_registry::hook_state_unreadable_tag($id)
         }
         fn session_namespace_env(&self) -> &'static str {
-            framework_kernel::runtime_registry::session_namespace_env($id)
+            framework_core::runtime_registry::session_namespace_env($id)
         }
         fn log_label(&self) -> &'static str {
             $label

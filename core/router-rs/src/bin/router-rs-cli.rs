@@ -10,10 +10,10 @@ use core_errors::FrameworkError;
 /// Wire browser-mcp dispatch hooks between core/browser-mcp-dispatch and tools/browser-mcp.
 /// Called once at startup before any `router-rs browser` CLI command.
 fn init_browser_mcp_dispatch() {
-    browser_mcp_dispatch::set_hooks(browser_mcp_dispatch::BrowserMcpHooks {
+    mcp_tool_registry::browser_dispatch::set_hooks(mcp_tool_registry::browser_dispatch::BrowserMcpHooks {
         evaluate_mcp_pre_guard: |tool, args, repo| {
             let v = host_projection::hooks::evaluate_mcp_pre_guard_safe(tool, args, repo);
-            browser_mcp_dispatch::McpPreGuardVerdict {
+            mcp_tool_registry::browser_dispatch::McpPreGuardVerdict {
                 blocked: v.blocked,
                 reason: v.reason,
             }

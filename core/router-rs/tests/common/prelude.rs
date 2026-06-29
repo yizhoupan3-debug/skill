@@ -8,7 +8,7 @@ pub use runtime_core::{
     kernel_bootstrap, mcp_stdio_test_support, router_self, task_state,
 };
 
-pub use framework_kernel::runtime_registry;
+pub use framework_core::runtime_registry;
 
 // host submodule re-exports (registry-driven: single RegistryDispatcher for all hosts)
 pub use runtime_core::hosts::mcp_stdio_harness;
@@ -24,20 +24,20 @@ pub use runtime_core::{
 };
 
 // framework-runtime 原 re-export items — 现直接用原始 crate
-pub use fr_exec::live_execute::{
+pub use framework_runtime::live_execute::{
     DEEP_CONTINUATION_ASSISTANT_TAIL_CHARS, EXECUTE_AGGREGATOR_HOST_ALLOWLIST_ENV,
     LiveExecuteResult, build_live_execute_prompt, build_live_execute_response, execute_request,
     extract_chat_completion_content, live_execute_http_client, normalize_chat_completions_endpoint,
     perform_live_execute_with_sender, validate_live_execute_aggregator_base_url,
 };
-pub use fr_exec::trace_attach::{
+pub use framework_runtime::trace_attach::{
     attach_runtime_event_transport, subscribe_attached_runtime_events,
 };
-pub use fr_exec::trace_stream_io::{
+pub use framework_runtime::trace_stream_io::{
     inspect_trace_stream, replay_trace_stream, write_trace_compaction_delta, write_trace_metadata,
 };
-pub use fr_exec::trace_transport::write_text_payload;
-pub use fr_utils::types::FrameworkAliasBuildOptions;
+pub use framework_runtime::trace_transport::write_text_payload;
+pub use framework_runtime::types::FrameworkAliasBuildOptions;
 pub use framework_extra::alias::build_framework_alias_envelope;
 pub use framework_extra::evidence::framework_hook_evidence_append;
 pub use framework_extra::framework_doctor::run_continuity_audit;

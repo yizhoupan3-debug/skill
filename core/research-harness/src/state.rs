@@ -212,7 +212,7 @@ pub fn hydrate_state(state: &Value) -> Result<Value> {
         root.entry("next_actions").or_insert(json!([]));
         let created_at = root
             .entry("created_at")
-            .or_insert_with(|| json!(framework_kernel::time::now_iso()))
+            .or_insert_with(|| json!(framework_core::time::now_iso()))
             .clone();
         root.entry("updated_at").or_insert(created_at);
     }
@@ -296,7 +296,7 @@ pub fn dump_state(path: &Path, state: &Value) -> Result<()> {
     set_key(
         &mut state_to_write,
         "updated_at",
-        json!(framework_kernel::time::now_iso()),
+        json!(framework_core::time::now_iso()),
     );
     let actions = crate::claims::lifecycle::recommend_next_actions(&state_to_write);
     set_key(&mut state_to_write, "next_actions", json!(actions));

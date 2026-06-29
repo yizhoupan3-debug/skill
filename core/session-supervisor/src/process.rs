@@ -6,7 +6,7 @@ use std::thread;
 use std::time::Duration;
 
 use core_errors::FrameworkError;
-use fr_utils::process_utils;
+use framework_runtime::process_utils;
 
 use crate::types::{AgentHealthEntry, AgentHealthStore, DriverCommandSpec, WorkerSessionRecord};
 
@@ -339,7 +339,7 @@ pub fn reap_stale_agents(
 ) -> Result<usize, FrameworkError> {
     with_agent_health(repo_root, |store| {
         let before = store.agents.len();
-        let deadline = framework_kernel::time::now_iso();
+        let deadline = framework_core::time::now_iso();
         store.agents.retain(|a| {
             if !a.is_terminal() {
                 return true;

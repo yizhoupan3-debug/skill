@@ -1,0 +1,10 @@
+---
+source: core/framework-core/src/review_gate_engine.rs
+assertion_line: 318
+expression: facts
+---
+ReviewGateFacts {
+    review_required: true,
+    review_override: false,
+    independent_reviewer_seen: false,
+}

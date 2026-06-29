@@ -1,7 +1,0 @@
----
-source: core/core-policy/src/hook_review_disk_state.rs
-expression: line
----
-Some(
-    "router-rs CLAUDE_REVIEW_GATE incomplete: run an observed independent reviewer lane with explicit fork_context=false before closing this review turn.",
-)

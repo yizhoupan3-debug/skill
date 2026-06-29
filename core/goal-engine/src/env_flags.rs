@@ -2,7 +2,7 @@
 //!
 //! All `ROUTER_RS_*` env var reads for this crate go through this module.
 //! String/integer values are parsed here; boolean flags (e.g. `_ENABLED`)
-//! delegate to [`core_policy::env_flags`] for consistent true/false semantics.
+//! delegate to [`framework_core::env_flags`] for consistent true/false semantics.
 
 use core_errors::FrameworkError;
 use std::sync::OnceLock;

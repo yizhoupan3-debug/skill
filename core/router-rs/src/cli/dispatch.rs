@@ -12,7 +12,7 @@ use super::router_command_dispatch::{
     dispatch_research_command, dispatch_schema_drift_command, dispatch_storage_command,
     dispatch_trace_command, dispatch_web_command,
 };
-use fr_utils::json_io::print_json_value;
+use framework_runtime::json_io::print_json_value;
 use framework_extra::route_manifest_fallback::route_task_with_manifest_fallback;
 use runtime_core::route::{
     MatchRow, SearchResultsPayload, build_search_results_payload, filter_record_indices_for_host,

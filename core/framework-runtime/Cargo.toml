@@ -1,0 +1,35 @@
+[package]
+name = "framework-runtime"
+version = "0.1.0"
+edition = "2024"
+description = "L1-L3 framework runtime: execution contracts, live execute, trace, env flags"
+[lints]
+workspace = true
+
+[dependencies]
+core-errors = { path = "../core-errors" }
+framework-core = { path = "../framework-core" }
+core-state = { path = "../core-state" }
+core-state-utils = { path = "../core-state-utils" }
+http-util = { path = "../http-util" }
+runtime-storage = { path = "../runtime-storage" }
+trace-runtime = { path = "../trace-runtime" }
+chrono.workspace = true
+fs2.workspace = true
+hex.workspace = true
+libc.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+criterion = { workspace = true }
+ctor = "0.2"
+tempfile.workspace = true
+
+[[bench]]
+name = "stdio_serde_bench"
+harness = false

@@ -16,7 +16,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 /// Map host_id to its config directory via registry.
 /// Returns empty string for unknown hosts.
 fn host_config_dir(host_id: &str) -> &'static str {
-    framework_kernel::runtime_registry::host_private_config_dir(host_id)
+    framework_core::runtime_registry::host_private_config_dir(host_id)
 }
 
 /// Return the per-host hook-state directory leaf, e.g. ".claude/hook-state".

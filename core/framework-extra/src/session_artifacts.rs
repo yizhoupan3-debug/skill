@@ -1,14 +1,14 @@
 use core_errors::FrameworkError;
-use fr_utils::constants::{
+use framework_runtime::constants::{
     CURRENT_ARTIFACT_DIR, EVIDENCE_INDEX_FILENAME, EVIDENCE_INDEX_SCHEMA_VERSION,
     FRAMEWORK_SESSION_ARTIFACT_WRITE_AUTHORITY, FRAMEWORK_SESSION_ARTIFACT_WRITE_SCHEMA_VERSION,
     TASK_POINTERS_FILENAME, TASK_POINTERS_SCHEMA_VERSION, TERMINAL_STORY_STATES,
     TERMINAL_VERIFICATION_STATUSES,
 };
-use fr_utils::json_io::read_json_strict;
-use fr_utils::json_value::{build_task_id, safe_slug, value_bool_or_none, value_text};
-use fr_utils::types::TaskRegistryEntry;
-use fr_utils::util::{defaulted_payload_text, required_payload_text};
+use framework_runtime::json_io::read_json_strict;
+use framework_runtime::json_value::{build_task_id, safe_slug, value_bool_or_none, value_text};
+use framework_runtime::types::TaskRegistryEntry;
+use framework_runtime::util::{defaulted_payload_text, required_payload_text};
 use serde_json::{Value, json};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -24,7 +24,7 @@ fn resolve_session_repo_root_for_task_ledger(
     if !path.is_dir() {
         fs::create_dir_all(&path)?;
     }
-    Ok(Some(framework_kernel::repo_roots::resolve_repo_root_arg(
+    Ok(Some(framework_core::repo_roots::resolve_repo_root_arg(
         Some(path.as_path()),
     )?))
 }
@@ -71,7 +71,7 @@ pub fn write_framework_session_artifacts(payload: Value) -> Result<Value, Framew
 
         // ── TASK_POINTERS.json entry ──
         let mirror_root = output_root.join(CURRENT_ARTIFACT_DIR);
-        let updated_at = framework_kernel::time::current_local_timestamp();
+        let updated_at = framework_core::time::current_local_timestamp();
         let registry_known = task_id_known_in_task_pointers(&mirror_root, &task_id);
         let should_touch_registry = !update_registry_only_if_known || registry_known;
         if should_touch_registry {

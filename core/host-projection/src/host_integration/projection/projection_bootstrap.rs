@@ -3,7 +3,7 @@
 //! Extracted from projection.rs to keep file size ≤2000 lines.
 
 use super::*;
-use framework_kernel::json_value::{build_task_id, safe_slug};
+use framework_core::json_value::{build_task_id, safe_slug};
 
 pub fn default_home_dir() -> PathBuf {
     std::env::var_os("HOME")
@@ -56,7 +56,7 @@ pub fn build_default_bootstrap_payload(
     let workspace = workspace_override
         .map(str::to_owned)
         .unwrap_or_else(|| workspace_name_from_root(&repo_root));
-    let created_at = framework_kernel::time::current_local_timestamp();
+    let created_at = framework_core::time::current_local_timestamp();
     let task_id = build_task_id(
         if query.trim().is_empty() {
             &workspace
@@ -171,7 +171,7 @@ pub fn scratch_artifact_root(repo_root: &Path, run_id: Option<&str>) -> PathBuf 
 pub fn move_path(source: &Path, destination: &Path) -> Result<String> {
     let mut resolved_destination = destination.to_path_buf();
     if resolved_destination.exists() {
-        let suffix = framework_kernel::time::current_local_timestamp()
+        let suffix = framework_core::time::current_local_timestamp()
             .replace(':', "")
             .replace('+', "_");
         let stem = resolved_destination
@@ -426,7 +426,7 @@ pub fn ensure_config_file(config_path: &Path) -> Result<bool> {
     if config_path.exists() {
         return Ok(false);
     }
-    let header = framework_kernel::runtime_registry::host_config_schema_url("codex");
+    let header = framework_core::runtime_registry::host_config_schema_url("codex");
     let header = if header.is_empty() {
         String::new()
     } else {

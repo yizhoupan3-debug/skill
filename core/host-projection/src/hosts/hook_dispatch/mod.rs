@@ -151,14 +151,14 @@ pub trait HostHookDispatcher: HostHookConfig {
         }
         // Compute review_required from the prompt (was previously hardcoded false,
         // making spawn-first review nudge permanently disabled — P1.6).
-        let review_required = core_policy::hook_common::is_review_prompt(&prompt);
+        let review_required = framework_core::hook_common::is_review_prompt(&prompt);
         let contexts = build_user_prompt_context_injection(
             event.repo_root,
             &prompt,
             self.host_id(),
             self.host_id(),
             review_required,
-            core_policy::hook_common::has_override(&prompt),
+            framework_core::hook_common::has_override(&prompt),
         );
         if contexts.is_empty() {
             None
@@ -172,13 +172,13 @@ pub trait HostHookDispatcher: HostHookConfig {
     fn handle_post_tool_use(&self, event: &HookEvent) -> Option<HookOutput> {
         crate::hooks::ensure_kernel_bootstrap();
         let tool_name = crate::hosts::hook_dispatch::extract_tool_name(event.payload);
-        let normalized = core_policy::hook_common::normalize_tool_name(Some(&tool_name));
+        let normalized = framework_core::hook_common::normalize_tool_name(Some(&tool_name));
         crate::hosts::host_state::auto_record_verification_evidence(event.repo_root, event.payload);
         crate::hosts::host_state::auto_record_research_activity(event.repo_root, event.payload);
 
         // Auto-register subagent in health registry when a subagent tool is called.
         // This covers hosts (like Claude) that don't fire SubagentStart/SubagentStop events.
-        if core_policy::subagent::is_subagent_tool(&normalized) {
+        if framework_core::subagent::is_subagent_tool(&normalized) {
             let agent_id = extract_subagent_id_from_payload(event.payload).unwrap_or_else(|| {
                 format!(
                     "agent-{}",
@@ -188,7 +188,7 @@ pub trait HostHookDispatcher: HostHookConfig {
                         .as_nanos()
                 )
             });
-            let now = framework_kernel::time::now_iso();
+            let now = framework_core::time::now_iso();
             let _payload = serde_json::json!({
                 "operation": "agent_register",
                 "agent_id": agent_id,
@@ -235,7 +235,7 @@ pub trait HostHookDispatcher: HostHookConfig {
     fn handle_session_start(&self, event: &HookEvent) -> Option<HookOutput> {
         let mut contexts = Vec::new();
 
-        if core_policy::env_flags::router_rs_operator_inject_globally_enabled() {
+        if framework_core::env_flags::router_rs_operator_inject_globally_enabled() {
             contexts.push(format!("Repo: {}", event.repo_root.display()));
         }
 
@@ -286,7 +286,7 @@ pub trait HostHookDispatcher: HostHookConfig {
             )
         });
         let host_id = self.host_id();
-        let now = framework_kernel::time::now_iso();
+        let now = framework_core::time::now_iso();
         let _payload = serde_json::json!({
             "operation": "agent_register",
             "agent_id": agent_id,
@@ -303,7 +303,7 @@ pub trait HostHookDispatcher: HostHookConfig {
             debug!("SubagentStop: no agent_id in payload, skipping unregister");
             return None;
         };
-        let now = framework_kernel::time::now_iso();
+        let now = framework_core::time::now_iso();
         let terminal_status = if payload_signal_contains_failure(event.payload) {
             "failed"
         } else {
@@ -408,12 +408,12 @@ fn build_task_list_summary_context(repo_root: &Path) -> Option<String> {
 
 // ── Re-exports from sub-modules (backward compat) ──
 
-pub use core_policy::subagent::{SUBAGENT_TOOL_NAMES, is_subagent_tool};
+pub use framework_core::subagent::{SUBAGENT_TOOL_NAMES, is_subagent_tool};
 
-pub use core_policy::session_key::SESSION_ID_FIELDS;
-pub use core_policy::session_key::SESSION_KEY_CWD_FIELDS;
-pub use core_policy::session_key::TOOL_INPUT_METADATA_SESSION_ID_FIELDS;
-pub use core_policy::session_key::TOOL_INPUT_SESSION_ID_FIELDS;
+pub use framework_core::session_key::SESSION_ID_FIELDS;
+pub use framework_core::session_key::SESSION_KEY_CWD_FIELDS;
+pub use framework_core::session_key::TOOL_INPUT_METADATA_SESSION_ID_FIELDS;
+pub use framework_core::session_key::TOOL_INPUT_SESSION_ID_FIELDS;
 
 pub use crate::hosts::generic_config::GenericHostConfig;
 pub use crate::hosts::host_state::{

@@ -12,6 +12,8 @@ path = "src/lib.rs"
 
 [dependencies]
 core-errors = { path = "../core-errors" }
+framework-core = { path = "../framework-core" }
+framework-runtime = { path = "../framework-runtime" }
 core-state-utils = { path = "../core-state-utils" }
 serde.workspace = true
 serde_json.workspace = true
@@ -19,9 +21,7 @@ chrono.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 
-framework-kernel = { path = "../framework-kernel" }
 core-state = { path = "../core-state" }
-fr-utils = { path = "../fr-utils" }
 
 [dev-dependencies]
 tempfile.workspace = true

@@ -541,7 +541,7 @@ pub fn upsert_entity(
         kind,
         description,
         metadata,
-        framework_kernel::time::now_iso()
+        framework_core::time::now_iso()
     ])?;
     // Return entity ID via a fresh query
     let mut q = stmts.get_entity_by_name.query(params![name])?;
@@ -569,7 +569,7 @@ pub fn insert_entity_relation(
         entry_id,
         confidence,
         metadata,
-        framework_kernel::time::now_iso(),
+        framework_core::time::now_iso(),
     ])?;
     Ok(())
 }
@@ -986,8 +986,8 @@ mod tests {
             barrier_id: None,
             importance: 0,
             status: "active".to_string(),
-            created_at: framework_kernel::time::now_iso(),
-            updated_at: framework_kernel::time::now_iso(),
+            created_at: framework_core::time::now_iso(),
+            updated_at: framework_core::time::now_iso(),
         }
     }
 
@@ -1069,7 +1069,7 @@ mod tests {
             content: "attention improves accuracy".to_string(),
             confidence: Some(0.8),
             metadata: None,
-            created_at: framework_kernel::time::now_iso(),
+            created_at: framework_core::time::now_iso(),
         };
         insert_finding(&conn, &finding).unwrap();
         let results = search_findings(&conn, "attention", None, 10).unwrap();

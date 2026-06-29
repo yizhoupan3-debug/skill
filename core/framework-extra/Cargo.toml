@@ -15,13 +15,11 @@ test-support = []
 # B0
 core-state = { path = "../core-state" }
 core-state-utils = { path = "../core-state-utils" }
-core-policy = { path = "../core-policy" }
 core-errors = { path = "../core-errors" }
-framework-kernel = { path = "../framework-kernel" }
+framework-core = { path = "../framework-core" }
+framework-runtime = { path = "../framework-runtime" }
 
 # L4
-fr-utils = { path = "../fr-utils" }
-fr-exec = { path = "../fr-exec" }
 runtime-core-contracts = { path = "../runtime-core-contracts" }
 runtime-storage = { path = "../runtime-storage" }
 routing-engine = { path = "../routing-engine" }

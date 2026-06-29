@@ -253,7 +253,7 @@ impl BrowserRuntime {
         handoff_path: Option<&str>,
         resume_manifest_path: Option<&str>,
     ) -> anyhow::Result<LoadedRuntimeAttachDescriptor> {
-        let attached = (browser_mcp_dispatch::hooks().attach_runtime_event_transport)(json!({
+        let attached = (mcp_tool_registry::browser_dispatch::hooks().attach_runtime_event_transport)(json!({
             "attach_descriptor": attach_descriptor,
             "binding_artifact_path": binding_artifact_path,
             "handoff_path": handoff_path,

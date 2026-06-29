@@ -40,7 +40,7 @@ pub trait StopHostOps {
     /// multiple hosts share the same repo.
     fn hook_state_base(&self, repo_root: &Path) -> PathBuf {
         let config_dir =
-            framework_kernel::runtime_registry::host_private_config_dir(self.host_id());
+            framework_core::runtime_registry::host_private_config_dir(self.host_id());
         repo_root
             .join(config_dir)
             .join("hook-state")
@@ -64,7 +64,7 @@ pub trait StopHostOps {
     fn hydrate_goal_gate_from_disk(
         &self,
         _repo_root: &Path,
-        _state: &mut core_policy::hook_review_disk_state::HookReviewDiskCore,
+        _state: &mut framework_core::hook_review_disk_state::HookReviewDiskCore,
         _goal_drive_entrypoint: bool,
     ) {
         // no-op default
@@ -96,7 +96,7 @@ pub fn run_unified_stop(
     let key = host.session_key(repo_root, payload);
     let base = host.hook_state_base(repo_root);
     let review_path =
-        base.join(core_policy::hook_review_disk_state::hook_review_subagent_state_basename(&key));
+        base.join(framework_core::hook_review_disk_state::hook_review_subagent_state_basename(&key));
     let touch_path = base.join(format!("hook_state_{key}.json"));
 
     // ── 4. Load state from disk ──
@@ -130,14 +130,14 @@ pub fn run_unified_stop(
     // ── 5. Extract prompt, response, stop signal ──
     let stop_signal = host.stop_signal_text(payload);
     let prompt = hook_dispatch::extract_prompt_text(payload);
-    let response_for_lint = core_policy::hook_common::hook_assistant_tail_window(
+    let response_for_lint = framework_core::hook_common::hook_assistant_tail_window(
         &response_text,
-        core_policy::hook_common::HOOK_SIGNAL_ASSISTANT_TAIL_CHARS,
+        framework_core::hook_common::HOOK_SIGNAL_ASSISTANT_TAIL_CHARS,
     );
 
     // ── 6. Load review state ──
     let mut review_state = match review_load {
-        DiskState::Absent => core_policy::hook_review_disk_state::HookReviewDiskCore::default(),
+        DiskState::Absent => framework_core::hook_review_disk_state::HookReviewDiskCore::default(),
         DiskState::Ok(s) => s,
         DiskState::Unreadable => unreachable!(),
     };
@@ -164,7 +164,7 @@ pub fn run_unified_stop(
     let review_advisory_needed = if review_suppressed {
         None
     } else {
-        core_policy::hook_review_disk_state::hook_review_stop_advisory_needed(
+        framework_core::hook_review_disk_state::hook_review_stop_advisory_needed(
             &gate_fields,
             &format!("{}_REVIEW_GATE", host.host_id().to_uppercase()),
         )
@@ -277,7 +277,7 @@ pub fn run_unified_stop(
                 );
             }
             // After completion, check if the conversation describes a new complex task
-            let next_goal = core_policy::goal_auto_detect::analyze_complexity(&prompt);
+            let next_goal = framework_core::goal_auto_detect::analyze_complexity(&prompt);
             if next_goal.is_complex {
                 return add_context(
                     "Stop",
@@ -322,10 +322,10 @@ pub fn run_unified_stop(
     // ── 13. Review output lint (shared) ──
     let mut output = json!({});
     if !response_for_lint.trim().is_empty() && response_for_lint.contains("[P") {
-        let lint_findings = core_policy::review_output_lint::lint_review_output(&response_for_lint);
+        let lint_findings = framework_core::review_output_lint::lint_review_output(&response_for_lint);
         let warning_count = lint_findings
             .iter()
-            .filter(|f| f.severity == core_policy::review_output_lint::LintSeverity::Warning)
+            .filter(|f| f.severity == framework_core::review_output_lint::LintSeverity::Warning)
             .count();
         if warning_count > 0 {
             let msg = format!(
@@ -361,7 +361,7 @@ enum DiskState<T> {
 
 fn load_review_gate_disk(
     path: &Path,
-) -> DiskState<core_policy::hook_review_disk_state::HookReviewDiskCore> {
+) -> DiskState<framework_core::hook_review_disk_state::HookReviewDiskCore> {
     match std::fs::read_to_string(path) {
         Ok(text) => match serde_json::from_str(&text) {
             Ok(state) => DiskState::Ok(state),
@@ -385,7 +385,7 @@ fn load_touch_state_disk(path: &Path) -> DiskState<Value> {
 
 fn write_review_state(
     path: &Path,
-    state: &core_policy::hook_review_disk_state::HookReviewDiskCore,
+    state: &framework_core::hook_review_disk_state::HookReviewDiskCore,
 ) -> Result<(), FrameworkError> {
     let text = serde_json::to_string_pretty(state)
         .map_err(|e| FrameworkError::config(format!("serialize review state: {e}")))?;
@@ -508,7 +508,7 @@ mod tests {
     fn write_review_state_creates_file() {
         let dir = std::env::temp_dir().join("stop-dispatch-test-write");
         let path = dir.join("review.json");
-        let state = core_policy::hook_review_disk_state::HookReviewDiskCore::default();
+        let state = framework_core::hook_review_disk_state::HookReviewDiskCore::default();
         let result = write_review_state(&path, &state);
         assert!(result.is_ok(), "write should succeed: {:?}", result.err());
         assert!(path.exists());

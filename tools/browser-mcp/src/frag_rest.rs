@@ -1,7 +1,7 @@
 // CDP/Chrome 助手、Attach 候选、skill 路由与 MCP 收尾工具函数。
 use std::net::TcpListener;
 use std::sync::LazyLock;
-use framework_kernel::json_value::optional_bool;
+use framework_core::json_value::optional_bool;
 
 /// Shared HTTP client for CDP requests with a 30-second timeout.
 static CDP_HTTP_CLIENT: LazyLock<reqwest::blocking::Client> = LazyLock::new(|| {

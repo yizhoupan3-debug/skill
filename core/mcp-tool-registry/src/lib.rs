@@ -14,7 +14,12 @@
 //! | Tool record types, JSON loading | `mcp-tool-registry` (this crate) |
 //! | Tool scoring, routing, search | `tool-routing-engine` (routing layer) |
 //! | Skill scoring, routing, search | `routing-engine` (routing layer) |
+//!
+//! ## Browser MCP dispatch
+//! The `browser_dispatch` module (ex-browser-mcp-dispatch) provides a thin bridge
+//! between `tools/browser-mcp` and `core/host-projection`.
 
+pub mod browser_dispatch;
 pub mod hooks;
 #[cfg(test)]
 pub mod tests;

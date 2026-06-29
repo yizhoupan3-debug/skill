@@ -8,7 +8,7 @@ fn default_subagent_review_types() -> &'static [&'static str] {
         // Collect all unique subagent_review_types from registry-backed host providers.
         // This ensures the registry is the single source of truth.
         let mut types: Vec<&'static str> = Vec::new();
-        for &host_id in framework_kernel::runtime_registry::ALL_HOST_IDS {
+        for &host_id in framework_core::runtime_registry::ALL_HOST_IDS {
             if let Some(provider) = crate::hosts::host_provider_for_id(host_id) {
                 for t in provider.subagent_review_types() {
                     if !types.contains(t) {
@@ -80,8 +80,8 @@ pub fn compact_contexts_with_suffix(
 
 /// Check if review gate is suppressed for this host/prompt combination.
 pub fn is_review_gate_suppressed(host_id: &str, repo_root: Option<&Path>, prompt: &str) -> bool {
-    core_policy::env_flags::router_rs_review_gate_disabled_for_host(host_id)
-        || core_policy::hook_common::review_gate_hard_block_disabled(repo_root, prompt)
+    framework_core::env_flags::router_rs_review_gate_disabled_for_host(host_id)
+        || framework_core::hook_common::review_gate_hard_block_disabled(repo_root, prompt)
 }
 
 pub fn is_verification_command(tool_name: &str, command: &str) -> bool {
@@ -166,7 +166,7 @@ pub fn shared_goal_is_satisfied(
 ///
 /// Hosts should pass their `review_state.core` (or equivalent `HookReviewDiskCore`).
 pub fn update_goal_gate(
-    core: &mut core_policy::HookReviewDiskCore,
+    core: &mut framework_core::HookReviewDiskCore,
     prompt: &str,
     response_text: &str,
     goal_drive_entrypoint: bool,
@@ -187,7 +187,7 @@ pub fn update_goal_gate(
 /// `hooks::evaluate_goal_readiness_from_disk` for more precise signal detection.
 /// Disk signals are merged with regex-based signals (union: either can arm a field).
 pub fn update_goal_gate_with_disk(
-    core: &mut core_policy::HookReviewDiskCore,
+    core: &mut framework_core::HookReviewDiskCore,
     prompt: &str,
     response_text: &str,
     goal_drive_entrypoint: bool,
@@ -210,13 +210,13 @@ pub fn update_goal_gate_with_disk(
     } else {
         format!("{prompt}\n{response_text}")
     };
-    if core_policy::hook_common::has_structured_goal_contract(&signal) {
+    if framework_core::hook_common::has_structured_goal_contract(&signal) {
         core.goal.goal_contract_seen = true;
     }
-    if core_policy::hook_common::has_goal_progress_signal(&signal) {
+    if framework_core::hook_common::has_goal_progress_signal(&signal) {
         core.goal.goal_progress_seen = true;
     }
-    if core_policy::hook_common::has_goal_verify_or_block_signal(&signal) {
+    if framework_core::hook_common::has_goal_verify_or_block_signal(&signal) {
         core.goal.goal_verify_or_block_seen = true;
     }
 }
@@ -228,16 +228,16 @@ pub fn update_goal_gate_with_disk(
 /// Apply override + reject detection to review gate state (Stop event).
 /// All 4 hosts run this sequence. Call before gate evaluation.
 pub fn apply_override_and_reject(
-    core: &mut core_policy::HookReviewDiskCore,
+    core: &mut framework_core::HookReviewDiskCore,
     prompt: &str,
     stop_signal: &str,
 ) {
-    if core_policy::hook_common::has_override(prompt) {
+    if framework_core::hook_common::has_override(prompt) {
         core.gate.review_override = true;
         core.goal.delegation_override = true;
     }
-    if core_policy::hook_common::saw_reject_reason(stop_signal, prompt)
-        || core_policy::hook_common::saw_reject_reason(prompt, stop_signal)
+    if framework_core::hook_common::saw_reject_reason(stop_signal, prompt)
+        || framework_core::hook_common::saw_reject_reason(prompt, stop_signal)
     {
         core.gate.reject_reason_seen = true;
         core.goal.followup_count = 0;
@@ -361,10 +361,10 @@ pub fn build_user_prompt_context_injection(
     // Spawn-first review nudge
     if review_required
         && !review_override
-        && core_policy::hook_common::should_inject_spawn_first_review_nudge(Some(repo_root), prompt)
+        && framework_core::hook_common::should_inject_spawn_first_review_nudge(Some(repo_root), prompt)
     {
         contexts.push(
-            core_policy::registry_review_gate::review_spawn_first_nudge_line(
+            framework_core::registry_review_gate::review_spawn_first_nudge_line(
                 Some(repo_root),
                 host_id,
             ),
@@ -402,7 +402,7 @@ pub fn build_user_prompt_context_injection(
         let goal_driving = goal.get("drive_until_done").and_then(Value::as_bool) == Some(true);
         let not_stale = goal.get("stale").and_then(Value::as_bool) != Some(true);
         if goal_running && goal_driving && not_stale {
-            let goal_result = core_policy::goal_auto_detect::analyze_complexity(prompt);
+            let goal_result = framework_core::goal_auto_detect::analyze_complexity(prompt);
             if goal_result.is_scope_change {
                 let constraint = extract_scope_change_constraint(prompt);
                 if !constraint.is_empty() {
@@ -447,7 +447,7 @@ pub fn build_user_prompt_context_injection(
                 && g.get("stale").and_then(Value::as_bool) != Some(true)
         });
         if !has_active_goal {
-            let result = core_policy::goal_auto_detect::analyze_complexity(prompt);
+            let result = framework_core::goal_auto_detect::analyze_complexity(prompt);
             if result.is_complex {
                 let nanos = SystemTime::now()
                     .duration_since(UNIX_EPOCH)

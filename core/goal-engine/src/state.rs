@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 const MAX_HISTORY_ENTRIES: usize = 100;
 
 /// Canonical `now_iso` — re-exported from `framework-kernel`.
-pub use framework_kernel::time::now_iso;
+pub use framework_core::time::now_iso;
 
 /// Filename used for persisting loop run state: `LOOP_RUN_STATE.json`.
 pub const LOOP_RUN_STATE_FILENAME: &str = "LOOP_RUN_STATE.json";

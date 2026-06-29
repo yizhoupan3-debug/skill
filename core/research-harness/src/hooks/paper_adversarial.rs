@@ -41,7 +41,7 @@ use host_projection::hooks::paper_adversarial_env_var;
 /// Check whether the adversarial hook is requested for a given host.
 pub fn paper_adversarial_hook_requested(host: &str) -> bool {
     super::paper_common::operator_inject_globally_enabled()
-        && core_policy::env_flags::env_enabled_default_false(paper_adversarial_env_var(host))
+        && framework_core::env_flags::env_enabled_default_false(paper_adversarial_env_var(host))
 }
 
 /// 轻量启发：检测用户提示是否涉及论文审稿/返修。

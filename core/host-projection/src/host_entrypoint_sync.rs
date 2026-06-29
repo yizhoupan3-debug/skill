@@ -159,7 +159,7 @@ fn build_host_entrypoint_sync_manifest(
     let mut json_files = provider.json_relative_paths.clone();
     json_files.push(provider.manifest_relative_path.clone());
     let mut shared_system =
-        framework_kernel::framework_host_targets::sync_manifest_shared_system_block(repo_root)?;
+        framework_core::framework_host_targets::sync_manifest_shared_system_block(repo_root)?;
     if let Some(obj) = shared_system.as_object_mut() {
         obj.insert(
             "agent_policy_entrypoint".to_string(),

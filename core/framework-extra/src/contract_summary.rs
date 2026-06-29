@@ -4,11 +4,11 @@
 //! including the SHA-256 digest, host harness fragment, and prompt-line helpers.
 
 use core_errors::FrameworkError;
-use fr_exec::runtime_view;
-use fr_utils::constants::{FRAMEWORK_CONTRACT_SUMMARY_SCHEMA_VERSION, FRAMEWORK_RUNTIME_AUTHORITY};
-use fr_utils::json_io::read_json_strict;
-use fr_utils::json_value::{nonempty_string, value_string_list, value_text};
-use fr_utils::util::supervisor_contract;
+use framework_runtime::runtime_view;
+use framework_runtime::constants::{FRAMEWORK_CONTRACT_SUMMARY_SCHEMA_VERSION, FRAMEWORK_RUNTIME_AUTHORITY};
+use framework_runtime::json_io::read_json_strict;
+use framework_runtime::json_value::{nonempty_string, value_string_list, value_text};
+use framework_runtime::util::supervisor_contract;
 use hex;
 use serde_json::{Map, Value, json};
 use sha2::{Digest, Sha256};
@@ -27,7 +27,7 @@ pub fn build_framework_contract_summary_envelope(
     let snapshot = runtime_view::load_framework_runtime_view(repo_root, None, None);
     let continuity = runtime_view::classify_runtime_continuity(&snapshot);
     let contract = supervisor_contract(&snapshot.supervisor_state);
-    let workspace = fr_exec::runtime_view::workspace_name_from_root(repo_root);
+    let workspace = framework_runtime::runtime_view::workspace_name_from_root(repo_root);
     let continuity_route = continuity
         .get("route")
         .and_then(Value::as_array)

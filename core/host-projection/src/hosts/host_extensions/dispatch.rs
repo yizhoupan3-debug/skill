@@ -73,7 +73,7 @@ impl StopHostOps for RegistryDispatcher {
     fn hydrate_goal_gate_from_disk(
         &self,
         repo_root: &std::path::Path,
-        state: &mut core_policy::hook_review_disk_state::HookReviewDiskCore,
+        state: &mut framework_core::hook_review_disk_state::HookReviewDiskCore,
         _goal_drive_entrypoint: bool,
     ) {
         if !state.goal.goal_drive_entry_active {

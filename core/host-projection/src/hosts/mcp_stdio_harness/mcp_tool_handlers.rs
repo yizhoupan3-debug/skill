@@ -193,7 +193,7 @@ impl ToolHandler for GoalCloseoutTools {
 /// Resolve the tool registry path. Uses hooks, falls back to repo_root default.
 fn resolve_tool_registry_path(repo_root: &std::path::Path) -> std::path::PathBuf {
     mcp_tool_registry::resolve_tool_registry_path().unwrap_or_else(|| {
-        repo_root.join(framework_kernel::constants::MCP_TOOL_REGISTRY_RELATIVE_PATH)
+        repo_root.join(framework_core::constants::MCP_TOOL_REGISTRY_RELATIVE_PATH)
     })
 }
 

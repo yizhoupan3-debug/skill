@@ -4,13 +4,13 @@
 //! and internal helpers.
 
 use core_errors::FrameworkError;
-use fr_exec::runtime_view;
-use fr_utils::constants::{
+use framework_runtime::runtime_view;
+use framework_runtime::constants::{
     EVIDENCE_INDEX_FILENAME, FRAMEWORK_RUNTIME_AUTHORITY,
     FRAMEWORK_RUNTIME_SNAPSHOT_SCHEMA_VERSION, SUPERVISOR_STATE_FILENAME,
     TASK_REGISTRY_SCHEMA_VERSION,
 };
-use fr_utils::json_value::{nonempty_string, value_text};
+use framework_runtime::json_value::{nonempty_string, value_text};
 use serde_json::{Value, json};
 use std::path::Path;
 use tracing::instrument;
@@ -121,7 +121,7 @@ pub fn build_framework_runtime_snapshot_envelope_with_level(
 
     let mut runtime_snapshot = json!({
         "ok": true,
-        "workspace": fr_exec::runtime_view::workspace_name_from_root(repo_root),
+        "workspace": framework_runtime::runtime_view::workspace_name_from_root(repo_root),
         "detail_level": if is_full { "full" } else { "summary" },
         "control_plane_present": snapshot.task_pointers_present
             && !snapshot.supervisor_state.is_empty(),

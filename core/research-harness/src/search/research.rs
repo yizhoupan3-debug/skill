@@ -175,7 +175,7 @@ pub fn research_claim_with_client(
         "source": source.as_str(),
         "results": dedupe_research_results(results),
         "errors": errors,
-        "created_at": framework_kernel::time::now_iso(),
+        "created_at": framework_core::time::now_iso(),
     }))
 }
 
@@ -460,7 +460,7 @@ pub fn novelty_gate_recommendation_from_research(state: &Value, min_results: usi
         "missing_claims": missing,
         "uncompared_claims": uncompared,
         "claim_comparisons": existing_records,
-        "generated_at": framework_kernel::time::now_iso(),
+        "generated_at": framework_core::time::now_iso(),
     })
 }
 

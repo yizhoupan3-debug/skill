@@ -2,7 +2,7 @@ use serde_json::{Value, json};
 
 pub(crate) const HARNESS_CONTRACT_SCHEMA_VERSION: &str = "router-rs-harness-contract-v1";
 
-pub use framework_kernel::skill_lint::{
+pub use framework_core::skill_lint::{
     FAILURE_TAXONOMY, HARNESS_CONTRACT_AUTHORITY, HARNESS_SKILL_LINT_SCHEMA_VERSION,
     failure_taxonomy_values, lint_skill_contracts,
 };

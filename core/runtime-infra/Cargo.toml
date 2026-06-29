@@ -10,17 +10,15 @@ workspace = true
 # B0
 core-state = { path = "../core-state" }
 core-state-utils = { path = "../core-state-utils" }
-core-policy = { path = "../core-policy" }
 core-errors = { path = "../core-errors" }
-framework-kernel = { path = "../framework-kernel" }
+framework-core = { path = "../framework-core" }
+framework-runtime = { path = "../framework-runtime" }
 
 # L0/L1
 host-projection = { path = "../host-projection" }
 routing-engine = { path = "../routing-engine" }
 
 # L4
-fr-exec = { path = "../fr-exec" }
-fr-utils = { path = "../fr-utils" }
 runtime-storage = { path = "../runtime-storage" }
 
 # workspace

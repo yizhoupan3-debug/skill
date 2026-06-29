@@ -1,7 +1,7 @@
 use crate::utils::path_guard::{safe_task_id_component, validate_task_id_component};
 use core_errors::FrameworkError;
 
-use framework_kernel::json_value::{optional_non_empty_string, required_non_empty_string};
+use framework_core::json_value::{optional_non_empty_string, required_non_empty_string};
 use serde_json::{Map, Value, json};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
@@ -109,7 +109,7 @@ fn append_step_ledger_entry(payload: Value) -> Result<Value, FrameworkError> {
     );
     entry.insert(
         "recorded_at".to_string(),
-        Value::String(framework_kernel::time::now_iso()),
+        Value::String(framework_core::time::now_iso()),
     );
     entry.insert("task_id".to_string(), Value::String(task_id.clone()));
     entry.insert("step_id".to_string(), Value::String(step_id));
@@ -140,7 +140,7 @@ fn append_step_ledger_entry(payload: Value) -> Result<Value, FrameworkError> {
         let inner_changed = append_jsonl_entry(&path, &entry_value, idempotency_key.as_deref())?;
         if inner_changed {
             let tx = crate::task_ledger::LedgerTransaction {
-                ts: framework_kernel::time::now_iso(),
+                ts: framework_core::time::now_iso(),
                 tx_type: "step".to_string(),
                 payload: entry_value.clone(),
                 idempotency_key: idempotency_key.clone(),

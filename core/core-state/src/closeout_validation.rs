@@ -22,7 +22,7 @@ const ALLOWED_VERIFICATION_STATUSES: &[&str] = &["passed", "failed", "partial", 
 pub struct CloseoutEvidenceContext {
     pub task_id: Option<String>,
     pub has_successful_verification: bool,
-    pub goal_prediction: Option<core_state_types::goal_prediction::GoalStatePrediction>,
+    pub goal_prediction: Option<crate::goal_prediction::GoalStatePrediction>,
 }
 
 // ── Rule helpers ──────────────────────────────────────────────────────
@@ -510,5 +510,5 @@ fn base_response(tid: &str) -> CloseoutResponse {
 }
 
 fn summary_claims_completion(summary: &str) -> bool {
-    core_policy::hook_common::contains_completion_claim_token(summary)
+    framework_core::hook_common::contains_completion_claim_token(summary)
 }

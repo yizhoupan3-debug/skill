@@ -120,7 +120,7 @@ pub(crate) fn tool_task_create(
                                 &repo_root_owned,
                                 &task_id_owned,
                                 LedgerTransaction {
-                                    ts: framework_kernel::time::now_iso(),
+                                    ts: framework_core::time::now_iso(),
                                     tx_type: "task_created".to_string(),
                                     payload: json!({
                                         "task_id": &task_id_owned,
@@ -144,7 +144,7 @@ pub(crate) fn tool_task_create(
             &repo_root_owned,
             &task_id_owned,
             LedgerTransaction {
-                ts: framework_kernel::time::now_iso(),
+                ts: framework_core::time::now_iso(),
                 tx_type: "task_created".to_string(),
                 payload: json!({
                     "task_id": &task_id_owned,
@@ -339,7 +339,7 @@ pub(crate) fn tool_task_complete(
             &repo_root_owned,
             &id,
             LedgerTransaction {
-                ts: framework_kernel::time::now_iso(),
+                ts: framework_core::time::now_iso(),
                 tx_type: "task_completed".to_string(),
                 payload: json!({
                     "task_id": &id,

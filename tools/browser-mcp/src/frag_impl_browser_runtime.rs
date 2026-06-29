@@ -7,9 +7,9 @@ impl BrowserRuntime {
         // Initialize no-op hooks for test isolation
         static INIT_HOOKS: std::sync::Once = std::sync::Once::new();
         INIT_HOOKS.call_once(|| {
-            browser_mcp_dispatch::set_hooks(browser_mcp_dispatch::BrowserMcpHooks {
+            mcp_tool_registry::browser_dispatch::set_hooks(mcp_tool_registry::browser_dispatch::BrowserMcpHooks {
                 evaluate_mcp_pre_guard: |_, _, _| {
-                    browser_mcp_dispatch::McpPreGuardVerdict {
+                    mcp_tool_registry::browser_dispatch::McpPreGuardVerdict {
                         blocked: false,
                         reason: None,
                     }
@@ -667,7 +667,7 @@ impl BrowserRuntime {
             &session_path,
             serde_json::to_string_pretty(&json!({
                 "schemaVersion": "browser-mcp-rust-session-v1",
-                "savedAt": framework_kernel::time::current_local_timestamp(),
+                "savedAt": framework_core::time::current_local_timestamp(),
                 "cookies": cookies.get("cookies").cloned().unwrap_or_else(|| json!([])),
             }))
             .unwrap_or_else(|_| "{}".to_string()),
@@ -681,7 +681,7 @@ impl BrowserRuntime {
             )
         })?;
         Ok(
-            json!({"ok": true, "path": session_path.to_string_lossy(), "savedAt": framework_kernel::time::current_local_timestamp()}),
+            json!({"ok": true, "path": session_path.to_string_lossy(), "savedAt": framework_core::time::current_local_timestamp()}),
         )
     }
 
@@ -769,7 +769,7 @@ impl BrowserRuntime {
             return base;
         }
         match self.resolve_attached_runtime_descriptor_context() {
-            Ok(resolved) => match (browser_mcp_dispatch::hooks().inspect_trace_stream)(TraceStreamInspectRequestPayload {
+            Ok(resolved) => match (mcp_tool_registry::browser_dispatch::hooks().inspect_trace_stream)(TraceStreamInspectRequestPayload {
                 path: Some(resolved.trace_stream_path),
                 event_stream_text: None,
                 compaction_manifest_path: None,
@@ -914,7 +914,7 @@ impl BrowserRuntime {
             session_id.clone(),
             SessionRecord {
                 id: session_id.clone(),
-                created_at: framework_kernel::time::current_local_timestamp(),
+                created_at: framework_core::time::current_local_timestamp(),
                 viewport: ViewportSize {
                     width: 1440,
                     height: 900,

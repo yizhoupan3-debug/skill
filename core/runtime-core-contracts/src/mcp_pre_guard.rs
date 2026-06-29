@@ -1,7 +1,7 @@
 //! MCP `tools/call` pre-guard: mcp-tool-safety (+ protected-path when available).
 //! On guard panic: fallback allow + stderr log (HX-5).
 
-use core_policy::hook_policy::dangerous_mcp_tool_reason;
+use framework_core::hook_policy::dangerous_mcp_tool_reason;
 use serde_json::Value;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::Path;

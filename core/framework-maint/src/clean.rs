@@ -7,7 +7,7 @@ use core_errors::FrameworkError;
 use std::fs;
 use std::path::Path;
 
-use framework_kernel::runtime_registry::ALL_KNOWN_HOST_DIRS;
+use framework_core::runtime_registry::ALL_KNOWN_HOST_DIRS;
 use tracing;
 
 pub(super) fn clean_rust_target_dirs(

@@ -1,0 +1,27 @@
+---
+source: core/framework-core/src/review_gate_engine.rs
+assertion_line: 369
+expression: results
+---
+[
+    (
+        "armed-no-evidence",
+        true,
+        false,
+    ),
+    (
+        "cleared-by-evidence",
+        false,
+        true,
+    ),
+    (
+        "cleared-by-override",
+        false,
+        true,
+    ),
+    (
+        "not-required",
+        false,
+        true,
+    ),
+]

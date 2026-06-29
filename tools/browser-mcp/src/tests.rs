@@ -979,7 +979,7 @@ fn tools_call_unknown_tool_returns_error() {
     assert_eq!(resp["result"]["isError"], true);
     assert_eq!(
         resp["result"]["structuredContent"]["error"]["code"],
-        "INVALID_INPUT"
+        "UNKNOWN_TOOL"
     );
     fs::remove_dir_all(repo_root).unwrap();
 }
@@ -1417,7 +1417,7 @@ fn browser_mcp_unknown_tool_returns_error() {
     assert_eq!(response["result"]["isError"], true);
     assert_eq!(
         response["result"]["structuredContent"]["error"]["code"],
-        "INVALID_INPUT"
+        "UNKNOWN_TOOL"
     );
     fs::remove_dir_all(repo_root).expect("cleanup");
 }

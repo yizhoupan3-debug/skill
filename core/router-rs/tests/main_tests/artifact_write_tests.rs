@@ -22,7 +22,7 @@ fn framework_session_artifact_write_rejects_stale_focus_update() {
     assert_eq!(first["task_id"], json!("cas-task"));
 
     let focus_path = repo_root.join("artifacts/current/focus_task.json");
-    let stale_hash = fr_utils::util::hash_file_for_test(&focus_path).expect("focus hash");
+    let stale_hash = framework_runtime::util::hash_file_for_test(&focus_path).expect("focus hash");
     write_text_fixture(
         &focus_path,
         r#"{"task_id":"other-task","task":"Other task","updated_at":"2026-04-25T00:00:00+08:00"}"#,
@@ -74,10 +74,10 @@ fn framework_session_artifact_write_preserves_existing_roundtrip() {
     let active_path = repo_root.join("artifacts/current/active_task.json");
     let focus_path = repo_root.join("artifacts/current/focus_task.json");
     let supervisor_path = repo_root.join(".supervisor_state.json");
-    let active_hash = fr_utils::util::hash_file_for_test(&active_path).expect("active hash");
-    let focus_hash = fr_utils::util::hash_file_for_test(&focus_path).expect("focus hash");
+    let active_hash = framework_runtime::util::hash_file_for_test(&active_path).expect("active hash");
+    let focus_hash = framework_runtime::util::hash_file_for_test(&focus_path).expect("focus hash");
     let supervisor_hash =
-        fr_utils::util::hash_file_for_test(&supervisor_path).expect("supervisor hash");
+        framework_runtime::util::hash_file_for_test(&supervisor_path).expect("supervisor hash");
 
     let second = write_framework_session_artifacts(json!({
         "repo_root": repo_root,

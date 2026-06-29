@@ -12,11 +12,10 @@ path = "src/lib.rs"
 
 [dependencies]
 core-errors = { path = "../core-errors" }
+framework-core = { path = "../framework-core" }
+framework-runtime = { path = "../framework-runtime" }
 core-state-utils = { path = "../core-state-utils" }
-core-policy = { path = "../core-policy" }
 core-state = { path = "../core-state" }
-framework-kernel = { path = "../framework-kernel" }
-fr-utils = { path = "../fr-utils" }
 runtime-storage = { path = "../runtime-storage" }
 chrono.workspace = true
 libc.workspace = true

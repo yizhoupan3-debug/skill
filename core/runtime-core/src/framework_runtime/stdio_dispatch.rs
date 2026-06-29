@@ -67,29 +67,29 @@ use crate::trace_runtime::{
     TraceCompactRequestPayload, TraceRecordEventRequestPayload, compact_trace_stream,
     record_trace_event,
 };
-use fr_exec::trace_attach::{
+use fr_runtime::trace_attach::{
     attach_runtime_event_transport, cleanup_attached_runtime_event_transport,
     subscribe_attached_runtime_events,
 };
-use fr_exec::trace_stream_io::{
+use fr_runtime::trace_stream_io::{
     inspect_trace_stream, replay_trace_stream, write_trace_compaction_delta, write_trace_metadata,
 };
-use fr_exec::trace_transport::{
+use fr_runtime::trace_transport::{
     write_checkpoint_resume_manifest_payload, write_transport_binding_payload,
 };
-use fr_utils::stdio_op_registry::{
+use fr_runtime::stdio_op_registry::{
     dispatch_runtime_output_mode_stdio, handles_runtime_output_stdio_op,
 };
 use framework_extra::route_manifest_fallback::route_task_with_manifest_fallback;
 
-use fr_contracts::pre_tool_use_guard::evaluate_pre_tool_use_guard_value;
-use fr_exec::live_execute::execute_request;
-use fr_exec::trace_transport::{
+use fr_runtime::pre_tool_use_guard::evaluate_pre_tool_use_guard_value;
+use fr_runtime::live_execute::execute_request;
+use fr_runtime::trace_transport::{
     build_checkpoint_resume_manifest, build_trace_handoff_descriptor,
     build_trace_transport_descriptor,
 };
-use fr_utils::stdio_op_registry::{StdioOpDomain, classify_stdio_op};
-use fr_utils::types::FrameworkAliasBuildOptions;
+use fr_runtime::stdio_op_registry::{StdioOpDomain, classify_stdio_op};
+use fr_runtime::types::FrameworkAliasBuildOptions;
 use framework_extra::alias::build_framework_alias_envelope;
 use framework_extra::closeout::evaluate_closeout_record_file_for_task;
 use framework_extra::content_store::ContentStore;
@@ -100,11 +100,11 @@ use framework_extra::prompt_compression::build_framework_prompt_compression_enve
 use framework_extra::prompt_resolver::PromptResolver;
 use framework_extra::session_artifacts::write_framework_session_artifacts;
 use framework_extra::snapshot::build_framework_runtime_snapshot_envelope_with_level;
-use framework_kernel::json_value::{
+use framework_core::json_value::{
     optional_bool, optional_non_empty_string, required_non_empty_string,
 };
-use framework_kernel::repo_roots::resolve_repo_root_arg;
-use framework_kernel::runtime_registry::load_runtime_registry_payload;
+use framework_core::repo_roots::resolve_repo_root_arg;
+use framework_core::runtime_registry::load_runtime_registry_payload;
 use quality_gate;
 
 pub fn dispatch_stdio_json_request_payload(
@@ -153,7 +153,7 @@ pub fn dispatch_stdio_json_request(op: &str, payload: Value) -> Result<Value, Fr
     // The real implementation lives in `runtime-core::orchestration_controller` and
     // is registered via host-projection hooks at runtime. These stubs break the
     // `cli ↔ framework-runtime` circular dependency (framework-runtime cannot
-    // depend on runtime-core). See `fr_utils::stdio_op_registry` for details.
+    // depend on runtime-core). See `fr_runtime::stdio_op_registry` for details.
     if handles_runtime_output_stdio_op(op) {
         let Some(result) = dispatch_runtime_output_mode_stdio(op, payload) else {
             return Err(FrameworkError::validation(format!(
@@ -335,7 +335,7 @@ fn dispatch_runtime_stdio_request(op: &str, payload: Value) -> Result<Value, Fra
         )),
         // "session_supervisor" dispatch key also routes to orchestrator
         // operations via the RuntimeCoreHooks handle_orchestrator_operation.
-        "session_supervisor" => framework_kernel::runtime_hooks::try_hooks()
+        "session_supervisor" => framework_core::runtime_hooks::try_hooks()
             .ok_or_else(|| {
                 FrameworkError::hook(
                     "RuntimeCoreHooks not registered — call runtime_core::init_hooks() first",
@@ -535,7 +535,7 @@ fn resolve_tool_registry_path_from_payload(
         .and_then(|v| v.as_str())
         .unwrap_or(".");
     Ok(std::path::PathBuf::from(repo_root)
-        .join(framework_kernel::constants::MCP_TOOL_REGISTRY_RELATIVE_PATH))
+        .join(framework_core::constants::MCP_TOOL_REGISTRY_RELATIVE_PATH))
 }
 
 /// Resolve the artifact root directory from the payload or RUNTIME_REGISTRY.
@@ -556,7 +556,7 @@ fn resolve_artifact_root(payload: &Value) -> Result<std::path::PathBuf, Framewor
         .unwrap_or(".");
     if let Ok(registry) = load_runtime_registry_payload(Path::new(repo_root)) {
         if let Some(root) = registry
-            .get(fr_utils::constants::ARTIFACT_ROOT_REGISTRY_FIELD)
+            .get(fr_runtime::constants::ARTIFACT_ROOT_REGISTRY_FIELD)
             .and_then(Value::as_str)
         {
             if !root.is_empty() {

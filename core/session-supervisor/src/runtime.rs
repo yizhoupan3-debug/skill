@@ -5,7 +5,7 @@ use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-pub use framework_kernel::json_value::{
+pub use framework_core::json_value::{
     optional_bool, optional_non_empty_string, required_non_empty_string,
 };
 
@@ -121,7 +121,7 @@ pub fn now_from_payload(payload: &Value) -> Result<String, FrameworkError> {
         parse_rfc3339(&now)?;
         return Ok(now);
     }
-    Ok(framework_kernel::time::now_iso())
+    Ok(framework_core::time::now_iso())
 }
 
 pub fn add_seconds_rfc3339(now: &str, seconds: i64) -> Result<String, FrameworkError> {

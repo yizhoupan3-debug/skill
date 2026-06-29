@@ -7,15 +7,15 @@ use std::path::Path;
 use std::sync::{LazyLock, Mutex};
 
 use crate::util::supervisor_contract;
-use fr_exec::runtime_view::{
+use framework_runtime::runtime_view::{
     classify_runtime_continuity, load_framework_runtime_view, workspace_name_from_root,
 };
-use fr_utils::constants::{
+use framework_runtime::constants::{
     FRAMEWORK_ALIAS_SCHEMA_VERSION, FRAMEWORK_ALIAS_STATE_MACHINE_SCHEMA_VERSION,
     FRAMEWORK_RUNTIME_AUTHORITY,
 };
-use fr_utils::json_value::{stable_line_items, value_string_list, value_text};
-use fr_utils::types::FrameworkAliasBuildOptions;
+use framework_runtime::json_value::{stable_line_items, value_string_list, value_text};
+use framework_runtime::types::FrameworkAliasBuildOptions;
 
 fn string_or_null(value: String) -> Value {
     if value.trim().is_empty() {

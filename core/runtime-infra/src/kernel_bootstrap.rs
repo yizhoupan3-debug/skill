@@ -9,7 +9,7 @@ use std::time::Duration;
 
 struct RouteTokenizerProvider;
 
-impl framework_kernel::TokenizerProvider for RouteTokenizerProvider {
+impl framework_core::TokenizerProvider for RouteTokenizerProvider {
     fn tokenize_query(&self, text: &str) -> Vec<String> {
         routing_engine::route::tokenize_query(text)
     }
@@ -36,8 +36,8 @@ pub fn ensure_kernel_bootstrap() {
 /// Core DI: tokenizer provider + review context probes.
 /// Light enough for any subprocess — no threads, no file handles.
 fn bootstrap_core() {
-    framework_kernel::install_tokenizer_provider(Box::new(RouteTokenizerProvider));
-    core_policy::review_context_signals::install_review_context_probes(
+    framework_core::install_tokenizer_provider(Box::new(RouteTokenizerProvider));
+    framework_core::review_context_signals::install_review_context_probes(
         routing_engine::route::has_paper_context,
         routing_engine::route::has_github_pr_context,
     );
