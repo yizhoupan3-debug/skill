@@ -163,7 +163,6 @@ impl LoopProfileConfig {
             .unwrap_or(false);
         let closeout_mode = profile_val
             .get("closeout_mode")
-            .or_else(|| profile_val.get("closeout_enforcement"))
             .and_then(|v| v.as_str())
             .unwrap_or("advisory")
             .to_string();

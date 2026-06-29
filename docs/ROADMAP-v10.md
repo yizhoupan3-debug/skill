@@ -133,7 +133,7 @@ Phase A（并行期）         Phase B（切换期）             Phase C（清�
 │                                                                      │
 │  mcp-tool-registry：统一 MCP 工具注册表（发现/路由/注册）              │
 │  router-rs MCP tools：框架提供给 agent 的 MCP 工具实现                │
-│    （framework_goal_xxx、framework_quality_gate_xxx 等）               │
+│    （goal_state_manage / closeout_gate 等）                              │
 │  依赖方向：工具层 → 运行层（MCP tool handler 通过运行层 API 操作任务） │
 │  对应 v9 层：L5 mcp-tool-registry + L7 router-rs                     │
 ├──────────────────────────────────────────────────────────────────────┤
@@ -557,7 +557,7 @@ fn verify_evidence_chain(scaffold: &TaskScaffold) -> bool {
 
 | 步骤 | 结果 |
 |---|---|
-| `framework_quality_gate` MCP tool → QG Route wrapper | ✅ wrapper 模式透明替换 |
+| QG Route = QGEntry + CheckerRegistry | ✅ 合入 runtime-core |
 | `runtime-exit-gate` crate | ✅ 全删 |
 | QG ↔ Goal 互斥逻辑 | ✅ `deactivate_goal_for_conflict_with_quality_gate` 已删 |
 | `RfvCloseGates` → `GoalReviewGates` | ✅ 附加到 GoalState::ReviewPending |
@@ -694,7 +694,7 @@ Wave 6  ~1 天    sub_scene 专项治理     ── ✅
 - `loop-engine` → `goal-engine` 重命名
 - 新增 `core/quality-gate/` crate（5 源文件 + 6 Checker 适配器）
 - 全部 `once_lock_hook!` 宏消除，hooks.rs 56% 缩减
-- 关闭 MCP tool：`framework_closeout`、`framework_quality_gate start/close_gates`
+- 关闭 MCP tool：`closeout_gate`、`goal_state_manage`（由 QGEntry + core-state goal_ops 分发）
 
 **遗留项**（不在 v10 范围内）：
 - `agent-orchestrator` 重命名 + MCP 工具集成 — ✅ 已于 2026-06-27 完成
