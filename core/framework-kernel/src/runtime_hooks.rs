@@ -11,25 +11,28 @@ use serde_json::Value;
 use std::path::Path;
 use std::sync::{OnceLock, RwLock};
 
-// ── Hook duplicate check (generic fn-pointer proxy) ──
+// ── Hook duplicate check ──
 
-type HookDuplicateCheckFn = fn(repo_root: &Path) -> Vec<String>;
-static HOOK_DUPLICATE_CHECK: OnceLock<HookDuplicateCheckFn> = OnceLock::new();
+static HOOK_DUPLICATE_CHECK: OnceLock<bool> = OnceLock::new();
 
-pub fn check_hook_duplicates(repo_root: &Path) -> Vec<String> {
-    match HOOK_DUPLICATE_CHECK.get() {
-        Some(f) => f(repo_root),
-        None => vec![],
+pub fn check_hook_duplicates(_repo_root: &Path) -> Vec<String> {
+    let found = HOOK_DUPLICATE_CHECK.get().copied().unwrap_or(false);
+    if found {
+        vec!["RuntimeCoreHooks: register() called more than once".to_string()]
+    } else {
+        vec![]
     }
 }
 
 static RUNTIME_CORE_HOOKS: RwLock<Option<RuntimeCoreHooks>> = RwLock::new(None);
 
-/// Get the registered hooks. Must be called after `register()`.
+/// Get the registered RuntimeCoreHooks, panicking if not initialized.
+/// Prefer `try_hooks()` which returns `Option` for graceful handling.
 ///
 /// # Panics
-/// Panics if `register()` has not been called yet. Guaranteed by
-/// `runtime_core::init_hooks()` initialization ordering.
+/// Panics if `init_hooks()` (or `register()`) has not been called before this function is invoked.
+/// There is no compile-time check enforcing this ordering — incorrect initialization will cause a panic.
+#[deprecated(note = "use try_hooks() instead for non-panicking access")]
 #[track_caller]
 pub fn hooks() -> RuntimeCoreHooks {
     RUNTIME_CORE_HOOKS
@@ -54,8 +57,8 @@ pub fn register(h: RuntimeCoreHooks) {
         .write()
         .unwrap_or_else(|e| e.into_inner());
     if guard.is_some() {
-        tracing::warn!("RuntimeCoreHooks already registered — ignoring duplicate");
-        return;
+        let _ = HOOK_DUPLICATE_CHECK.set(true);
+        tracing::warn!("RuntimeCoreHooks already registered — overwriting");
     }
     *guard = Some(h);
 }

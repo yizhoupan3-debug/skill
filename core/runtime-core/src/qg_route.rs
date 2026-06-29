@@ -30,7 +30,9 @@ static EXTERN_CHECKERS: OnceLock<ExternCheckersFn> = OnceLock::new();
 /// research-harness checkers into the QG Route registry.
 /// Must be called before `init_qg_route()` to take effect.
 pub fn set_extern_checkers(f: ExternCheckersFn) {
-    EXTERN_CHECKERS.set(f).ok();
+    if let Err(_) = EXTERN_CHECKERS.set(f) {
+        tracing::warn!("set_extern_checkers called twice — second call ignored");
+    }
 }
 
 /// Initialize the QG Route registry. Called once from `init_hooks()`.

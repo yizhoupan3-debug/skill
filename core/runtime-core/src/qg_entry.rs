@@ -136,18 +136,33 @@ pub(crate) fn evaluate_quality_gate_hook(
     let repo_root_str = payload
         .get("repo_root")
         .and_then(|v| v.as_str())
-        .unwrap_or(".");
+        .unwrap_or_else(|| {
+            tracing::warn!("evaluate_quality_gate_hook: missing 'repo_root' field");
+            "."
+        });
     let repo_root = Path::new(repo_root_str);
     let task_id = payload
         .get("task_id")
         .and_then(|v| v.as_str())
-        .unwrap_or("");
+        .unwrap_or_else(|| {
+            tracing::warn!("evaluate_quality_gate_hook: missing 'task_id' field");
+            ""
+        });
     let scene = payload
         .get("scene")
         .and_then(|v| v.as_str())
         .filter(|s| !s.is_empty())
-        .unwrap_or(quality_gate::scene::GENERAL);
-    let goal = payload.get("goal").and_then(|v| v.as_str()).unwrap_or("");
+        .unwrap_or_else(|| {
+            tracing::warn!("evaluate_quality_gate_hook: missing or empty 'scene' field");
+            quality_gate::scene::GENERAL
+        });
+    let goal = payload
+        .get("goal")
+        .and_then(|v| v.as_str())
+        .unwrap_or_else(|| {
+            tracing::warn!("evaluate_quality_gate_hook: missing 'goal' field");
+            ""
+        });
     let sub_scene = payload
         .get("sub_scene")
         .and_then(|v| v.as_str())

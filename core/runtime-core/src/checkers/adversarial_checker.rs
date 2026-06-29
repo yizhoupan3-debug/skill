@@ -18,7 +18,7 @@ impl GateChecker for AdversarialChecker {
     }
 
     fn scenes(&self) -> Vec<&'static str> {
-        vec![quality_gate::scene::GENERAL]
+        vec![quality_gate::scene::GENERAL, quality_gate::scene::RESEARCH]
     }
 
     fn description(&self) -> &'static str {

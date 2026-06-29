@@ -665,10 +665,14 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
                     .get("iteration_count")
                     .and_then(Value::as_u64)
                     .unwrap_or(0);
+                let goal_scene = state
+                    .get("scene")
+                    .and_then(Value::as_str)
+                    .unwrap_or("general");
                 let qg_payload = serde_json::json!({
                     "repo_root": repo_root.to_string_lossy().to_string(),
                     "task_id": task_id,
-                    "scene": "general",
+                    "scene": goal_scene,
                     "goal": goal_text,
                     "round": round + 1,
                 });

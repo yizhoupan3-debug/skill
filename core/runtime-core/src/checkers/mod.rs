@@ -57,6 +57,12 @@ fn find_rust_files_recursive(dir: &Path, files: &mut Vec<std::path::PathBuf>) {
             continue;
         }
         if path.is_dir() {
+            // Skip build output and vendored directories
+            if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+                if matches!(name, "target" | "node_modules" | "build" | "dist" | "vendor") {
+                    continue;
+                }
+            }
             find_rust_files_recursive(&path, files);
         } else if path.extension().and_then(|e| e.to_str()) == Some("rs") {
             files.push(path);

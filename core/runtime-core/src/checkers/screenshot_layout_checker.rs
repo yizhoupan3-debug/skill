@@ -15,7 +15,7 @@
 //! - Emit B-level findings for layout inconsistencies
 
 use quality_gate::checker::GateChecker;
-use quality_gate::types::{CheckContext, CheckResult};
+use quality_gate::types::{CheckContext, CheckResult, Finding, Severity};
 
 /// Checker that validates screenshot layout for the VISUAL scene.
 pub struct ScreenshotLayoutChecker;
@@ -35,10 +35,17 @@ impl GateChecker for ScreenshotLayoutChecker {
 
     fn check(&self, ctx: &CheckContext) -> CheckResult {
         let _ = ctx; // unused while checker is a stub
+        tracing::warn!("ScreenshotLayoutChecker: not yet implemented — check always passes");
         CheckResult {
-            checker_id: "screenshot_layout".to_string(),
+            checker_id: self.id().to_string(),
             passed: true,
-            findings: Vec::new(),
+            findings: vec![Finding {
+                id: "screenshot_check_not_implemented".to_string(),
+                severity: Severity::C,
+                description: "Screenshot layout check not implemented — placeholder only".to_string(),
+                location: None,
+                suggestion: None,
+            }],
         }
     }
 }

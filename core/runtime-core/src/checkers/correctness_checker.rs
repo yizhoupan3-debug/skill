@@ -60,7 +60,19 @@ impl GateChecker for CorrectnessChecker {
                 Err(_) => continue,
             };
 
-            let unwrap_count = content.matches(".unwrap()").count();
+            // Line-based unwrap counting: exclude comments and string literals
+            let unwrap_count = content
+                .lines()
+                .filter(|line| {
+                    let trimmed = line.trim();
+                    !trimmed.starts_with("//")
+                        && !trimmed.starts_with("///")
+                        && !trimmed.starts_with("//!")
+                        && !trimmed.starts_with("/*")
+                })
+                .filter(|line| !line.trim().starts_with('"'))
+                .map(|line| line.matches(".unwrap(").count())
+                .sum::<usize>();
             let todo_count =
                 content.matches("todo!()").count() + content.matches("todo!(\"").count();
             let unimplemented_count = content.matches("unimplemented!()").count()
