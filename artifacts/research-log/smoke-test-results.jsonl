@@ -1,3 +1,0 @@
-{"error":"Semantic Scholar returned an error","expected_freshness_days":365,"expected_min":5,"freshness_days":999,"id":"multi-agent-frameworks","passed":false,"regression":null,"results_count":0,"stale":true,"timestamp":"2026-06-19T19:20:11+00:00"}
-{"error":"Semantic Scholar returned an error","expected_freshness_days":365,"expected_min":3,"freshness_days":999,"id":"research-automation","passed":false,"regression":null,"results_count":0,"stale":true,"timestamp":"2026-06-19T19:20:11+00:00"}
-{"error":null,"expected_freshness_days":180,"expected_min":3,"freshness_days":0,"id":"llm-tool-integration","passed":true,"regression":null,"results_count":5,"stale":false,"timestamp":"2026-06-19T19:20:12+00:00"}
