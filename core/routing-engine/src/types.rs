@@ -413,7 +413,7 @@ impl RecordRowIndexes {
         let required_max = *required
             .iter()
             .max()
-            .unwrap_or_else(|| panic!("required columns: [usize; 6] is non-empty by type"));
+            .expect("required columns: [usize; 6] is non-empty by type");
         Self {
             slug,
             skill_path: None,

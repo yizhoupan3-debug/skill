@@ -83,7 +83,7 @@ Runtime lanes  planning, execution/code, language/framework, platform/integratio
 - `systematic-debugging` vs `gh-fix-ci` → gh-fix-ci 管 CI 修复（已知是 CI 问题，需 GitHub source）；systematic-debugging 管根因调查（不知是否 CI 问题）
 - `systematic-debugging` vs `code-review-deep` → 根因未知的运行时故障 vs 已知代码的质量审查
 - `infographic` vs `diagramming` → HTML 信息图（浏览器渲染，富视觉）vs Mermaid/Graphviz（文本语法，可粘贴 Markdown）
-- `infographic` vs `scientific-figure-plotting` → 静态信息图/知识卡片（HTML）vs 代码驱动科研图表（matplotlib）
+- `infographic` vs `tikz-paper-figure` → 静态信息图/知识卡片（HTML）vs 代码驱动科研图表（matplotlib/TikZ）
 - `infographic` vs `slides` → 单页信息图 vs 多页演示文稿
 - `tikz-paper-figure` vs `diagramming` → TikZ 矢量图（LaTeX 编译）vs Mermaid/Graphviz 文本图
 - `tikz-paper-figure` vs `structure-verification` → 生成 TikZ 图 vs 验证 LaTeX 编译正确性

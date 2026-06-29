@@ -211,18 +211,19 @@ pub fn projection_manifest_path(
     roots: &ResolvedProjectionRoots,
     host_projection: &str,
     scope: &str,
-) -> PathBuf {
+) -> Result<PathBuf> {
     let manifest_name = FRAMEWORK_PROJECTION_MANIFEST_NAME;
     if scope == "user" {
-        return roots
+        return Ok(roots
             .host_home_root(host_projection)
-            .unwrap_or_else(|| {
-                panic!(
-                    "host '{}' must be registered in projection roots",
+            .ok_or_else(|| {
+                FrameworkError::config(format!(
+                    "host '{}' must be registered in projection roots \
+                     (check RUNTIME_REGISTRY.json host_targets)",
                     host_projection
-                )
-            })
-            .join(manifest_name);
+                ))
+            })?
+            .join(manifest_name));
     }
     // Project scope: use .<host_dir> under project_root.
     // Host dir mapping from RUNTIME_REGISTRY.json host_targets.metadata.*.config_dir.
@@ -232,7 +233,7 @@ pub fn projection_manifest_path(
     } else {
         host_dir.to_string()
     };
-    roots.project_root.join(&host_dir).join(manifest_name)
+    Ok(roots.project_root.join(&host_dir).join(manifest_name))
 }
 
 /// Unified projection manifest writer for all hosts.
@@ -245,7 +246,7 @@ pub fn write_projection_manifest(
     managed_key_paths: &[String],
 ) -> Result<bool> {
     write_json_if_changed(
-        &projection_manifest_path(roots, host_projection, scope),
+        &projection_manifest_path(roots, host_projection, scope)?,
         &json!({
             "schema_version": FRAMEWORK_PROJECTION_SCHEMA_VERSION,
             "managed_by": "skill-framework",

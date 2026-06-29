@@ -365,6 +365,7 @@ pub fn install_projection(
                 &[projection_manifest_file_ref(roots, &mcp_path)],
                 &manifest_key_paths,
             )?;
+            let manifest_path = projection_manifest_path(roots, host_id, scope)?;
             Ok(json!({
                 "status": "installed",
                 "changed": mcp_changed || manifest_changed,
@@ -375,7 +376,7 @@ pub fn install_projection(
                     "changed": mcp_changed,
                 },
                 "projection_manifest": {
-                    "path": projection_manifest_path(roots, host_id, scope).to_string_lossy(),
+                    "path": manifest_path.to_string_lossy(),
                     "changed": manifest_changed,
                 },
             }))
@@ -505,7 +506,7 @@ pub fn projection_status(roots: &ResolvedProjectionRoots, host_id: &str) -> Resu
                     "servers": server_status,
                 },
                 "manifest": {
-                    "user": projection_manifest_status(&projection_manifest_path(roots, host_id, "user"))?,
+                    "user": projection_manifest_status(&projection_manifest_path(roots, host_id, "user")?)?,
                 },
                 "hooks": {"managed": false, "reason": "not-enabled-by-framework-policy"},
                 "policy": "user-scope-only",
@@ -524,8 +525,8 @@ pub fn projection_status(roots: &ResolvedProjectionRoots, host_id: &str) -> Resu
                     }
                 },
                 "manifest": {
-                    "project": projection_manifest_status(&projection_manifest_path(roots, host_id, "project"))?,
-                    "user": projection_manifest_status(&projection_manifest_path(roots, host_id, "user"))?,
+                    "project": projection_manifest_status(&projection_manifest_path(roots, host_id, "project")?)?,
+                    "user": projection_manifest_status(&projection_manifest_path(roots, host_id, "user")?)?,
                 },
                 "hooks": {"managed": false, "reason": "not-enabled-by-framework-policy"},
             }))
@@ -552,8 +553,8 @@ pub fn projection_status(roots: &ResolvedProjectionRoots, host_id: &str) -> Resu
                     "servers": server_status,
                 },
                 "projection_manifest": {
-                    "project_scope": projection_manifest_path(roots, host_id, "project").exists(),
-                    "user_scope": projection_manifest_path(roots, host_id, "user").exists(),
+                    "project_scope": projection_manifest_path(roots, host_id, "project").map(|p| p.exists()).unwrap_or(false),
+                    "user_scope": projection_manifest_path(roots, host_id, "user").map(|p| p.exists()).unwrap_or(false),
                 },
             }))
         }
@@ -573,8 +574,8 @@ pub fn projection_status(roots: &ResolvedProjectionRoots, host_id: &str) -> Resu
                     }
                 },
                 "manifest": {
-                    "project": projection_manifest_status(&projection_manifest_path(roots, host_id, "project"))?,
-                    "user": projection_manifest_status(&projection_manifest_path(roots, host_id, "user"))?,
+                    "project": projection_manifest_status(&projection_manifest_path(roots, host_id, "project")?)?,
+                    "user": projection_manifest_status(&projection_manifest_path(roots, host_id, "user")?)?,
                 },
                 "hooks": {
                     "project": settings_hook_status(&project_settings, host_id)?,
@@ -592,7 +593,7 @@ pub fn remove_projection(
     host_id: &str,
 ) -> Result<Value> {
     let target = entrypoint_target(roots, scope, host_id)?;
-    let manifest_path = projection_manifest_path(roots, host_id, scope);
+    let manifest_path = projection_manifest_path(roots, host_id, scope)?;
     let manifest_ownership =
         projection_manifest_ownership(&manifest_path, host_id, scope, &target)?;
     let would_remove_projection = target.is_file() && manifest_ownership.owns_projection_file;
