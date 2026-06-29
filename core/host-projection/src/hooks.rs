@@ -293,7 +293,7 @@ runtime_hook_proxy! { fn evaluate_mcp_pre_guard_safe(tool_name: &str, arguments:
 type ResearchToolDispatchFn = fn(&str, &Value) -> std::result::Result<String, FrameworkError>;
 
 /// Get the registered research tool dispatch function from RuntimeHooks.
-pub fn get_research_tool_dispatch() -> Option<ResearchToolDispatchFn> {
+pub(crate) fn get_research_tool_dispatch() -> Option<ResearchToolDispatchFn> {
     get_runtime_hooks().map(|h| h.research_tool_dispatch)
 }
 
@@ -417,7 +417,7 @@ pub struct RuntimeHooks {
 static RUNTIME_HOOKS: Mutex<Option<RuntimeHooks>> = Mutex::new(None);
 
 /// Get the consolidated RuntimeHooks struct. Returns `None` if not yet set (bootstrap not complete).
-pub fn get_runtime_hooks() -> Option<RuntimeHooks> {
+pub(crate) fn get_runtime_hooks() -> Option<RuntimeHooks> {
     RUNTIME_HOOKS.lock().ok().and_then(|g| g.clone())
 }
 

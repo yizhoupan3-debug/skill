@@ -218,7 +218,7 @@ pub fn extract_output_summary(payload: &Value, max_chars: usize) -> Option<Strin
 }
 
 /// Convert a JSON value to a HookOutput.
-pub fn value_to_hook_output(val: &Value) -> Option<HookOutput> {
+pub(crate) fn value_to_hook_output(val: &Value) -> Option<HookOutput> {
     if val.is_null() {
         return None;
     }
@@ -234,7 +234,7 @@ pub fn value_to_hook_output(val: &Value) -> Option<HookOutput> {
 }
 
 /// Convert a HookOutput to a JSON value (host-agnostic).
-pub fn hook_output_to_json_value(event_name: &str, output: Option<HookOutput>) -> Value {
+pub(crate) fn hook_output_to_json_value(event_name: &str, output: Option<HookOutput>) -> Value {
     match output {
         None => serde_json::json!({}),
         Some(HookOutput::None) => serde_json::json!({}),

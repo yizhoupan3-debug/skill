@@ -181,9 +181,7 @@ pub trait HostProvider: HostLifecycle + HostTelemetry {
     /// Hook event dispatcher for this host. Returns a `RegistryDispatcher`
     /// configured from RUNTIME_REGISTRY.json fields.
     /// Used by CLI dispatch to avoid hardcoded host match arms.
-    fn dispatcher(&self) -> Box<dyn crate::hosts::hook_dispatch::HostHookDispatcher> {
-        unreachable!("HostProvider::dispatcher() default reached — all 4 supported hosts override")
-    }
+    fn dispatcher(&self) -> Box<dyn crate::hosts::hook_dispatch::HostHookDispatcher>;
 }
 
 /// Closed-set fast path for `pre_tool_use_guard` (no registry disk read).

@@ -37,7 +37,7 @@ pub fn build_router_rs_hook_command(event: &str, host_id: &str) -> String {
     )
 }
 
-pub fn managed_hook_entry(event: &str, host_id: &str) -> Value {
+pub(crate) fn managed_hook_entry(event: &str, host_id: &str) -> Value {
     json!({
         "matcher": "",
         "hooks": [{
