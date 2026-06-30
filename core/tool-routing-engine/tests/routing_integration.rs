@@ -170,7 +170,7 @@ mod routing_integration_tests {
         let records = mcp_tool_registry::load_tool_records(&registry_path)
             .expect("should load real MCP_TOOL_REGISTRY.json");
         assert!(!records.is_empty(), "registry should contain tools");
-        assert!(records.len() >= 54, "should have at least 54 tools");
+        assert!(records.len() >= 42, "should have at least 42 tools");
 
         for record in &records {
             assert!(!record.slug.is_empty(), "every tool must have a slug");

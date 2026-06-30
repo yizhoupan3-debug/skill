@@ -1,11 +1,11 @@
 {
   "schema_version": "mcp-tool-registry-v2",
   "scope": {
-    "total_count": 42,
-    "builtin_count": 15,
-    "research_count": 1,
+    "total_count": 69,
+    "builtin_count": 19,
+    "research_count": 16,
     "independent_count": 15,
-    "external_count": 11,
+    "external_count": 19,
     "_comment": "auto-generated — update via tools when adding/removing tools. This is the SOLE source of truth for all tool routing."
   },
   "tools": [
@@ -19,7 +19,10 @@
       "trigger_hints": [
         "skill",
         "技能",
-        "读取"
+        "读取",
+        "查看skill",
+        "skill文档",
+        "SKILL.md"
       ],
       "mcp_server": "router-rs-framework",
       "tool_flags": [],
@@ -77,9 +80,11 @@
       "dispatch_domain": "domain:framework",
       "owner": "framework",
       "trigger_hints": [
-        "搜索",
-        "search",
-        "skill"
+        "搜索skill",
+        "search skill",
+        "skill搜索",
+        "技能搜索",
+        "有哪些skill"
       ],
       "mcp_server": "router-rs-framework",
       "tool_flags": [],
@@ -113,8 +118,9 @@
       "owner": "framework",
       "trigger_hints": [
         "路由状态",
-        "route",
-        "技能路由"
+        "route status",
+        "routing health",
+        "路由健康"
       ],
       "mcp_server": "router-rs-framework",
       "tool_flags": [],
@@ -132,23 +138,18 @@
       "owner": "framework",
       "trigger_hints": [
         "fetch",
-        "网页",
-        "HTTP",
-        "抓取",
-        "URL",
-        "访问链接",
-        "查看页面",
-        "读取网页",
-        "联网",
-        "url内容",
-        "打开链接",
-        "网页内容",
+        "抓取URL",
+        "抓取网页",
+        "URL内容",
+        "查看页面内容",
         "网站内容",
         "web fetch",
         "curl",
         "request",
         "访问网站",
-        "页面内容"
+        "页面内容",
+        "SSRF",
+        "打开链接"
       ],
       "mcp_server": "router-rs-cli",
       "tool_flags": [
@@ -206,7 +207,16 @@
       "trigger_hints": [
         "goal",
         "目标",
-        "goal start"
+        "管理",
+        "暂停",
+        "恢复",
+        "block",
+        "complete",
+        "start",
+        "pause",
+        "resume",
+        "amend",
+        "clear"
       ],
       "mcp_server": "router-rs-framework",
       "tool_flags": [
@@ -582,9 +592,12 @@
       "dispatch_domain": "domain:browser",
       "owner": "browser",
       "trigger_hints": [
-        "浏览器",
         "fill",
-        "输入"
+        "填充",
+        "表单",
+        "填入",
+        "登录表单",
+        "表单提交"
       ],
       "mcp_server": "browser-mcp",
       "tool_flags": []
@@ -597,9 +610,13 @@
       "dispatch_domain": "domain:browser",
       "owner": "browser",
       "trigger_hints": [
-        "浏览器",
         "press",
-        "按键"
+        "按键",
+        "键盘",
+        "Esc",
+        "Enter",
+        "Tab",
+        "键盘按键"
       ],
       "mcp_server": "browser-mcp",
       "tool_flags": []
@@ -612,9 +629,10 @@
       "dispatch_domain": "domain:browser",
       "owner": "browser",
       "trigger_hints": [
-        "截图",
         "screenshot",
-        "浏览器"
+        "截图",
+        "截屏",
+        "页面截图"
       ],
       "mcp_server": "browser-mcp",
       "tool_flags": []
@@ -627,9 +645,10 @@
       "dispatch_domain": "domain:browser",
       "owner": "browser",
       "trigger_hints": [
-        "浏览器",
-        "text",
-        "文本"
+        "get text",
+        "提取文本",
+        "页面文本",
+        "页面内容文本"
       ],
       "mcp_server": "browser-mcp",
       "tool_flags": []
@@ -807,9 +826,14 @@
       "dispatch_domain": "domain:stdio-binary",
       "owner": "rust-tools",
       "trigger_hints": [
+        "financial",
+        "金融",
         "股票",
-        "基金",
-        "金融"
+        "行情",
+        "OHLCV",
+        "AAPL",
+        "股价",
+        "币价"
       ],
       "mcp_server": "mcp-financial-data",
       "tool_flags": []
@@ -903,6 +927,472 @@
       ],
       "mcp_server": "paperplain",
       "tool_flags": []
+    },
+    {
+      "slug": "closeout_gate",
+      "display_name": "收尾门禁",
+      "description": "评估 closeout readiness，检查多维度收尾条件",
+      "layer": "builtin",
+      "dispatch_domain": "domain:framework",
+      "owner": "framework",
+      "trigger_hints": [
+        "closeout",
+        "收尾",
+        "gate",
+        "门禁"
+      ],
+      "mcp_server": "router-rs-framework",
+      "tool_flags": [
+        "readonly"
+      ]
+    },
+    {
+      "slug": "closeout_record_write",
+      "display_name": "收尾记录写入",
+      "description": "生成收尾记录并归档到 closeout report",
+      "layer": "builtin",
+      "dispatch_domain": "domain:framework",
+      "owner": "framework",
+      "trigger_hints": [
+        "closeout",
+        "收尾",
+        "record",
+        "记录",
+        "归档"
+      ],
+      "mcp_server": "router-rs-framework",
+      "tool_flags": []
+    },
+    {
+      "slug": "research_review_dimensions",
+      "display_name": "审稿维度",
+      "description": "获取审稿维度 prompt，支持多轮对抗审稿",
+      "layer": "research",
+      "dispatch_domain": "domain:research",
+      "owner": "research",
+      "trigger_hints": [
+        "审稿",
+        "review",
+        "维度",
+        "dimensions"
+      ],
+      "mcp_server": "mcp-research-harness",
+      "tool_flags": [
+        "readonly"
+      ]
+    },
+    {
+      "slug": "research_claim_drift",
+      "display_name": "声明漂移检测",
+      "description": "检测声明漂移和证据变化",
+      "layer": "research",
+      "dispatch_domain": "domain:research",
+      "owner": "research",
+      "trigger_hints": [
+        "claim",
+        "drift",
+        "声明",
+        "漂移"
+      ],
+      "mcp_server": "mcp-research-harness",
+      "tool_flags": [
+        "readonly"
+      ]
+    },
+    {
+      "slug": "research_review_loop",
+      "display_name": "对抗审稿循环",
+      "description": "运行多轮对抗审稿循环",
+      "layer": "research",
+      "dispatch_domain": "domain:research",
+      "owner": "research",
+      "trigger_hints": [
+        "review loop",
+        "审稿循环",
+        "对抗"
+      ],
+      "mcp_server": "mcp-research-harness",
+      "tool_flags": []
+    },
+    {
+      "slug": "math_asymptotic_estimate",
+      "display_name": "渐近估计",
+      "description": "估计数学表达式的渐近量级",
+      "layer": "research",
+      "dispatch_domain": "domain:research",
+      "owner": "research",
+      "trigger_hints": [
+        "渐近",
+        "asymptotic",
+        "复杂度",
+        "O量级"
+      ],
+      "mcp_server": "mcp-research-harness",
+      "tool_flags": [
+        "readonly"
+      ]
+    },
+    {
+      "slug": "math_proof_dag_init",
+      "display_name": "证明DAG初始化",
+      "description": "初始化证明 DAG，分解证明蓝图",
+      "layer": "research",
+      "dispatch_domain": "domain:research",
+      "owner": "research",
+      "trigger_hints": [
+        "proof",
+        "DAG",
+        "证明"
+      ],
+      "mcp_server": "mcp-research-harness",
+      "tool_flags": []
+    },
+    {
+      "slug": "math_proof_dag_decompose",
+      "display_name": "证明DAG分解",
+      "description": "分解证明节点为子目标",
+      "layer": "research",
+      "dispatch_domain": "domain:research",
+      "owner": "research",
+      "trigger_hints": [
+        "decompose",
+        "分解",
+        "子目标"
+      ],
+      "mcp_server": "mcp-research-harness",
+      "tool_flags": []
+    },
+    {
+      "slug": "math_proof_dag_verify",
+      "display_name": "证明DAG验证",
+      "description": "验证证明 DAG 结构完备性",
+      "layer": "research",
+      "dispatch_domain": "domain:research",
+      "owner": "research",
+      "trigger_hints": [
+        "verify",
+        "验证",
+        "DAG完备"
+      ],
+      "mcp_server": "mcp-research-harness",
+      "tool_flags": [
+        "readonly"
+      ]
+    },
+    {
+      "slug": "math_proof_dag_status",
+      "display_name": "证明DAG状态",
+      "description": "查看证明 DAG 进度摘要",
+      "layer": "research",
+      "dispatch_domain": "domain:research",
+      "owner": "research",
+      "trigger_hints": [
+        "DAG",
+        "status",
+        "进度"
+      ],
+      "mcp_server": "mcp-research-harness",
+      "tool_flags": [
+        "readonly"
+      ]
+    },
+    {
+      "slug": "math_sympy_verify",
+      "display_name": "SymPy验证",
+      "description": "SymPy 验证代数等式",
+      "layer": "research",
+      "dispatch_domain": "domain:research",
+      "owner": "research",
+      "trigger_hints": [
+        "SymPy",
+        "验证等式",
+        "identity"
+      ],
+      "mcp_server": "mcp-research-harness",
+      "tool_flags": [
+        "readonly"
+      ]
+    },
+    {
+      "slug": "math_sympy_simplify",
+      "display_name": "SymPy化简",
+      "description": "SymPy 化简数学表达式",
+      "layer": "research",
+      "dispatch_domain": "domain:research",
+      "owner": "research",
+      "trigger_hints": [
+        "SymPy",
+        "化简",
+        "simplify"
+      ],
+      "mcp_server": "mcp-research-harness",
+      "tool_flags": [
+        "readonly"
+      ]
+    },
+    {
+      "slug": "codegraph_search",
+      "display_name": "代码搜索",
+      "description": "在代码知识图谱中搜索符号",
+      "layer": "external",
+      "dispatch_domain": "domain:stdio-binary",
+      "owner": "codegraph",
+      "trigger_hints": [
+        "搜索符号",
+        "search symbol",
+        "codegraph"
+      ],
+      "mcp_server": "mcp-codegraph",
+      "tool_flags": [
+        "readonly"
+      ]
+    },
+    {
+      "slug": "codegraph_callers",
+      "display_name": "调用者查询",
+      "description": "查找符号的所有上游调用者（BFS 遍历）",
+      "layer": "external",
+      "dispatch_domain": "domain:stdio-binary",
+      "owner": "codegraph",
+      "trigger_hints": [
+        "callers",
+        "调用者",
+        "谁调用了",
+        "上游调用",
+        "调用关系"
+      ],
+      "mcp_server": "mcp-codegraph",
+      "tool_flags": [
+        "readonly"
+      ]
+    },
+    {
+      "slug": "codegraph_callees",
+      "display_name": "被调用查询",
+      "description": "查找符号的所有下游被调用者（BFS 遍历）",
+      "layer": "external",
+      "dispatch_domain": "domain:stdio-binary",
+      "owner": "codegraph",
+      "trigger_hints": [
+        "callees",
+        "被调用",
+        "调用了什么",
+        "下游调用",
+        "子函数"
+      ],
+      "mcp_server": "mcp-codegraph",
+      "tool_flags": [
+        "readonly"
+      ]
+    },
+    {
+      "slug": "codegraph_impact",
+      "display_name": "影响分析",
+      "description": "分析修改符号的影响半径（上游+下游）",
+      "layer": "external",
+      "dispatch_domain": "domain:stdio-binary",
+      "owner": "codegraph",
+      "trigger_hints": [
+        "impact",
+        "影响",
+        "blast radius",
+        "影响范围"
+      ],
+      "mcp_server": "mcp-codegraph",
+      "tool_flags": [
+        "readonly"
+      ]
+    },
+    {
+      "slug": "codegraph_node",
+      "display_name": "节点详情",
+      "description": "查看代码图谱中节点的详细信息",
+      "layer": "external",
+      "dispatch_domain": "domain:stdio-binary",
+      "owner": "codegraph",
+      "trigger_hints": [
+        "node",
+        "节点",
+        "symbol info"
+      ],
+      "mcp_server": "mcp-codegraph",
+      "tool_flags": [
+        "readonly"
+      ]
+    },
+    {
+      "slug": "codegraph_status",
+      "display_name": "索引状态",
+      "description": "查看代码知识图谱索引统计信息",
+      "layer": "external",
+      "dispatch_domain": "domain:stdio-binary",
+      "owner": "codegraph",
+      "trigger_hints": [
+        "index",
+        "索引",
+        "status",
+        "统计"
+      ],
+      "mcp_server": "mcp-codegraph",
+      "tool_flags": [
+        "readonly"
+      ]
+    },
+    {
+      "slug": "codegraph_dead_code",
+      "display_name": "死代码检测",
+      "description": "检测未被调用的函数/方法（零入度）",
+      "layer": "external",
+      "dispatch_domain": "domain:stdio-binary",
+      "owner": "codegraph",
+      "trigger_hints": [
+        "dead code",
+        "死代码",
+        "unused",
+        "未调用"
+      ],
+      "mcp_server": "mcp-codegraph",
+      "tool_flags": [
+        "readonly"
+      ]
+    },
+    {
+      "slug": "codegraph_goto_definition",
+      "display_name": "跳转定义",
+      "description": "查找符号的定义位置",
+      "layer": "external",
+      "dispatch_domain": "domain:stdio-binary",
+      "owner": "codegraph",
+      "trigger_hints": [
+        "definition",
+        "定义",
+        "go to",
+        "跳转"
+      ],
+      "mcp_server": "mcp-codegraph",
+      "tool_flags": [
+        "readonly"
+      ]
+    },
+    {
+      "slug": "record_evidence",
+      "display_name": "记录证据",
+      "description": "追加一条 evidence 记录到当前 task",
+      "layer": "builtin",
+      "dispatch_domain": "domain:framework",
+      "owner": "framework",
+      "trigger_hints": [
+        "evidence",
+        "证据",
+        "记录"
+      ],
+      "mcp_server": "router-rs-framework",
+      "tool_flags": []
+    },
+    {
+      "slug": "session_checkpoint",
+      "display_name": "会话快照",
+      "description": "保存当前会话进度的 checkpoint 快照",
+      "layer": "builtin",
+      "dispatch_domain": "domain:framework",
+      "owner": "framework",
+      "trigger_hints": [
+        "checkpoint",
+        "快照",
+        "保存进度",
+        "会话快照"
+      ],
+      "mcp_server": "router-rs-framework",
+      "tool_flags": []
+    },
+    {
+      "slug": "math_prove_inequality",
+      "display_name": "不等式证明",
+      "description": "用 SMT solver (Z3) 证明数学不等式",
+      "layer": "research",
+      "dispatch_domain": "domain:research",
+      "owner": "research",
+      "trigger_hints": [
+        "inequality",
+        "不等式",
+        "证明不等式",
+        "Z3"
+      ],
+      "mcp_server": "mcp-research-harness",
+      "tool_flags": [
+        "readonly"
+      ]
+    },
+    {
+      "slug": "math_asymptotic_chain",
+      "display_name": "渐近链验证",
+      "description": "验证渐近关系链的正确性",
+      "layer": "research",
+      "dispatch_domain": "domain:research",
+      "owner": "research",
+      "trigger_hints": [
+        "asymptotic chain",
+        "渐近链",
+        "渐近关系"
+      ],
+      "mcp_server": "mcp-research-harness",
+      "tool_flags": [
+        "readonly"
+      ]
+    },
+    {
+      "slug": "math_backend_available",
+      "display_name": "数学后端检查",
+      "description": "检查 Z3/SymPy/Lean 验证后端是否可用",
+      "layer": "research",
+      "dispatch_domain": "domain:research",
+      "owner": "research",
+      "trigger_hints": [
+        "backend",
+        "后端",
+        "Z3",
+        "SymPy",
+        "Lean"
+      ],
+      "mcp_server": "mcp-research-harness",
+      "tool_flags": [
+        "readonly"
+      ]
+    },
+    {
+      "slug": "math_lean_verify",
+      "display_name": "Lean验证",
+      "description": "用 Lean 做定理形式化验证",
+      "layer": "research",
+      "dispatch_domain": "domain:research",
+      "owner": "research",
+      "trigger_hints": [
+        "Lean",
+        "lean",
+        "形式化",
+        "定理验证"
+      ],
+      "mcp_server": "mcp-research-harness",
+      "tool_flags": [
+        "readonly"
+      ]
+    },
+    {
+      "slug": "research_smoke",
+      "display_name": "数据源烟雾测试",
+      "description": "对 arXiv 和 Semantic Scholar 做数据源可达性烟雾测试",
+      "layer": "research",
+      "dispatch_domain": "domain:research",
+      "owner": "research",
+      "trigger_hints": [
+        "smoke",
+        "烟雾",
+        "数据源测试"
+      ],
+      "mcp_server": "mcp-research-harness",
+      "tool_flags": [
+        "readonly"
+      ]
     }
   ]
 }

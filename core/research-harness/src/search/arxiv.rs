@@ -47,11 +47,12 @@ pub fn search(client: &Client, query: &str, limit: usize) -> Result<Vec<Value>> 
 }
 
 fn try_search(client: &Client, query: &str, limit: usize) -> Result<Vec<Value>> {
+    crate::util::validate_url_for_fetch(ARXIV_BASE_URL)?;
     let raw = client
         .get(ARXIV_BASE_URL)
         .header(USER_AGENT, "research-harness/0.1")
         .query(&[
-            ("search_query", format!("all:\"{query}\"")),
+            ("search_query", format!("all:\"{}\"", query.replace('"', "\\\""))),
             ("start", "0".to_string()),
             ("max_results", normalize_limit(limit).to_string()),
             ("sortBy", "relevance".to_string()),
@@ -87,12 +88,6 @@ fn try_search(client: &Client, query: &str, limit: usize) -> Result<Vec<Value>> 
         }));
     }
     Ok(results)
-}
-
-/// Search with a default client (20-second timeout).
-pub fn search_default(query: &str, limit: usize) -> Result<Vec<Value>> {
-    let client = http_client(20)?;
-    search(&client, query, limit)
 }
 
 // ── Convenience wrapper returning crate::types::Paper ──

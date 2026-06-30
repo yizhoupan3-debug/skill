@@ -5,13 +5,14 @@ use std::collections::HashSet;
 use std::sync::LazyLock;
 
 /// 进程级共享 HTTP 客户端，避免每次 DOI 检查都新建 Client（TLS 握手 + 连接池初始化开销）。
-static DOI_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
+/// 使用 Option 避免 TLS 不可用时 panic 永久毒化 LazyLock。
+static DOI_CLIENT: LazyLock<Option<reqwest::Client>> = LazyLock::new(|| {
     reqwest::Client::builder()
         .user_agent("research-harness/0.1")
         .timeout(std::time::Duration::from_secs(10))
         .redirect(reqwest::redirect::Policy::limited(5))
         .build()
-        .expect("failed to build DOI client")
+        .ok()
 });
 
 /// 验证 DOI 是否可解析（网络可达）。
@@ -24,8 +25,12 @@ pub async fn verify_doi_reachable(doi: &str) -> Result<bool> {
     } else {
         format!("https://doi.org/{doi}")
     };
+    crate::util::validate_url_for_fetch(&url)?;
 
-    let resp = DOI_CLIENT.head(&url).send().await?;
+    let client = DOI_CLIENT.as_ref().ok_or_else(|| {
+        anyhow::anyhow!("DOI client unavailable: TLS backend not initialized")
+    })?;
+    let resp = client.head(&url).send().await?;
     Ok(resp.status().is_success() || resp.status().is_redirection())
 }
 

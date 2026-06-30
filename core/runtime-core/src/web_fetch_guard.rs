@@ -84,7 +84,10 @@ pub(crate) fn validate_web_fetch_host_basic(host: &str) -> Result<()> {
             )));
         }
     }
-    if let Ok(ip) = IpAddr::from_str(host)
+    // Strip IPv6 brackets ([::1] -> ::1) before IP parsing — IpAddr::from_str
+    // does not accept bracketed form, which would silently skip the forbidden check.
+    let bare_host = host.strip_prefix('[').and_then(|h| h.strip_suffix(']')).unwrap_or(host);
+    if let Ok(ip) = IpAddr::from_str(bare_host)
         && is_forbidden_web_fetch_ip(&ip)
     {
         return Err(FrameworkError::validation(format!(
@@ -94,36 +97,13 @@ pub(crate) fn validate_web_fetch_host_basic(host: &str) -> Result<()> {
     Ok(())
 }
 
+/// Validate a hostname for SSRF safety (string check + DNS resolution).
+/// Delegates to `validate_and_resolve_web_fetch_url` to ensure consistent
+/// TOCTOU-safe validation across all code paths.
 fn validate_web_fetch_host(host: &str) -> Result<()> {
-    validate_web_fetch_host_basic(host)?;
-    // Hostname-only: resolve DNS to catch hostnames pointing to private IPs.
-    // Port is irrelevant for SSRF IP checks; use 443 for the lookup.
-    let host = host.trim().trim_end_matches('.');
-    if IpAddr::from_str(host).is_ok() {
-        return Ok(()); // Already checked in basic — IP literal, no DNS needed.
-    }
-    let lookup_host = host
-        .strip_prefix('[')
-        .and_then(|h| h.strip_suffix(']'))
-        .unwrap_or(host);
-    let addrs = (lookup_host, 443u16).to_socket_addrs().map_err(|err| {
-        FrameworkError::validation(format!("web_fetch DNS lookup failed for {host}: {err}"))
-    })?;
-    let mut any = false;
-    for addr in addrs {
-        any = true;
-        if is_forbidden_web_fetch_ip(&addr.ip()) {
-            return Err(FrameworkError::validation(format!(
-                "web_fetch blocked resolved address for {host}: {}",
-                addr.ip()
-            )));
-        }
-    }
-    if !any {
-        return Err(FrameworkError::validation(format!(
-            "web_fetch DNS lookup returned no addresses for {host}"
-        )));
-    }
+    // Reconstruct a minimal URL for the unified validation path.
+    let probe_url = format!("https://{host}/");
+    validate_and_resolve_web_fetch_url(&probe_url)?;
     Ok(())
 }
 

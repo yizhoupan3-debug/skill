@@ -116,14 +116,16 @@ impl GateChecker for Literature {
             });
 
             // Verify reachability when a tokio runtime handle is available.
-            // 使用 join_all 并发验证所有 DOI，相比串行 block_on 大幅提速。
+            // 使用 buffer_unordered 并发验证所有 DOI，限制最大并发为 5 防止限流。
+            const MAX_DOI_CONCURRENCY: usize = 5;
             if let Some(ref handle) = ctx.runtime_handle {
                 let results = handle.block_on(async {
-                    let futures: Vec<_> = all_dois
-                        .iter()
-                        .map(|doi| literature::verify_doi_reachable(doi))
-                        .collect();
-                    futures::future::join_all(futures).await
+                    use futures::stream::{self, StreamExt};
+                    let futures = all_dois.iter().map(|doi| literature::verify_doi_reachable(doi));
+                    stream::iter(futures)
+                        .buffer_unordered(MAX_DOI_CONCURRENCY)
+                        .collect::<Vec<_>>()
+                        .await
                 });
                 let mut unreachable = Vec::new();
                 for (doi, result) in all_dois.iter().zip(results) {
@@ -244,4 +246,82 @@ fn find_literature_files(root: &Path) -> Vec<std::path::PathBuf> {
     }
 
     files
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
+    use super::*;
+    use quality_gate::checker::GateChecker;
+    use quality_gate::types::CheckContext;
+
+    fn ctx_with_repo(repo_root: std::path::PathBuf) -> CheckContext {
+        CheckContext {
+            scene: "test".into(),
+            sub_scene: None,
+            goal: "test".into(),
+            round: 1,
+            repo_root,
+            task_id: "t1".into(),
+            evidence_path: None,
+            runtime_handle: None,
+            output_data: None,
+            evaluated_at: "2026-01-01T00:00:00Z".into(),
+        }
+    }
+
+    #[test]
+    fn no_paper_files_returns_passed() {
+        let dir = tempfile::tempdir().expect("create tempdir");
+        let gate = Literature;
+        let result = gate.check(&ctx_with_repo(dir.path().to_path_buf()));
+        assert!(result.passed);
+        assert_eq!(result.findings.len(), 1);
+        assert_eq!(result.findings[0].id, "literature_no_paper");
+        assert!(matches!(result.findings[0].severity, Severity::C));
+    }
+
+    #[test]
+    fn paper_with_doi_finds_references() {
+        let dir = tempfile::tempdir().expect("create tempdir");
+        let paper_path = dir.path().join("paper.tex");
+        std::fs::write(&paper_path, "See \\cite{10.1234/test.5678} for details.")
+            .expect("write paper");
+        let gate = Literature;
+        let result = gate.check(&ctx_with_repo(dir.path().to_path_buf()));
+        assert!(result.passed);
+        // Should have doi_count finding and no_runtime finding
+        let doi_finding = result.findings.iter().find(|f| f.id == "literature_doi_count");
+        assert!(doi_finding.is_some());
+    }
+
+    #[test]
+    fn paper_without_doi_reports_no_doi() {
+        let dir = tempfile::tempdir().expect("create tempdir");
+        let paper_path = dir.path().join("paper.tex");
+        std::fs::write(&paper_path, "This paper has no DOI references.")
+            .expect("write paper");
+        let gate = Literature;
+        let result = gate.check(&ctx_with_repo(dir.path().to_path_buf()));
+        assert!(result.passed);
+        assert!(result
+            .findings
+            .iter()
+            .any(|f| f.id == "literature_no_doi"));
+    }
+
+    #[test]
+    fn no_runtime_skips_reachability() {
+        let dir = tempfile::tempdir().expect("create tempdir");
+        let paper_path = dir.path().join("paper.tex");
+        std::fs::write(&paper_path, "Reference: 10.1234/test.5678")
+            .expect("write paper");
+        let gate = Literature;
+        let result = gate.check(&ctx_with_repo(dir.path().to_path_buf()));
+        // No runtime_handle provided → no_runtime finding
+        assert!(result
+            .findings
+            .iter()
+            .any(|f| f.id == "literature_no_runtime"));
+    }
 }

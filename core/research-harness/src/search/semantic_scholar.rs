@@ -16,6 +16,7 @@ use crate::search::helpers::*;
 /// Returns a list of JSON objects with fields: source, title, authors, year,
 /// venue, url, abstract, citation_count, external_ids.
 pub fn search(client: &Client, query: &str, limit: usize) -> Result<Vec<Value>> {
+    crate::util::validate_url_for_fetch(SEMANTIC_SCHOLAR_BASE_URL)?;
     let response: Value = client
         .get(SEMANTIC_SCHOLAR_BASE_URL)
         .header(USER_AGENT, "research-harness/0.1")
@@ -66,12 +67,6 @@ pub fn search(client: &Client, query: &str, limit: usize) -> Result<Vec<Value>> 
         }));
     }
     Ok(results)
-}
-
-/// Search with a default client (20-second timeout).
-pub fn search_default(query: &str, limit: usize) -> Result<Vec<Value>> {
-    let client = http_client(20)?;
-    search(&client, query, limit)
 }
 
 // ── Convenience wrapper returning crate::types::Paper ──
