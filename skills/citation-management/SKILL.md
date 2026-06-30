@@ -16,7 +16,7 @@ name: citation-management
 scene: research
 risk: low
 routing_gate: none
-routing_layer: L2
+routing_layer: L3
 routing_owner: owner
 routing_priority: P2
 session_start: preferred
@@ -40,7 +40,7 @@ trigger_hints:
 This skill owns reference correctness and style consistency. It makes
 citations verifiable, complete, deduplicated, and aligned with the manuscript.
 
-Manuscript workflow context: [`../paper-workbench/references/RESEARCH_PAPER_STACK.md`](../paper-workbench/references/RESEARCH_PAPER_STACK.md).
+Manuscript workflow context: [`../research/paper-workbench/references/RESEARCH_PAPER_STACK.md`](../research/paper-workbench/references/RESEARCH_PAPER_STACK.md).
 
 ## When to Use
 
@@ -51,7 +51,7 @@ Manuscript workflow context: [`../paper-workbench/references/RESEARCH_PAPER_STAC
 
 ## Do Not Use
 
-- Searching and synthesizing a topic literature corpus -> keep this skill only for citation truth; broader source synthesis belongs to `$paper-workbench` for manuscripts or `$research-discovery` or `$research-execution` for non-manuscript research.
+- Searching and synthesizing a topic literature corpus -> keep this skill only for citation truth; broader source synthesis belongs to `$research` (paper-workbench lane) for manuscripts or `$research` (discovery lane) for non-manuscript research.
 - Writing or polishing manuscript prose -> use `@lane:writer`.
 - Checking paper logic beyond citations -> use `@lane:reviewer` logic mode.
 - Formatting non-academic documents without citations.
@@ -61,7 +61,7 @@ Manuscript workflow context: [`../paper-workbench/references/RESEARCH_PAPER_STAC
 - **诚信红线**（不可核验主张、图像诚信、自我剽窃）：[`references/integrity-redlines.md`](references/integrity-redlines.md)；与 `@lane:reviewer` **P0** 口径对齐（致命问题先报、不粉饰）。
 - When manuscript context is available, keep citation keys and bibliography
   titles aligned with the frozen terminology in
-  [`../paper-workbench/references/research-language-norms.md`](../paper-workbench/references/research-language-norms.md)
+  [`../research/paper-workbench/references/research-language-norms.md`](../research/paper-workbench/references/research-language-norms.md)
   (preferred names for methods/datasets/metrics); do not introduce a second
   naming system in `.bib` that conflicts with in-text terms unless the user
   asked for a rename pass.

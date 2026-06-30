@@ -12,14 +12,14 @@ metadata:
   - multi-source
   version: '1.1.0'
 name: deep-search
-scene: research
+scene: general
 risk: low
 routing_gate: approve
-routing_layer: L2
+routing_layer: L3
 routing_owner: user
 routing_priority: P2
 session_start: preferred
-short_description: Deep research harness — web-first multi-source fact-checked report
+short_description: 通用深度搜索引擎 — web 多源覆盖+事实核查+综合报告
 source: local
 trigger_hints:
 - deep research
@@ -44,10 +44,6 @@ and synthesizes a cited report. It is the general-purpose answer to "deeply
 research this topic for me" when the task does not require literature-survey
 scoping, experiment design, or manuscript work.
 
-**四宿主统一**：NL 热路由与本 skill 相同；非手稿科研总地图见
-[`../research-discovery/SKILL.md`](../research-discovery/SKILL.md) 与
-[`../research-execution/SKILL.md`](../research-execution/SKILL.md)。
-
 ## When to use
 
 - The user asks for a deep, multi-source, fact-checked research report on any topic.
@@ -58,9 +54,9 @@ scoping, experiment design, or manuscript work.
 
 ## Do not use
 
-- The user needs a **literature survey, theory landscape, or math-background inquiry** (academic discovery phase) → use `$research-discovery`.
-- The user wants to **design experiments, ablations, benchmarks, or math modeling** (execution phase) → use `$research-execution`.
-- The object is a **manuscript, submission, reviewer response, paper structure, or "能不能投" decision** → use `$paper-workbench`.
+- The user needs a **literature survey, theory landscape, or math-background inquiry** (academic discovery phase) → use `$research` (discovery lane).
+- The user wants to **design experiments, ablations, benchmarks, or math modeling** (execution phase) → use `$research` (execution lane).
+- The object is a **manuscript, submission, reviewer response, paper structure, or "能不能投" decision** → use `$research` (paper-workbench lane).
 - The user only asks which **statistical test** to use → use `$statistical-analysis`.
 - The user only asks for a **formal proof, derivation, or pure-math task** (数学推导、定理证明、公式推导、不等式证明) with no research orchestration → use `$math-derivation`.
 - The user only asks for **citation metadata cleanup** or BibTeX formatting → use `$citation-management`.
@@ -166,38 +162,18 @@ Return:
 - Do not bury the next executable step in prose; make it directly actionable.
 - Do not use academic API endpoints (arXiv, OpenAlex, CrossRef, PubMed) unless the research topic specifically requires academic sources; use `WebSearch` as the primary retrieval backbone.
 
-## Division of work with peer skills
-
-This skill and `research-discovery` / `research-execution` are complementary:
-
-| Concern | `deep-search` (this skill) | `research-discovery` | `research-execution` |
-|---|---|---|---|
-| Web-first general research report | Primary | -- | -- |
-| Claim verification via multi-source cross-reference | Primary | -- | -- |
-| Literature survey, related-work synthesis | -- | Primary | -- |
-| Theory landscape, math background inquiry | -- | Primary | -- |
-| Experiment design, ablation, baselines | -- | -- | Primary |
-| Math verification (checker, witnesses) | -- | -- | Primary |
-| Code verification (audit, tests, repro) | -- | -- | Primary |
-
-If the research question turns out to require academic discovery or experiment
-execution, complete the web research phase first, then hand off with the
-findings as context.
-
 ## Lane handoffs
 
-- `$research-discovery`: when the task needs literature survey, theory landscape, or math-background inquiry.
-- `$research-execution`: when the task needs experiment design, code/math verification, or reproducibility checks.
-- `$paper-workbench`: when the object is a manuscript, submission, or paper review.
+- `$research` (discovery lane): when the task needs literature survey, theory landscape, or math-background inquiry.
+- `$research` (execution lane): when the task needs experiment design, code/math verification, or reproducibility checks.
+- `$research` (paper-workbench lane): when the object is a manuscript, submission, or paper review.
 - `$statistical-analysis`: when the task narrows to statistical test choice or uncertainty reporting.
 - `$math-derivation`: when the task narrows to formal proof or derivation.
 - `$citation-management`: when the task narrows to citation metadata cleanup.
 
 ## Cross-references
 
-- Academic sources (when academic APIs are needed): [`../research-discovery/references/academic-sources.md`](../research-discovery/references/academic-sources.md) — arXiv, OpenAlex, CrossRef, PubMed E-utilities, DOAJ API templates.
-- Team orchestration API: `core/session-supervisor/src/team_manager.rs` — team-based multi-agent orchestration, exposed via `orchestrator_team_*` MCP tools (replaces deprecated JS workflow model).
-- Agent lifecycle tracking: `core/session-supervisor/src/process.rs` — agent health registry for monitoring active subagents.
-- Manuscript stack boundary: [`../paper-workbench/references/RESEARCH_PAPER_STACK.md`](../paper-workbench/references/RESEARCH_PAPER_STACK.md)
-- Discovery counterpart: [`../research-discovery/SKILL.md`](../research-discovery/SKILL.md)
-- Execution counterpart: [`../research-execution/SKILL.md`](../research-execution/SKILL.md)
+- Academic sources (when academic APIs are needed): [`../research/references/academic-sources.md`](../research/references/academic-sources.md) — arXiv, OpenAlex, CrossRef, PubMed E-utilities, DOAJ API templates. 仅限于科研需求时查阅。
+- Team orchestration API: `core/session-supervisor/src/team_manager.rs` — team-based multi-agent orchestration.
+- Agent lifecycle tracking: `core/session-supervisor/src/process.rs` — agent health registry.
+- 科研统一前门: [`../research/SKILL.md`](../research/SKILL.md)
