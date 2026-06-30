@@ -13,6 +13,7 @@
 /// Cache an env-var–parsed numeric value in a `OnceLock`.
 /// `$typ` must implement `FromStr` (parsed via `.ok()`), and the `$default`
 /// literal must be coercible to `$typ`.
+#[allow(unused_macros)]
 macro_rules! env_cache_typed {
     ($typ:ty, $env:literal, $default:expr) => {{
         static CACHED: OnceLock<$typ> = OnceLock::new();

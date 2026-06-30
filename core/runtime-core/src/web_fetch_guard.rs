@@ -52,7 +52,13 @@ pub fn resolve_web_fetch_redirect(
     base: &reqwest::Url,
     location: &str,
 ) -> Result<(reqwest::Url, Vec<std::net::SocketAddr>)> {
-    let next = base.join(location.trim()).map_err(|e| {
+    let trimmed = location.trim();
+    if trimmed.is_empty() {
+        return Err(FrameworkError::validation(
+            "web_fetch redirect location is empty",
+        ));
+    }
+    let next = base.join(trimmed).map_err(|e| {
         FrameworkError::validation(format!("web_fetch invalid redirect location: {e}"))
     })?;
     // Validate + DNS resolve in one pass — returns addresses for DNS pinning.
@@ -392,9 +398,11 @@ mod tests {
     // ── Redirect chain edge cases ──
 
     #[test]
-    fn rejects_redirect_relative_path_to_localhost() {
+    fn accepts_redirect_relative_path_to_localhost() {
         let base = reqwest::Url::parse("https://example.com/path/").unwrap();
-        assert!(resolve_web_fetch_redirect(&base, "../localhost").is_err());
+        // "../localhost" resolves to "https://example.com/localhost" — same host,
+        // different path. This is a valid redirect, not a host access.
+        assert!(resolve_web_fetch_redirect(&base, "../localhost").is_ok());
     }
 
     #[test]
@@ -471,7 +479,7 @@ mod tests {
         let result = super::check_redirect_scheme_downgrade(&base, &target);
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();
-        assert!(err.contains("downgrade"), "error should mention 'downgrade': {err}");
+        assert!(err.contains("refused redirect from HTTPS"), "error should mention 'refused redirect from HTTPS': {err}");
     }
 
     #[test]

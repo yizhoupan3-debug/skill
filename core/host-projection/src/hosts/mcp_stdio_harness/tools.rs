@@ -4,7 +4,9 @@
 
 use super::*;
 use framework_core::skill_repo::skill_routing_runtime_json;
-use serde_json::{Map, Value, json};
+#[cfg(any(test, feature = "test-support"))]
+use serde_json::Map;
+use serde_json::{Value, json};
 use std::path::Path;
 
 /// In-memory fallback for `first_turn` detection — **removed** (P2 #16).
@@ -284,6 +286,7 @@ pub(super) fn tool_skill_route_status(repo_root: &Path) -> Result<String, Framew
     .to_string())
 }
 
+#[cfg(any(test, feature = "test-support"))]
 pub fn build_evidence_entry(arguments: &Value) -> Result<Map<String, Value>, FrameworkError> {
     // HPM-16: Input validation for evidence records.
     // tool_name is validated against a known allowlist of framework tool names.
@@ -351,6 +354,7 @@ pub fn build_evidence_entry(arguments: &Value) -> Result<Map<String, Value>, Fra
 
 /// 获取 evidence output 的最大字符数配置。
 /// 默认 2000 字符，可通过 `ROUTER_RS_EVIDENCE_OUTPUT_MAX_CHARS` 环境变量覆盖。
+#[cfg(any(test, feature = "test-support"))]
 pub(super) fn evidence_output_max_chars() -> usize {
     env_cache_typed!(usize, "ROUTER_RS_EVIDENCE_OUTPUT_MAX_CHARS", 2000)
 }

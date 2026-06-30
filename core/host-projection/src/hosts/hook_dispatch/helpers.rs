@@ -236,6 +236,7 @@ pub(crate) fn value_to_hook_output(val: &Value) -> Option<HookOutput> {
 }
 
 /// Convert a HookOutput to a JSON value (host-agnostic).
+#[cfg(any(test, feature = "test-support"))]
 pub(crate) fn hook_output_to_json_value(event_name: &str, output: Option<HookOutput>) -> Value {
     match output {
         None => serde_json::json!({}),
