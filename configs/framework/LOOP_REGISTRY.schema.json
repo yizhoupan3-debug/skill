@@ -1,0 +1,30 @@
+{
+  "schema_version": "loop-registry-schema-v1",
+  "description": "Schema reference for LOOP_REGISTRY.json",
+  "top_level": ["schema_version", "loops"],
+  "loop_entry_required": ["loop_id", "profile", "trigger"],
+  "loop_entry_optional": [
+    "skill",
+    "scope_based_safety",
+    "default_safety",
+    "scope_conflict_resolution",
+    "cost_budget",
+    "notification",
+    "research_enabled",
+    "research",
+    "verify_quality_gate",
+    "verify_closeout_gate",
+    "static_actions",
+    "subagent_protocol"
+  ],
+  "research_fields_optional": [
+    "barrier_threshold",
+    "escalation_target",
+    "max_research_time_min",
+    "auto_resume",
+    "require_human_approval",
+    "freshness_window_min"
+  ],
+  "trigger_required": ["type"],
+  "trigger_optional": ["schedule", "timezone"]
+}

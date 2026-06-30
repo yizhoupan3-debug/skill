@@ -1291,4 +1291,49 @@ mod tests {
         let result: Result<SubagentOutput, _> = serde_json::from_str(json);
         assert!(result.is_err(), "unknown fields must be denied");
     }
+
+    // ── Issue 8: Phase1Profile type validation ────────────────────────────
+
+    #[test]
+    fn phase1_profile_valid_types() {
+        // Correct field types should succeed deserialization
+        let json = serde_json::json!({
+            "loop_capable": true,
+            "closeout_mode": "hard-block",
+            "review_gate": "mandatory",
+            "spawn_first_nudge": true,
+            "interactive_capable": true,
+            "pause_timeout_secs": 3600,
+            "extra_field_ok": "since Phase1Profile doesn't deny_unknown_fields"
+        });
+        let result: Result<super::Phase1Profile, _> = serde_json::from_value(json);
+        assert!(result.is_ok(), "valid types should deserialize Phase1Profile: {:?}", result.err());
+    }
+
+    #[test]
+    fn phase1_profile_type_mismatch() {
+        // Wrong field type should fail deserialization
+        let json = serde_json::json!({
+            "loop_capable": "true",   // string instead of bool
+            "closeout_mode": "hard-block",
+            "review_gate": "mandatory",
+            "spawn_first_nudge": 1,   // number instead of bool
+        });
+        let result: Result<super::Phase1Profile, _> = serde_json::from_value(json);
+        assert!(result.is_err(), "type mismatch should fail Phase1Profile deserialization");
+    }
+
+    #[test]
+    fn phase1_profile_extra_fields_tolerated() {
+        // Extra fields not in Phase1Profile should be tolerated
+        let json = serde_json::json!({
+            "loop_capable": true,
+            "closeout_mode": "hard-block",
+            "review_gate": "mandatory",
+            "spawn_first_nudge": true,
+            "unknown_future_field": "should be OK"
+        });
+        let result: Result<super::Phase1Profile, _> = serde_json::from_value(json);
+        assert!(result.is_ok(), "extra unknown fields must be tolerated");
+    }
 }

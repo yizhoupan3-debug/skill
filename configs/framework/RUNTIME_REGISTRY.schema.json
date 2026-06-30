@@ -1,0 +1,18 @@
+{
+  "schema_version": "runtime-registry-schema-v1",
+  "description": "Schema reference for RUNTIME_REGISTRY.json (lifecycle_profiles section)",
+  "lifecycle_profile_optional": [
+    "loop_capable",
+    "closeout_mode",
+    "review_gate",
+    "spawn_first_nudge",
+    "cost_budget",
+    "escalation",
+    "disable_spawn_first_nudge",
+    "goal_continuation",
+    "kill_switch",
+    "verification_required",
+    "interactive_capable",
+    "pause_timeout_secs"
+  ]
+}

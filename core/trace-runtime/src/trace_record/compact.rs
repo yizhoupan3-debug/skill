@@ -4,6 +4,7 @@ use std::collections::HashSet;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::time::Instant;
 
 use rt_storage::runtime_storage::acquire_runtime_path_lock;
 
@@ -24,8 +25,13 @@ use super::{
 pub fn compact_trace_stream(
     payload: TraceCompactRequestPayload,
 ) -> Result<TraceCompactResponsePayload, TraceError> {
+    let _compact_start = Instant::now();
     if !payload.supports_compaction || !payload.supports_snapshot_delta {
-        tracing::debug!(run_id = %payload.run_id, "compaction skipped: backend unsupported");
+        tracing::info!(
+            run_id = %payload.run_id,
+            status = "unsupported",
+            "compaction skipped: backend unsupported"
+        );
         return Ok(TraceCompactResponsePayload {
             schema_version: TRACE_COMPACTION_RESULT_SCHEMA_VERSION.to_string(),
             authority: TRACE_STREAM_IO_AUTHORITY.to_string(),
@@ -62,7 +68,13 @@ pub fn compact_trace_stream(
     )?;
     let active_generation = streamed.active_generation;
     let Some(tail) = streamed.last_event else {
-        tracing::debug!(run_id = %payload.run_id, generation = active_generation, "compaction skipped: no matching events");
+        tracing::info!(
+            run_id = %payload.run_id,
+            generation = active_generation,
+            status = "no_events",
+            duration_us = _compact_start.elapsed().as_micros() as u64,
+            "compaction skipped: no matching events"
+        );
         return Ok(TraceCompactResponsePayload {
             schema_version: TRACE_COMPACT_SCHEMA_VERSION.to_string(),
             authority: TRACE_STREAM_IO_AUTHORITY.to_string(),
@@ -302,7 +314,13 @@ pub fn compact_trace_stream(
         }
     }
 
-    tracing::debug!(run_id = %payload.run_id, generation = active_generation, next_generation, event_count, "compaction completed");
+    tracing::info!(
+        run_id = %payload.run_id,
+        generation = active_generation,
+        event_count,
+        duration_ms = _compact_start.elapsed().as_millis() as u64,
+        "compaction completed"
+    );
 
     Ok(TraceCompactResponsePayload {
         schema_version: TRACE_COMPACTION_RESULT_SCHEMA_VERSION.to_string(),

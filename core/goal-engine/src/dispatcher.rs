@@ -646,6 +646,39 @@ fn resolve_cached_git_diff(repo_root: &Path) -> Vec<String> {
     changes
 }
 
+/// Reset modified tracked files within the given scope paths to their committed state.
+///
+/// Uses `git checkout -- <paths>` for each scope path to discard uncommitted changes.
+/// This is intended for use during pause→resume cycles, where the subagent was killed
+/// mid-execution and may have left partially modified files.
+///
+/// Logs warnings on failure but does not return errors — best-effort cleanup.
+pub fn reset_scope_paths(repo_root: &Path, scope_paths: &[String]) {
+    if scope_paths.is_empty() {
+        return;
+    }
+    for path in scope_paths {
+        let output = Command::new("git")
+            .args(["checkout", "--", path])
+            .current_dir(repo_root)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output();
+        match output {
+            Ok(out) if out.status.success() => {
+                tracing::debug!(%path, "reset scope path");
+            }
+            Ok(out) => {
+                let stderr = String::from_utf8_lossy(&out.stderr);
+                tracing::warn!(%path, stderr = %stderr, "git checkout failed");
+            }
+            Err(e) => {
+                tracing::warn!(%path, error = %e, "failed to spawn git checkout");
+            }
+        }
+    }
+}
+
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 #[cfg(test)]
 mod tests {

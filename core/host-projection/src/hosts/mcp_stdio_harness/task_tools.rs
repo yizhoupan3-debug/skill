@@ -147,6 +147,11 @@ pub(crate) fn tool_task_create(
         Ok(true)
     })?;
 
+    // Initialize the structured TASK_OUTPUT.json for this task
+    if created {
+        let _ = core_state::task_output::init_task_output(repo_root, task_id);
+    }
+
     Ok(json!({
         "ok": true,
         "task_id": &task_id_owned,
@@ -526,10 +531,27 @@ pub(crate) fn tool_task_chain_advance(
             chain["current_index"] = json!(tasks_len);
             let path = repo_root_owned.join("artifacts/current/TASK_CHAIN.json");
             core_state_utils::atomic_write::write_atomic_json(&path, &chain)?;
+
+            // Auto-generate chain aggregate on completion
+            let aggregate_result = core_state::chain_output::build_and_write_chain_aggregate(
+                &repo_root_owned,
+            );
+            let aggregate_info = match aggregate_result {
+                Ok(ref agg) => serde_json::json!({
+                    "overall_status": &agg.overall_status,
+                    "task_count": agg.task_count,
+                    "overall_verification": &agg.aggregated_evidence.overall_verification,
+                }),
+                Err(ref e) => serde_json::json!({
+                    "error": e.to_string(),
+                }),
+            };
+
             return Ok(json!({
                 "ok": true,
                 "status": "chain_complete",
                 "message": "all tasks in chain completed",
+                "chain_aggregate": aggregate_info,
             })
             .to_string());
         }
@@ -550,6 +572,59 @@ pub(crate) fn tool_task_chain_advance(
         chain["current_index"] = json!(next);
         let path = repo_root_owned.join("artifacts/current/TASK_CHAIN.json");
         core_state_utils::atomic_write::write_atomic_json(&path, &chain)?;
+
+        // ── Output passing: carry current task's TASK_OUTPUT to the next task ──
+        let current_task_id = chain["tasks"]
+            .get(current_index)
+            .and_then(|t| t.get("task_id"))
+            .and_then(Value::as_str)
+            .map(str::to_string);
+        let current_output = current_task_id
+            .as_deref()
+            .and_then(|tid| core_state::task_output::read_task_output(&repo_root_owned, tid).ok())
+            .flatten();
+        if let Some(ref output) = current_output {
+            // Initialize or update the next task's TASK_OUTPUT.json
+            let mut next_output =
+                core_state::task_output::read_task_output(&repo_root_owned, &next_id)
+                    .ok()
+                    .flatten()
+                    .unwrap_or_else(|| core_state::task_output::TaskOutput::new(&next_id));
+            // Set parent chain reference
+            let chain_id = chain.get("chain_id")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+                .unwrap_or_else(|| format!("chain-{}", current_task_id.as_deref().unwrap_or(&next_id)));
+            next_output.aggregates = Some(core_state::task_output::AggregatesRef {
+                parent_chain_id: Some(chain_id),
+                parent_loop_id: None,
+                chain_index: Some(next as u64),
+            });
+            // Add consumed input from current task
+            let source_path = current_task_id
+                .as_deref()
+                .and_then(|tid| core_state::task_output::task_output_path_for_task(&repo_root_owned, tid).ok())
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_default();
+            next_output.consumed_inputs.push(
+                core_state::task_output::ConsumedInput {
+                    source_task_id: current_task_id.clone().unwrap_or_default(),
+                    source_output_path: source_path,
+                    consumed_fields: vec![
+                        "changed_files".to_string(),
+                        "commands_run".to_string(),
+                        "verification_status".to_string(),
+                        "summary".to_string(),
+                    ],
+                    consumed_at: Some(framework_core::time::now_iso()),
+                },
+            );
+            // Only set title/producer if the next_output was just created
+            if next_output.producer.is_empty() {
+                next_output.producer = "task-engine".to_string();
+            }
+            let _ = core_state::task_output::write_task_output(&repo_root_owned, &next_output);
+        }
 
         // Atomically switch focus to the next task
         core_state::state_manager::set_task_focus(&repo_root_owned, &next_id, &next_title)?;

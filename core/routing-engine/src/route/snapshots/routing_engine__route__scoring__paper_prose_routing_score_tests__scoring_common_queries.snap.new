@@ -1,0 +1,158 @@
+---
+source: core/routing-engine/src/route/scoring.rs
+assertion_line: 1091
+expression: results
+---
+[
+  {
+    "query": "SCI润色 abstract",
+    "top3": [
+      {
+        "reasons": [
+          "Paper-workbench boost: prose edit / pasted manuscript / colloquial rewrite — auto prose-quality-gate (no user tokens required).",
+          "Trigger hint matched: SCI润色.",
+          "ngram_similarity:0.7",
+          "Description keywords matched: sci, 润色.",
+          "Session-start preferred boost applied (+3)."
+        ],
+        "score": 89.65278757377182,
+        "slug": "paper-workbench"
+      },
+      {
+        "reasons": [
+          "ngram_similarity:0.4",
+          "Session-start required boost applied (+8)."
+        ],
+        "score": 13.384327832914654,
+        "slug": "agent-swarm-orchestration"
+      },
+      {
+        "reasons": [
+          "ngram_similarity:0.4",
+          "Session-start required boost applied (+8)."
+        ],
+        "score": 13.352639954402445,
+        "slug": "doc"
+      }
+    ]
+  },
+  {
+    "query": "code review 找bug",
+    "top3": [
+      {
+        "reasons": [
+          "Routing gate matched: bug.",
+          "ngram_similarity:0.4"
+        ],
+        "score": 23.398883142100807,
+        "slug": "systematic-debugging"
+      },
+      {
+        "reasons": [
+          "ngram_similarity:0.3",
+          "Description keywords matched: review.",
+          "Session-start required boost applied (+8)."
+        ],
+        "score": 16.330893028056757,
+        "slug": "doc"
+      },
+      {
+        "reasons": [
+          "ngram_similarity:0.3",
+          "Description keywords matched: review.",
+          "Session-start required boost applied (+8)."
+        ],
+        "score": 16.288131891144317,
+        "slug": "pdf"
+      }
+    ]
+  },
+  {
+    "query": "help me write tests",
+    "top3": [
+      {
+        "reasons": [
+          "ngram_similarity:0.4",
+          "Session-start required boost applied (+8)."
+        ],
+        "score": 13.422467058399056,
+        "slug": "design-md"
+      },
+      {
+        "reasons": [
+          "ngram_similarity:0.4",
+          "Session-start required boost applied (+8)."
+        ],
+        "score": 13.408526208962043,
+        "slug": "agent-swarm-orchestration"
+      },
+      {
+        "reasons": [
+          "ngram_similarity:0.4",
+          "Session-start required boost applied (+8)."
+        ],
+        "score": 13.400131602415211,
+        "slug": "doc"
+      }
+    ]
+  },
+  {
+    "query": "重构这个模块",
+    "top3": [
+      {
+        "reasons": [
+          "ngram_similarity:0.1",
+          "Session-start required boost applied (+8)."
+        ],
+        "score": 13.077151674981046,
+        "slug": "doc"
+      },
+      {
+        "reasons": [
+          "ngram_similarity:0.1",
+          "Session-start required boost applied (+8)."
+        ],
+        "score": 13.072168783648703,
+        "slug": "slides"
+      },
+      {
+        "reasons": [
+          "ngram_similarity:0.1",
+          "Session-start preferred boost applied (+3)."
+        ],
+        "score": 3.102062072615966,
+        "slug": "research-execution"
+      }
+    ]
+  },
+  {
+    "query": "security audit",
+    "top3": [
+      {
+        "reasons": [
+          "ngram_similarity:0.6",
+          "Description keywords matched: audit.",
+          "Skill alias hints matched: audit."
+        ],
+        "score": 19.614309449638355,
+        "slug": "statistical-verification"
+      },
+      {
+        "reasons": [
+          "ngram_similarity:0.5",
+          "Session-start required boost applied (+8)."
+        ],
+        "score": 13.48419592243242,
+        "slug": "doc"
+      },
+      {
+        "reasons": [
+          "ngram_similarity:0.5",
+          "Session-start required boost applied (+8)."
+        ],
+        "score": 13.464372803808859,
+        "slug": "agent-swarm-orchestration"
+      }
+    ]
+  }
+]

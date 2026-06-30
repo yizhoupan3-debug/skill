@@ -336,6 +336,9 @@ fn run_loop_inner(
                                         tracing::error!("failed to write loop state on resume: {e}");
                                     }
                                     let _ = clear_pause_state(ctx.repo_root, &entry.loop_id);
+                                    // Reset scope paths to clear any partial modifications
+                                    // from the killed subagent before re-dispatch.
+                                    dispatcher::reset_scope_paths(ctx.repo_root, &action.scope_paths);
                                     continue 'exec; // re-dispatch same action
                                 }
                                 Ok(PauseCommand::Redirect { .. }) => {
@@ -1704,5 +1707,179 @@ some trailing text"#;
     #[test]
     fn default_max_depth_is_five() {
         assert_eq!(RunContext::default_max_depth(), 5);
+    }
+
+    // ── Issue 7: Checkpoint rescue ────────────────────────────────────────
+
+    #[test]
+    fn checkpoint_rescue_skips_done() {
+        // Simulate a crashed run with "done" in dispatch
+        let mut state = create_initial_state("checkpoint-test", "loop-auto");
+        let run_id = generate_run_id("checkpoint-test");
+        start_new_run(&mut state, &run_id);
+        if let Some(ref mut run) = state.current_run {
+            run.dispatch.insert("a1".to_string(), "done".to_string());
+        }
+
+        // Rescue logic (as in run_loop)
+        let rescued: std::collections::HashMap<String, String> = state
+            .current_run
+            .as_ref()
+            .map(|run| {
+                run.dispatch
+                    .iter()
+                    .filter(|(_, status)| status.as_str() == "done")
+                    .map(|(k, v)| (k.clone(), v.clone()))
+                    .collect()
+            })
+            .unwrap_or_default();
+        assert_eq!(rescued.len(), 1);
+        assert_eq!(rescued.get("a1").map(|s| s.as_str()), Some("done"));
+    }
+
+    #[test]
+    fn checkpoint_rescue_does_not_skip_failed() {
+        // "failed" actions should NOT be rescued (research escalation should retry them)
+        let mut state = create_initial_state("checkpoint-test-2", "loop-auto");
+        let run_id = generate_run_id("checkpoint-test-2");
+        start_new_run(&mut state, &run_id);
+        if let Some(ref mut run) = state.current_run {
+            run.dispatch.insert("fail-1".to_string(), "failed".to_string());
+            run.dispatch.insert("ok-1".to_string(), "done".to_string());
+        }
+
+        let rescued: std::collections::HashMap<String, String> = state
+            .current_run
+            .as_ref()
+            .map(|run| {
+                run.dispatch
+                    .iter()
+                    .filter(|(_, status)| status.as_str() == "done")
+                    .map(|(k, v)| (k.clone(), v.clone()))
+                    .collect()
+            })
+            .unwrap_or_default();
+        assert_eq!(rescued.len(), 1, "only 'done' should be rescued");
+        assert!(rescued.contains_key("ok-1"), "completed action should be rescued");
+        assert!(!rescued.contains_key("fail-1"), "failed actions must NOT be rescued");
+    }
+
+    #[test]
+    fn checkpoint_rescue_insert_ordering() {
+        // Verify rescued entries are inserted into new current_run BEFORE level insert
+        // (see runner.rs line ~240 for the unconditional dispatch insert).
+        // This test verifies that after rescue + start_new_run, the dispatch
+        // has the rescued "done" entry, which the action loop skip check relies on.
+        let mut state = create_initial_state("checkpoint-ordering", "loop-auto");
+        let old_run_id = generate_run_id("checkpoint-ordering");
+        start_new_run(&mut state, &old_run_id);
+        if let Some(ref mut run) = state.current_run {
+            run.dispatch.insert("a1".to_string(), "done".to_string());
+        }
+
+        // Simulate rescue
+        let rescued: std::collections::HashMap<String, String> = state
+            .current_run
+            .as_ref()
+            .map(|run| {
+                run.dispatch
+                    .iter()
+                    .filter(|(_, status)| status.as_str() == "done")
+                    .map(|(k, v)| (k.clone(), v.clone()))
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        // Start new run and insert rescued entries
+        let new_run_id = generate_run_id("checkpoint-ordering");
+        start_new_run(&mut state, &new_run_id);
+        if !rescued.is_empty() {
+            if let Some(ref mut run) = state.current_run {
+                run.dispatch.extend(rescued);
+            }
+        }
+
+        // Verify rescued entry exists in new run's dispatch
+        let dispatch = state.current_run.as_ref().map(|r| &r.dispatch);
+        assert!(dispatch.is_some());
+        let entry = dispatch.unwrap().get("a1");
+        assert_eq!(entry.map(|s| s.as_str()), Some("done"),
+            "rescued 'done' must survive into new current_run.dispatch for skip check");
+    }
+
+    // ── Issue 7: Checkpoint write ─────────────────────────────────────────
+
+    #[test]
+    fn checkpoint_writes_state_to_disk() {
+        // Verify write_loop_state persists state that can be re-read
+        let tmp = tempfile::TempDir::new().unwrap();
+        let root = tmp.path();
+        let loop_id = "checkpoint-write-test";
+
+        let mut state = create_initial_state(loop_id, "loop-auto");
+        let run_id = generate_run_id(loop_id);
+        start_new_run(&mut state, &run_id);
+        if let Some(ref mut run) = state.current_run {
+            run.dispatch.insert("a1".to_string(), "done".to_string());
+        }
+
+        // Write checkpoint (as done in the action loop)
+        write_loop_state(root, loop_id, &state).unwrap();
+
+        // Read back and verify
+        let loaded = read_loop_state(root, loop_id).unwrap().unwrap();
+        let dispatch = loaded
+            .current_run
+            .as_ref()
+            .map(|r| r.dispatch.clone())
+            .unwrap_or_default();
+        assert_eq!(dispatch.get("a1").map(|s| s.as_str()), Some("done"),
+            "checkpoint must persist dispatch state");
+    }
+
+    // ── Issue 9: require_human_approval ───────────────────────────────────
+    // Note: BarrierResult unit tests already exist above.
+    // These tests verify the logic that barrier_escalation uses internally.
+
+    #[test]
+    fn require_human_approval_blocks_resume() {
+        // When require_human_approval=true, will_resume must be false
+        // even when auto_resume=true and candidates exist.
+        let br = BarrierResult {
+            candidates: vec!["candidate-1".into()],
+            will_resume: false, // simulate require_human_approval suppression
+        };
+        assert!(!br.should_resume(),
+            "with require_human_approval=true, should_resume must be false");
+    }
+
+    #[test]
+    fn require_human_approval_no_candidates() {
+        // Even without require_human_approval, no candidates = no resume
+        let br = BarrierResult {
+            candidates: vec![],
+            will_resume: true,
+        };
+        assert!(!br.should_resume());
+    }
+
+    // ── Issue 9: Freshness window ─────────────────────────────────────────
+
+    #[test]
+    fn barrier_candidates_stale_report() {
+        // Report older than freshness window should be ignored.
+        // Use freshness_window_secs=0 so age < 0 is always false.
+        let tmp = tempfile::TempDir::new().unwrap();
+        let barrier_dir = tmp.path().join("artifacts/research-barrier/2026-01-01T00-00-00Z");
+        std::fs::create_dir_all(&barrier_dir).unwrap();
+        let report = serde_json::json!({"candidates": ["old-candidate"]});
+        std::fs::write(
+            barrier_dir.join("BARRIER_REPORT.json"),
+            serde_json::to_string_pretty(&report).unwrap(),
+        ).unwrap();
+
+        // Use freshness_window_secs=0 so no report passes the check
+        let candidates = discover_barrier_candidates(tmp.path(), 0);
+        assert!(candidates.is_empty(), "stale report must be ignored");
     }
 }

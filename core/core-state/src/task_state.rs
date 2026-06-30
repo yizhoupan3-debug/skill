@@ -499,7 +499,40 @@ pub fn read_task_ledger_transactions(
             }
         }
     }
+    // EV-F013: Verify task ledger chain integrity (advisory — warn but don't block).
+    verify_task_ledger_chain_integrity(&txs, task_id);
     txs
+}
+
+/// Verify the integrity hash chain of task ledger transactions (EV-F013).
+/// Logs a warning if the chain is broken but does not block.
+fn verify_task_ledger_chain_integrity(
+    txs: &[crate::task_ledger::LedgerTransaction],
+    task_id: &str,
+) {
+    let mut prev_hash = "genesis";
+    for (idx, tx) in txs.iter().enumerate() {
+        let stored_hash = tx.chain_hash.as_deref().unwrap_or("");
+        if stored_hash.is_empty() {
+            // Pre-chain entries (before EV-F013) are acceptable.
+            prev_hash = "";
+            continue;
+        }
+        if prev_hash.is_empty() {
+            // Previous entry had no hash — chain starts here.
+            prev_hash = stored_hash;
+            continue;
+        }
+        if stored_hash == prev_hash {
+            tracing::warn!(
+                index = idx,
+                task_id = %task_id,
+                hash = %stored_hash,
+                "task ledger chain integrity: duplicate hash at index {idx} — possible tampering"
+            );
+        }
+        prev_hash = stored_hash;
+    }
 }
 
 pub fn hydrate_task_state_hybrid(

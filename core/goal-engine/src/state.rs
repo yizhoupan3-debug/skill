@@ -59,6 +59,11 @@ pub fn kill_signal_path(repo_root: &Path, loop_id: &str) -> PathBuf {
     repo_root.join(".loop-kill").join(loop_id)
 }
 
+/// Return the pause state file path for a loop: `.loop-pause/{loop_id}`.
+pub fn pause_state_path(repo_root: &Path, loop_id: &str) -> PathBuf {
+    repo_root.join(".loop-pause").join(loop_id)
+}
+
 /// Read the persisted loop run state from `LOOP_RUN_STATE.json` on disk.
 /// Returns `Ok(None)` when the file does not exist.
 pub fn read_loop_state(repo_root: &Path, loop_id: &str) -> Result<Option<LoopRunState>, LoopError> {

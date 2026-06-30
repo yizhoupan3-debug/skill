@@ -190,6 +190,80 @@ impl ToolHandler for GoalCloseoutTools {
     }
 }
 
+// ---------------------------------------------------------------------------
+// TaskOutputTools (5 tools: task_output_write, task_output_read, task_output_init,
+//                   task_output_pull)
+// ---------------------------------------------------------------------------
+
+pub struct TaskOutputTools;
+impl ToolHandler for TaskOutputTools {
+    fn tool_names(&self) -> &[&'static str] {
+        &[
+            "task_output_write",
+            "task_output_read",
+            "task_output_init",
+            "task_output_pull",
+            "task_output_validate",
+            "chain_aggregate",
+        ]
+    }
+    fn dispatch(
+        &self,
+        tool_name: &str,
+        args: &Value,
+        ctx: &ToolCallContext,
+    ) -> Result<String, FrameworkError> {
+        match tool_name {
+            "task_output_write" => Ok(tool_task_output_write(args, &ctx.repo_root)?),
+            "task_output_read" => Ok(tool_task_output_read(args, &ctx.repo_root)?),
+            "task_output_init" => Ok(tool_task_output_init(args, &ctx.repo_root)?),
+            "task_output_pull" => Ok(tool_task_output_pull(args, &ctx.repo_root)?),
+            "task_output_validate" => Ok(tool_task_output_validate(args, &ctx.repo_root)?),
+            "chain_aggregate" => Ok(tool_chain_aggregate(args, &ctx.repo_root)?),
+            _ => Err(FrameworkError::not_found(format!(
+                "TaskOutputTools: unknown tool: {tool_name}"
+            ))),
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// ChainDagTools (5 tools: chain_dag_init, chain_dag_tick, chain_dag_status,
+//                chain_dag_retry, chain_dag_skip)
+// ---------------------------------------------------------------------------
+
+pub struct ChainDagTools;
+impl ToolHandler for ChainDagTools {
+    fn tool_names(&self) -> &[&'static str] {
+        &[
+            "chain_dag_init",
+            "chain_dag_tick",
+            "chain_dag_status",
+            "chain_dag_retry",
+            "chain_dag_skip",
+            "chain_dag_resume",
+        ]
+    }
+    fn dispatch(
+        &self,
+        tool_name: &str,
+        args: &Value,
+        ctx: &ToolCallContext,
+    ) -> Result<String, FrameworkError> {
+        match tool_name {
+            "chain_dag_init" => Ok(tool_chain_dag_init(args, &ctx.repo_root)?),
+            "chain_dag_tick" => Ok(tool_chain_dag_tick(args, &ctx.repo_root)?),
+            "chain_dag_status" => Ok(tool_chain_dag_status(args, &ctx.repo_root)?),
+            "chain_dag_retry" => Ok(tool_chain_dag_retry(args, &ctx.repo_root)?),
+            "chain_dag_skip" => Ok(tool_chain_dag_skip(args, &ctx.repo_root)?),
+            "chain_dag_resume" => Ok(tool_chain_dag_resume(args, &ctx.repo_root)?),
+            _ => Err(FrameworkError::not_found(format!(
+                "ChainDagTools: unknown tool: {tool_name}"
+            ))),
+        }
+    }
+}
+
 /// Resolve the tool registry path. Uses hooks, falls back to repo_root default.
 fn resolve_tool_registry_path(repo_root: &std::path::Path) -> std::path::PathBuf {
     mcp_tool_registry::resolve_tool_registry_path().unwrap_or_else(|| {

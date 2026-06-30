@@ -465,6 +465,8 @@
         "daily_tokens": 1000000
       },
       "kill_switch": "loop-kill-enabled",
+      "interactive_capable": true,
+      "pause_timeout_secs": 3600,
       "verification_required": true,
       "loop_capable": true,
       "escalation": {
@@ -473,6 +475,21 @@
         "on_budget_exceeded": "escalate",
         "on_unexpected_error": "escalate"
       }
+    },
+    "interactive": {
+      "disable_spawn_first_nudge": false,
+      "closeout_mode": "advisory",
+      "review_gate": "advisory",
+      "spawn_first_nudge": true,
+      "goal_continuation": "manual-boards-only",
+      "cost_budget": {
+        "tokens_per_run": 500000,
+        "daily_tokens": 2000000
+      },
+      "kill_switch": "loop-kill-enabled",
+      "interactive_capable": true,
+      "pause_timeout_secs": 7200,
+      "loop_capable": true
     }
   },
   "framework_commands": {

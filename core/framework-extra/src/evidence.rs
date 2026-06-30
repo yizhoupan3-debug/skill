@@ -284,6 +284,52 @@ pub fn append_evidence_index_merged_row(
     Ok(())
 }
 
+/// Allowed evidence row kinds for the structured evidence schema.
+pub const ALLOWED_EVIDENCE_KINDS: &[&str] = &[
+    "command_run",
+    "external_hook_verification",
+    "artifact_check",
+    "aggregate_summary",
+];
+
+/// Validate an evidence row entry against the schema constraints.
+///
+/// Returns a list of warning strings for non-blocking issues.
+/// If `strict` is true, returns errors for missing `kind` field instead of warnings.
+pub fn validate_evidence_row(
+    entry: &Map<String, Value>,
+    strict: bool,
+) -> Result<Vec<String>> {
+    let mut issues = Vec::new();
+
+    let kind = entry.get("kind").and_then(Value::as_str).unwrap_or("");
+    if kind.is_empty() {
+        let msg = "evidence row missing 'kind' field — expected one of: command_run, external_hook_verification, artifact_check, aggregate_summary";
+        if strict {
+            return Err(FrameworkError::validation(msg));
+        }
+        issues.push(msg.to_string());
+    } else if !ALLOWED_EVIDENCE_KINDS.contains(&kind) {
+        issues.push(format!(
+            "evidence row 'kind' is '{kind}' — expected one of: {allowed}",
+            allowed = ALLOWED_EVIDENCE_KINDS.join(", ")
+        ));
+    }
+
+    if entry.get("command_preview").and_then(Value::as_str).map(str::trim).unwrap_or("").is_empty() {
+        issues.push("evidence row missing non-empty 'command_preview'".to_string());
+    }
+
+    // When exit_code is present, it should be a valid integer.
+    if let Some(ec) = entry.get("exit_code") {
+        if coerce_exit_code_value(Some(ec)).is_none() {
+            issues.push(format!("evidence row 'exit_code' is not a valid integer: {ec}"));
+        }
+    }
+
+    Ok(issues)
+}
+
 /// `framework hook-evidence-append`：供 Cursor hook 等外部进程写入一条验证记录。
 ///
 /// JSON：`repo_root`（可选）、`task_id`（可选）、`command_preview`（必填）、`exit_code`（可选）、`source`（可选，默认 `external_hook`）。

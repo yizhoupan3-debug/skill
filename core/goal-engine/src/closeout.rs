@@ -6,7 +6,7 @@ use core_state::closeout_validation::evaluate_closeout_record_value;
 use std::fs;
 use std::path::Path;
 
-const LOOP_CLOSEOUT_AGGREGATE_SCHEMA_VERSION: &str = "loop-closeout-aggregate-v1";
+pub(crate) const LOOP_CLOSEOUT_AGGREGATE_SCHEMA_VERSION: &str = "loop-closeout-aggregate-v1";
 
 #[derive(Debug, Clone)]
 /// Response from a closeout verification, indicating whether closeout is allowed
@@ -271,6 +271,52 @@ pub fn build_aggregate(
     aggregate
 }
 
+/// Schema version constant for LOOP_OUTPUT.json
+pub const LOOP_OUTPUT_SCHEMA_VERSION: &str = "loop-output-v1";
+
+/// Write a `LoopCloseoutAggregate` as LOOP_OUTPUT.json to the loop's directory.
+/// This makes the structured loop aggregate available to downstream consumers
+/// (review gate, supervisor, etc.) without requiring access to individual
+/// closeout records.
+pub fn write_loop_output(
+    repo_root: &std::path::Path,
+    loop_id: &str,
+    aggregate: &LoopCloseoutAggregate,
+) {
+    let output_dir = repo_root
+        .join("artifacts/loop")
+        .join(loop_id);
+    let output_path = output_dir.join("LOOP_OUTPUT.json");
+    if let Err(e) = std::fs::create_dir_all(&output_dir) {
+        tracing::warn!(
+            "write_loop_output: failed to create dir for {loop_id}: {e}"
+        );
+        return;
+    }
+
+    let value = serde_json::json!({
+        "schema_version": LOOP_OUTPUT_SCHEMA_VERSION,
+        "loop_id": aggregate.loop_id,
+        "run_id": aggregate.run_id,
+        "overall_status": aggregate.overall_status,
+        "actions": aggregate.actions.iter().map(|a| {
+            serde_json::json!({
+                "action_id": a.action_id,
+                "execution": a.execution,
+                "safety_level": a.safety_level,
+                "verification": a.verification,
+            })
+        }).collect::<Vec<_>>(),
+        "qg_blockers": aggregate.qg_blockers,
+    });
+
+    if let Err(e) = core_state_utils::atomic_write::write_atomic_json(&output_path, &value) {
+        tracing::warn!(
+            "write_loop_output: failed to write LOOP_OUTPUT.json for {loop_id}: {e}"
+        );
+    }
+}
+
 #[derive(Debug, Clone)]
 /// Outcome of a single action execution for aggregation purposes.
 pub enum AggregateActionResult {
@@ -383,6 +429,7 @@ mod tests {
             scope_paths: vec!["src/a.rs".into()],
             safety: "L2".into(),
             description: None,
+            consumed_action_ids: Vec::new(),
         }];
         let results = vec![(
             "a1".to_string(),
@@ -406,6 +453,7 @@ mod tests {
                 scope_paths: vec![],
                 safety: "L1".into(),
                 description: None,
+                consumed_action_ids: Vec::new(),
             },
             LoopAction {
                 action_id: "a2".into(),
@@ -413,6 +461,7 @@ mod tests {
                 scope_paths: vec![],
                 safety: "L2".into(),
                 description: None,
+                consumed_action_ids: Vec::new(),
             },
         ];
         let results = vec![

@@ -19,6 +19,7 @@ rusqlite.workspace = true
 
 [workspace]
 members = [
+    "core/chain-engine",
     "core/core-errors",
     "core/core-state",
     "core/core-state-utils",

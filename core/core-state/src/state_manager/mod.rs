@@ -48,6 +48,9 @@ pub use scrub_ops::{
     strip_followup_paragraphs_with_line_prefix,
 };
 
+// Re-export the task output path helper for convenience
+pub use crate::task_output::task_output_path_for_task;
+
 // ── Goal state path ──
 pub fn goal_state_path_for_task(
     repo_root: &Path,

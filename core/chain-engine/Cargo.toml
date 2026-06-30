@@ -1,0 +1,22 @@
+[package]
+name = "chain-engine"
+version = "0.1.0"
+edition = "2024"
+description = "DAG Task Chain Engine — conditional branching, fan-out/fan-in, retry, timeout groups"
+[lints]
+workspace = true
+
+[lib]
+name = "chain_engine"
+
+[dependencies]
+core-errors = { path = "../core-errors" }
+core-state = { path = "../core-state" }
+framework-core = { path = "../framework-core" }
+serde.workspace = true
+serde_json.workspace = true
+chrono.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

@@ -1,5 +1,6 @@
 #![deny(clippy::unwrap_used, clippy::expect_used)]
 
+pub mod chain_output;
 pub mod closeout_validation;
 pub mod goal_prediction;
 #[cfg(test)]
@@ -7,6 +8,7 @@ mod proptests;
 pub mod state_manager;
 pub mod step_ledger;
 pub mod task_ledger;
+pub mod task_output;
 pub mod task_state;
 pub mod task_state_types;
 pub mod transition_validation;
