@@ -1,5 +1,5 @@
 ---
-last_verified: "2026-06-29"
+last_verified: "2026-06-30"
 scope: architecture-reference
 ---
 
@@ -80,6 +80,17 @@ scope: architecture-reference
 
 **独立 MCP 服务器二进制**（在 `rust_tools/` 和 `tools/` 中实现）。
 
+**内建 MCP 工具组**（通过 `CompositeRegistry` 注册在 `host-projection` 的 `router-rs` 域中）：
+
+| 工具组 | 包含工具 |
+|--------|---------|
+| `TaskCrudTools` | `task_create`, `task_list`, `task_complete`, `task_focus`, `task_chain_advance` |
+| `TaskOutputTools` | `task_output_write`, `task_output_read`, `task_output_init`, `task_output_pull`, `task_output_validate`, `chain_aggregate` |
+| `ChainDagTools` | `chain_dag_init`, `chain_dag_tick`, `chain_dag_status`, `chain_dag_retry`, `chain_dag_skip`, `chain_dag_resume` |
+| `RoutingTools` | `skill_route`, `skill_search`, `skill_read`, `skill_route_status` |
+| `ToolDomainTools` | `route_tool`, `search_tools`, `tool_registry_status` |
+| `GoalCloseoutTools` | `closeout_gate`, `closeout_record_write`, `goal_state_manage`, `goal_state_read` |
+
 **配置文件**：
 - `configs/framework/MCP_TOOL_REGISTRY.json` → 工具注册表真源
 - `configs/tool_scoring_weights.json` → 工具路由评分权重
@@ -92,8 +103,9 @@ scope: architecture-reference
 
 | Crate | 路径 | 说明 |
 |-------|------|------|
-| `core-state` | `core/core-state` | 任务状态机：goal_drive、step_ledger、task_ledger、closeout_validation |
+| `core-state` | `core/core-state` | 任务状态机：goal_drive、step_ledger、task_ledger、closeout_validation、task_output（TASK_OUTPUT.json schema）、chain_output（CHAIN_OUTPUT.json 聚合） |
 | `core-state-utils` | `core/core-state-utils` | IO/路径/JSONL 辅助函数 |
+| `chain-engine` | `core/chain-engine` | **DAG 任务链引擎**：`advance_dag()` 幂等调度、`validate_dag()` 循环检测、条件分支、并行组、重试策略、超时组、失败策略。兼容旧线性 TASK_CHAIN.json 格式 |
 
 **6.2 Loop Goal（含退出门）**
 
