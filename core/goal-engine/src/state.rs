@@ -33,6 +33,44 @@ pub fn loop_artifacts_dir(repo_root: &Path, loop_id: &str) -> PathBuf {
     repo_root.join("artifacts").join("loop").join(loop_id)
 }
 
+/// Remove all artifacts for a completed/terminated loop:
+/// `artifacts/loop/{loop_id}/` plus the `.loop-kill/{loop_id}` signal file.
+///
+/// Call this when a loop reaches a terminal state (completed, aborted, killed)
+/// to prevent unbounded accumulation of closeout/input/output/evidence/report
+/// files. This is safe because:
+/// - Terminal loops are no longer driving subagents or producing output.
+/// - The aggregate result (LoopCloseoutAggregate) is already returned to the
+///   caller before this function is invoked.
+/// - Loop kill/pause signal files for a dead loop are stale by definition.
+///
+/// # Best-effort
+/// This function logs warnings on failure but does not return `Err` — a failed
+/// cleanup should not block the loop's terminal transition. The next bootstrap
+/// or a manual `maint` command can clean orphaned directories.
+pub fn cleanup_loop_artifacts(repo_root: &Path, loop_id: &str) {
+    let dir = loop_artifacts_dir(repo_root, loop_id);
+    if dir.is_dir() {
+        if let Err(e) = fs::remove_dir_all(&dir) {
+            tracing::warn!(
+                loop_id = %loop_id,
+                path = %dir.display(),
+                error = %e,
+                "cleanup_loop_artifacts: remove_dir_all failed"
+            );
+        }
+    }
+    // Also remove stale signal/sentinel files
+    let kill_signal = kill_signal_path(repo_root, loop_id);
+    if kill_signal.is_file() {
+        let _ = fs::remove_file(&kill_signal);
+    }
+    let pause_file = pause_state_path(repo_root, loop_id);
+    if pause_file.is_file() {
+        let _ = fs::remove_file(&pause_file);
+    }
+}
+
 /// Return the reports directory path for a loop: `artifacts/loop/{loop_id}/reports/`.
 pub fn loop_reports_dir(repo_root: &Path, loop_id: &str) -> PathBuf {
     loop_artifacts_dir(repo_root, loop_id).join("reports")

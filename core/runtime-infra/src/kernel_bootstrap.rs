@@ -60,17 +60,20 @@ fn current_exe_name() -> Option<String> {
 }
 
 /// Clear stale task pointers from `artifacts/current/` at bootstrap,
-/// preventing cross-session leakage (P0). Only runs in the main CLI
-/// process (not in subagent binaries) to avoid corrupting the parent
-/// session's state.
+/// preventing cross-session leakage (P0). Also cleans up stale task
+/// subdirectories (P1) that are no longer referenced by any active pointer.
+/// Only runs in the main CLI process (not in subagent binaries) to avoid
+/// corrupting the parent session's state.
 ///
 /// # Safety
 /// - Only clears pointer/index files (active_task.json, focus_task.json,
 ///   task_registry.json, and the `active_task_id`/`focus_task_id` fields
 ///   of TASK_POINTERS.json).
-/// - Task subdirectories with evidence artifacts are **not** deleted.
-/// - Subagent binaries (containing "subagent", "agent-daemon", or the
-///   value of `ROUTER_RS_SUBAGENT_BIN` in their path) skip this step.
+/// - Task subdirectories with evidence artifacts are only removed when
+///   their task_id does not match any entry in TASK_POINTERS.json (i.e.,
+///   they are orphaned subdirectories from prior sessions).
+/// - Subagent binaries (containing "subagent", "agent-daemon", or
+///   "subagent-permit" in their path) skip this step.
 fn clear_stale_artifact_pointers() {
     // Only run in the main process — skip if we're a subagent
     if let Some(exe) = current_exe_name() {
@@ -95,16 +98,27 @@ fn clear_stale_artifact_pointers() {
         return; // nothing to clean
     }
 
-    // 1. Reset TASK_POINTERS.json: clear active/focus IDs and tasks array
+    // 1. Build a set of known task IDs from TASK_POINTERS.json, then clear pointers
+    let mut known_task_ids: std::collections::HashSet<String> = std::collections::HashSet::new();
     let pointers_path = artifact_dir.join("TASK_POINTERS.json");
     if pointers_path.is_file() {
         let raw = match std::fs::read_to_string(&pointers_path) {
             Ok(r) => r,
             Err(e) => {
-                tracing::debug!("clear_stale_artifact_pointers: read failed ({e})");
+                tracing::debug!("clear_stale_artifact_pointers: read TASK_POINTERS failed ({e})");
                 return;
             }
         };
+        // Read known task IDs before clearing
+        if let Ok(data) = serde_json::from_str::<serde_json::Value>(&raw) {
+            if let Some(tasks) = data.get("tasks").and_then(|v| v.as_array()) {
+                for entry in tasks {
+                    if let Some(tid) = entry.get("task_id").and_then(|v| v.as_str()) {
+                        known_task_ids.insert(tid.to_string());
+                    }
+                }
+            }
+        }
         // Check if there's actually stale data before writing
         let should_clear = raw.contains(r#""active_task_id""#)
             || raw.contains(r#""focus_task_id""#);
@@ -130,7 +144,37 @@ fn clear_stale_artifact_pointers() {
         }
     }
 
-    // 2. Remove legacy pointer files
+    // 2. Remove orphaned task subdirectories (those whose task_id is NOT in
+    //    TASK_POINTERS.json. After the pointer clear above, known_task_ids is
+    //    empty, so ALL task subdirectories from prior sessions are removed.)
+    if let Ok(entries) = std::fs::read_dir(&artifact_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if !path.is_dir() {
+                continue;
+            }
+            // Only clean subdirectories that look like task dirs (contain GOAL_STATE.json)
+            if !path.join("GOAL_STATE.json").is_file() {
+                continue;
+            }
+            let dir_name = match path.file_name().and_then(|n| n.to_str()) {
+                Some(n) => n.to_string(),
+                None => continue,
+            };
+            // Skip directories that match known task IDs (still referenced)
+            if !known_task_ids.is_empty() && known_task_ids.contains(&dir_name) {
+                continue;
+            }
+            if let Err(e) = std::fs::remove_dir_all(&path) {
+                tracing::debug!(
+                    "clear_stale_artifact_pointers: remove task dir {} failed ({e})",
+                    path.display()
+                );
+            }
+        }
+    }
+
+    // 3. Remove legacy pointer files
     for name in ["active_task.json", "focus_task.json", "task_registry.json"] {
         let path = artifact_dir.join(name);
         if path.is_file() {

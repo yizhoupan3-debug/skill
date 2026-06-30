@@ -31,9 +31,9 @@ pub use runner::{
 };
 pub use safety::{assign_safety_for_action, assign_safety_for_file, parse_safety_level};
 pub use state::{
-    closeout_path, create_initial_state, generate_run_id, kill_signal_path, lock_path,
-    loop_artifacts_dir, loop_state_path, now_iso, pause_state_path, read_loop_state,
-    write_loop_state,
+    cleanup_loop_artifacts, closeout_path, create_initial_state, generate_run_id,
+    kill_signal_path, lock_path, loop_artifacts_dir, loop_state_path, now_iso, pause_state_path,
+    read_loop_state, write_loop_state,
 };
 pub use types::{
     KillSignalAction, KillSignalPayload, LoopAction, LoopActionRecord, LoopCloseoutAggregate,

@@ -7,7 +7,7 @@ use crate::kill_switch::{self, acquire_lock_guarded, clear_pause_state, read_pau
 use crate::report;
 use crate::safety::assign_safety_for_action;
 use crate::state::{
-    closeout_path, create_initial_state, finish_run, generate_run_id,
+    closeout_path, create_initial_state, cleanup_loop_artifacts, finish_run, generate_run_id,
     read_loop_state, start_new_run, transition_phase, update_heartbeat, write_loop_state,
 };
 use crate::types::{
@@ -168,6 +168,8 @@ pub fn run_loop(ctx: &RunContext) -> Result<LoopCloseoutAggregate, LoopError> {
                 if let Err(e) = write_loop_state(ctx.repo_root, loop_id, &state) {
                     tracing::error!("failed to write loop state on success path: {e}");
                 }
+                // P1: clean up loop artifact files to prevent unbounded on-disk accumulation
+                cleanup_loop_artifacts(ctx.repo_root, loop_id);
                 tracing::info!(
                     exit_path = "success",
                     loop_id = %loop_id,
@@ -210,6 +212,8 @@ pub fn run_loop(ctx: &RunContext) -> Result<LoopCloseoutAggregate, LoopError> {
                 if let Err(write_err) = write_loop_state(ctx.repo_root, loop_id, &state) {
                     tracing::error!("failed to write loop state on error path: {write_err}");
                 }
+                // P1: clean up loop artifact files — the loop is terminal
+                cleanup_loop_artifacts(ctx.repo_root, loop_id);
                 tracing::info!(
                     exit_path = "error",
                     error = %e,
