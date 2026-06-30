@@ -1,8 +1,8 @@
 {
   "schema_version": "mcp-tool-registry-v2",
   "scope": {
-    "total_count": 69,
-    "builtin_count": 19,
+    "total_count": 72,
+    "builtin_count": 22,
     "research_count": 16,
     "independent_count": 15,
     "external_count": 19,
@@ -1393,6 +1393,96 @@
       "tool_flags": [
         "readonly"
       ]
+    },
+    {
+      "slug": "loop_pause",
+      "display_name": "循环暂停",
+      "description": "暂停一个正在运行的循环。可选附带人工反馈文本",
+      "layer": "builtin",
+      "dispatch_domain": "domain:framework",
+      "owner": "framework",
+      "trigger_hints": [
+        "pause",
+        "暂停",
+        "loop pause",
+        "循环暂停"
+      ],
+      "mcp_server": "router-rs-framework",
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "loop_id"
+        ],
+        "properties": {
+          "loop_id": {
+            "type": "string",
+            "description": "要暂停的 loop ID"
+          },
+          "feedback": {
+            "type": "string",
+            "description": "可选人工反馈文本，注入到子进程的 handoff 中"
+          }
+        }
+      }
+    },
+    {
+      "slug": "loop_resume",
+      "display_name": "循环恢复",
+      "description": "恢复一个已暂停的循环",
+      "layer": "builtin",
+      "dispatch_domain": "domain:framework",
+      "owner": "framework",
+      "trigger_hints": [
+        "resume",
+        "恢复",
+        "loop resume",
+        "循环恢复"
+      ],
+      "mcp_server": "router-rs-framework",
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "loop_id"
+        ],
+        "properties": {
+          "loop_id": {
+            "type": "string",
+            "description": "要恢复的 loop ID"
+          }
+        }
+      }
+    },
+    {
+      "slug": "loop_redirect",
+      "display_name": "循环重定向",
+      "description": "重定向一个暂停的循环到新目标",
+      "layer": "builtin",
+      "dispatch_domain": "domain:framework",
+      "owner": "framework",
+      "trigger_hints": [
+        "redirect",
+        "重定向",
+        "loop redirect",
+        "循环重定向"
+      ],
+      "mcp_server": "router-rs-framework",
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "loop_id",
+          "new_goal"
+        ],
+        "properties": {
+          "loop_id": {
+            "type": "string",
+            "description": "要重定向的 loop ID"
+          },
+          "new_goal": {
+            "type": "string",
+            "description": "新目标描述"
+          }
+        }
+      }
     }
   ]
 }

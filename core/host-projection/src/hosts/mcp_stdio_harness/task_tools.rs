@@ -8,6 +8,7 @@ use core_state::task_ledger::{LedgerTransaction, append_transaction_assuming_l1_
 use core_state::transition_validation::{TaskTransition, validate_transition};
 use core_state_utils::task_write_lock::apply_task_ledger_mutation;
 use serde_json::{Value, json};
+use std::time::{SystemTime, UNIX_EPOCH};
 use std::path::Path;
 
 /// Create a new task: ensure directory, set focus, append `task_created` ledger entry.
@@ -639,6 +640,137 @@ pub(crate) fn tool_task_chain_advance(
     Ok(result)
 }
 
+// ── Loop control MCP tools ──
+// Write signal files to .loop-kill/{loop_id} for pause/resume/redirect.
+// These do NOT go through the goal-engine crate — they write directly to the
+// filesystem signal path that the goal-engine's poll_subprocess reads.
+
+/// Write a loop kill-switch signal file with the given action payload.
+/// The file is stored at `.loop-kill/{loop_id}` with JSON content.
+fn write_loop_signal(repo_root: &Path, loop_id: &str, payload: &serde_json::Value) -> Result<String, FrameworkError> {
+    let kill_dir = repo_root.join(".loop-kill");
+    std::fs::create_dir_all(&kill_dir)
+        .map_err(|e| FrameworkError::Io(e))?;
+    let file_path = kill_dir.join(loop_id);
+    let content = serde_json::to_string(payload)
+        .map_err(|e| FrameworkError::validation(format!("serialize signal: {e}")))?;
+    std::fs::write(&file_path, content)
+        .map_err(|e| FrameworkError::Io(e))?;
+    Ok(json!({
+        "ok": true,
+        "loop_id": loop_id,
+        "signal_path": file_path.to_string_lossy().to_string(),
+    })
+    .to_string())
+}
+
+/// Pause a running loop. Optionally includes human feedback for the subagent.
+/// Arguments: { loop_id (required), feedback (optional) }
+pub(crate) fn tool_loop_pause(
+    arguments: &Value,
+    repo_root: &Path,
+) -> Result<String, FrameworkError> {
+    let loop_id = arguments
+        .get("loop_id")
+        .and_then(Value::as_str)
+        .ok_or_else(|| FrameworkError::validation("loop_pause: missing 'loop_id'".to_string()))?
+        .trim();
+    if loop_id.is_empty() {
+        return Err(FrameworkError::validation("loop_pause: loop_id must not be empty".to_string()));
+    }
+    let now_epoch = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let feedback = arguments.get("feedback").and_then(Value::as_str);
+    let payload = if let Some(fb) = feedback {
+        json!({
+            "schema_version": "loop-signal-v2",
+            "loop_id": loop_id,
+            "action": "pause_with_feedback",
+            "action_id": "mcp-tool",
+            "armed_at": now_epoch,
+            "armed_at_iso": now_epoch.to_string(),
+            "feedback": fb,
+        })
+    } else {
+        json!({
+            "schema_version": "loop-signal-v2",
+            "loop_id": loop_id,
+            "action": "pause",
+            "action_id": "mcp-tool",
+            "armed_at": now_epoch,
+            "armed_at_iso": now_epoch.to_string(),
+        })
+    };
+    write_loop_signal(repo_root, loop_id, &payload)
+}
+
+/// Resume a paused loop. The loop continues with the same action.
+/// Arguments: { loop_id (required) }
+pub(crate) fn tool_loop_resume(
+    arguments: &Value,
+    repo_root: &Path,
+) -> Result<String, FrameworkError> {
+    let loop_id = arguments
+        .get("loop_id")
+        .and_then(Value::as_str)
+        .ok_or_else(|| FrameworkError::validation("loop_resume: missing 'loop_id'".to_string()))?
+        .trim();
+    if loop_id.is_empty() {
+        return Err(FrameworkError::validation("loop_resume: loop_id must not be empty".to_string()));
+    }
+    let now_epoch = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let payload = json!({
+        "schema_version": "loop-signal-v2",
+        "loop_id": loop_id,
+        "action": "resume",
+        "armed_at": now_epoch,
+        "armed_at_iso": now_epoch.to_string(),
+    });
+    write_loop_signal(repo_root, loop_id, &payload)
+}
+
+/// Redirect a paused loop to a new goal. The current action is skipped.
+/// Arguments: { loop_id (required), new_goal (required) }
+pub(crate) fn tool_loop_redirect(
+    arguments: &Value,
+    repo_root: &Path,
+) -> Result<String, FrameworkError> {
+    let loop_id = arguments
+        .get("loop_id")
+        .and_then(Value::as_str)
+        .ok_or_else(|| FrameworkError::validation("loop_redirect: missing 'loop_id'".to_string()))?
+        .trim();
+    if loop_id.is_empty() {
+        return Err(FrameworkError::validation("loop_redirect: loop_id must not be empty".to_string()));
+    }
+    let new_goal = arguments
+        .get("new_goal")
+        .and_then(Value::as_str)
+        .ok_or_else(|| FrameworkError::validation("loop_redirect: missing 'new_goal'".to_string()))?
+        .trim();
+    if new_goal.is_empty() {
+        return Err(FrameworkError::validation("loop_redirect: new_goal must not be empty".to_string()));
+    }
+    let now_epoch = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let payload = json!({
+        "schema_version": "loop-signal-v2",
+        "loop_id": loop_id,
+        "action": "redirect",
+        "new_goal": new_goal,
+        "armed_at": now_epoch,
+        "armed_at_iso": now_epoch.to_string(),
+    });
+    write_loop_signal(repo_root, loop_id, &payload)
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
@@ -917,6 +1049,97 @@ mod tests {
         let v: Value = serde_json::from_str(&result).expect("parse");
         assert_eq!(v["status"], json!("loop_goal_skipped"));
 
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    // ── Loop control tool tests ──
+
+    #[test]
+    fn test_tool_loop_pause_writes_signal_file() {
+        let repo = unique_test_dir("loop-pause");
+        let args = json!({"loop_id": "test-loop"});
+        let result = tool_loop_pause(&args, &repo).expect("pause");
+        let v: Value = serde_json::from_str(&result).expect("parse result");
+        assert_eq!(v["ok"], json!(true));
+        assert_eq!(v["loop_id"], json!("test-loop"));
+
+        let signal_path = repo.join(".loop-kill").join("test-loop");
+        assert!(signal_path.is_file(), "signal file must exist");
+        let content = std::fs::read_to_string(&signal_path).expect("read signal");
+        let parsed: Value = serde_json::from_str(&content).expect("parse signal");
+        assert_eq!(parsed["action"], json!("pause"));
+        assert_eq!(parsed["loop_id"], json!("test-loop"));
+
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    #[test]
+    fn test_tool_loop_pause_with_feedback() {
+        let repo = unique_test_dir("loop-pause-fb");
+        let args = json!({"loop_id": "test-loop", "feedback": "check edge cases"});
+        let result = tool_loop_pause(&args, &repo).expect("pause");
+        let v: Value = serde_json::from_str(&result).expect("parse");
+        assert_eq!(v["ok"], json!(true));
+
+        let signal_path = repo.join(".loop-kill").join("test-loop");
+        let content = std::fs::read_to_string(&signal_path).expect("read signal");
+        let parsed: Value = serde_json::from_str(&content).expect("parse");
+        assert_eq!(parsed["action"], json!("pause_with_feedback"));
+        assert_eq!(parsed["feedback"], json!("check edge cases"));
+
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    #[test]
+    fn test_tool_loop_resume_writes_signal_file() {
+        let repo = unique_test_dir("loop-resume");
+        let args = json!({"loop_id": "test-resume"});
+        let result = tool_loop_resume(&args, &repo).expect("resume");
+        let v: Value = serde_json::from_str(&result).expect("parse");
+        assert_eq!(v["ok"], json!(true));
+
+        let signal_path = repo.join(".loop-kill").join("test-resume");
+        assert!(signal_path.is_file(), "signal file must exist");
+        let content = std::fs::read_to_string(&signal_path).expect("read signal");
+        let parsed: Value = serde_json::from_str(&content).expect("parse");
+        assert_eq!(parsed["action"], json!("resume"));
+
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    #[test]
+    fn test_tool_loop_redirect_writes_signal_file() {
+        let repo = unique_test_dir("loop-redirect");
+        let args = json!({"loop_id": "test-redirect", "new_goal": "do something else"});
+        let result = tool_loop_redirect(&args, &repo).expect("redirect");
+        let v: Value = serde_json::from_str(&result).expect("parse");
+        assert_eq!(v["ok"], json!(true));
+
+        let signal_path = repo.join(".loop-kill").join("test-redirect");
+        assert!(signal_path.is_file(), "signal file must exist");
+        let content = std::fs::read_to_string(&signal_path).expect("read signal");
+        let parsed: Value = serde_json::from_str(&content).expect("parse");
+        assert_eq!(parsed["action"], json!("redirect"));
+        assert_eq!(parsed["new_goal"], json!("do something else"));
+
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    #[test]
+    fn test_tool_loop_pause_missing_loop_id() {
+        let repo = unique_test_dir("loop-pause-err");
+        let args = json!({});
+        let result = tool_loop_pause(&args, &repo);
+        assert!(result.is_err(), "missing loop_id must error");
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    #[test]
+    fn test_tool_loop_redirect_missing_new_goal() {
+        let repo = unique_test_dir("loop-redirect-err");
+        let args = json!({"loop_id": "test"});
+        let result = tool_loop_redirect(&args, &repo);
+        assert!(result.is_err(), "missing new_goal must error");
         let _ = fs::remove_dir_all(&repo);
     }
 }

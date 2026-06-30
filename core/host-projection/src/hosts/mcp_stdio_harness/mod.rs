@@ -284,6 +284,7 @@ pub(super) fn dispatch_tool(
         r.register(RoutingTools);
         r.register(ToolDomainTools);
         r.register(TaskCrudTools);
+        r.register(LoopControlTools);
         r.register(GoalCloseoutTools);
         r.register(TaskOutputTools);
         r.register(ChainDagTools);

@@ -112,7 +112,9 @@ pub fn create_initial_state(loop_id: &str, profile: &str) -> LoopRunState {
 
 /// Transition the loop runner to a new phase, updating the heartbeat and refresh timestamp.
 /// Logs a warning when the transition is not in the valid set, but still allows it.
+/// Emits a structured phase_transition event with from/to fields for observability.
 pub fn transition_phase(state: &mut LoopRunState, new_phase: LoopPhase) {
+    let from = state.phase.clone();
     let current_str = &state.phase;
     if let Some(current) = [
         LoopPhase::Pending,
@@ -139,6 +141,11 @@ pub fn transition_phase(state: &mut LoopRunState, new_phase: LoopPhase) {
     state.phase = new_phase.as_str().to_string();
     state.last_heartbeat = now_iso();
     state.last_refreshed_at = now_iso();
+    tracing::info!(
+        from = %from,
+        to = %new_phase,
+        "phase transition"
+    );
 }
 
 /// Initialise a new run within the loop state, setting the run ID and started-at timestamp.

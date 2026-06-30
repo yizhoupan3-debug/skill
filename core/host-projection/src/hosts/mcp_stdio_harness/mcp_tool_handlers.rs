@@ -159,6 +159,33 @@ impl ToolHandler for TaskCrudTools {
 }
 
 // ---------------------------------------------------------------------------
+// LoopControlTools (3 tools: loop_pause, loop_resume, loop_redirect)
+// Write goal-engine signal files via task_tools handlers (direct fs, no dep).
+// ---------------------------------------------------------------------------
+
+pub struct LoopControlTools;
+impl ToolHandler for LoopControlTools {
+    fn tool_names(&self) -> &[&'static str] {
+        &["loop_pause", "loop_resume", "loop_redirect"]
+    }
+    fn dispatch(
+        &self,
+        tool_name: &str,
+        args: &Value,
+        ctx: &ToolCallContext,
+    ) -> Result<String, FrameworkError> {
+        match tool_name {
+            "loop_pause" => Ok(tool_loop_pause(args, &ctx.repo_root)?),
+            "loop_resume" => Ok(tool_loop_resume(args, &ctx.repo_root)?),
+            "loop_redirect" => Ok(tool_loop_redirect(args, &ctx.repo_root)?),
+            _ => Err(FrameworkError::not_found(format!(
+                "LoopControlTools: unknown tool: {tool_name}"
+            ))),
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // GoalCloseoutTools (4 tools: closeout_gate, closeout_record_write, goal_state_manage, goal_state_read)
 // ---------------------------------------------------------------------------
 

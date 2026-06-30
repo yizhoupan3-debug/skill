@@ -100,8 +100,8 @@ pub fn run_loop(ctx: &RunContext) -> Result<LoopCloseoutAggregate, LoopError> {
         // Re-insert rescued entries into the new current_run.dispatch
         if !rescued_dispatch.is_empty() {
             tracing::info!(
-                "checkpoint restart: rescued {} completed action(s) from previous run",
-                rescued_dispatch.len()
+                rescued_count = rescued_dispatch.len(),
+                "checkpoint restart: rescued completed action(s) from previous run"
             );
             if let Some(ref mut run) = state.current_run {
                 run.dispatch.extend(rescued_dispatch);
@@ -133,6 +133,10 @@ pub fn run_loop(ctx: &RunContext) -> Result<LoopCloseoutAggregate, LoopError> {
             if let Err(e) = write_loop_state(ctx.repo_root, loop_id, &state) {
                 tracing::error!("failed to write loop state on dry-run path: {e}");
             }
+            tracing::info!(
+                exit_path = "dry_run",
+                "run_loop exit"
+            );
             return Ok(aggregate);
         }
 
@@ -148,8 +152,8 @@ pub fn run_loop(ctx: &RunContext) -> Result<LoopCloseoutAggregate, LoopError> {
                     .as_ref()
                     .map(|r| r.unconsumed_findings.clone())
                     .unwrap_or_default();
-                let elapsed = Some(lock_start.elapsed().as_secs());
-                let report_text = report::render_loop_report(&state, &agg, &findings, elapsed);
+                let lock_ms = lock_start.elapsed().as_millis() as u64;
+                let report_text = report::render_loop_report(&state, &agg, &findings, Some(lock_ms / 1000));
                 let report_path =
                     report::write_loop_report(ctx.repo_root, loop_id, &run_id, &report_text).ok();
                 if let Some(ref mut r) = state.current_run {
@@ -161,6 +165,15 @@ pub fn run_loop(ctx: &RunContext) -> Result<LoopCloseoutAggregate, LoopError> {
                 if let Err(e) = write_loop_state(ctx.repo_root, loop_id, &state) {
                     tracing::error!("failed to write loop state on success path: {e}");
                 }
+                tracing::info!(
+                    exit_path = "success",
+                    loop_id = %loop_id,
+                    run_id = %run_id,
+                    duration_ms = lock_ms,
+                    overall_status = %agg.overall_status,
+                    actions_count = agg.actions.len(),
+                    "run_loop exit"
+                );
                 break Ok(agg);
             }
             Err(LoopError::ResearchEscalation(msg)) => {
@@ -171,6 +184,11 @@ pub fn run_loop(ctx: &RunContext) -> Result<LoopCloseoutAggregate, LoopError> {
                     tracing::error!("failed to write loop state on research escalation: {e}");
                 }
                 if depth_remaining == 0 {
+                    tracing::info!(
+                        exit_path = "research_max_depth",
+                        depth_remaining = 0,
+                        "run_loop exit"
+                    );
                     break Err(LoopError::ResearchEscalation(
                         "max recursion depth reached for research escalation auto-restart"
                             .to_string(),
@@ -187,6 +205,11 @@ pub fn run_loop(ctx: &RunContext) -> Result<LoopCloseoutAggregate, LoopError> {
                 if let Err(write_err) = write_loop_state(ctx.repo_root, loop_id, &state) {
                     tracing::error!("failed to write loop state on error path: {write_err}");
                 }
+                tracing::info!(
+                    exit_path = "error",
+                    error = %e,
+                    "run_loop exit"
+                );
                 break Err(e);
             }
         } // close match
@@ -199,6 +222,8 @@ fn run_loop_inner(
     run_id: &str,
     entry: &LoopRegistryEntry,
 ) -> Result<LoopCloseoutAggregate, LoopError> {
+    let mut phase_start = Instant::now();
+
     transition_phase(state, LoopPhase::Discovering);
     let actions = discover_actions(entry, ctx.repo_root)?;
 
@@ -208,7 +233,14 @@ fn run_loop_inner(
             actions: actions.clone(),
         });
     }
+    tracing::info!(
+        phase = "discovering",
+        duration_us = phase_start.elapsed().as_micros() as u64,
+        actions_found = actions.len(),
+        "phase completed"
+    );
 
+    phase_start = Instant::now();
     transition_phase(state, LoopPhase::Preflight);
     let profile_config = LoopProfileConfig::from_runtime_registry(ctx.repo_root, &entry.profile)
         .unwrap_or_else(|| LoopProfileConfig {
@@ -224,7 +256,13 @@ fn run_loop_inner(
         });
     let safety_map = assign_safety_levels(&actions, entry);
     check_budget_preflight(&profile_config)?;
+    tracing::info!(
+        phase = "preflight",
+        duration_us = phase_start.elapsed().as_micros() as u64,
+        "phase completed"
+    );
 
+    phase_start = Instant::now();
     transition_phase(state, LoopPhase::Running);
     let mut results: Vec<(String, AggregateActionResult)> = Vec::new();
     // Action output cache: populated after each committed action, consumed
@@ -458,6 +496,14 @@ fn run_loop_inner(
         }
     }
 
+    tracing::info!(
+        phase = "running",
+        duration_us = phase_start.elapsed().as_micros() as u64,
+        actions_executed = results.len(),
+        "phase completed"
+    );
+
+    phase_start = Instant::now();
     transition_phase(state, LoopPhase::Verifying);
     let mut aggregate = build_aggregate(run_id, &entry.loop_id, &actions, results);
     // Write LOOP_OUTPUT.json for downstream consumers
@@ -492,12 +538,14 @@ fn run_loop_inner(
                     "goal": entry.loop_id,
                     "round": 1,
                 });
+                let qg_start = Instant::now();
                 match qg_hooks.evaluate_quality_gate(qg_payload) {
                     Ok(verdict) => {
                         let passed = verdict
                             .get("passed")
                             .and_then(|v| v.as_bool())
                             .unwrap_or(false);
+                        let qg_duration_us = qg_start.elapsed().as_micros() as u64;
                         if !passed {
                             let blockers: Vec<String> = verdict
                                 .get("blockers")
@@ -513,26 +561,41 @@ fn run_loop_inner(
                                 })
                                 .unwrap_or_default();
                             tracing::warn!(
-                                "Quality gate blocked (verify_quality_gate=true): {}",
-                                blockers.join("; ")
+                                loop_id = %entry.loop_id,
+                                qg_passed = false,
+                                qg_blocker_count = blockers.len(),
+                                qg_duration_us = qg_duration_us,
+                                "Quality gate blocked (verify_quality_gate=true)"
                             );
                             aggregate.overall_status = "fail".to_string();
                             aggregate.qg_blockers = blockers;
+                        } else {
+                            tracing::info!(
+                                loop_id = %entry.loop_id,
+                                qg_passed = true,
+                                qg_duration_us = qg_duration_us,
+                                "quality gate passed"
+                            );
                         }
                     }
                     Err(e) => {
+                        let qg_duration_us = qg_start.elapsed().as_micros() as u64;
                         // P1-007: Fail-closed on QG hook error, consistent with goal_ops.rs
                         // (which returns Err on QG hook failure). In runner context, downgrade
                         // the aggregate to "fail" so the caller is aware of the blocked gate.
                         tracing::error!(
-                            "Quality gate hook error (verify_quality_gate=true): {e} — \
-                             downgrading aggregate to fail (fail-closed)"
+                            loop_id = %entry.loop_id,
+                            qg_error = %e,
+                            qg_duration_us = qg_duration_us,
+                            "Quality gate hook error (verify_quality_gate=true) — downgrading aggregate to fail (fail-closed)"
                         );
                         aggregate.overall_status = "fail".to_string();
                     }
                 }
             } else {
                 tracing::warn!(
+                    loop_id = %entry.loop_id,
+                    task_id = %task_id,
                     "verify_quality_gate=true but RuntimeCoreHooks not registered — skipping QG gate"
                 );
             }
@@ -558,6 +621,7 @@ fn run_loop_inner(
                 "task_id": task_id,
                 "host_id": ctx.host_id,
             });
+            let cg_start = Instant::now();
             match cg_hooks.evaluate_closeout_gate(closeout_payload) {
                 Ok(result) => {
                     let passed = result
@@ -573,15 +637,32 @@ fn run_loop_inner(
                                 .collect()
                         })
                         .unwrap_or_default();
+                    let cg_duration_us = cg_start.elapsed().as_micros() as u64;
                     if !passed {
                         tracing::warn!(
-                            "Closeout gate advisory (verify_closeout_gate=true): {} findings",
-                            findings.len()
+                            loop_id = %entry.loop_id,
+                            cg_passed = false,
+                            cg_findings_count = findings.len(),
+                            cg_duration_us = cg_duration_us,
+                            "Closeout gate advisory (verify_closeout_gate=true)"
+                        );
+                    } else {
+                        tracing::info!(
+                            loop_id = %entry.loop_id,
+                            cg_passed = true,
+                            cg_duration_us = cg_duration_us,
+                            "closeout gate passed"
                         );
                     }
                 }
                 Err(e) => {
-                    tracing::warn!("Closeout gate hook error (verify_closeout_gate=true): {e}");
+                    let cg_duration_us = cg_start.elapsed().as_micros() as u64;
+                    tracing::warn!(
+                        loop_id = %entry.loop_id,
+                        cg_error = %e,
+                        cg_duration_us = cg_duration_us,
+                        "Closeout gate hook error (verify_closeout_gate=true)"
+                    );
                 }
             }
         }
@@ -599,18 +680,18 @@ fn run_loop_inner(
     let current_goal = read_goal_snapshot(ctx.repo_root, entry);
     if current_goal.is_none() && should_check && state.anti_drift.original_goal_snapshot.is_some() {
         tracing::warn!(
-            "[goal-engine] anti-drift check at cycle {} skipped: cannot read current goal (GOAL_STATE.json not found at artifacts/current/{}/)",
-            state.anti_drift.review_cycle_count,
-            entry.loop_id,
+            review_cycle = state.anti_drift.review_cycle_count,
+            loop_id = %entry.loop_id,
+            "anti-drift check skipped: cannot read current goal (GOAL_STATE.json not found)"
         );
     }
     if should_check && let Some(current_goal_text) = current_goal {
         let result = crate::drift::perform_drift_check(&mut state.anti_drift, &current_goal_text);
         tracing::warn!(
-            "[goal-engine] anti-drift check at cycle {}: drift_detected={}, score={:.2}",
-            result.review_cycle,
-            result.drift_detected,
-            result.drift_score
+            review_cycle = result.review_cycle,
+            drift_detected = result.drift_detected,
+            drift_score = result.drift_score,
+            "anti-drift check result"
         );
         state.anti_drift.last_drift_check = Some(result.clone());
         state.anti_drift.drift_check_history.push(result);
@@ -632,6 +713,13 @@ fn run_loop_inner(
             .map(|r| r.barrier_threshold)
             .unwrap_or(3);
         if state.circuit_breaker.consecutive_failures >= threshold {
+            tracing::warn!(
+                loop_id = %entry.loop_id,
+                consecutive_failures = state.circuit_breaker.consecutive_failures,
+                threshold = threshold,
+                research_enabled = entry.research_enabled,
+                "circuit breaker firing"
+            );
             if entry.research_enabled {
                 let escalation = barrier_escalation(
                     entry,
@@ -664,6 +752,15 @@ fn run_loop_inner(
             }
         }
     }
+
+    // Emit verifying phase timing before the GOAL_STATE epilogue
+    // so it's not lost if the sync write propagates an error.
+    tracing::info!(
+        phase = "verifying",
+        duration_us = phase_start.elapsed().as_micros() as u64,
+        overall_status = %aggregate.overall_status,
+        "phase completed"
+    );
 
     // ── GOAL_STATE heartbeat sync (formerly iteration_count sync) ──
     // Best-effort touch of GOAL_STATE.json to prevent the goal-engine's

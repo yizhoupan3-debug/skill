@@ -106,7 +106,9 @@ pub(crate) fn poll_subprocess(
     timeout_duration: Duration,
     pause_ctx: Option<PausePollCtx<'_>>,
 ) -> Result<std::process::Output, LoopError> {
+    let mut poll_count: u64 = 0;
     loop {
+        poll_count += 1;
         match child
             .try_wait()
             .map_err(|e| LoopError::Io(format!("{label} try_wait: {e}")))?
@@ -194,6 +196,17 @@ pub(crate) fn poll_subprocess(
                         .map_err(|e| LoopError::Io(format!("{label} wait timeout: {e}")))?;
                     return Err(LoopError::Timeout(timeout_duration.as_secs()));
                 }
+
+                // Heartbeat every 15th poll interval (~30s at KILL_POLL_INTERVAL_SECS=2)
+                if poll_count % 15 == 0 {
+                    tracing::info!(
+                        %loop_id,
+                        label = %label,
+                        poll_count,
+                        "poll_subprocess heartbeat"
+                    );
+                }
+
                 thread::sleep(Duration::from_secs(KILL_POLL_INTERVAL_SECS));
             }
         }

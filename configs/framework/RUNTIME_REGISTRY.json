@@ -663,7 +663,10 @@
         "task_focus",
         "task_list",
         "tool_registry_status",
-        "web_fetch"
+        "web_fetch",
+        "loop_pause",
+        "loop_resume",
+        "loop_redirect"
       ],
       "host_config_keys": {
         "cursor": "mcp_servers.router-rs-framework",
