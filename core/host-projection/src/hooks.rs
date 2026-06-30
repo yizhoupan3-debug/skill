@@ -414,6 +414,133 @@ pub struct RuntimeHooks {
     pub inspect_trace_stream: InspectTraceStreamFn,
 }
 
+/// Safe defaults for all RuntimeHooks fields.
+///
+/// Provides no-op or error-returning defaults that mirror the proxy fallback
+/// behavior. Useful for tests and for constructing a partial RuntimeHooks
+/// that gets overridden via `modify_runtime_hooks()` after bootstrap.
+impl Default for RuntimeHooks {
+    fn default() -> Self {
+        Self {
+            // framework_runtime (5 fields)
+            closeout_record_path_for_task: |_, _| {
+                Err(FrameworkError::validation(
+                    "CLOSEOUT_RECORD_PATH not registered",
+                ))
+            },
+            evaluate_closeout_record_file_for_task: |_, _, _| {
+                Err(FrameworkError::validation(
+                    "evaluate_closeout_record_file_for_task not registered",
+                ))
+            },
+            extract_post_tool_duration_ms: |_| None,
+            post_tool_call_succeeded: |_| true,
+            closeout_stop_followup_for_completion_text: |_, _| None,
+            // paper hooks (4 fields) — no-op defaults
+            maybe_append_paper_prose_context: |_, _, _, _| {},
+            maybe_merge_paper_prose_before_submit: |_, _, _, _, _| {},
+            maybe_append_paper_adversarial_context: |_, _, _, _| {},
+            maybe_merge_paper_adversarial_before_submit: |_, _, _, _, _| {},
+            // research activity (1 field) — no-op default
+            maybe_record_research_activity: |_, _, _| {},
+            // kernel bootstrap (1 field)
+            ensure_kernel_bootstrap: || {},
+            // framework_runtime_extra (7 fields)
+            current_local_timestamp: || "1970-01-01T00:00:00Z".to_string(),
+            write_framework_session_artifacts: |_| {
+                Err(FrameworkError::validation(
+                    "WRITE_FRAMEWORK_SESSION_ARTIFACTS not registered",
+                ))
+            },
+            route_task_with_manifest_fallback: |_, _, _, _, _, _| {
+                Err(FrameworkError::validation(
+                    "ROUTE_TASK_WITH_MANIFEST_FALLBACK not registered",
+                ))
+            },
+            build_automatic_continuity_checkpoint_payload: |_, _, _, _, _, _| Value::Null,
+            append_evidence_index: |_, _, _| {
+                Err(FrameworkError::validation(
+                    "APPEND_EVIDENCE_INDEX not registered",
+                ))
+            },
+            closeout_record_schema_version: || "closeout-record-v1",
+            // web_fetch_guard (3 fields)
+            validate_and_resolve_web_fetch_url: |_| {
+                Err(FrameworkError::validation(
+                    "VALIDATE_AND_RESOLVE_WEB_FETCH_URL not registered",
+                ))
+            },
+            resolve_web_fetch_redirect: |_, _| {
+                Err(FrameworkError::validation(
+                    "RESOLVE_WEB_FETCH_REDIRECT not registered",
+                ))
+            },
+            resolve_web_fetch_addresses: |_, _| {
+                Err(FrameworkError::validation(
+                    "RESOLVE_WEB_FETCH_ADDRESSES not registered",
+                ))
+            },
+            // mcp_pre_guard (1 field) — blocked by default
+            evaluate_mcp_pre_guard_safe: |_, _, _| McpPreGuardVerdict {
+                blocked: true,
+                reason: Some(
+                    "MCP pre-guard not initialized — rejected by default".to_string(),
+                ),
+            },
+            // research_tool_dispatch (1 field)
+            research_tool_dispatch: |_, _| {
+                Err(FrameworkError::validation(
+                    "research_tool_dispatch not registered",
+                ))
+            },
+            // mcp_tool_routing (2 fields)
+            mcp_tool_skill_route: |_, _, _, _| {
+                Err(FrameworkError::validation(
+                    "MCP_TOOL_SKILL_ROUTE not registered",
+                ))
+            },
+            mcp_tool_search_skills: |_, _, _, _| {
+                Err(FrameworkError::validation(
+                    "MCP_TOOL_SEARCH_SKILLS not registered",
+                ))
+            },
+            // tool_dispatch (3 fields)
+            tool_goal_state_manage_dispatch: |_, _, _| {
+                Err(FrameworkError::validation(
+                    "GOAL_STATE_MANAGE_DISPATCH not registered",
+                ))
+            },
+            tool_closeout_record_write_dispatch: |_, _| {
+                Err(FrameworkError::validation(
+                    "CLOSEOUT_RECORD_WRITE_DISPATCH not registered",
+                ))
+            },
+            tool_closeout_gate_evaluate: |_, _, _| {
+                Err(FrameworkError::validation(
+                    "CLOSEOUT_GATE_EVALUATE not registered",
+                ))
+            },
+            // browser_dispatch (1 field)
+            browser_dispatch: |_| {
+                Err(FrameworkError::validation(
+                    "browser-mcp dispatch not registered",
+                ))
+            },
+            // runtime_trace_transport (2 fields)
+            attach_runtime_event_transport: |_| {
+                Err(FrameworkError::validation(
+                    "ATTACH_RUNTIME_EVENT_TRANSPORT not registered",
+                ))
+            },
+            inspect_trace_stream: |_| {
+                Err(FrameworkError::validation(
+                    "INSPECT_TRACE_STREAM not registered",
+                ))
+            },
+        }
+    }
+}
+
 static RUNTIME_HOOKS: Mutex<Option<RuntimeHooks>> = Mutex::new(None);
 
 /// Get the consolidated RuntimeHooks struct. Returns `None` if not yet set (bootstrap not complete).

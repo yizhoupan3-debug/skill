@@ -38,29 +38,13 @@ impl GateChecker for EvidenceChecker {
         let mut findings = Vec::new();
 
         if !has_evidence {
-            findings.push(Finding {
-                id: "no-evidence".to_string(),
-                severity: Severity::Warning,
-                description: format!(
-                    "task '{task_id}' has no evidence artifacts — no evidence of completion"
-                ),
-                location: None,
-                suggestion: Some(
-                    "record evidence via append_evidence before completing".to_string(),
-                ),
-            });
+            findings.push(Finding::new("no-evidence", Severity::Warning,
+                format!("task '{task_id}' has no evidence artifacts — no evidence of completion"))
+                .with_suggestion("record evidence via append_evidence before completing"));
         } else if !evidence_ok {
-            findings.push(Finding {
-                id: "evidence-not-ok".to_string(),
-                severity: Severity::C,
-                description: format!(
-                    "task '{task_id}' has evidence artifacts but none indicate success"
-                ),
-                location: None,
-                suggestion: Some(
-                    "ensure at least one artifact has exit_code=0 or success=true".to_string(),
-                ),
-            });
+            findings.push(Finding::new("evidence-not-ok", Severity::C,
+                format!("task '{task_id}' has evidence artifacts but none indicate success"))
+                .with_suggestion("ensure at least one artifact has exit_code=0 or success=true"));
         }
 
         let passed = findings.is_empty()

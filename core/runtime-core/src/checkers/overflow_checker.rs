@@ -30,30 +30,16 @@ impl GateChecker for OverflowChecker {
 
             // Empty output check
             if char_count < 50 {
-                findings.push(Finding {
-                    id: "output-too-small".to_string(),
-                    severity: Severity::Warning,
-                    description: format!(
-                        "slide output has only ~{char_count} characters — likely incomplete"
-                    ),
-                    location: None,
-                    suggestion: Some("verify the slide content was fully generated".to_string()),
-                });
+                findings.push(Finding::new("output-too-small", Severity::Warning,
+                    format!("slide output has only ~{char_count} characters — likely incomplete"))
+                    .with_suggestion("verify the slide content was fully generated"));
             }
 
             // Oversized output check (~100k chars ≈ 25k CJK tokens ≈ context window)
             if char_count > 100_000 {
-                findings.push(Finding {
-                    id: "output-too-large".to_string(),
-                    severity: Severity::B,
-                    description: format!(
-                        "slide output is ~{char_count} characters — may overflow LLM context window"
-                    ),
-                    location: None,
-                    suggestion: Some(
-                        "split into smaller sections or reduce content per slide".to_string(),
-                    ),
-                });
+                findings.push(Finding::new("output-too-large", Severity::B,
+                    format!("slide output is ~{char_count} characters — may overflow LLM context window"))
+                    .with_suggestion("split into smaller sections or reduce content per slide"));
             }
         }
 
@@ -62,24 +48,15 @@ impl GateChecker for OverflowChecker {
             if ev_path.is_file() {
                 if let Ok(content) = fs::read_to_string(ev_path) {
                     if content.trim().is_empty() {
-                        findings.push(Finding {
-                            id: "empty-evidence".to_string(),
-                            severity: Severity::Warning,
-                            description: "evidence index exists but is empty".to_string(),
-                            location: Some(ev_path.to_string_lossy().to_string()),
-                            suggestion: None,
-                        });
+                        findings.push(Finding::new("empty-evidence", Severity::Warning,
+                            "evidence index exists but is empty")
+                            .with_location(ev_path.to_string_lossy().to_string()));
                     }
                 }
             } else {
-                findings.push(Finding {
-                    id: "missing-evidence".to_string(),
-                    severity: Severity::C,
-                    description: "no evidence index found — cannot verify output completeness"
-                        .to_string(),
-                    location: None,
-                    suggestion: Some("complete the task and record evidence first".to_string()),
-                });
+                findings.push(Finding::new("missing-evidence", Severity::C,
+                    "no evidence index found — cannot verify output completeness")
+                    .with_suggestion("complete the task and record evidence first"));
             }
         }
 

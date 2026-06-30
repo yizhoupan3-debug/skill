@@ -175,25 +175,24 @@ fn build_dry_run_execute_response(payload: &ExecuteRequestPayload) -> ExecuteRes
         "diagnostic_route_mode".to_string(),
         json!(payload.diagnostic_route_mode),
     );
-    ExecuteResponsePayload {
-        execution_schema_version: EXECUTION_SCHEMA_VERSION.to_string(),
-        authority: EXECUTION_AUTHORITY.to_string(),
-        session_id: payload.session_id.clone(),
-        user_id: payload.user_id.clone(),
-        skill: payload.selected_skill.clone(),
-        overlay: payload.overlay_skill.clone(),
-        live_run: false,
+    let mut response = ExecuteResponsePayload::new(
+        payload.session_id.clone(),
+        payload.user_id.clone(),
+        payload.selected_skill.clone(),
+        false,
         content,
-        usage: ExecuteUsagePayload {
+        ExecuteUsagePayload {
             input_tokens,
             output_tokens,
             total_tokens: input_tokens + output_tokens,
             mode: "estimated".to_string(),
         },
-        prompt_preview: None,
-        model_id: None,
-        metadata: Value::Object(metadata),
-    }
+    );
+    response.execution_schema_version = EXECUTION_SCHEMA_VERSION.to_string();
+    response.authority = EXECUTION_AUTHORITY.to_string();
+    response.overlay = payload.overlay_skill.clone();
+    response.metadata = Value::Object(metadata);
+    response
 }
 
 #[derive(Debug)]
@@ -660,25 +659,26 @@ pub fn build_live_execute_response(
         "execution_kernel_model_id_source".to_string(),
         Value::String(EXECUTION_MODEL_ID_SOURCE.to_string()),
     );
-    ExecuteResponsePayload {
-        execution_schema_version: EXECUTION_SCHEMA_VERSION.to_string(),
-        authority: EXECUTION_AUTHORITY.to_string(),
-        session_id: payload.session_id.clone(),
-        user_id: payload.user_id.clone(),
-        skill: payload.selected_skill.clone(),
-        overlay: payload.overlay_skill.clone(),
-        live_run: true,
-        content: live_result.content,
-        usage: ExecuteUsagePayload {
+    let mut response = ExecuteResponsePayload::new(
+        payload.session_id.clone(),
+        payload.user_id.clone(),
+        payload.selected_skill.clone(),
+        true,
+        live_result.content,
+        ExecuteUsagePayload {
             input_tokens: live_result.input_tokens,
             output_tokens: live_result.output_tokens,
             total_tokens: live_result.total_tokens,
             mode: "live".to_string(),
         },
-        prompt_preview,
-        model_id: live_result.model_id.clone(),
-        metadata: Value::Object(metadata),
-    }
+    );
+    response.execution_schema_version = EXECUTION_SCHEMA_VERSION.to_string();
+    response.authority = EXECUTION_AUTHORITY.to_string();
+    response.overlay = payload.overlay_skill.clone();
+    response.prompt_preview = prompt_preview;
+    response.model_id = live_result.model_id.clone();
+    response.metadata = Value::Object(metadata);
+    response
 }
 
 pub fn normalize_chat_completions_endpoint(base_url: &str) -> String {

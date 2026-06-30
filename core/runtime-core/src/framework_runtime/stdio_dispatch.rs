@@ -40,7 +40,6 @@ use crate::framework_profile::{
     build_control_plane_contract_descriptors, build_profile_artifact_bundle, build_profile_bundle,
     load_framework_profile,
 };
-use crate::goal_drive;
 use crate::hook_event_routing::hook_event_routing_contract;
 use crate::hook_policy::evaluate_hook_policy_value;
 use crate::route::{
@@ -218,19 +217,7 @@ fn dispatch_stdio_closeout_evaluate(payload: Value) -> Result<Value, FrameworkEr
             .cloned()
             .unwrap_or_else(|| payload.clone());
         if let (Some(repo_root), Some(task_id)) = (repo_root.as_deref(), task_id.as_deref()) {
-            let (_rows_non_empty, has_success) =
-                goal_drive::task_evidence_artifacts_summary_for_task(Path::new(repo_root), task_id);
-            let goal_state = goal_drive::read_goal_state(Path::new(repo_root), Some(task_id))
-                .ok()
-                .flatten();
-            let goal_prediction = goal_state
-                .as_ref()
-                .and_then(core_state::goal_prediction::read_goal_prediction);
-            let ctx = CloseoutEvidenceContext {
-                task_id: Some(task_id.trim().to_string()),
-                has_successful_verification: has_success,
-                goal_prediction,
-            };
+            let ctx = CloseoutEvidenceContext::new(Some(task_id.trim().to_string()), Path::new(repo_root));
             Ok(evaluate_closeout_record_value_with_context(
                 record_value,
                 &ctx,

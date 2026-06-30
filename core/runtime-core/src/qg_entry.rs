@@ -60,25 +60,12 @@ pub fn trigger(
 
     if has_evidence && !evidence_ok {
         // Evidence exists but none indicates success → block.
-        return GateVerdict {
-            passed: false,
-            scene: scene.to_string(),
-            checkers_ran: 0,
-            blockers: vec![Finding {
-                id: "fraud_gate_evidence_incomplete".to_string(),
-                severity: Severity::P0,
-                description: format!(
-                    "evidence exists for task '{task_id}' but none indicates success"
-                ),
-                location: None,
-                suggestion: Some(
-                    "ensure at least one evidence artifact has exit_code=0 or success=true"
-                        .to_string(),
-                ),
-            }],
-            advisories: vec![],
-            reason: Some("Stage 1: anti-fraud gate — evidence incomplete".to_string()),
-        };
+        return GateVerdict::new(false, scene, 0,
+            vec![Finding::new("fraud_gate_evidence_incomplete", Severity::P0,
+                format!("evidence exists for task '{task_id}' but none indicates success"))
+                .with_suggestion("ensure at least one evidence artifact has exit_code=0 or success=true")],
+            vec![])
+            .with_reason("Stage 1: anti-fraud gate — evidence incomplete");
     }
 
     // No evidence or all evidence OK → proceed to Stage 2.
@@ -93,19 +80,10 @@ pub fn trigger(
                 task_id = %task_id,
                 "QGEntry Stage 1: all successful evidence is self-attested (no host-bound verification)"
             );
-            Some(Finding {
-                id: "self_attested_evidence".to_string(),
-                severity: Severity::Warning,
-                description: format!(
-                    "all successful evidence for task '{task_id}' is self-attested \
-                     (via mcp_record_evidence) without host-bound verification"
-                ),
-                location: None,
-                suggestion: Some(
-                    "ensure a host-bound evidence collector has verified the artifacts independently"
-                        .to_string(),
-                ),
-            })
+            Some(Finding::new("self_attested_evidence", Severity::B,
+                format!("all successful evidence for task '{task_id}' is self-attested \
+                     (via mcp_record_evidence) without host-bound verification"))
+                .with_suggestion("ensure a host-bound evidence collector has verified the artifacts independently"))
         } else {
             None
         }

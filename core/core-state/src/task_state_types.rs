@@ -72,6 +72,15 @@ pub struct ResolvedTaskView {
     pub resolution_notes: Vec<String>,
 }
 
+impl ResolvedTaskView {
+    pub fn task_id(&self) -> Option<&str> { self.task_id.as_deref() }
+    pub fn goal_state(&self) -> Option<&serde_json::Value> { self.goal_state.as_ref() }
+    pub fn depth_compliance(&self) -> Option<&DepthCompliance> { self.depth_compliance.as_ref() }
+    pub fn evidence(&self) -> Option<&EvidenceRollup> { self.evidence.as_ref() }
+    pub fn pointers(&self) -> &TaskPointers { &self.pointers }
+    pub fn resolution_notes(&self) -> &[String] { &self.resolution_notes }
+}
+
 /// Rollup of evidence index state for a single task.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]

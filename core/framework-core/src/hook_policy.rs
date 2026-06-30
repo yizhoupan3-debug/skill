@@ -63,6 +63,20 @@ pub struct HookPolicyEvaluateRequest {
     pub tool_args: Option<Value>,
 }
 
+impl HookPolicyEvaluateRequest {
+    pub fn new(operation: impl Into<String>) -> Self {
+        Self {
+            operation: operation.into(),
+            command: None,
+            path: None,
+            repo_root: None,
+            runtime_root: None,
+            tool_name: None,
+            tool_args: None,
+        }
+    }
+}
+
 /// Result of a hook policy evaluation.
 /// Encodes whether the operation is blocked, any human-readable reason,
 /// category classifications, and protection details.

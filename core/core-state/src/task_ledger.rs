@@ -36,6 +36,41 @@ pub struct LedgerTransaction {
     pub schema_version: Option<i64>,
 }
 
+impl LedgerTransaction {
+    /// Create a new transaction with current timestamp.
+    ///
+    /// `seq` is left as `None` — the append function assigns it.
+    /// Use [`with_schema_version`] to set schema version when needed.
+    pub fn new(tx_type: impl Into<String>, payload: Value) -> Self {
+        Self {
+            ts: framework_core::time::now_iso(),
+            tx_type: tx_type.into(),
+            payload,
+            idempotency_key: None,
+            seq: None,
+            schema_version: None,
+        }
+    }
+
+    /// Set the schema version (typically `Some(1)`).
+    pub fn with_schema_version(mut self, v: i64) -> Self {
+        self.schema_version = Some(v);
+        self
+    }
+
+    /// Set an idempotency key to prevent duplicate appends.
+    pub fn with_idempotency_key(mut self, key: impl Into<String>) -> Self {
+        self.idempotency_key = Some(key.into());
+        self
+    }
+
+    /// Set the sequence number (normally assigned by the append function).
+    pub fn with_seq(mut self, seq: u64) -> Self {
+        self.seq = Some(seq);
+        self
+    }
+}
+
 /// Write a `state_checkpoint` entry capturing the current effective state
 /// from physical files.  Called periodically by [`append_transaction`].
 pub fn write_state_checkpoint(
@@ -58,14 +93,9 @@ pub fn write_state_checkpoint(
         },
     });
 
-    let tx = LedgerTransaction {
-        ts: framework_core::time::now_iso(),
-        tx_type: STATE_CHECKPOINT_TX_TYPE.to_string(),
-        payload,
-        idempotency_key: None,
-        seq: Some(last_seq),
-        schema_version: Some(1),
-    };
+    let tx = LedgerTransaction::new(STATE_CHECKPOINT_TX_TYPE, payload)
+        .with_schema_version(1)
+        .with_seq(last_seq);
 
     let path = task_ledger_path(repo_root, task_id)?;
     if let Some(parent) = path.parent() {

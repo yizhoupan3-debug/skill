@@ -37,6 +37,35 @@ pub struct FrameworkRuntimeView {
     pub collected_at: String,
 }
 
+impl FrameworkRuntimeView {
+    pub fn new(
+        repo_root: std::path::PathBuf,
+        artifact_base: std::path::PathBuf,
+    ) -> Self {
+        Self {
+            session_summary_text: String::new(),
+            next_actions: Value::Null,
+            evidence_index: Value::Null,
+            trace_metadata: Value::Null,
+            supervisor_state: Map::new(),
+            routing_runtime_version: 0,
+            repo_root,
+            artifact_base,
+            current_root: std::path::PathBuf::new(),
+            mirror_root: std::path::PathBuf::new(),
+            task_root: std::path::PathBuf::new(),
+            task_pointers_present: false,
+            active_task_id: None,
+            focus_task_id: None,
+            control_plane_inconsistency_reasons: Vec::new(),
+            known_task_ids: Vec::new(),
+            recoverable_task_ids: Vec::new(),
+            registered_tasks: Value::Null,
+            collected_at: framework_core::time::now_iso(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct FrameworkAliasBuildOptions<'a> {
     pub max_lines: usize,

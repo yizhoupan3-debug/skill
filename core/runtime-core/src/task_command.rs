@@ -83,22 +83,16 @@ pub fn dispatch_task_ledger_command(cmd: TaskLedgerCommand) -> Result<Value, Fra
                 let transition_v =
                     validate_transition(repo_root, task_id, TaskTransition::Complete);
                 if !transition_v.passed {
-                    return Ok(serde_json::to_value(&quality_gate::types::GateVerdict {
-                        passed: false,
-                        scene: quality_gate::scene::GENERAL.to_string(),
-                        checkers_ran: 0,
-                        blockers: vec![quality_gate::types::Finding {
-                            id: "transition_validation_blocked".to_string(),
-                            severity: quality_gate::types::Severity::P0,
-                            description: transition_v.reason.clone(),
-                            location: None,
-                            suggestion: Some(
-                                "record evidence artifacts (exit_code=0 or success=true) before completing".to_string(),
-                            ),
-                        }],
-                        advisories: vec![],
-                        reason: Some(format!("transition validation blocked: {}", transition_v.reason)),
-                    })?);
+                    return Ok(serde_json::to_value(&quality_gate::types::GateVerdict::new(
+                        false,
+                        quality_gate::scene::GENERAL,
+                        0,
+                        vec![quality_gate::types::Finding::new("transition_validation_blocked",
+                            quality_gate::types::Severity::P0,
+                            transition_v.reason.clone())
+                            .with_suggestion("record evidence artifacts (exit_code=0 or success=true) before completing")],
+                        vec![],
+                    ).with_reason(format!("transition validation blocked: {}", transition_v.reason)))?);
                 }
             }
 

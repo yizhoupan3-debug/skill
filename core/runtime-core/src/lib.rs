@@ -5,29 +5,45 @@
 //!
 //! Single source of truth for framework_runtime and supporting modules.
 
-// ── original four (flattened from runtime-storage) ──
+// ── Re-export group: foundational state & storage primitives ──
+// These re-exports provide a unified import surface for router-rs,
+// which is the CLI entry point and needs access to multiple crates
+// without depending on each one directly. They supply runtime state
+// management, envelope ID resolution, and tracing infrastructure.
 #[cfg(feature = "l5-state")]
 pub use rt_storage::background_state;
 pub use rt_storage::{runtime_envelope_ids, runtime_storage};
 pub use trace_runtime;
 
-// ── migrated modules (B3) ──
+// ── Re-export group: core runtime capabilities (B3 consolidation) ──
+// Consolidated from runtime-core-contracts and framework-runtime during
+// the B3 phase. These provide goal-driven execution, closeout validation,
+// and framework profiling — the essential runtime machinery that router-rs
+// orchestrates without importing each sub-crate directly.
 pub use core_state::closeout_validation;
 pub use fr_runtime::execution_contract;
 pub mod framework_runtime;
 pub use framework_core::framework_profile;
 
-// ── QG Route: scene-dispatched CheckerRegistry bridge ──
+// ── Re-export group: quality-gate scene dispatch ──
+// Scene-dispatched CheckerRegistry bridge. Provides the quality gate
+// entry point and route so that host-projection can trigger QG evaluation
+// without a direct compile-time dependency on the checker implementations.
 mod checkers;
 pub mod qg_entry;
 pub mod qg_route;
 
-// ── Schema Drift: migrated from runtime-exit-gate ──
+// ── Re-export group: schema drift detection ──
+// Migrated from runtime-exit-gate. Provides a single source of truth for
+// schema drift detection logic, consolidating it under runtime-core so that
+// both host-projection and framework-runtime can share the same implementation.
 pub mod schema_drift;
 
-// ── subdomain module groups ──
-
-// │  backward-compatible re-exports from subdomain groups ─────────────────────
+// ── Re-export group: subdomain env flags & infra ──
+// Backward-compatible re-exports of router environment flags and
+// infrastructure utilities (kernel bootstrap, stdio transport). These
+// preserve the existing import surface that hook-based hosts (claude,
+// codex, opencode) depend on for configuration and bootstrapping.
 pub use fr_runtime::router_env_flags::{
     router_rs_cargo_check_sync_enabled, router_rs_continuity_post_tool_evidence_enabled,
     router_rs_env_enabled_default_false, router_rs_env_enabled_default_true,
@@ -45,8 +61,11 @@ pub use fr_runtime::router_env_flags::{
 };
 pub use runtime_infra::{kernel_bootstrap, kernel_utils, stdio_transport};
 
-// ── runtime-core-contracts modules (merged) ──
-// formal_toolchain is in framework-core (framework-extra dependency decoupling)
+// ── Re-export group: framework contracts (merged into runtime-core) ──
+// Consolidated from runtime-core-contracts. These modules define the
+// framework-level contracts for tool behavior, hook lifecycle, outbound
+// protection, and web fetch guards. Merged here to eliminate a separate
+// crate and keep contract definitions co-located with their enforcement.
 pub mod harness_context_signals;
 pub mod harness_contract;
 pub mod hook_event_routing;
@@ -56,20 +75,31 @@ pub mod mcp_pre_guard;
 pub mod web_fetch_guard;
 pub use framework_core::formal_toolchain;
 
-// ── re-exports from core-state (flattened) ──
+// ── Re-export group: state management & step ledger (flattened from core-state) ──
+// Provides goal-drive state management, step ledger tracking, and task
+// state as a flat import surface. Flattened so that consumers can import
+// these directly without navigating the core-state module hierarchy.
 pub use core_state::{state_manager as goal_drive, step_ledger, task_state};
 // ── local contract modules (remain in runtime-core due to internal coupling) ──
 pub mod hook_timing;
 
 pub mod task_command;
 
-// ── migrated supporting modules ──
+// ── Re-export group: host integration, routing, and support modules ──
+// Provides the primary integration surface for router-rs: host projection
+// (entrypoint sync, host integration, host providers), routing engine,
+// eval route, and supporting modules. These re-exports let router-rs
+// orchestrate the full runtime without direct dependencies on each crate.
 // browser_mcp: physically migrated to core/browser-mcp crate (§2.4)
 // Use browser-mcp crate directly; dispatch via browser_dispatch_hook.
 // cli: migrated to router-rs (ADR §10.3)
 #[cfg(feature = "codegraph")]
 pub mod codegraph_mcp;
 pub use eval_route;
+// ── Re-export group: framework-core primitives ──
+// Core framework utilities needed by router-rs: host target resolution,
+// skill repository discovery, and stdio payload type definitions. These
+// bridge the framework-core API surface to the CLI entry point.
 pub use framework_core::framework_host_targets;
 pub use framework_maint;
 pub use host_projection::host_entrypoint_sync;
@@ -88,7 +118,9 @@ pub mod test_env_sync;
 
 // (removed: hook_posttool_normalize was dead code)
 
-// ── re-exports from core-policy (crate-internal only) ──
+// ── Re-export group: crate-internal policy (not public) ──
+// Hook policy is crate-internal only — consumers inside runtime-core
+// use it directly, but external crates must not depend on it.
 pub(crate) use framework_core::hook_policy;
 
 // (removed: route_task_with_manifest_fallback re-export removed — callers use framework_extra::route_manifest_fallback directly)
@@ -115,6 +147,20 @@ fn combined_orchestrator_handler(
             "orchestrator: missing 'operation' field",
         )),
     }
+}
+
+#[cfg(not(feature = "l5-state"))]
+fn background_state_stub(
+    _: serde_json::Value,
+) -> Result<serde_json::Value, core_errors::FrameworkError> {
+    tracing::warn!(
+        target: "runtime_core",
+        "l5-state feature is disabled — background_state operation is a no-op. \
+         Enable the 'l5-state' feature in Cargo.toml to activate real background state handling."
+    );
+    Err(core_errors::FrameworkError::hook(
+        "background_state requires l5-state feature",
+    ))
 }
 
 /// Initialize all runtime-core subsystems. Safe to call multiple times.
@@ -302,9 +348,7 @@ pub fn init_hooks() {
             #[cfg(feature = "l5-state")]
             handle_background_state_operation: rt_storage::background_state::handle_background_state_operation,
             #[cfg(not(feature = "l5-state"))]
-            handle_background_state_operation: |_: serde_json::Value| -> Result<serde_json::Value, core_errors::FrameworkError> {
-                Err(core_errors::FrameworkError::hook("background_state requires l5-state feature"))
-            },
+            handle_background_state_operation: background_state_stub,
             runtime_concurrency_defaults_payload: || {
                 serde_json::to_value(stdio_transport::runtime_concurrency_defaults_payload())
                     .map_err(|e| {

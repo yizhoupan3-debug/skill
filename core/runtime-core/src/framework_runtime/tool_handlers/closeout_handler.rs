@@ -74,19 +74,7 @@ pub(crate) fn closeout_record_write_dispatch(
     let record_value = serde_json::Value::Object(record);
 
     // Evaluate BEFORE writing to disk (evaluate-then-write pattern)
-    let (_, has_success) =
-        core_state::state_manager::task_evidence_artifacts_summary_for_task(repo_root, task_id);
-    let goal_state = core_state::state_manager::read_goal_state(repo_root, Some(task_id))
-        .ok()
-        .flatten();
-    let goal_prediction = goal_state
-        .as_ref()
-        .and_then(core_state::goal_prediction::read_goal_prediction);
-    let ctx = core_state::closeout_validation::CloseoutEvidenceContext {
-        task_id: Some(task_id.to_string()),
-        has_successful_verification: has_success,
-        goal_prediction,
-    };
+    let ctx = core_state::closeout_validation::CloseoutEvidenceContext::new(Some(task_id.to_string()), repo_root);
     let eval_result = core_state::closeout_validation::evaluate_closeout_record_value_with_context(
         record_value.clone(),
         &ctx,
@@ -401,14 +389,14 @@ pub(crate) fn evaluate_closeout_gate_hook(
     let all_clear = compute_closeout_all_clear(
         goal_present, evidence_success, has_summary,
         review_goal,
-        false, // hook path has no reviewer evidence args
+        has_review_evidence,
     );
     let passed = all_clear;
 
     // P2-012: Three-level verdict matching the MCP tool path.
     // checkpoint-only means only SESSION_SUMMARY.md is missing.
     let checkpoint_only =
-        !all_clear && goal_present && evidence_success && (!review_goal || false);
+        !all_clear && goal_present && evidence_success && (!review_goal || has_review_evidence);
 
     let verdict_label = if all_clear {
         "PASS: all closeout gates satisfied"
@@ -447,6 +435,9 @@ fn compute_closeout_all_clear(
 /// Minimal check: does the goal mention review-related work?
 fn check_goal_suggests_review(goal_state: &Value) -> bool {
     let goal_text = goal_state.get("goal").and_then(Value::as_str).unwrap_or("");
-    let review_markers = ["review", "审计", "审稿", "check", "verify", "验证"];
+    let review_markers = [
+        "review", "audit", "inspecting", "scrutiny",
+        "审计", "审稿", "检查", "评估", "查验", "核查",
+    ];
     review_markers.iter().any(|m| goal_text.contains(m))
 }

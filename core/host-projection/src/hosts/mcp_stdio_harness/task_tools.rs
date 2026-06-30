@@ -119,17 +119,11 @@ pub(crate) fn tool_task_create(
                             append_transaction_assuming_l1_held(
                                 &repo_root_owned,
                                 &task_id_owned,
-                                LedgerTransaction {
-                                    ts: framework_core::time::now_iso(),
-                                    tx_type: "task_created".to_string(),
-                                    payload: json!({
-                                        "task_id": &task_id_owned,
-                                        "title": &title_owned,
-                                    }),
-                                    idempotency_key: Some(format!("task_create:{task_id_owned}")),
-                                    seq: None,
-                                    schema_version: None,
-                                },
+                                LedgerTransaction::new("task_created", json!({
+                                    "task_id": &task_id_owned,
+                                    "title": &title_owned,
+                                }))
+                                .with_idempotency_key(format!("task_create:{task_id_owned}")),
                             )?;
                             return Ok(true);
                         }
@@ -143,17 +137,11 @@ pub(crate) fn tool_task_create(
         append_transaction_assuming_l1_held(
             &repo_root_owned,
             &task_id_owned,
-            LedgerTransaction {
-                ts: framework_core::time::now_iso(),
-                tx_type: "task_created".to_string(),
-                payload: json!({
-                    "task_id": &task_id_owned,
-                    "title": &title_owned,
-                }),
-                idempotency_key: Some(format!("task_create:{task_id_owned}")),
-                seq: None,
-                schema_version: None,
-            },
+            LedgerTransaction::new("task_created", json!({
+                "task_id": &task_id_owned,
+                "title": &title_owned,
+            }))
+            .with_idempotency_key(format!("task_create:{task_id_owned}")),
         )?;
 
         Ok(true)
@@ -338,16 +326,10 @@ pub(crate) fn tool_task_complete(
         append_transaction_assuming_l1_held(
             &repo_root_owned,
             &id,
-            LedgerTransaction {
-                ts: framework_core::time::now_iso(),
-                tx_type: "task_completed".to_string(),
-                payload: json!({
-                    "task_id": &id,
-                }),
-                idempotency_key: Some(format!("task_complete:{id}")),
-                seq: None,
-                schema_version: None,
-            },
+            LedgerTransaction::new("task_completed", json!({
+                "task_id": &id,
+            }))
+            .with_idempotency_key(format!("task_complete:{id}")),
         )?;
 
         Ok(())

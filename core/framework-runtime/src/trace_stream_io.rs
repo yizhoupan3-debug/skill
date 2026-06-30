@@ -630,20 +630,21 @@ pub fn inspect_trace_stream(
     let reroute_count = trace_reroute_count(&resolved.events);
     let retry_count = trace_retry_count(&resolved.events);
 
-    Ok(TraceStreamInspectResponsePayload {
-        schema_version: TRACE_STREAM_INSPECT_SCHEMA_VERSION.to_string(),
-        authority: TRACE_STREAM_IO_AUTHORITY.to_string(),
-        path: resolved.path.display().to_string(),
-        source_kind: resolved.source_kind.to_string(),
-        event_count: resolved.events.len(),
-        latest_event_id: resolved.latest_event_id,
-        latest_event_kind: resolved.latest_event_kind,
-        latest_event_timestamp: resolved.latest_event_timestamp,
-        latest_cursor: resolved.latest_cursor,
-        recovery: resolved.recovery,
-        reroute_count,
-        retry_count,
-    })
+    let mut response = TraceStreamInspectResponsePayload::new(
+        resolved.path.display().to_string(),
+        resolved.source_kind.to_string(),
+        resolved.events.len(),
+    );
+    response.schema_version = TRACE_STREAM_INSPECT_SCHEMA_VERSION.to_string();
+    response.authority = TRACE_STREAM_IO_AUTHORITY.to_string();
+    response.latest_event_id = resolved.latest_event_id;
+    response.latest_event_kind = resolved.latest_event_kind;
+    response.latest_event_timestamp = resolved.latest_event_timestamp;
+    response.latest_cursor = resolved.latest_cursor;
+    response.recovery = resolved.recovery;
+    response.reroute_count = reroute_count;
+    response.retry_count = retry_count;
+    Ok(response)
 }
 
 pub fn replay_trace_stream(
@@ -686,22 +687,23 @@ pub fn replay_trace_stream(
 
     let window_start_index = anchor_index.map_or(0, |index| index + 1);
     let has_more = resolved.events.len() > window_start_index + events.len();
-    Ok(TraceStreamReplayResponsePayload {
-        schema_version: TRACE_STREAM_REPLAY_SCHEMA_VERSION.to_string(),
-        authority: TRACE_STREAM_IO_AUTHORITY.to_string(),
-        path: resolved.path.display().to_string(),
-        source_kind: resolved.source_kind.to_string(),
-        event_count: resolved.events.len(),
-        latest_event_id: resolved.latest_event_id,
-        latest_event_kind: resolved.latest_event_kind,
-        latest_event_timestamp: resolved.latest_event_timestamp,
-        latest_cursor: resolved.latest_cursor,
-        after_event_id,
-        window_start_index,
-        has_more,
-        next_cursor,
+    let mut response = TraceStreamReplayResponsePayload::new(
+        resolved.path.display().to_string(),
+        resolved.source_kind.to_string(),
+        resolved.events.len(),
         events,
-    })
+    );
+    response.schema_version = TRACE_STREAM_REPLAY_SCHEMA_VERSION.to_string();
+    response.authority = TRACE_STREAM_IO_AUTHORITY.to_string();
+    response.latest_event_id = resolved.latest_event_id;
+    response.latest_event_kind = resolved.latest_event_kind;
+    response.latest_event_timestamp = resolved.latest_event_timestamp;
+    response.latest_cursor = resolved.latest_cursor;
+    response.after_event_id = after_event_id;
+    response.window_start_index = window_start_index;
+    response.has_more = has_more;
+    response.next_cursor = next_cursor;
+    Ok(response)
 }
 
 fn trace_reroute_count(events: &[Map<String, Value>]) -> usize {

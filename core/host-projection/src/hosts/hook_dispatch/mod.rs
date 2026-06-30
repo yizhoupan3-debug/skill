@@ -388,13 +388,6 @@ fn build_task_list_summary_context(repo_root: &Path) -> Option<String> {
 
 // ── Re-exports from sub-modules (backward compat) ──
 
-pub use framework_core::subagent::{SUBAGENT_TOOL_NAMES, is_subagent_tool};
-
-pub use framework_core::session_key::SESSION_ID_FIELDS;
-pub use framework_core::session_key::SESSION_KEY_CWD_FIELDS;
-pub use framework_core::session_key::TOOL_INPUT_METADATA_SESSION_ID_FIELDS;
-pub use framework_core::session_key::TOOL_INPUT_SESSION_ID_FIELDS;
-
 pub use crate::hosts::generic_config::GenericHostConfig;
 pub use crate::hosts::host_state::{
     auto_record_research_activity, auto_record_verification_evidence,

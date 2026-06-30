@@ -92,22 +92,14 @@ mod tests {
             },
             attach_runtime_event_transport: |_| Ok(serde_json::json!({})),
             inspect_trace_stream: |_| {
-                Ok(
-                    framework_core::stdio_payload_types::TraceStreamInspectResponsePayload {
-                        schema_version: "1".into(),
-                        authority: "test".into(),
-                        path: "/test".into(),
-                        source_kind: "browser".into(),
-                        event_count: 0,
-                        latest_event_id: None,
-                        latest_event_kind: None,
-                        latest_event_timestamp: None,
-                        latest_cursor: None,
-                        recovery: None,
-                        reroute_count: 0,
-                        retry_count: 0,
-                    },
-                )
+                let mut resp = framework_core::stdio_payload_types::TraceStreamInspectResponsePayload::new(
+                    "/test",
+                    "browser",
+                    0,
+                );
+                resp.schema_version = "1".into();
+                resp.authority = "test".into();
+                Ok(resp)
             },
         };
         set_hooks(h);

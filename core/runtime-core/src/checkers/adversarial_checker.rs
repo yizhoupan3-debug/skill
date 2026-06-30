@@ -26,36 +26,18 @@ impl GateChecker for AdversarialChecker {
 
         // ── 1. evidence_path presence ──
         if ctx.evidence_path.as_ref().map_or(true, |p| !p.is_file()) {
-            findings.push(Finding {
-                id: "missing-evidence-file".to_string(),
-                severity: Severity::Warning,
-                description: format!(
-                    "evidence file not found at {:?} — adversarial pass cannot verify artifacts",
-                    ctx.evidence_path,
-                ),
-                location: None,
-                suggestion: Some(
-                    "ensure evidence is recorded before completing the goal".to_string(),
-                ),
-            });
+            findings.push(Finding::new("missing-evidence-file", Severity::Warning,
+                format!("evidence file not found at {:?} — adversarial pass cannot verify artifacts", ctx.evidence_path))
+                .with_suggestion("ensure evidence is recorded before completing the goal"));
         }
 
         // ── 2. non-trivial round count ──
         if ctx.round == 1 {
             // Single round suggests the goal may not have been iterated on.
             // This is informational only, not a blocker.
-            findings.push(Finding {
-                id: "single-round".to_string(),
-                severity: Severity::C,
-                description: format!(
-                    "goal '{}' completed in a single round — no iterative improvement cycle",
-                    ctx.goal,
-                ),
-                location: None,
-                suggestion: Some(
-                    "consider whether the goal was adequately verified in one pass".to_string(),
-                ),
-            });
+            findings.push(Finding::new("single-round", Severity::C,
+                format!("goal '{}' completed in a single round — no iterative improvement cycle", ctx.goal))
+                .with_suggestion("consider whether the goal was adequately verified in one pass"));
         }
 
         let passed = findings.is_empty()

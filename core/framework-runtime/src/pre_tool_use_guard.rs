@@ -410,15 +410,11 @@ fn classify_high_risk(
             ));
         }
         let repo_root_str = repo_root.display().to_string();
-        let response = evaluate_hook_policy(HookPolicyEvaluateRequest {
-            operation: "protected-path".to_string(),
-            command: None,
-            path: Some(path.clone()),
-            repo_root: Some(repo_root_str.clone()),
-            runtime_root: Some(repo_root_str),
-            tool_name: None,
-            tool_args: None,
-        })?;
+        let mut request = HookPolicyEvaluateRequest::new("protected-path");
+        request.path = Some(path.clone());
+        request.repo_root = Some(repo_root_str.clone());
+        request.runtime_root = Some(repo_root_str);
+        let response = evaluate_hook_policy(request)?;
         if response.blocked {
             return Ok((
                 PreToolUseGuardVerdict::RequiresStdioApproval,
@@ -540,24 +536,12 @@ fn has_path_traversal(tool_input: &Value) -> bool {
 #[cfg(test)]
 #[ctor::ctor]
 fn register_test_hooks() {
-    use framework_core::runtime_hooks::{HostProviderHooks, RuntimeCoreHooks};
-    framework_core::runtime_hooks::register(RuntimeCoreHooks {
-        host_provider: HostProviderHooks {
-            for_routing_spelling: |_| None,
-            strict_pre_tool_fallback_hint: |_| None,
-            registry: || vec![],
-        },
-        framework_goal_drive: |_| Ok(serde_json::Value::Null),
-        handle_orchestrator_operation: |_| Ok(serde_json::Value::Null),
-        handle_background_state_operation: |_| Ok(serde_json::Value::Null),
-        runtime_concurrency_defaults_payload: || Ok(serde_json::Value::Null),
-        eval_route_contract: || serde_json::Value::Null,
-        run_eval_route: |_, _| Ok(serde_json::Value::Null),
-        generated_artifacts_status_for_repo: |_| Ok(String::new()),
-        ensure_kernel_bootstrap: || {},
-        evaluate_quality_gate: |_| Ok(serde_json::Value::Null),
-        evaluate_closeout_gate: |_| Ok(serde_json::Value::Null),
-    });
+    use framework_core::runtime_hooks::RuntimeCoreHooksBuilder;
+    framework_core::runtime_hooks::register(
+        RuntimeCoreHooksBuilder::for_testing()
+            .build()
+            .expect("test hooks"),
+    );
 }
 
 #[cfg(test)]

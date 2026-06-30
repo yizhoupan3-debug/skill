@@ -190,19 +190,7 @@ pub fn evaluate_closeout_record_file_for_task(
             record_path.display()
         ))
     })?;
-    let (_rows_non_empty, has_success) =
-        core_state::state_manager::task_evidence_artifacts_summary_for_task(repo_root, tid);
-    let goal_state = core_state::state_manager::read_goal_state(repo_root, Some(tid))
-        .ok()
-        .flatten();
-    let goal_prediction = goal_state
-        .as_ref()
-        .and_then(core_state::goal_prediction::read_goal_prediction);
-    let ctx = CloseoutEvidenceContext {
-        task_id: Some(tid.to_string()),
-        has_successful_verification: has_success,
-        goal_prediction,
-    };
+    let ctx = CloseoutEvidenceContext::new(Some(tid.to_string()), repo_root);
     evaluate_closeout_record_value_with_context(record, &ctx).map_err(|err| {
         FrameworkError::validation(format!("closeout record evaluation failed: {err}"))
     })

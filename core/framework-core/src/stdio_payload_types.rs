@@ -53,6 +53,32 @@ pub struct ExecuteResponsePayload {
     pub metadata: Value,
 }
 
+impl ExecuteResponsePayload {
+    pub fn new(
+        session_id: impl Into<String>,
+        user_id: impl Into<String>,
+        skill: impl Into<String>,
+        live_run: bool,
+        content: impl Into<String>,
+        usage: ExecuteUsagePayload,
+    ) -> Self {
+        Self {
+            execution_schema_version: "execute-response-v1".into(),
+            authority: "framework-runtime".into(),
+            session_id: session_id.into(),
+            user_id: user_id.into(),
+            skill: skill.into(),
+            overlay: None,
+            live_run,
+            content: content.into(),
+            usage,
+            prompt_preview: None,
+            model_id: None,
+            metadata: serde_json::Value::Null,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BackgroundControlRequestPayload {
     pub schema_version: String,
@@ -90,6 +116,23 @@ pub struct BackgroundControlEffectPlanPayload {
     pub sleep_seconds: Option<f64>,
 }
 
+impl BackgroundControlEffectPlanPayload {
+    pub fn new(next_step: impl Into<String>) -> Self {
+        Self {
+            next_step: next_step.into(),
+            terminal_status: None,
+            resolved_status: None,
+            finalize_immediately: None,
+            cancel_running_task: None,
+            next_retry_count: None,
+            backoff_seconds: None,
+            wait_timeout_seconds: None,
+            wait_poll_interval_seconds: None,
+            sleep_seconds: None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BackgroundControlResponsePayload {
     pub schema_version: String,
@@ -112,6 +155,37 @@ pub struct BackgroundControlResponsePayload {
     pub cancel_running_task: Option<bool>,
     pub reason: String,
     pub effect_plan: BackgroundControlEffectPlanPayload,
+}
+
+impl BackgroundControlResponsePayload {
+    pub fn new(
+        operation: impl Into<String>,
+        reason: impl Into<String>,
+        effect_plan: BackgroundControlEffectPlanPayload,
+    ) -> Self {
+        Self {
+            schema_version: "background-control-response-v1".into(),
+            authority: "framework-runtime".into(),
+            operation: operation.into(),
+            resolved_parallel_group_id: None,
+            lane_ids: None,
+            normalized_multitask_strategy: None,
+            supported_multitask_strategies: Vec::new(),
+            strategy_supported: false,
+            accepted: None,
+            requires_takeover: None,
+            error: None,
+            should_retry: None,
+            next_retry_count: None,
+            backoff_seconds: None,
+            terminal_status: None,
+            resolved_status: None,
+            finalize_immediately: None,
+            cancel_running_task: None,
+            reason: reason.into(),
+            effect_plan,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -168,6 +242,32 @@ pub struct TraceStreamReplayResponsePayload {
     pub events: Vec<Value>,
 }
 
+impl TraceStreamReplayResponsePayload {
+    pub fn new(
+        path: impl Into<String>,
+        source_kind: impl Into<String>,
+        event_count: usize,
+        events: Vec<serde_json::Value>,
+    ) -> Self {
+        Self {
+            schema_version: "trace-stream-replay-response-v1".into(),
+            authority: "framework-runtime".into(),
+            path: path.into(),
+            source_kind: source_kind.into(),
+            event_count,
+            latest_event_id: None,
+            latest_event_kind: None,
+            latest_event_timestamp: None,
+            latest_cursor: None,
+            after_event_id: None,
+            window_start_index: 0,
+            has_more: false,
+            next_cursor: None,
+            events,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TraceStreamInspectResponsePayload {
     pub schema_version: String,
@@ -182,6 +282,29 @@ pub struct TraceStreamInspectResponsePayload {
     pub recovery: Option<Value>,
     pub reroute_count: usize,
     pub retry_count: usize,
+}
+
+impl TraceStreamInspectResponsePayload {
+    pub fn new(
+        path: impl Into<String>,
+        source_kind: impl Into<String>,
+        event_count: usize,
+    ) -> Self {
+        Self {
+            schema_version: "trace-stream-inspect-response-v1".into(),
+            authority: "framework-runtime".into(),
+            path: path.into(),
+            source_kind: source_kind.into(),
+            event_count,
+            latest_event_id: None,
+            latest_event_kind: None,
+            latest_event_timestamp: None,
+            latest_cursor: None,
+            recovery: None,
+            reroute_count: 0,
+            retry_count: 0,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

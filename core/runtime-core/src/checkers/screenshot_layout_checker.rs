@@ -28,13 +28,9 @@ impl GateChecker for ScreenshotLayoutChecker {
         let mut findings = Vec::new();
 
         let Some(ref ev_path) = ctx.evidence_path else {
-            findings.push(Finding {
-                id: "screenshot_no_evidence_path".to_string(),
-                severity: Severity::Warning,
-                description: "no evidence_path provided — cannot verify screenshot output".to_string(),
-                location: None,
-                suggestion: Some("provide evidence_path pointing to the screenshot artifact".to_string()),
-            });
+            findings.push(Finding::new("screenshot_no_evidence_path", Severity::Warning,
+                "no evidence_path provided — cannot verify screenshot output")
+                .with_suggestion("provide evidence_path pointing to the screenshot artifact"));
             return CheckResult {
                 checker_id: self.id().to_string(),
                 passed: true,
@@ -43,13 +39,10 @@ impl GateChecker for ScreenshotLayoutChecker {
         };
 
         if !ev_path.is_file() {
-            findings.push(Finding {
-                id: "screenshot_evidence_missing".to_string(),
-                severity: Severity::Warning,
-                description: format!("evidence file not found at {}", ev_path.display()),
-                location: Some(ev_path.display().to_string()),
-                suggestion: Some("ensure the screenshot was saved before running the gate".to_string()),
-            });
+            findings.push(Finding::new("screenshot_evidence_missing", Severity::Warning,
+                format!("evidence file not found at {}", ev_path.display()))
+                .with_location(ev_path.display().to_string())
+                .with_suggestion("ensure the screenshot was saved before running the gate"));
             return CheckResult {
                 checker_id: self.id().to_string(),
                 passed: true,
@@ -61,16 +54,10 @@ impl GateChecker for ScreenshotLayoutChecker {
         match std::fs::read(ev_path) {
             Ok(bytes) => {
                 if bytes.len() < 8 {
-                    findings.push(Finding {
-                        id: "screenshot_file_too_small".to_string(),
-                        severity: Severity::B,
-                        description: format!(
-                            "evidence file is only {} bytes — not a valid image",
-                            bytes.len(),
-                        ),
-                        location: Some(ev_path.display().to_string()),
-                        suggestion: Some("verify the screenshot was captured correctly".to_string()),
-                    });
+                    findings.push(Finding::new("screenshot_file_too_small", Severity::B,
+                        format!("evidence file is only {} bytes — not a valid image", bytes.len()))
+                        .with_location(ev_path.display().to_string())
+                        .with_suggestion("verify the screenshot was captured correctly"));
                 } else if bytes[..8] != *PNG_MAGIC {
                     // Not PNG — could be JPEG (FF D8 FF), WEBP, etc. — flag as advisory
                     let magic_hex = bytes[..4]
@@ -78,28 +65,17 @@ impl GateChecker for ScreenshotLayoutChecker {
                         .map(|b| format!("{b:02x}"))
                         .collect::<Vec<_>>()
                         .join(" ");
-                    findings.push(Finding {
-                        id: "screenshot_not_png".to_string(),
-                        severity: Severity::C,
-                        description: format!(
-                            "evidence file magic bytes ({magic_hex}) are not PNG — format may not be supported by downstream tools"
-                        ),
-                        location: Some(ev_path.display().to_string()),
-                        suggestion: Some(
-                            "convert screenshot to PNG format for consistent processing".to_string(),
-                        ),
-                    });
+                    findings.push(Finding::new("screenshot_not_png", Severity::C,
+                        format!("evidence file magic bytes ({magic_hex}) are not PNG — format may not be supported by downstream tools"))
+                        .with_location(ev_path.display().to_string())
+                        .with_suggestion("convert screenshot to PNG format for consistent processing"));
                 }
                 // PNG magic matches — no findings, gate passes cleanly
             }
             Err(e) => {
-                findings.push(Finding {
-                    id: "screenshot_read_error".to_string(),
-                    severity: Severity::C,
-                    description: format!("cannot read evidence file: {e}"),
-                    location: Some(ev_path.display().to_string()),
-                    suggestion: None,
-                });
+                findings.push(Finding::new("screenshot_read_error", Severity::C,
+                    format!("cannot read evidence file: {e}"))
+                    .with_location(ev_path.display().to_string()));
             }
         }
 

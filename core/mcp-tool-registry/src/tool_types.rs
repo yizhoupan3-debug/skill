@@ -206,6 +206,19 @@ pub struct McpToolRecord {
     pub input_schema_json: Option<McpToolInputSchema>,
 }
 
+impl McpToolRecord {
+    pub fn slug(&self) -> &str { &self.slug }
+    pub fn display_name(&self) -> &str { &self.display_name }
+    pub fn description(&self) -> &str { &self.description }
+    pub fn layer(&self) -> &ToolLayer { &self.layer }
+    pub fn dispatch_domain(&self) -> &DispatchDomain { &self.dispatch_domain }
+    pub fn owner(&self) -> &ToolOwner { &self.owner }
+    pub fn trigger_hints(&self) -> &[String] { &self.trigger_hints }
+    pub fn mcp_server(&self) -> &str { &self.mcp_server }
+    pub fn tool_flags(&self) -> &[String] { &self.tool_flags }
+    pub fn input_schema_json(&self) -> Option<&McpToolInputSchema> { self.input_schema_json.as_ref() }
+}
+
 /// JSON Schema for a framework-domain MCP tool's input parameters.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct McpToolInputSchema {

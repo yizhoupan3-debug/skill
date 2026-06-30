@@ -56,16 +56,6 @@ fn coerce_duration_ms_value(value: Option<&Value>) -> Option<u64> {
     None
 }
 
-/// Parse `tool_output` JSON string once; returns `None` when the field is missing, not a string,
-/// or fails to parse. Used by `extract_post_tool_duration_ms` and `extract_tool_exit_hint`
-/// to avoid double-parsing the same payload.
-fn parse_tool_output_json(event: &Value) -> Option<&'static Value> {
-    // Leak the parsed Value so it lives for 'static — small one-shot objects in hook path.
-    let text = event.get("tool_output").and_then(Value::as_str)?;
-    let parsed: Value = serde_json::from_str(text).ok()?;
-    Some(Box::leak(Box::new(parsed)))
-}
-
 /// PostToolUse journal: tool execution duration when the host payload carries it.
 pub fn extract_post_tool_duration_ms(event: &Value) -> Option<u64> {
     let candidates: [&Option<&Value>; 10] = [
@@ -83,12 +73,14 @@ pub fn extract_post_tool_duration_ms(event: &Value) -> Option<u64> {
             .and_then(|m| m.get("duration_ms")),
         &event.get("result").and_then(|v| v.get("duration_ms")),
     ];
-    if let Some(parsed) = parse_tool_output_json(event) {
-        if let Some(ms) = coerce_duration_ms_value(parsed.get("duration_ms")) {
-            return Some(ms);
-        }
-        if let Some(ms) = coerce_duration_ms_value(parsed.get("durationMs")) {
-            return Some(ms);
+    if let Some(text) = event.get("tool_output").and_then(Value::as_str) {
+        if let Ok(parsed) = serde_json::from_str::<Value>(text) {
+            if let Some(ms) = coerce_duration_ms_value(parsed.get("duration_ms")) {
+                return Some(ms);
+            }
+            if let Some(ms) = coerce_duration_ms_value(parsed.get("durationMs")) {
+                return Some(ms);
+            }
         }
     }
     for candidate in candidates {
@@ -132,12 +124,14 @@ fn extract_tool_exit_hint(event: &Value) -> Option<i64> {
         &event.get("result").and_then(|v| v.get("exit_code")),
         &event.get("response").and_then(|v| v.get("exit_code")),
     ];
-    if let Some(parsed) = parse_tool_output_json(event) {
-        if let Some(code) = coerce_exit_code_value(parsed.get("exit_code")) {
-            return Some(code);
-        }
-        if let Some(code) = coerce_exit_code_value(parsed.get("exitCode")) {
-            return Some(code);
+    if let Some(text) = event.get("tool_output").and_then(Value::as_str) {
+        if let Ok(parsed) = serde_json::from_str::<Value>(text) {
+            if let Some(code) = coerce_exit_code_value(parsed.get("exit_code")) {
+                return Some(code);
+            }
+            if let Some(code) = coerce_exit_code_value(parsed.get("exitCode")) {
+                return Some(code);
+            }
         }
     }
     for candidate in candidates {
@@ -230,7 +224,8 @@ pub fn append_evidence_index_merged_row(
         }
 
         if rows.len() > MAX_POST_TOOL_EVIDENCE_ARTIFACTS {
-            // Keep all success=true rows + latest N non-success rows
+            // Keep at most 80 success rows + fill remaining budget with non-success rows
+            let success_budget = (MAX_POST_TOOL_EVIDENCE_ARTIFACTS * 2 / 3).min(rows.len());
             let mut success_rows: Vec<Map<String, Value>> = Vec::new();
             let mut other_rows: Vec<Map<String, Value>> = Vec::new();
             for row in rows.drain(..) {
@@ -239,6 +234,10 @@ pub fn append_evidence_index_merged_row(
                 } else {
                     other_rows.push(row);
                 }
+            }
+            if success_rows.len() > success_budget {
+                let drain = success_rows.len() - success_budget;
+                success_rows.drain(0..drain);
             }
             let budget = MAX_POST_TOOL_EVIDENCE_ARTIFACTS.saturating_sub(success_rows.len());
             if other_rows.len() > budget {
@@ -256,14 +255,8 @@ pub fn append_evidence_index_merged_row(
         tx_payload
     };
     if let Some(tid) = resolved_task_id {
-        let tx = core_state::task_ledger::LedgerTransaction {
-            ts: framework_core::time::now_iso(),
-            tx_type: "evidence".to_string(),
-            payload: tx_payload,
-            idempotency_key: None,
-            seq: None,
-            schema_version: Some(1),
-        };
+        let tx = core_state::task_ledger::LedgerTransaction::new("evidence", tx_payload)
+            .with_schema_version(1);
         if let Err(e) = core_state::task_ledger::append_transaction(repo_root, &tid, tx) {
             tracing::error!(task_id = %tid, error = %e, "failed to append evidence transaction to TASK_LEDGER");
         }
@@ -509,7 +502,8 @@ pub(super) fn detect_and_verify_physical_artifact(repo_root: &Path, command_lowe
         return false;
     }
 
-    true
+    // 对未识别的验证命令，默认拒绝物理产物验证（fail-closed）
+    false
 }
 
 fn is_modified_recently(path: &std::path::Path, max_delta_secs: u64) -> bool {
@@ -593,8 +587,8 @@ mod shell_command_verification_heuristic_tests {
         ));
         std::fs::create_dir_all(&temp_dir).unwrap();
 
-        // 1. Non-verification commands should be bypassed and return true by default
-        assert!(detect_and_verify_physical_artifact(
+        // 1. Non-verification commands should be rejected by default (fail-closed)
+        assert!(!detect_and_verify_physical_artifact(
             &temp_dir,
             "python foo.py"
         ));

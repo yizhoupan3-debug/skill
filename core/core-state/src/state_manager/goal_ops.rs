@@ -504,14 +504,8 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
             let path = goal_state_path_for_task(&repo_root, &task_id)?;
             let value = Value::Object(obj);
             write_atomic_json(&path, &value)?;
-            let tx = crate::task_ledger::LedgerTransaction {
-                ts: framework_core::time::now_iso(),
-                tx_type: "goal_state".to_string(),
-                payload: value.clone(),
-                idempotency_key: None,
-                seq: None,
-                schema_version: Some(1),
-            };
+            let tx = crate::task_ledger::LedgerTransaction::new("goal_state", value.clone())
+                .with_schema_version(1);
             crate::task_ledger::append_transaction_assuming_l1_held(&repo_root, &task_id, tx)
                 .map_err(|e| {
                     FrameworkError::validation(format!("TASK_LEDGER append failed: {e}"))
@@ -563,6 +557,19 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
             // GOAL-001: Strip stale annotations before mutation+write
             strip_stale_annotations(&mut state);
 
+            // T-F-005: Enforce checkpoint note length limit to prevent GOAL_STATE.json bloat.
+            const MAX_CHECKPOINT_NOTE_LEN: usize = 2048;
+            let note_clamped = if note.len() > MAX_CHECKPOINT_NOTE_LEN {
+                tracing::warn!(
+                    note_len = note.len(),
+                    max = MAX_CHECKPOINT_NOTE_LEN,
+                    "checkpoint note exceeds length limit — clamping"
+                );
+                &note[..MAX_CHECKPOINT_NOTE_LEN]
+            } else {
+                note
+            };
+
             let arr = state
                 .as_object_mut()
                 .and_then(|o| o.get_mut("checkpoints"))
@@ -570,7 +577,7 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
                 .ok_or_else(|| FrameworkError::validation("GOAL_STATE.checkpoints corrupt"))?;
             arr.push(json!({
                 "at": framework_core::time::now_iso(),
-                "note": note,
+                "note": note_clamped,
                 "type": payload.get("checkpoint_type").and_then(Value::as_str).unwrap_or("milestone"),
                 "done_when_covers": payload.get("done_when_covers").cloned().unwrap_or(json!([])),
                 "evidence_refs": payload.get("evidence_refs").cloned().unwrap_or(json!([])),
@@ -583,14 +590,8 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
                 crate::goal_prediction::merge_prediction_from_payload(o, &payload);
             }
             write_atomic_json(&path, &state)?;
-            let tx = crate::task_ledger::LedgerTransaction {
-                ts: framework_core::time::now_iso(),
-                tx_type: "goal_state".to_string(),
-                payload: state.clone(),
-                idempotency_key: None,
-                seq: None,
-                schema_version: Some(1),
-            };
+            let tx = crate::task_ledger::LedgerTransaction::new("goal_state", state.clone())
+                .with_schema_version(1);
             crate::task_ledger::append_transaction_assuming_l1_held(&repo_root, &task_id, tx)
                 .map_err(|e| {
                     FrameworkError::validation(format!("TASK_LEDGER append failed: {e}"))
@@ -690,14 +691,8 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
                     // GOAL-001: Strip stale annotations before write
                     strip_stale_annotations(&mut pending);
                     write_atomic_json(&goal_path, &pending)?;
-                    let tx = crate::task_ledger::LedgerTransaction {
-                        ts: framework_core::time::now_iso(),
-                        tx_type: "goal_state".to_string(),
-                        payload: pending.clone(),
-                        idempotency_key: None,
-                        seq: None,
-                        schema_version: Some(1),
-                    };
+                    let tx = crate::task_ledger::LedgerTransaction::new("goal_state", pending.clone())
+                        .with_schema_version(1);
                     crate::task_ledger::append_transaction_assuming_l1_held(&repo_root, &task_id, tx)
                         .map_err(|e| {
                             FrameworkError::validation(format!("TASK_LEDGER append failed: {e}"))
@@ -755,14 +750,11 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
                             // GOAL-001: Strip stale annotations before write
                             strip_stale_annotations(&mut qg_state);
                             write_atomic_json(&goal_path, &qg_state)?;
-                            let tx = crate::task_ledger::LedgerTransaction {
-                                ts: framework_core::time::now_iso(),
-                                tx_type: "goal_iteration_blocked".to_string(),
-                                payload: qg_state,
-                                idempotency_key: None,
-                                seq: None,
-                                schema_version: Some(1),
-                            };
+                            let tx = crate::task_ledger::LedgerTransaction::new(
+                                "goal_iteration_blocked",
+                                qg_state,
+                            )
+                            .with_schema_version(1);
                             crate::task_ledger::append_transaction_assuming_l1_held(
                                 &repo_root, &task_id, tx,
                             )
@@ -803,14 +795,11 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
                         }
                         strip_stale_annotations(&mut degraded_state);
                         write_atomic_json(&goal_path, &degraded_state)?;
-                        let tx = crate::task_ledger::LedgerTransaction {
-                            ts: framework_core::time::now_iso(),
-                            tx_type: "goal_iteration_blocked".to_string(),
-                            payload: degraded_state,
-                            idempotency_key: None,
-                            seq: None,
-                            schema_version: Some(1),
-                        };
+                        let tx = crate::task_ledger::LedgerTransaction::new(
+                            "goal_iteration_blocked",
+                            degraded_state,
+                        )
+                        .with_schema_version(1);
                         crate::task_ledger::append_transaction_assuming_l1_held(
                             &repo_root, &task_id, tx,
                         )
@@ -869,14 +858,8 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
             // GOAL-001: Strip stale annotations before write
             strip_stale_annotations(&mut loop_state);
             write_atomic_json(&goal_path, &loop_state)?;
-            let tx = crate::task_ledger::LedgerTransaction {
-                ts: framework_core::time::now_iso(),
-                tx_type: "goal_iteration_completed".to_string(),
-                payload: loop_state.clone(),
-                idempotency_key: None,
-                seq: None,
-                schema_version: Some(1),
-            };
+            let tx = crate::task_ledger::LedgerTransaction::new("goal_iteration_completed", loop_state.clone())
+                .with_schema_version(1);
             crate::task_ledger::append_transaction_assuming_l1_held(&repo_root, &task_id, tx)
                 .map_err(|e| {
                     FrameworkError::validation(format!("TASK_LEDGER append failed: {e}"))
@@ -926,14 +909,8 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
                 json!(framework_core::time::now_iso()),
             );
             write_atomic_json(&path, &state)?;
-            let tx = crate::task_ledger::LedgerTransaction {
-                ts: framework_core::time::now_iso(),
-                tx_type: "goal_state".to_string(),
-                payload: state.clone(),
-                idempotency_key: None,
-                seq: None,
-                schema_version: Some(1),
-            };
+            let tx = crate::task_ledger::LedgerTransaction::new("goal_state", state.clone())
+                .with_schema_version(1);
             crate::task_ledger::append_transaction_assuming_l1_held(&repo_root, &task_id, tx)
                 .map_err(|e| {
                     FrameworkError::validation(format!("TASK_LEDGER append failed: {e}"))
@@ -1153,14 +1130,8 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
             strip_stale_annotations(&mut state);
 
             write_atomic_json(&path, &state)?;
-            let tx = crate::task_ledger::LedgerTransaction {
-                ts: framework_core::time::now_iso(),
-                tx_type: "goal_state".to_string(),
-                payload: state.clone(),
-                idempotency_key: None,
-                seq: None,
-                schema_version: Some(1),
-            };
+            let tx = crate::task_ledger::LedgerTransaction::new("goal_state", state.clone())
+                .with_schema_version(1);
             crate::task_ledger::append_transaction_assuming_l1_held(&repo_root, &task_id, tx)
                 .map_err(|e| {
                     FrameworkError::validation(format!("TASK_LEDGER append failed: {e}"))
@@ -1204,6 +1175,21 @@ fn clear_goal_state(
 
     if existed {
         fs::remove_file(&path)?;
+        // T-F-004: Record goal_cleared in TASK_LEDGER for audit trail completeness.
+        let clear_tx = crate::task_ledger::LedgerTransaction::new(
+            "goal_cleared",
+            json!({"task_id": task_id, "cleared_at": framework_core::time::now_iso()}),
+        )
+        .with_schema_version(1);
+        if let Err(e) = crate::task_ledger::append_transaction_assuming_l1_held(
+            repo_root, &task_id, clear_tx,
+        ) {
+            tracing::warn!(
+                task_id = %task_id,
+                error = %e,
+                "failed to append goal_cleared transaction to TASK_LEDGER"
+            );
+        }
     }
     neutralize_task_pointers_for_task(repo_root, &task_id)?;
     Ok(json!({
@@ -1297,14 +1283,8 @@ fn resume_goal_running(
     )?;
 
     write_atomic_json(&path, &state)?;
-    let tx = crate::task_ledger::LedgerTransaction {
-        ts: framework_core::time::now_iso(),
-        tx_type: "goal_state".to_string(),
-        payload: state.clone(),
-        idempotency_key: None,
-        seq: None,
-        schema_version: Some(1),
-    };
+    let tx = crate::task_ledger::LedgerTransaction::new("goal_state", state.clone())
+        .with_schema_version(1);
     crate::task_ledger::append_transaction_assuming_l1_held(repo_root, &task_id, tx)
         .map_err(|e| FrameworkError::validation(format!("TASK_LEDGER append failed: {e}")))?;
     let goal_label = state
@@ -1355,6 +1335,16 @@ fn set_terminal_flags(
     // 'completed' is reserved for future state machine use; currently unreachable
     // since loop semantics keep goals at "running" after iteration complete.
     // P2-019: Also guard against completed/archived, consistent with amend path.
+    // T-SG-002: Validate that the requested status is a known goal status.
+    const VALID_GOAL_STATUSES: &[&str] = &[
+        "running", "paused", "blocked", "review_pending", "completed",
+    ];
+    if !VALID_GOAL_STATUSES.contains(&status) {
+        return Err(FrameworkError::validation(format!(
+            "framework_goal_drive: invalid goal status '{status}' — must be one of {VALID_GOAL_STATUSES:?}"
+        )));
+    }
+
     let current = obj.get("status").and_then(Value::as_str).unwrap_or("");
     if current == "completed" {
         return Err(FrameworkError::validation(format!(
@@ -1403,14 +1393,8 @@ fn set_terminal_flags(
         json!(framework_core::time::now_iso()),
     );
     write_atomic_json(&path, &state)?;
-    let tx = crate::task_ledger::LedgerTransaction {
-        ts: framework_core::time::now_iso(),
-        tx_type: "goal_state".to_string(),
-        payload: state.clone(),
-        idempotency_key: None,
-        seq: None,
-        schema_version: Some(1),
-    };
+    let tx = crate::task_ledger::LedgerTransaction::new("goal_state", state.clone())
+        .with_schema_version(1);
     crate::task_ledger::append_transaction_assuming_l1_held(repo_root, &task_id, tx)
         .map_err(|e| FrameworkError::validation(format!("TASK_LEDGER append failed: {e}")))?;
     Ok(json!({

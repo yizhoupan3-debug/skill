@@ -2,7 +2,7 @@ use serde_json::Value;
 use std::collections::HashSet;
 
 use super::HookOutput;
-use super::{SESSION_KEY_CWD_FIELDS, extract_tool_input, is_path_key};
+use super::{extract_tool_input, is_path_key};
 
 pub fn extract_session_key(
     event: &Value,
@@ -90,7 +90,7 @@ fn extract_session_id_from_nested(event: &Value) -> Option<String> {
 
 /// Extract cwd from payload using standard field names.
 fn extract_cwd_from_payload(event: &Value) -> Option<String> {
-    for key in SESSION_KEY_CWD_FIELDS {
+    for key in framework_core::session_key::SESSION_KEY_CWD_FIELDS {
         if let Some(val) = event.get(*key).and_then(Value::as_str)
             && !val.is_empty()
         {

@@ -779,22 +779,7 @@ pub fn dispatch_closeout_command(command: CloseoutCommand) -> Result<(), Framewo
                     )?
                 }
                 (Some(repo_root), Some(task_id), None) => {
-                    let (_rows_non_empty, has_success) =
-                        runtime_core::goal_drive::task_evidence_artifacts_summary_for_task(
-                            repo_root, task_id,
-                        );
-                    let goal_state =
-                        runtime_core::goal_drive::read_goal_state(repo_root, Some(task_id))
-                            .ok()
-                            .flatten();
-                    let goal_prediction = goal_state
-                        .as_ref()
-                        .and_then(core_state::goal_prediction::read_goal_prediction);
-                    let ctx = CloseoutEvidenceContext {
-                        task_id: Some(task_id.trim().to_string()),
-                        has_successful_verification: has_success,
-                        goal_prediction,
-                    };
+                    let ctx = CloseoutEvidenceContext::new(Some(task_id.trim().to_string()), Path::new(repo_root));
                     evaluate_closeout_record_value_with_context(record_value, &ctx)?
                 }
                 _ => evaluate_closeout_record_value(record_value)?,
@@ -1386,9 +1371,9 @@ fn dispatch_web_fetch(args: WebFetchCommand) -> Result<(), FrameworkError> {
                 })?
                 .to_string();
 
-            if redirect_host != origin_host {
-                client = build_pinned_client(&redirect_host, &redirect_addrs)?;
-            }
+            // Always rebuild pinned client with fresh DNS resolution to prevent
+            // TOCTOU between validation and connection, even for same-host redirects.
+            client = build_pinned_client(&redirect_host, &redirect_addrs)?;
 
             current_url = resolved_url;
             continue;

@@ -146,6 +146,100 @@ impl RuntimeCoreHooks {
     }
 }
 
+/// Builder for `RuntimeCoreHooks` — enforces all fields are set at compile time.
+pub struct RuntimeCoreHooksBuilder {
+    host_provider: Option<HostProviderHooks>,
+    framework_goal_drive: Option<fn(Value) -> Result<Value, FrameworkError>>,
+    handle_orchestrator_operation: Option<fn(Value) -> Result<Value, FrameworkError>>,
+    handle_background_state_operation: Option<fn(Value) -> Result<Value, FrameworkError>>,
+    runtime_concurrency_defaults_payload: Option<fn() -> Result<Value, FrameworkError>>,
+    eval_route_contract: Option<fn() -> Value>,
+    run_eval_route: Option<fn(&Path, Option<&Path>) -> Result<Value, FrameworkError>>,
+    generated_artifacts_status_for_repo: Option<fn(&Path) -> Result<String, FrameworkError>>,
+    ensure_kernel_bootstrap: Option<fn()>,
+    evaluate_quality_gate: Option<fn(serde_json::Value) -> Result<serde_json::Value, FrameworkError>>,
+    evaluate_closeout_gate: Option<fn(serde_json::Value) -> Result<serde_json::Value, FrameworkError>>,
+}
+
+impl Default for RuntimeCoreHooksBuilder {
+    fn default() -> Self { Self::new() }
+}
+
+impl RuntimeCoreHooksBuilder {
+    pub fn new() -> Self {
+        Self {
+            host_provider: None,
+            framework_goal_drive: None,
+            handle_orchestrator_operation: None,
+            handle_background_state_operation: None,
+            runtime_concurrency_defaults_payload: None,
+            eval_route_contract: None,
+            run_eval_route: None,
+            generated_artifacts_status_for_repo: None,
+            ensure_kernel_bootstrap: None,
+            evaluate_quality_gate: None,
+            evaluate_closeout_gate: None,
+        }
+    }
+
+    pub fn host_provider(mut self, v: HostProviderHooks) -> Self { self.host_provider = Some(v); self }
+    pub fn framework_goal_drive(mut self, v: fn(Value) -> Result<Value, FrameworkError>) -> Self { self.framework_goal_drive = Some(v); self }
+    pub fn handle_orchestrator_operation(mut self, v: fn(Value) -> Result<Value, FrameworkError>) -> Self { self.handle_orchestrator_operation = Some(v); self }
+    pub fn handle_background_state_operation(mut self, v: fn(Value) -> Result<Value, FrameworkError>) -> Self { self.handle_background_state_operation = Some(v); self }
+    pub fn runtime_concurrency_defaults_payload(mut self, v: fn() -> Result<Value, FrameworkError>) -> Self { self.runtime_concurrency_defaults_payload = Some(v); self }
+    pub fn eval_route_contract(mut self, v: fn() -> Value) -> Self { self.eval_route_contract = Some(v); self }
+    pub fn run_eval_route(mut self, v: fn(&Path, Option<&Path>) -> Result<Value, FrameworkError>) -> Self { self.run_eval_route = Some(v); self }
+    pub fn generated_artifacts_status_for_repo(mut self, v: fn(&Path) -> Result<String, FrameworkError>) -> Self { self.generated_artifacts_status_for_repo = Some(v); self }
+    pub fn ensure_kernel_bootstrap(mut self, v: fn()) -> Self { self.ensure_kernel_bootstrap = Some(v); self }
+    pub fn evaluate_quality_gate(mut self, v: fn(serde_json::Value) -> Result<serde_json::Value, FrameworkError>) -> Self { self.evaluate_quality_gate = Some(v); self }
+    pub fn evaluate_closeout_gate(mut self, v: fn(serde_json::Value) -> Result<serde_json::Value, FrameworkError>) -> Self { self.evaluate_closeout_gate = Some(v); self }
+
+    /// Pre-filled builder for tests — all fields are stub fns.
+    pub fn for_testing() -> Self {
+        fn stub(_: Value) -> Result<Value, FrameworkError> { Ok(Value::Null) }
+        fn stub2() -> Result<Value, FrameworkError> { Ok(Value::Null) }
+        fn stub3() -> Value { Value::Null }
+        fn stub4(_: &Path) -> Result<String, FrameworkError> { Ok(String::new()) }
+        fn stub5(_: &Path, _: Option<&Path>) -> Result<Value, FrameworkError> { Ok(Value::Null) }
+        fn stub6() {}
+        fn stub7(_: serde_json::Value) -> Result<serde_json::Value, FrameworkError> { Ok(serde_json::Value::Null) }
+        Self {
+            host_provider: Some(HostProviderHooks {
+                for_routing_spelling: |_| None,
+                strict_pre_tool_fallback_hint: |_| None,
+                registry: || vec![],
+            }),
+            framework_goal_drive: Some(stub),
+            handle_orchestrator_operation: Some(stub),
+            handle_background_state_operation: Some(stub),
+            runtime_concurrency_defaults_payload: Some(stub2),
+            eval_route_contract: Some(stub3),
+            run_eval_route: Some(stub5),
+            generated_artifacts_status_for_repo: Some(stub4),
+            ensure_kernel_bootstrap: Some(stub6),
+            evaluate_quality_gate: Some(stub7),
+            evaluate_closeout_gate: Some(stub7),
+        }
+    }
+
+    /// Build — returns Err if any field is unset.
+    pub fn build(self) -> Result<RuntimeCoreHooks, String> {
+        Ok(RuntimeCoreHooks {
+            host_provider: self.host_provider.ok_or("host_provider not set")?,
+            framework_goal_drive: self.framework_goal_drive.ok_or("framework_goal_drive not set")?,
+            handle_orchestrator_operation: self.handle_orchestrator_operation.ok_or("handle_orchestrator_operation not set")?,
+            handle_background_state_operation: self.handle_background_state_operation.ok_or("handle_background_state_operation not set")?,
+            runtime_concurrency_defaults_payload: self.runtime_concurrency_defaults_payload.ok_or("runtime_concurrency_defaults_payload not set")?,
+            eval_route_contract: self.eval_route_contract.ok_or("eval_route_contract not set")?,
+            run_eval_route: self.run_eval_route.ok_or("run_eval_route not set")?,
+            generated_artifacts_status_for_repo: self.generated_artifacts_status_for_repo.ok_or("generated_artifacts_status_for_repo not set")?,
+            ensure_kernel_bootstrap: self.ensure_kernel_bootstrap.ok_or("ensure_kernel_bootstrap not set")?,
+            evaluate_quality_gate: self.evaluate_quality_gate.ok_or("evaluate_quality_gate not set")?,
+            evaluate_closeout_gate: self.evaluate_closeout_gate.ok_or("evaluate_closeout_gate not set")?,
+        })
+    }
+}
+
 /// All hooks that require callbacks into runtime-core.
 ///
 /// Uses grouped sub-structs to reduce cognitive load.

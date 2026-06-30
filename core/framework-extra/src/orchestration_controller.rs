@@ -26,18 +26,7 @@ use rt_storage::runtime_envelope_ids::{
 };
 
 fn background_effect_plan(next_step: &str) -> BackgroundControlEffectPlanPayload {
-    BackgroundControlEffectPlanPayload {
-        next_step: next_step.to_string(),
-        terminal_status: None,
-        resolved_status: None,
-        finalize_immediately: None,
-        cancel_running_task: None,
-        next_retry_count: None,
-        backoff_seconds: None,
-        wait_timeout_seconds: None,
-        wait_poll_interval_seconds: None,
-        sleep_seconds: None,
-    }
+    BackgroundControlEffectPlanPayload::new(next_step.to_string())
 }
 fn normalize_multitask_strategy(strategy: Option<&str>) -> String {
     strategy.unwrap_or("reject").trim().to_lowercase()
@@ -88,28 +77,12 @@ fn base_response(
     operation: &str,
     supported_multitask_strategies: Vec<String>,
 ) -> BackgroundControlResponsePayload {
-    BackgroundControlResponsePayload {
-        schema_version: BACKGROUND_CONTROL_SCHEMA_VERSION.to_string(),
-        authority: BACKGROUND_CONTROL_AUTHORITY.to_string(),
-        operation: operation.to_string(),
-        resolved_parallel_group_id: None,
-        lane_ids: None,
-        normalized_multitask_strategy: None,
-        supported_multitask_strategies,
-        strategy_supported: true,
-        accepted: None,
-        requires_takeover: None,
-        error: None,
-        should_retry: None,
-        next_retry_count: None,
-        backoff_seconds: None,
-        terminal_status: None,
-        resolved_status: None,
-        finalize_immediately: None,
-        cancel_running_task: None,
-        reason: String::new(),
-        effect_plan: background_effect_plan("noop"),
-    }
+    let mut response = BackgroundControlResponsePayload::new(operation, "", background_effect_plan("noop"));
+    response.schema_version = BACKGROUND_CONTROL_SCHEMA_VERSION.to_string();
+    response.authority = BACKGROUND_CONTROL_AUTHORITY.to_string();
+    response.supported_multitask_strategies = supported_multitask_strategies;
+    response.strategy_supported = true;
+    response
 }
 
 // ─── per-operation handlers ──────────────────────────────────────────

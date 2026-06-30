@@ -43,16 +43,8 @@ impl GateChecker for CorrectnessChecker {
         let rs_files = find_rust_files(repo_root);
 
         if rs_files.is_empty() {
-            findings.push(Finding {
-                id: "correctness_no_rust".to_string(),
-                severity: Severity::C,
-                description: format!(
-                    "no Rust source files found at {:?} — correctness checks skipped",
-                    repo_root,
-                ),
-                location: None,
-                suggestion: None,
-            });
+            findings.push(Finding::new("correctness_no_rust", Severity::C,
+                format!("no Rust source files found at {:?} — correctness checks skipped", repo_root)));
             return CheckResult {
                 checker_id: self.id().to_string(),
                 passed: true,
@@ -100,56 +92,25 @@ impl GateChecker for CorrectnessChecker {
 
         // ── unwrap() usage ──
         if total_unwrap > 20 {
-            let sev = if total_unwrap > 100 {
-                Severity::Warning
-            } else {
-                Severity::C
-            };
-            findings.push(Finding {
-                id: "correctness_unwrap".to_string(),
-                severity: sev,
-                description: format!(
-                    "{} .unwrap() calls across codebase — consider replacing with error propagation or expect() with context",
-                    total_unwrap,
-                ),
-                location: None,
-                suggestion: Some(
-                    "replace .unwrap() with ? operator or expect(\"descriptive message\")"
-                        .to_string(),
-                ),
-            });
+            findings.push(Finding::new("correctness_unwrap",
+                if total_unwrap > 100 { Severity::Warning } else { Severity::C },
+                format!("{} .unwrap() calls across codebase — consider replacing with error propagation or expect() with context", total_unwrap))
+                .with_suggestion("replace .unwrap() with ? operator or expect(\"descriptive message\")"));
         }
 
         // ── todo!() stubs ──
         if total_todo > 0 {
-            findings.push(Finding {
-                id: "correctness_todo".to_string(),
-                severity: Severity::C,
-                description: format!("{} todo!() / todo!(\"…\") stubs remaining", total_todo,),
-                location: None,
-                suggestion: Some("implement stubs before closing the task".to_string()),
-            });
+            findings.push(Finding::new("correctness_todo", Severity::C,
+                format!("{} todo!() / todo!(\"…\") stubs remaining", total_todo))
+                .with_suggestion("implement stubs before closing the task"));
         }
 
         // ── unimplemented!() stubs ──
         if total_unimplemented > 0 {
-            let sev = if total_unimplemented > 5 {
-                Severity::Warning
-            } else {
-                Severity::C
-            };
-            findings.push(Finding {
-                id: "correctness_unimplemented".to_string(),
-                severity: sev,
-                description: format!(
-                    "{} unimplemented!() stubs — will panic at runtime if reached",
-                    total_unimplemented,
-                ),
-                location: None,
-                suggestion: Some(
-                    "implement or replace with todo!() for tracked follow-up work".to_string(),
-                ),
-            });
+            findings.push(Finding::new("correctness_unimplemented",
+                if total_unimplemented > 5 { Severity::Warning } else { Severity::C },
+                format!("{} unimplemented!() stubs — will panic at runtime if reached", total_unimplemented))
+                .with_suggestion("implement or replace with todo!() for tracked follow-up work"));
         }
 
         let passed = findings.is_empty()

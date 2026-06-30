@@ -25,6 +25,22 @@ pub struct CloseoutEvidenceContext {
     pub goal_prediction: Option<crate::goal_prediction::GoalStatePrediction>,
 }
 
+impl CloseoutEvidenceContext {
+    /// Build evidence context by querying task state files.
+    pub fn new(task_id: Option<String>, repo_root: &std::path::Path) -> Self {
+        let tid = task_id.as_deref().unwrap_or("");
+        let (_, has_successful_verification) =
+            crate::state_manager::task_evidence_artifacts_summary_for_task(repo_root, tid);
+        let goal_state = crate::state_manager::read_goal_state(repo_root, task_id.as_deref())
+            .ok()
+            .flatten();
+        let goal_prediction = goal_state
+            .as_ref()
+            .and_then(crate::goal_prediction::read_goal_prediction);
+        Self { task_id, has_successful_verification, goal_prediction }
+    }
+}
+
 // ── Rule helpers ──────────────────────────────────────────────────────
 
 fn rule_category(rule: &str) -> &'static str {

@@ -51,26 +51,12 @@ impl CheckerRegistry {
         let Some(checkers) = self.checkers.get(norm_scene) else {
             let mut advisories = Vec::new();
             if scene_normalized {
-                advisories.push(Finding {
-                    id: "scene_normalized".to_string(),
-                    severity: Severity::Warning,
-                    description: format!(
-                        "scene '{scene_str}' is not a valid scene constant — normalized to '{norm_scene}'"
-                    ),
-                    location: None,
-                    suggestion: Some(
-                        "fix the scene string at the call site to use a valid scene constant".to_string(),
-                    ),
-                });
+                advisories.push(Finding::new("scene_normalized", Severity::Warning,
+                    format!("scene '{scene_str}' is not a valid scene constant — normalized to '{norm_scene}'"))
+                    .with_suggestion("fix the scene string at the call site to use a valid scene constant"));
             }
-            return GateVerdict {
-                passed: true,
-                scene: norm_scene.to_string(),
-                checkers_ran: 0,
-                blockers: vec![],
-                advisories,
-                reason: Some(format!("scene '{norm_scene}' has no registered checkers")),
-            };
+            return GateVerdict::new(true, norm_scene, 0, vec![], advisories)
+                .with_reason(format!("scene '{norm_scene}' has no registered checkers"));
         };
 
         let mut results: Vec<CheckResult> = Vec::with_capacity(checkers.len());
@@ -81,17 +67,9 @@ impl CheckerRegistry {
             results.push(CheckResult {
                 checker_id: "scene_routing".to_string(),
                 passed: true,
-                findings: vec![Finding {
-                    id: "scene_normalized".to_string(),
-                    severity: Severity::Warning,
-                    description: format!(
-                        "scene '{scene_str}' is not a valid scene constant — normalized to '{norm_scene}'"
-                    ),
-                    location: None,
-                    suggestion: Some(
-                        "fix the scene string at the call site to use a valid scene constant".to_string(),
-                    ),
-                }],
+                findings: vec![Finding::new("scene_normalized", Severity::Warning,
+                    format!("scene '{scene_str}' is not a valid scene constant — normalized to '{norm_scene}'"))
+                    .with_suggestion("fix the scene string at the call site to use a valid scene constant")],
             });
         }
 
@@ -145,16 +123,10 @@ fn aggregate(results: &[CheckResult], scene: &str) -> GateVerdict {
         // If checker self-judged failed but produced no findings,
         // synthesize a generic blocker so its verdict is not silently ignored.
         if !r.passed && r.findings.is_empty() {
-            blockers.push(Finding {
-                id: format!("{}_self_blocked", r.checker_id),
-                severity: Severity::B,
-                description: format!(
-                    "checker '{}' judged the gate as failed but produced no specific findings",
-                    r.checker_id,
-                ),
-                location: None,
-                suggestion: None,
-            });
+            blockers.push(Finding::new(
+                format!("{}_self_blocked", r.checker_id),
+                Severity::B,
+                format!("checker '{}' judged the gate as failed but produced no specific findings", r.checker_id)));
         }
 
         for f in &r.findings {
@@ -180,14 +152,9 @@ fn aggregate(results: &[CheckResult], scene: &str) -> GateVerdict {
         None
     };
 
-    GateVerdict {
-        passed,
-        scene: scene.to_string(),
-        checkers_ran,
-        blockers,
-        advisories,
-        reason,
-    }
+    let mut verdict = GateVerdict::new(passed, scene, checkers_ran, blockers, advisories);
+    verdict.reason = reason;
+    verdict
 }
 
 #[cfg(test)]
@@ -268,13 +235,7 @@ mod tests {
                 result: CheckResult {
                     checker_id: "p0-checker".to_string(),
                     passed: false,
-                    findings: vec![Finding {
-                        id: "f1".to_string(),
-                        severity: Severity::P0,
-                        description: "critical bug".to_string(),
-                        location: None,
-                        suggestion: None,
-                    }],
+                    findings: vec![Finding::new("f1", Severity::P0, "critical bug")],
                 },
             }),
         );
@@ -294,13 +255,7 @@ mod tests {
                 result: CheckResult {
                     checker_id: "warn-checker".to_string(),
                     passed: true,
-                    findings: vec![Finding {
-                        id: "w1".to_string(),
-                        severity: Severity::Warning,
-                        description: "minor style issue".to_string(),
-                        location: None,
-                        suggestion: None,
-                    }],
+                    findings: vec![Finding::new("w1", Severity::Warning, "minor style issue")],
                 },
             }),
         );
@@ -341,20 +296,8 @@ mod tests {
                     checker_id: "mixed".to_string(),
                     passed: false,
                     findings: vec![
-                        Finding {
-                            id: "b1".to_string(),
-                            severity: Severity::B,
-                            description: "blocker".to_string(),
-                            location: None,
-                            suggestion: None,
-                        },
-                        Finding {
-                            id: "w1".to_string(),
-                            severity: Severity::Warning,
-                            description: "advice".to_string(),
-                            location: None,
-                            suggestion: None,
-                        },
+                        Finding::new("b1", Severity::B, "blocker"),
+                        Finding::new("w1", Severity::Warning, "advice"),
                     ],
                 },
             }),

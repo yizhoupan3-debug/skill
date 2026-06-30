@@ -35,6 +35,32 @@ pub struct Finding {
     pub suggestion: Option<String>,
 }
 
+impl Finding {
+    pub fn new(
+        id: impl Into<String>,
+        severity: Severity,
+        description: impl Into<String>,
+    ) -> Self {
+        Self {
+            id: id.into(),
+            severity,
+            description: description.into(),
+            location: None,
+            suggestion: None,
+        }
+    }
+
+    pub fn with_location(mut self, location: impl Into<String>) -> Self {
+        self.location = Some(location.into());
+        self
+    }
+
+    pub fn with_suggestion(mut self, suggestion: impl Into<String>) -> Self {
+        self.suggestion = Some(suggestion.into());
+        self
+    }
+}
+
 /// Result from a single checker invocation.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CheckResult {
@@ -66,6 +92,30 @@ pub struct GateVerdict {
     pub reason: Option<String>,
 }
 
+impl GateVerdict {
+    pub fn new(
+        passed: bool,
+        scene: impl Into<String>,
+        checkers_ran: usize,
+        blockers: Vec<Finding>,
+        advisories: Vec<Finding>,
+    ) -> Self {
+        Self {
+            passed,
+            scene: scene.into(),
+            checkers_ran,
+            blockers,
+            advisories,
+            reason: None,
+        }
+    }
+
+    pub fn with_reason(mut self, reason: impl Into<String>) -> Self {
+        self.reason = Some(reason.into());
+        self
+    }
+}
+
 /// Per-invocation context passed to every checker.
 #[derive(Debug, Clone)]
 pub struct CheckContext {
@@ -89,5 +139,7 @@ pub struct CheckContext {
     /// checkers to access task results without scanning repo files.
     pub output_data: Option<serde_json::Value>,
     /// ISO 8601 timestamp of when this evaluation was initiated.
+    /// Populated at the registry layer for observability; not consumed by individual checkers.
+    #[allow(dead_code)]
     pub evaluated_at: String,
 }

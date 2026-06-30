@@ -139,14 +139,9 @@ fn append_step_ledger_entry(payload: Value) -> Result<Value, FrameworkError> {
     let changed = crate::utils::task_write_lock::apply_task_ledger_mutation(&repo_root, || {
         let inner_changed = append_jsonl_entry(&path, &entry_value, idempotency_key.as_deref())?;
         if inner_changed {
-            let tx = crate::task_ledger::LedgerTransaction {
-                ts: framework_core::time::now_iso(),
-                tx_type: "step".to_string(),
-                payload: entry_value.clone(),
-                idempotency_key: idempotency_key.clone(),
-                seq: None,
-                schema_version: Some(1),
-            };
+            let tx = crate::task_ledger::LedgerTransaction::new("step", entry_value.clone())
+                .with_schema_version(1)
+                .with_idempotency_key(idempotency_key.unwrap_or_default());
             if let Err(e) =
                 crate::task_ledger::append_transaction_assuming_l1_held(&repo_root, &task_id, tx)
             {

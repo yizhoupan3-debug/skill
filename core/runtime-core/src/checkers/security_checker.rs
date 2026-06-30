@@ -31,16 +31,8 @@ impl GateChecker for SecurityChecker {
         let rs_files = find_rust_files(repo_root);
 
         if rs_files.is_empty() {
-            findings.push(Finding {
-                id: "security_no_rust".to_string(),
-                severity: Severity::C,
-                description: format!(
-                    "no Rust source files found at {:?} — security checks skipped",
-                    repo_root,
-                ),
-                location: None,
-                suggestion: None,
-            });
+            findings.push(Finding::new("security_no_rust", Severity::C,
+                format!("no Rust source files found at {:?} — security checks skipped", repo_root)));
             return CheckResult {
                 checker_id: self.id().to_string(),
                 passed: true,
@@ -114,74 +106,32 @@ impl GateChecker for SecurityChecker {
 
         // ── unsafe blocks without SAFETY comment ──
         if unsafe_unsafe_blocks > 0 {
-            findings.push(Finding {
-                id: "security_unsafe_no_safety".to_string(),
-                severity: if unsafe_unsafe_blocks > 5 {
-                    Severity::Warning
-                } else {
-                    Severity::C
-                },
-                description: format!(
-                    "{} unsafe {{ }} block(s) without // SAFETY: comment (out of {} total)",
-                    unsafe_unsafe_blocks, unsafe_total_blocks,
-                ),
-                location: None,
-                suggestion: Some(
-                    "add // SAFETY: comment above each unsafe block explaining invariants"
-                        .to_string(),
-                ),
-            });
+            findings.push(Finding::new("security_unsafe_no_safety",
+                if unsafe_unsafe_blocks > 5 { Severity::Warning } else { Severity::C },
+                format!("{} unsafe {{ }} block(s) without // SAFETY: comment (out of {} total)",
+                    unsafe_unsafe_blocks, unsafe_total_blocks))
+                .with_suggestion("add // SAFETY: comment above each unsafe block explaining invariants"));
         }
 
         // ── transmute ──
         if transmute_calls > 0 {
-            findings.push(Finding {
-                id: "security_transmute".to_string(),
-                severity: Severity::C,
-                description: format!(
-                    "{} transmute call(s) — prefer safe conversions via From/TryFrom",
-                    transmute_calls,
-                ),
-                location: None,
-                suggestion: Some(
-                    "replace transmute with From/TryFrom or a dedicated conversion function"
-                        .to_string(),
-                ),
-            });
+            findings.push(Finding::new("security_transmute", Severity::C,
+                format!("{} transmute call(s) — prefer safe conversions via From/TryFrom", transmute_calls))
+                .with_suggestion("replace transmute with From/TryFrom or a dedicated conversion function"));
         }
 
         // ── Command::new(var) — variable command injection ──
         if command_new_var > 0 {
-            findings.push(Finding {
-                id: "security_command_injection".to_string(),
-                severity: Severity::Warning,
-                description: format!(
-                    "{} Command::new(var) call(s) — variable command with potential injection",
-                    command_new_var,
-                ),
-                location: None,
-                suggestion: Some(
-                    "avoid building shell commands from untrusted variables; validate input"
-                        .to_string(),
-                ),
-            });
+            findings.push(Finding::new("security_command_injection", Severity::Warning,
+                format!("{} Command::new(var) call(s) — variable command with potential injection", command_new_var))
+                .with_suggestion("avoid building shell commands from untrusted variables; validate input"));
         }
 
         // ── shell command execution ──
         if shell_cmds > 0 {
-            findings.push(Finding {
-                id: "security_shell_exec".to_string(),
-                severity: Severity::Warning,
-                description: format!(
-                    "{} shell command execution(s) via sh -c / bash -c",
-                    shell_cmds,
-                ),
-                location: None,
-                suggestion: Some(
-                    "use std::process::Command with explicit args instead of shell strings"
-                        .to_string(),
-                ),
-            });
+            findings.push(Finding::new("security_shell_exec", Severity::Warning,
+                format!("{} shell command execution(s) via sh -c / bash -c", shell_cmds))
+                .with_suggestion("use std::process::Command with explicit args instead of shell strings"));
         }
 
         let passed = findings.is_empty()
