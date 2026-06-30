@@ -4,12 +4,10 @@
 //! These tools allow creating and managing DAG task chains with conditional
 //! branching, fan-out/fan-in, retry policies, and timeout groups.
 
-use super::*;
-use chain_engine::scheduler::{self, advance_dag, validate_dag, write_chain_file};
-use chain_engine::tracker::{self, process_post_tick, TimeoutResult, FailureActionResult};
+use chain_engine::scheduler::{advance_dag, validate_dag, write_chain_file};
+use chain_engine::tracker::process_post_tick;
 use chain_engine::types::{
-    ChainDagRoot, ChainMode, DagTaskEntry, DagCondition, RetryPolicy,
-    TimeoutGroupSpec, TaskStatus,
+    ChainDagRoot, ChainMode, DagTaskEntry, TaskStatus,
 };
 use core_errors::FrameworkError;
 use serde_json::{Value, json};
@@ -356,7 +354,7 @@ pub(crate) fn tool_chain_dag_skip(
 /// Resume a paused DAG chain (set `paused = false`) so the scheduler
 /// and poller continue processing it.
 pub(crate) fn tool_chain_dag_resume(
-    arguments: &Value,
+    _arguments: &Value,
     repo_root: &Path,
 ) -> std::result::Result<String, FrameworkError> {
     let path = chain_engine::chain_file_path(repo_root);

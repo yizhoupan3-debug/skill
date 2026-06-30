@@ -20,9 +20,8 @@ use std::thread;
 use std::time::Duration;
 
 use crate::compat;
-use crate::scheduler::{advance_dag, is_chain_complete, load_advance_write, write_chain_file};
+use crate::scheduler::{advance_dag, is_chain_complete, write_chain_file};
 use crate::tracker::process_post_tick;
-use crate::types::ChainDagRoot;
 
 /// Default polling interval in seconds.
 pub const DEFAULT_POLL_INTERVAL_SECS: u64 = 5;

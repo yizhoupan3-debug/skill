@@ -5,9 +5,8 @@
 //! supporting the task output pipeline across chains, goal-engine loops, and
 //! swarm teams.
 
-use super::*;
 use core_errors::FrameworkError;
-use core_state::chain_output::{self as chain_output_mod, ChainOutput};
+use core_state::chain_output::{self as chain_output_mod};
 use core_state::task_output::{
     self as task_output_mod, TaskOutput, OutputData, ConsumedInput,
 };

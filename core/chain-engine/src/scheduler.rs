@@ -11,8 +11,7 @@ use std::path::Path;
 
 use crate::compat;
 use crate::types::{
-    ChainDagRoot, ChainMode, ConditionOperator, ConditionType, DagCondition, DagTaskEntry,
-    FailureStrategy, GlobalDagConfig, RetryPolicy, TaskStatus,
+    ChainDagRoot, ChainMode, ConditionOperator, ConditionType, DagCondition, DagTaskEntry, TaskStatus,
 };
 
 /// Find tasks whose dependency and capacity constraints are satisfied,
@@ -242,7 +241,7 @@ pub fn validate_dag(root: &ChainDagRoot) -> Result<(), FrameworkError> {
 
     // Cycle detection via iterative DFS (CE-06: avoid stack overflow on deep chains)
     for task in &root.tasks {
-        let mut visited: HashSet<&str> = HashSet::new();
+        let _visited: HashSet<&str> = HashSet::new();
         if has_cycle_iterative(task.task_id.as_str(), &root.tasks) {
             return Err(FrameworkError::validation(format!(
                 "cycle detected in chain starting from '{}'",

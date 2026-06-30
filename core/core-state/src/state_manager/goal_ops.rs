@@ -57,7 +57,8 @@ fn is_valid_goal_transition(from: &str, to: &str) -> bool {
 // P3-08: completed and failed are terminal — guard against accidental transitions.
 // The catch-all below (returns false) already handles these; this doc+guard
 // makes the intent explicit and protects against future matrix additions.
-fn is_terminal_goal_status(status: &str) -> bool {
+#[allow(dead_code)] // P3-08: defensive guard, kept for documentation
+pub(crate) fn is_terminal_goal_status(status: &str) -> bool {
     matches!(status, "completed" | "failed")
 }
 

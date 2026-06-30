@@ -5,8 +5,6 @@
 //! - Schedule retries for failed tasks with retry policies
 //! - Apply failure strategies (pause_dag / abort_dag / continue)
 
-use core_errors::FrameworkError;
-use std::collections::{HashMap, HashSet};
 
 use crate::types::{
     ChainDagRoot, ChainMode, FailureStrategy, TaskStatus,

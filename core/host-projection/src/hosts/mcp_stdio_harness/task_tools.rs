@@ -593,7 +593,7 @@ pub(crate) fn tool_task_chain_advance(
             .as_deref()
             .and_then(|tid| core_state::task_output::read_task_output(&repo_root_owned, tid).ok())
             .flatten();
-        if let Some(ref output) = current_output {
+        if let Some(_output) = current_output {
             // Initialize or update the next task's TASK_OUTPUT.json
             let mut next_output =
                 core_state::task_output::read_task_output(&repo_root_owned, &next_id)
