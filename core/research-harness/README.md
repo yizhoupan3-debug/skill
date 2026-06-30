@@ -19,7 +19,8 @@ Unified research harness crate for the skill framework. Integrates paper revisio
 | `workspace` | Workspace initialization, file sync, ledger events |
 | `text` | Text processing: slugification, XML parsing, content word extraction |
 | `provenance` | Git provenance and environment fingerprint capture |
-| `smoke` | Smoke tests for academic source freshness |
+| `smoke` | General-purpose experiment smoke test engine (quick directional probes via templates/ executables) |
+| `smoke_cache` | LRU+TTL cache with disk persistence for experiment results |
 
 ## Dependencies
 

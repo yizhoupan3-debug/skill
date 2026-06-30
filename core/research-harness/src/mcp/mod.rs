@@ -155,6 +155,7 @@ pub fn tool_definitions() -> Vec<Value> {
                 "required": ["check"]
             }),
         ),
+        tool_literature_search(),
     ]
 }
 
@@ -175,4 +176,22 @@ fn tool_def(name: &str, description: &str, input_schema: Value) -> Value {
         "description": description,
         "inputSchema": input_schema,
     })
+}
+
+// ── Literature search tool ──
+
+fn tool_literature_search() -> Value {
+    tool_def(
+        "research_literature_search",
+        "Search academic literature across arXiv and Semantic Scholar",
+        json!({
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Search query (plain text)"},
+                "limit": {"type": "integer", "description": "Max results per source (default 10, max 20)"},
+                "source": {"type": "string", "enum": ["all", "semantic-scholar", "arxiv"], "description": "Source to search (default all)"}
+            },
+            "required": ["query"]
+        }),
+    )
 }

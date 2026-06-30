@@ -1,407 +1,668 @@
-//! Smoke test: freshness guard for academic source queries.
+//! General-purpose experiment smoke test engine.
 //!
-//! Implements the research harness smoke test specification:
-//! - Query registry at `artifacts/research-log/smoke-tests.json`
-//! - HTTP execution via existing arXiv / Semantic Scholar clients
-//! - Freshness computation, stale detection, regression comparison
-//! - Results written to `smoke-test-results.jsonl`
+//! Runs executable templates from `templates/` at the repo root, injecting
+//! parameter combinations as environment variables (`EXPERIMENT_<KEY>=<VALUE>`).
+//! Results are parsed from script stdout as structured JSON.
 //!
-//! Migrated from `tools/autoresearch-rs/src/smoke.rs`.
+//! Intended for **quick directional probes** — single-run, no multi-seed,
+//! no statistical rigor. All experiments run independently to completion.
+//!
+//! # Security
+//!
+//! - Templates are resolved relative to `repo_root/templates/` — no path traversal.
+//! - Parameters reach the subprocess via **environment variables only** — not CLI args,
+//!   preventing shell injection. Only the template binary name is fixed and from the
+//!   trusted `templates/` directory, not caller-supplied.
+//! - Subprocesses are process-group-isolated (via `setsid()` + `pre_exec`) so that
+//!   timeout kills the entire process tree, not just the direct child.
+//! - User input NEVER reaches shell arguments. All data flows through env vars.
+//!
+//! # Concurrency
+//!
+//! Parallel subprocess execution bounded by chunking (process `concurrency`
+//! experiments at a time). No early exit — every experiment runs to completion
+//! or timeout. Subprocess stdout/stderr are read by dedicated background threads
+//! to prevent pipe-buffer deadlock on large output.
+//!
+//! # Caching
+//!
+//! LRU + TTL cache managed by [`smoke_cache::ExperimentCache`]. Cache key is SHA-256
+//! of `template_content_hash || sorted_params_json`. Content hash (not mtime) avoids
+//! filesystem precision issues. Disk persistence is flock-guarded against cross-process
+//! races.
 
-use anyhow::{Context, Result};
-use chrono::Datelike;
+use core_errors::FrameworkError;
 use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::fs;
-use std::path::Path;
+use std::io::Read;
+use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
 
-use crate::search::arxiv;
-use crate::search::semantic_scholar;
-use crate::util::{str_field, str_field_default};
+use crate::smoke_cache::ExperimentCache;
 
-// ── Local helpers ──
+// ── Constants ──
 
-const DEFAULT_EXTERNAL_TIMEOUT_SECS: u64 = 20;
+const DEFAULT_TIMEOUT_MS: u64 = 60_000;
+const DEFAULT_CONCURRENCY: usize = 4;
+const MAX_CONCURRENCY: usize = 32;
+const MAX_STDERR_CHARS: usize = 4096;
+const TEMPLATES_DIR: &str = "templates";
+const ARTIFACTS_SUBDIR: &str = "artifacts/research-log/smoke";
+const MAX_MCP_RESPONSE_BYTES: usize = 4 * 1024 * 1024;
+const POLL_INTERVAL_MS: u64 = 50;
+/// Conservative per-experiment result size estimate for pre-flight size check.
+const ESTIMATED_BYTES_PER_RESULT: usize = 1024;
 
-const SMOKE_TESTS_REL_PATH: &str = "artifacts/research-log/smoke-tests.json";
-const SMOKE_RESULTS_REL_PATH: &str = "artifacts/research-log/smoke-test-results.jsonl";
-const EXPECTED_SCHEMA_VERSION: &str = "research-smoke-v1";
-const STALE_THRESHOLD_DAYS: i64 = 180;
+// ── Public entry point ──
 
-/// A single smoke test query definition from smoke-tests.json.
-#[derive(Debug, Clone)]
-pub struct SmokeQuery {
-    pub id: String,
-    pub source: String,
-    pub query: String,
-    pub expected_min_results: usize,
-    pub expected_freshness_days: i64,
-    pub related_directions: Vec<String>,
-    pub related_barriers: Vec<String>,
-}
-
-/// A single smoke test result.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct SmokeResult {
-    pub id: String,
-    pub passed: bool,
-    pub results_count: usize,
-    pub expected_min: usize,
-    pub stale: bool,
-    pub freshness_days: i64,
-    pub expected_freshness_days: i64,
-    pub regression: Option<String>,
-    pub error: Option<String>,
-    pub timestamp: String,
-}
-
-// ── Config loading ──
-
-/// Load and parse smoke-tests.json from the repo root.
-pub fn load_smoke_config(repo_root: &Path) -> Result<Vec<SmokeQuery>> {
-    let path = repo_root.join(SMOKE_TESTS_REL_PATH);
-    if !path.exists() {
-        return Ok(Vec::new());
-    }
-    let text = fs::read_to_string(&path)
-        .with_context(|| format!("read smoke config: {}", path.display()))?;
-    let config: Value = serde_json::from_str(&text)
-        .with_context(|| format!("parse smoke config: {}", path.display()))?;
-
-    let version = config
-        .get("schema_version")
+/// Run experiment smoke tests.
+///
+/// # Arguments (from MCP JSON)
+///
+/// | Field | Type | Required | Description |
+/// |-------|------|----------|-------------|
+/// | `template` | string | yes | Filename in `templates/` directory (must be executable) |
+/// | `params` | array | yes | `[{"key": "val", ...}]` — each entry becomes one experiment run |
+/// | `concurrency` | integer | no | Max parallel subprocesses (1–32, default 4) |
+/// | `timeout_ms` | integer | no | Per-experiment timeout (default 60000) |
+/// | `no_cache` | boolean | no | Bypass LRU+TTL cache (default false) |
+///
+/// # Returns
+///
+/// Structured JSON:
+/// ```json
+/// {
+///   "experiments": [{
+///     "run_id": "benchmark-0",
+///     "template": "benchmark",
+///     "params": {"lr": "0.01"},
+///     "exit_code": 0,
+///     "result": {"accuracy": 0.85},
+///     "error": null,
+///     "wall_time_ms": 2345
+///   }],
+///   "summary": {"total": 1, "succeeded": 1, "failed": 0}
+/// }
+/// ```
+pub fn run_smoke_tests(repo_root: &Path, arguments: &Value) -> Result<String, FrameworkError> {
+    // 1. Validate & parse arguments
+    let template_name = arguments
+        .get("template")
         .and_then(Value::as_str)
-        .unwrap_or("");
-    if version != EXPECTED_SCHEMA_VERSION {
-        tracing::warn!(
-            "[smoke] config schema_version={version:?}, expected={EXPECTED_SCHEMA_VERSION:?}"
-        );
+        .ok_or_else(|| {
+            FrameworkError::validation(
+                "research_smoke requires 'template' (string): executable filename in templates/",
+            )
+        })?;
+
+    // Reject path separators in template name to prevent path traversal
+    if template_name.is_empty() {
+        return Err(FrameworkError::validation(
+            "template name must not be empty",
+        ));
+    }
+    if template_name.contains('/') || template_name.contains('\\') || template_name.contains("..") {
+        return Err(FrameworkError::validation(format!(
+            "template name must not contain path separators: {template_name:?}"
+        )));
     }
 
-    let mut queries = Vec::new();
-    if let Some(arr) = config.get("queries").and_then(Value::as_array) {
-        for item in arr {
-            queries.push(SmokeQuery {
-                id: str_field(item, "id").to_string(),
-                source: str_field_default(item, "source", "arxiv").to_string(),
-                query: str_field(item, "query").to_string(),
-                expected_min_results: item
-                    .get("expected_min_results")
-                    .and_then(Value::as_u64)
-                    .unwrap_or(3) as usize,
-                expected_freshness_days: item
-                    .get("expected_freshness_days")
-                    .and_then(Value::as_i64)
-                    .unwrap_or(180),
-                related_directions: item
-                    .get("related_directions")
-                    .and_then(Value::as_array)
-                    .map(|a| {
-                        a.iter()
-                            .filter_map(Value::as_str)
-                            .map(String::from)
-                            .collect()
-                    })
-                    .unwrap_or_default(),
-                related_barriers: item
-                    .get("related_barriers")
-                    .and_then(Value::as_array)
-                    .map(|a| {
-                        a.iter()
-                            .filter_map(Value::as_str)
-                            .map(String::from)
-                            .collect()
-                    })
-                    .unwrap_or_default(),
-            });
-        }
+    let raw_params = arguments
+        .get("params")
+        .and_then(Value::as_array)
+        .ok_or_else(|| {
+            FrameworkError::validation(
+                "research_smoke requires 'params' (array of {key: value, ...} objects)",
+            )
+        })?;
+
+    if raw_params.is_empty() {
+        return Err(FrameworkError::validation("params must not be empty"));
     }
 
-    // Also load barrier_extends
-    if let Some(extends) = config.get("barrier_extends").and_then(Value::as_object) {
-        for (_barrier_id, group) in extends {
-            if let Some(arr) = group.get("queries").and_then(Value::as_array) {
-                for item in arr {
-                    queries.push(SmokeQuery {
-                        id: str_field(item, "id").to_string(),
-                        source: str_field_default(item, "source", "arxiv").to_string(),
-                        query: str_field(item, "query").to_string(),
-                        expected_min_results: item
-                            .get("expected_min_results")
-                            .and_then(Value::as_u64)
-                            .unwrap_or(3) as usize,
-                        expected_freshness_days: item
-                            .get("expected_freshness_days")
-                            .and_then(Value::as_i64)
-                            .unwrap_or(180),
-                        related_directions: item
-                            .get("related_directions")
-                            .and_then(Value::as_array)
-                            .map(|a| {
-                                a.iter()
-                                    .filter_map(Value::as_str)
-                                    .map(String::from)
-                                    .collect()
-                            })
-                            .unwrap_or_default(),
-                        related_barriers: Vec::new(),
-                    });
-                }
+    let concurrency = arguments
+        .get("concurrency")
+        .and_then(Value::as_u64)
+        .map(|c| c as usize)
+        .unwrap_or(DEFAULT_CONCURRENCY)
+        .clamp(1, MAX_CONCURRENCY);
+
+    let timeout_ms = arguments
+        .get("timeout_ms")
+        .and_then(Value::as_u64)
+        .unwrap_or(DEFAULT_TIMEOUT_MS);
+
+    let no_cache = arguments
+        .get("no_cache")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+
+    // 2. Pre-flight size check: prevent massive response from clogging MCP transport
+    if raw_params.len().saturating_mul(ESTIMATED_BYTES_PER_RESULT) > MAX_MCP_RESPONSE_BYTES {
+        return Err(FrameworkError::validation(format!(
+            "Too many experiments ({}). Estimated response > {} bytes. \
+             Reduce params size or use the results JSONL at {}/results.jsonl",
+            raw_params.len(),
+            MAX_MCP_RESPONSE_BYTES,
+            repo_root.join(ARTIFACTS_SUBDIR).display(),
+        )));
+    }
+
+    // 3. Locate and validate template file
+    let template_path = repo_root.join(TEMPLATES_DIR).join(template_name);
+    if !template_path.exists() {
+        return Err(FrameworkError::not_found(format!(
+            "template not found: {template_name} (looked in {})",
+            template_path.display(),
+        )));
+    }
+    // Check that the file is executable (best-effort on Unix)
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if let Ok(meta) = fs::metadata(&template_path) {
+            if meta.permissions().mode() & 0o111 == 0 {
+                return Err(FrameworkError::validation(format!(
+                    "template is not executable: {template_name} (chmod +x it)"
+                )));
             }
         }
     }
 
-    Ok(queries)
+    // 4. Ensure artifacts directory exists
+    let artifacts_dir = repo_root.join(ARTIFACTS_SUBDIR);
+    fs::create_dir_all(&artifacts_dir)
+        .map_err(|e| FrameworkError::Io(e))?;
+
+    // 5. Build run list
+    let runs = build_runs(template_name, &template_path, raw_params);
+
+    // 6. Run experiments
+    let cache = ExperimentCache::new(&artifacts_dir, no_cache);
+    let results = run_experiments(&runs, timeout_ms, concurrency, &cache, &artifacts_dir);
+
+    // 7. Build response (with size guard)
+    let response = build_response(&results);
+    let json_str = serde_json::to_string(&response).map_err(FrameworkError::Json)?;
+
+    if json_str.len() > MAX_MCP_RESPONSE_BYTES {
+        let truncated = json!({
+            "truncated": true,
+            "experiments_count": results.len(),
+            "summary": {
+                "total": results.len(),
+                "succeeded": results.iter().filter(|r| r.error.is_none()).count(),
+                "failed": results.iter().filter(|r| r.error.is_some()).count(),
+                "note": format!(
+                    "Response too large ({} bytes). Use {}/results.jsonl for full data.",
+                    json_str.len(),
+                    artifacts_dir.display(),
+                ),
+            }
+        });
+        return serde_json::to_string(&truncated).map_err(FrameworkError::Json);
+    }
+
+    Ok(json_str)
 }
 
-// ── Filtering ──
+// ── Data types ──
 
-/// Filter queries by source and/or barrier_id.
-pub fn filter_queries(
-    queries: Vec<SmokeQuery>,
-    source: Option<&str>,
-    barrier_id: Option<&str>,
-) -> Vec<SmokeQuery> {
-    queries
-        .into_iter()
-        .filter(|q| {
-            if let Some(src) = source {
-                if q.source != src {
-                    return false;
-                }
+/// A single experiment configuration.
+#[derive(Debug, Clone)]
+pub struct ExperimentRun {
+    pub run_id: String,
+    pub template_name: String,
+    pub template_path: PathBuf,
+    pub params: HashMap<String, String>,
+}
+
+/// Result of a single experiment execution.
+#[derive(Debug, Clone)]
+pub struct ExperimentResult {
+    pub run_id: String,
+    pub template_name: String,
+    pub params: HashMap<String, String>,
+    pub exit_code: i32,
+    pub result: Value,
+    pub error: Option<String>,
+    pub wall_time_ms: u64,
+}
+
+// ── Run building ──
+
+/// Build a list of `ExperimentRun` from the MCP params array.
+fn build_runs(template_name: &str, template_path: &Path, params_list: &[Value]) -> Vec<ExperimentRun> {
+    params_list
+        .iter()
+        .enumerate()
+        .map(|(i, entry)| {
+            let params = match entry.as_object() {
+                Some(obj) => obj
+                    .iter()
+                    .map(|(k, v)| (k.clone(), param_value_to_string(v)))
+                    .collect(),
+                None => HashMap::new(),
+            };
+
+            ExperimentRun {
+                run_id: format!("{template_name}-{i}"),
+                template_name: template_name.to_string(),
+                template_path: template_path.to_path_buf(),
+                params,
             }
-            if let Some(bid) = barrier_id {
-                if !q.related_barriers.iter().any(|b| b == bid) {
-                    return false;
-                }
-            }
-            true
         })
         .collect()
 }
 
-// ── Query execution ──
+// ── Parallel execution ──
 
-/// Execute a single smoke test query against the appropriate source.
-pub fn execute_query(query: &SmokeQuery, client: &reqwest::blocking::Client) -> SmokeResult {
-    let id = query.id.clone();
-    let timestamp = framework_core::time::now_iso();
+/// Run all experiments with bounded concurrency via chunking.
+///
+/// Processes `concurrency` experiments at a time in parallel using
+/// `std::thread::scope`. This provides bounded concurrency without needing
+/// a Semaphore (not yet stabilized in std). For quick probe experiments this
+/// works well — the last chunk may have idle threads, but wall-clock is
+/// dominated by the slowest experiment, not chunk alignment.
+fn run_experiments(
+    runs: &[ExperimentRun],
+    timeout_ms: u64,
+    concurrency: usize,
+    cache: &ExperimentCache,
+    artifacts_dir: &Path,
+) -> Vec<ExperimentResult> {
+    let effective_concurrency = concurrency.max(1);
+    let mut all_results = Vec::with_capacity(runs.len());
 
-    let search_limit = query.expected_min_results.max(5);
-    let results = match query.source.as_str() {
-        "arxiv" | "all" => arxiv::search(client, &query.query, search_limit),
-        "semantic-scholar" | "semantic_scholar" | "semanticscholar" => {
-            semantic_scholar::search(client, &query.query, search_limit)
+    for chunk in runs.chunks(effective_concurrency) {
+        let chunk_results: Vec<ExperimentResult> = std::thread::scope(|scope| {
+            let handles: Vec<_> = chunk
+                .iter()
+                .map(|run| {
+                    let run = run.clone();
+                    let artifacts_dir = artifacts_dir.to_path_buf();
+
+                    scope.spawn(move || {
+                        // Cache lookup — skip computation when no_cache
+                        let cache_key = if !cache.no_cache {
+                            Some(ExperimentCache::cache_key(
+                                &run.template_path,
+                                &run.template_name,
+                                &run.params,
+                            ))
+                        } else {
+                            None
+                        };
+                        if let Some(ref ck) = cache_key {
+                            if let Some(cached_val) = cache.get(ck) {
+                                return ExperimentResult {
+                                run_id: run.run_id,
+                                template_name: run.template_name,
+                                params: run.params,
+                                exit_code: cached_val["exit_code"].as_i64().unwrap_or(-1) as i32,
+                                result: cached_val.get("result").cloned().unwrap_or(Value::Null),
+                                error: cached_val.get("error")
+                                    .and_then(Value::as_str)
+                                    .map(String::from),
+                                wall_time_ms: cached_val["wall_time_ms"].as_u64().unwrap_or(0),
+                            };
+                        }
+                        }
+
+                        // Execute
+                        let start = Instant::now();
+                        let mut result = execute_single(&run, timeout_ms);
+                        result.wall_time_ms = start.elapsed().as_millis() as u64;
+
+                        // Cache the result (only when cache is active)
+                        if let Some(ck) = &cache_key {
+                            let cache_result = json!({
+                                "run_id": result.run_id,
+                                "template_name": result.template_name,
+                                "params": result.params,
+                                "exit_code": result.exit_code,
+                                "result": result.result,
+                                "error": result.error,
+                                "wall_time_ms": result.wall_time_ms,
+                            });
+                            cache.set(ck.clone(), cache_result);
+                        }
+
+                        // Append to results JSONL (file-locked)
+                        append_result_jsonl(&artifacts_dir, &result);
+
+                        result
+                    })
+                })
+                .collect();
+
+            handles
+                .into_iter()
+                .map(|h| h.join().expect("experiment thread panicked"))
+                .collect()
+        });
+        all_results.extend(chunk_results);
+    }
+
+    all_results
+}
+
+// ── Single experiment execution ──
+
+/// Execute a single experiment: spawn subprocess, capture output, return result.
+///
+/// Uses process group isolation (`setsid()` in `pre_exec`) so that timeout kills
+/// the entire process tree. Stdout/stderr are consumed by background reader threads
+/// to prevent pipe-buffer deadlock on large output.
+fn execute_single(run: &ExperimentRun, timeout_ms: u64) -> ExperimentResult {
+    let run_id = run.run_id.clone();
+    let template_name = run.template_name.clone();
+    let params = run.params.clone();
+
+    // Build command with process group isolation
+    let mut cmd = std::process::Command::new(&run.template_path);
+    cmd.stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped());
+
+    // Process group isolation: create a new session so we can kill the entire tree
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        unsafe {
+            cmd.pre_exec(|| {
+                let ret = libc::setsid();
+                if ret == -1 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                Ok(())
+            });
         }
-        other => {
-            return SmokeResult {
-                id,
-                passed: false,
-                results_count: 0,
-                expected_min: query.expected_min_results,
-                stale: true,
-                freshness_days: 999,
-                expected_freshness_days: query.expected_freshness_days,
-                regression: None,
-                error: Some(format!("unsupported source: {other}")),
-                timestamp,
+    }
+
+    // Inject parameters as environment variables: EXPERIMENT_<KEY>=<VALUE>
+    cmd.env("EXPERIMENT_TEMPLATE", &run.template_name);
+    cmd.env("EXPERIMENT_RUN_ID", &run.run_id);
+    for (key, value) in &run.params {
+        let env_key = sanitize_env_key(key);
+        cmd.env(&env_key, value);
+    }
+
+    let start = Instant::now();
+
+    let mut child = match cmd.spawn() {
+        Ok(c) => c,
+        Err(e) => {
+            return ExperimentResult {
+                run_id,
+                template_name,
+                params,
+                exit_code: -1,
+                result: Value::Null,
+                error: Some(format!("spawn failed: {e}")),
+                wall_time_ms: start.elapsed().as_millis() as u64,
             };
         }
     };
 
-    match results {
-        Ok(papers) => {
-            let results_count = papers.len();
-            let now = chrono::Utc::now();
-            let freshness_days = papers
-                .iter()
-                .filter_map(|p| {
-                    let precise_days = ["publicationDate", "published", "date"]
-                        .iter()
-                        .filter_map(|field| p.get(field).and_then(Value::as_str))
-                        .filter_map(|date_str| {
-                            chrono::NaiveDate::parse_from_str(date_str, "%Y-%m-%d")
-                                .or_else(|_| {
-                                    chrono::NaiveDate::parse_from_str(date_str, "%Y-%m-%dT%H:%M:%S")
-                                })
-                                .ok()
-                        })
-                        .map(|d| (now.date_naive() - d).num_days().max(0))
-                        .next();
-                    if let Some(days) = precise_days {
-                        return Some(days);
+    let pid = child.id();
+
+    // Take stdout/stderr BEFORE spawning reader threads
+    let child_stdout = child.stdout.take();
+    let child_stderr = child.stderr.take();
+
+    // Background threads read stdout/stderr concurrently to avoid pipe deadlock.
+    let (out_tx, out_rx) = std::sync::mpsc::channel::<Vec<u8>>();
+    let (err_tx, err_rx) = std::sync::mpsc::channel::<Vec<u8>>();
+
+    std::thread::spawn(move || {
+        let mut buf = Vec::new();
+        if let Some(mut reader) = child_stdout {
+            let _ = reader.read_to_end(&mut buf);
+        }
+        let _ = out_tx.send(buf);
+    });
+    std::thread::spawn(move || {
+        let mut buf = Vec::new();
+        if let Some(mut reader) = child_stderr {
+            let _ = reader.read_to_end(&mut buf);
+        }
+        let _ = err_tx.send(buf);
+    });
+
+    // Timeout watcher via mpsc channel
+    let (deadline_tx, deadline_rx) = std::sync::mpsc::channel::<()>();
+    std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(timeout_ms));
+        let _ = deadline_tx.send(());
+    });
+
+    let mut timed_out = false;
+
+    // Poll loop
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                let _ = child.wait();
+
+                let stdout_bytes = out_rx.recv().unwrap_or_default();
+                let stderr_bytes = err_rx.recv().unwrap_or_default();
+                let stdout_str = String::from_utf8_lossy(&stdout_bytes).to_string();
+                let stderr_str = truncate(
+                    &String::from_utf8_lossy(&stderr_bytes),
+                    MAX_STDERR_CHARS,
+                );
+                let exit_code = status.code().unwrap_or(-1);
+
+                let (parsed, parse_error) = parse_last_json(&stdout_str);
+
+                let error = if timed_out {
+                    Some(format!("timeout after {timeout_ms}ms (pid={pid})"))
+                } else if let Some(msg) = parse_error {
+                    if exit_code != 0 {
+                        Some(format!("exit={exit_code}, parse: {msg}"))
+                    } else {
+                        Some(format!("parse: {msg}"))
                     }
-                    p.get("year").and_then(Value::as_i64).map(|yr| {
-                        let current_year = now.year();
-                        if yr as i32 == current_year {
-                            // Same year: assume fresh (conservative)
-                            0
-                        } else {
-                            // Different year: calculate from start of that year
-                            let est_date = chrono::NaiveDate::from_ymd_opt(yr as i32, 1, 1)
-                                .unwrap_or(now.date_naive());
-                            (now.date_naive() - est_date).num_days().max(0)
-                        }
-                    })
-                })
-                .min()
-                .unwrap_or(0);
-
-            let stale = freshness_days > query.expected_freshness_days
-                || freshness_days > STALE_THRESHOLD_DAYS;
-            let passed = results_count >= query.expected_min_results && !stale;
-
-            SmokeResult {
-                id,
-                passed,
-                results_count,
-                expected_min: query.expected_min_results,
-                stale,
-                freshness_days,
-                expected_freshness_days: query.expected_freshness_days,
-                regression: None,
-                error: if passed {
-                    None
+                } else if exit_code != 0 {
+                    let detail = if stderr_str.is_empty() {
+                        "no stderr".into()
+                    } else {
+                        stderr_str
+                    };
+                    Some(format!("exit={exit_code}: {detail}"))
                 } else {
-                    Some(format!(
-                        "expected >= {}, got {}; stale={}",
-                        query.expected_min_results, results_count, stale
-                    ))
-                },
-                timestamp,
+                    None
+                };
+
+                return ExperimentResult {
+                    run_id,
+                    template_name,
+                    params,
+                    exit_code,
+                    result: parsed,
+                    error,
+                    wall_time_ms: start.elapsed().as_millis() as u64,
+                };
+            }
+            Ok(None) => {
+                if deadline_rx.try_recv().is_ok() {
+                    timed_out = true;
+                    #[cfg(unix)]
+                    unsafe {
+                        if let Ok(pgid) = i32::try_from(pid) {
+                            libc::kill(-pgid, libc::SIGTERM);
+                        }
+                    }
+                    #[cfg(not(unix))]
+                    let _ = child.kill();
+
+                    std::thread::sleep(Duration::from_millis(200));
+                    #[cfg(unix)]
+                    unsafe {
+                        if let Ok(pgid) = i32::try_from(pid) {
+                            libc::kill(-pgid, libc::SIGKILL);
+                        }
+                    }
+
+                    continue;
+                }
+                std::thread::sleep(Duration::from_millis(POLL_INTERVAL_MS));
+            }
+            Err(e) => {
+                return ExperimentResult {
+                    run_id,
+                    template_name,
+                    params,
+                    exit_code: -1,
+                    result: Value::Null,
+                    error: Some(format!("subprocess wait error: {e}")),
+                    wall_time_ms: start.elapsed().as_millis() as u64,
+                };
             }
         }
-        Err(e) => SmokeResult {
-            id: id.clone(),
-            passed: false,
-            results_count: 0,
-            expected_min: query.expected_min_results,
-            stale: true,
-            freshness_days: 999,
-            expected_freshness_days: query.expected_freshness_days,
-            regression: None,
-            error: Some(e.to_string()),
-            timestamp,
-        },
     }
 }
 
-// ── Regression detection ──
+// ── Stdout JSON parsing ──
 
-/// Load previous results from smoke-test-results.jsonl for regression comparison.
-pub fn load_previous_results(path: &Path) -> Result<HashMap<String, SmokeResult>> {
-    if !path.exists() {
-        return Ok(HashMap::new());
+/// Parse the last JSON value from stdout.
+///
+/// Strategy:
+/// 1. Try parsing the entire trimmed stdout as JSON (handles single JSON object).
+/// 2. If that fails, parse line-by-line and return the last valid JSON object.
+/// 3. If nothing works, return `(Value::Null, Some(reason))`.
+fn parse_last_json(stdout: &str) -> (Value, Option<String>) {
+    let trimmed = stdout.trim();
+    if trimmed.is_empty() {
+        return (Value::Null, None);
     }
-    let text = fs::read_to_string(path)?;
-    let mut results = HashMap::new();
-    for line in text.lines() {
-        let trimmed = line.trim();
-        if trimmed.is_empty() {
+
+    // Fast path: parse entire stdout as JSON
+    if let Ok(v) = serde_json::from_str::<Value>(trimmed) {
+        return (v, None);
+    }
+
+    // Fallback: line-by-line, return last valid object
+    let mut last_valid: Option<Value> = None;
+    for line in trimmed.lines() {
+        let line = line.trim();
+        if line.is_empty() {
             continue;
         }
-        if let Ok(val) = serde_json::from_str::<SmokeResult>(trimmed) {
-            results.insert(val.id.clone(), val);
-        } else {
-            tracing::warn!(
-                "[smoke] skipping unparseable line in {}: {trimmed}",
-                path.display()
-            );
+        if let Ok(v) = serde_json::from_str::<Value>(line) {
+            if v.is_object() || v.is_array() {
+                last_valid = Some(v);
+            }
         }
     }
-    Ok(results)
+
+    match last_valid {
+        Some(v) => (v, None),
+        None => (Value::Null, Some("stdout is not valid JSON".into())),
+    }
 }
 
-/// Run regression detection against previous results.
-pub fn detect_regression(
-    current: &SmokeResult,
-    previous: &HashMap<String, SmokeResult>,
-) -> Option<String> {
-    let prev = previous.get(&current.id)?;
-    if prev.passed && !current.passed {
-        return Some("previous: passed → now: failed".to_string());
-    }
-    if prev.results_count > 0 {
-        let drop_ratio = prev.results_count as f64 / current.results_count.max(1) as f64;
-        if drop_ratio > 2.0 {
-            return Some(format!(
-                "results dropped >50% ({} → {})",
-                prev.results_count, current.results_count
-            ));
+// ── JSONL append (using framework-runtime process-safe writer) ──
+
+/// Append an experiment result to `results.jsonl` using framework-runtime's
+/// `append_text_with_process_lock()` for cross-process safety.
+fn append_result_jsonl(artifacts_dir: &Path, result: &ExperimentResult) {
+    use framework_runtime::io_utils::append_text_with_process_lock;
+
+    let entry = json!({
+        "run_id": result.run_id,
+        "template": result.template_name,
+        "params": result.params,
+        "exit_code": result.exit_code,
+        "result": result.result,
+        "error": result.error,
+        "wall_time_ms": result.wall_time_ms,
+    });
+
+    let line = match serde_json::to_string(&entry) {
+        Ok(l) => l + "\n",
+        Err(e) => {
+            tracing::warn!(error = %e, "[smoke] JSONL serialization failed");
+            return;
         }
+    };
+
+    let jsonl_path = artifacts_dir.join("results.jsonl");
+    if let Err(e) = append_text_with_process_lock(&jsonl_path, &line, "experiment-smoke") {
+        tracing::warn!(error = %e, path = %jsonl_path.display(), "[smoke] append result failed");
     }
-    if prev.freshness_days > 0 && current.freshness_days > prev.freshness_days * 2 {
-        return Some(format!(
-            "freshness window expanded >2× ({}d → {}d)",
-            prev.freshness_days, current.freshness_days
-        ));
-    }
-    None
 }
 
-// ── Main orchestrator ──
+// ── Response builder ──
 
-/// Core implementation: run smoke tests and return JSONL results string.
-pub fn run_smoke_tests(
-    repo_root: &Path,
-    source: Option<&str>,
-    barrier_id: Option<&str>,
-) -> Result<String> {
-    let queries = load_smoke_config(repo_root)?;
-    if queries.is_empty() {
-        return Ok(String::new());
-    }
-    let filtered = filter_queries(queries, source, barrier_id);
-    if filtered.is_empty() {
-        return Ok(String::new());
-    }
+fn build_response(results: &[ExperimentResult]) -> Value {
+    let total = results.len();
+    let succeeded = results.iter().filter(|r| r.error.is_none()).count();
+    let failed = results.iter().filter(|r| r.error.is_some()).count();
 
-    let client = crate::util::blocking_client(DEFAULT_EXTERNAL_TIMEOUT_SECS)?;
+    let experiments: Vec<Value> = results
+        .iter()
+        .map(|r| {
+            json!({
+                "run_id": r.run_id,
+                "template": r.template_name,
+                "params": r.params,
+                "exit_code": r.exit_code,
+                "result": r.result,
+                "error": r.error,
+                "wall_time_ms": r.wall_time_ms,
+            })
+        })
+        .collect();
 
-    // Load previous results for regression
-    let prev_path = repo_root.join(SMOKE_RESULTS_REL_PATH);
-    let previous = load_previous_results(&prev_path)?;
-
-    let mut lines = Vec::new();
-    for query in &filtered {
-        let mut result = execute_query(query, &client);
-        // Regression check
-        if barrier_id.is_none() {
-            result.regression = detect_regression(&result, &previous);
+    json!({
+        "experiments": experiments,
+        "summary": {
+            "total": total,
+            "succeeded": succeeded,
+            "failed": failed,
         }
-        let entry = json!({
-            "id": result.id,
-            "passed": result.passed,
-            "results_count": result.results_count,
-            "expected_min": result.expected_min,
-            "expected_freshness_days": result.expected_freshness_days,
-            "freshness_days": result.freshness_days,
-            "stale": result.stale,
-            "regression": result.regression,
-            "error": result.error,
-            "timestamp": result.timestamp,
-        });
-        lines.push(serde_json::to_string(&entry)?);
-    }
-
-    // Write results (replace, not append — each run is a full snapshot)
-    if let Err(e) = fs::write(&prev_path, lines.join("\n")) {
-        tracing::warn!(
-            "[smoke] warn: failed to persist results to {}: {e}",
-            prev_path.display()
-        );
-    }
-
-    Ok(lines.join("\n"))
+    })
 }
 
-// ── Freshness check ──
+// ── Helpers ──
 
-/// Check if a result year is fresh enough given the threshold.
-pub fn is_fresh(year: u32, threshold_days: i64) -> bool {
-    let current_year = chrono::Utc::now().year() as u32;
-    let threshold_years = (threshold_days / 365).max(1) as u32;
-    current_year.saturating_sub(year) <= threshold_years
+/// Sanitize a parameter key into a valid environment variable name.
+///
+/// Uppercases, replaces non-alphanumeric chars with `_`, prepends `EXPERIMENT_`.
+fn sanitize_env_key(key: &str) -> String {
+    let sanitized: String = key
+        .chars()
+        .map(|c| if c.is_alphanumeric() { c.to_ascii_uppercase() } else { '_' })
+        .collect();
+    format!("EXPERIMENT_{sanitized}")
+}
+
+fn truncate(s: &str, max: usize) -> String {
+    if s.len() > max {
+        let mut t: String = s.chars().take(max).collect();
+        t.push_str(&format!("... ({} total)", s.len()));
+        t
+    } else {
+        s.to_string()
+    }
+}
+
+/// Convert a JSON parameter value to its string representation.
+///
+/// Strings pass through, numbers/bools become their text form, null becomes
+/// empty string. This prevents silent data loss when users pass `{"lr": 0.01}`
+/// (number) instead of `{"lr": "0.01"}` (string).
+fn param_value_to_string(v: &Value) -> String {
+    match v {
+        Value::String(s) => s.clone(),
+        Value::Number(n) => n.to_string(),
+        Value::Bool(b) => b.to_string(),
+        Value::Null => String::new(),
+        Value::Array(_) | Value::Object(_) => String::new(),
+    }
 }
 
 // ── Tests ──
@@ -413,353 +674,108 @@ mod tests {
     use serde_json::json;
 
     #[test]
-    fn load_smoke_config_returns_empty_when_missing() {
-        let tmp = tempfile::tempdir().unwrap();
-        let queries = load_smoke_config(tmp.path()).unwrap();
-        assert!(queries.is_empty());
+    fn build_runs_flat_dict() {
+        let params = json!([{"lr": "0.01", "bs": "32"}, {"lr": "0.001", "bs": "64"}]);
+        let runs = build_runs("test", &Path::new("templates/test.sh"), params.as_array().unwrap());
+        assert_eq!(runs.len(), 2);
+        assert_eq!(runs[0].params["lr"], "0.01");
+        assert_eq!(runs[0].params["bs"], "32");
+        assert_eq!(runs[1].run_id, "test-1");
     }
 
     #[test]
-    fn load_smoke_config_parses_valid() {
-        let tmp = tempfile::tempdir().unwrap();
-        let config_path = tmp.path().join(SMOKE_TESTS_REL_PATH);
-        fs::create_dir_all(config_path.parent().unwrap()).unwrap();
-        fs::write(
-            &config_path,
-            json!({
-                "schema_version": "research-smoke-v1",
-                "queries": [{
-                    "id": "q1",
-                    "source": "arxiv",
-                    "query": "transformer attention",
-                    "expected_min_results": 3,
-                    "expected_freshness_days": 180,
-                    "related_directions": ["nlp"],
-                    "related_barriers": ["br-001"]
-                }]
-            })
-            .to_string(),
-        )
-        .unwrap();
-        let queries = load_smoke_config(tmp.path()).unwrap();
-        assert_eq!(queries.len(), 1);
-        assert_eq!(queries[0].id, "q1");
-        assert_eq!(queries[0].source, "arxiv");
-        assert_eq!(queries[0].expected_min_results, 3);
+    fn build_runs_empty_params_yields_empty_map() {
+        let params = json!([{}]);
+        let runs = build_runs("t", &Path::new("t.sh"), params.as_array().unwrap());
+        assert_eq!(runs.len(), 1);
+        assert!(runs[0].params.is_empty());
     }
 
     #[test]
-    fn filter_queries_by_source() {
-        let queries = vec![
-            SmokeQuery {
-                id: "a".into(),
-                source: "arxiv".into(),
-                query: "".into(),
-                expected_min_results: 3,
-                expected_freshness_days: 180,
-                related_directions: vec![],
-                related_barriers: vec![],
+    fn parse_last_json_whole_stdout() {
+        let (v, err) = parse_last_json(r#"{"accuracy": 0.85}"#);
+        assert!(err.is_none());
+        assert_eq!(v["accuracy"], 0.85);
+    }
+
+    #[test]
+    fn parse_last_json_line_by_line() {
+        let stdout = "some log line\n{\"step\": 1}\nanother log\n{\"step\": 2}";
+        let (v, err) = parse_last_json(stdout);
+        assert!(err.is_none());
+        assert_eq!(v["step"], 2);
+    }
+
+    #[test]
+    fn parse_last_json_empty() {
+        let (v, err) = parse_last_json("");
+        assert!(err.is_none());
+        assert_eq!(v, Value::Null);
+    }
+
+    #[test]
+    fn parse_last_json_invalid() {
+        let (v, err) = parse_last_json("not json at all");
+        assert!(err.is_some());
+        assert_eq!(v, Value::Null);
+    }
+
+    #[test]
+    fn sanitize_env_key_basic() {
+        let k = sanitize_env_key("batch_size");
+        assert_eq!(k, "EXPERIMENT_BATCH_SIZE");
+    }
+
+    #[test]
+    fn sanitize_env_key_with_special_chars() {
+        let k = sanitize_env_key("my-param.1");
+        assert_eq!(k, "EXPERIMENT_MY_PARAM_1");
+    }
+
+    #[test]
+    fn truncate_short() {
+        let s = truncate("hello", 100);
+        assert_eq!(s, "hello");
+    }
+
+    #[test]
+    fn truncate_long() {
+        let s = truncate("hello world", 5);
+        assert!(s.starts_with("hello"));
+        assert!(s.contains("..."));
+    }
+
+    #[test]
+    fn build_response_empty() {
+        let resp = build_response(&[]);
+        assert_eq!(resp["summary"]["total"], 0);
+    }
+
+    #[test]
+    fn build_response_mixed() {
+        let results = vec![
+            ExperimentResult {
+                run_id: "ok".into(),
+                template_name: "t".into(),
+                params: HashMap::new(),
+                exit_code: 0,
+                result: json!({"x": 1}),
+                error: None,
+                wall_time_ms: 100,
             },
-            SmokeQuery {
-                id: "b".into(),
-                source: "semantic-scholar".into(),
-                query: "".into(),
-                expected_min_results: 3,
-                expected_freshness_days: 180,
-                related_directions: vec![],
-                related_barriers: vec![],
+            ExperimentResult {
+                run_id: "fail".into(),
+                template_name: "t".into(),
+                params: HashMap::new(),
+                exit_code: 1,
+                result: Value::Null,
+                error: Some("exit=1".into()),
+                wall_time_ms: 50,
             },
         ];
-        let filtered = filter_queries(queries, Some("arxiv"), None);
-        assert_eq!(filtered.len(), 1);
-        assert_eq!(filtered[0].id, "a");
-    }
-
-    #[test]
-    fn filter_queries_by_barrier() {
-        let queries = vec![
-            SmokeQuery {
-                id: "a".into(),
-                source: "arxiv".into(),
-                query: "".into(),
-                expected_min_results: 3,
-                expected_freshness_days: 180,
-                related_directions: vec![],
-                related_barriers: vec!["br-001".into()],
-            },
-            SmokeQuery {
-                id: "b".into(),
-                source: "arxiv".into(),
-                query: "".into(),
-                expected_min_results: 3,
-                expected_freshness_days: 180,
-                related_directions: vec![],
-                related_barriers: vec![],
-            },
-        ];
-        let filtered = filter_queries(queries, None, Some("br-001"));
-        assert_eq!(filtered.len(), 1);
-        assert_eq!(filtered[0].id, "a");
-    }
-
-    #[test]
-    fn filter_queries_by_both() {
-        let queries = vec![
-            SmokeQuery {
-                id: "a".into(),
-                source: "arxiv".into(),
-                query: "".into(),
-                expected_min_results: 3,
-                expected_freshness_days: 180,
-                related_directions: vec![],
-                related_barriers: vec!["br-001".into()],
-            },
-            SmokeQuery {
-                id: "b".into(),
-                source: "semantic-scholar".into(),
-                query: "".into(),
-                expected_min_results: 3,
-                expected_freshness_days: 180,
-                related_directions: vec![],
-                related_barriers: vec!["br-001".into()],
-            },
-        ];
-        let filtered = filter_queries(queries, Some("arxiv"), Some("br-001"));
-        assert_eq!(filtered.len(), 1);
-        assert_eq!(filtered[0].id, "a");
-    }
-
-    #[test]
-    fn smoke_result_passed_true_when_ok() {
-        let result = SmokeResult {
-            id: "t1".into(),
-            passed: true,
-            results_count: 5,
-            expected_min: 3,
-            stale: false,
-            freshness_days: 30,
-            expected_freshness_days: 180,
-            regression: None,
-            error: None,
-            timestamp: "now".into(),
-        };
-        assert!(result.passed);
-    }
-
-    #[test]
-    fn smoke_result_passed_false_when_stale() {
-        let result = SmokeResult {
-            id: "t2".into(),
-            passed: false,
-            results_count: 5,
-            expected_min: 3,
-            stale: true,
-            freshness_days: 365,
-            expected_freshness_days: 180,
-            regression: None,
-            error: Some("stale".into()),
-            timestamp: "now".into(),
-        };
-        assert!(!result.passed);
-    }
-
-    #[test]
-    fn regression_detects_pass_to_fail() {
-        let current = SmokeResult {
-            id: "q1".into(),
-            passed: false,
-            results_count: 1,
-            expected_min: 3,
-            stale: true,
-            freshness_days: 365,
-            expected_freshness_days: 180,
-            regression: None,
-            error: None,
-            timestamp: "".into(),
-        };
-        let mut prev = HashMap::new();
-        prev.insert(
-            "q1".into(),
-            SmokeResult {
-                id: "q1".into(),
-                passed: true,
-                results_count: 10,
-                expected_min: 3,
-                stale: false,
-                freshness_days: 30,
-                expected_freshness_days: 180,
-                regression: None,
-                error: None,
-                timestamp: "".into(),
-            },
-        );
-        assert!(detect_regression(&current, &prev).is_some());
-    }
-
-    #[test]
-    fn regression_detects_drop_gt_50pct() {
-        let current = SmokeResult {
-            id: "q1".into(),
-            passed: false,
-            results_count: 4,
-            expected_min: 3,
-            stale: false,
-            freshness_days: 30,
-            expected_freshness_days: 180,
-            regression: None,
-            error: None,
-            timestamp: "".into(),
-        };
-        let mut prev = HashMap::new();
-        prev.insert(
-            "q1".into(),
-            SmokeResult {
-                id: "q1".into(),
-                passed: true,
-                results_count: 10,
-                expected_min: 3,
-                stale: false,
-                freshness_days: 30,
-                expected_freshness_days: 180,
-                regression: None,
-                error: None,
-                timestamp: "".into(),
-            },
-        );
-        assert!(detect_regression(&current, &prev).is_some());
-    }
-
-    #[test]
-    fn regression_detects_freshness_expansion() {
-        let current = SmokeResult {
-            id: "q1".into(),
-            passed: false,
-            results_count: 5,
-            expected_min: 3,
-            stale: true,
-            freshness_days: 100,
-            expected_freshness_days: 180,
-            regression: None,
-            error: None,
-            timestamp: "".into(),
-        };
-        let mut prev = HashMap::new();
-        prev.insert(
-            "q1".into(),
-            SmokeResult {
-                id: "q1".into(),
-                passed: true,
-                results_count: 5,
-                expected_min: 3,
-                stale: false,
-                freshness_days: 30,
-                expected_freshness_days: 180,
-                regression: None,
-                error: None,
-                timestamp: "".into(),
-            },
-        );
-        assert!(detect_regression(&current, &prev).is_some());
-    }
-
-    #[test]
-    fn regression_no_false_positive() {
-        let current = SmokeResult {
-            id: "q1".into(),
-            passed: true,
-            results_count: 8,
-            expected_min: 3,
-            stale: false,
-            freshness_days: 40,
-            expected_freshness_days: 180,
-            regression: None,
-            error: None,
-            timestamp: "".into(),
-        };
-        let mut prev = HashMap::new();
-        prev.insert(
-            "q1".into(),
-            SmokeResult {
-                id: "q1".into(),
-                passed: true,
-                results_count: 10,
-                expected_min: 3,
-                stale: false,
-                freshness_days: 30,
-                expected_freshness_days: 180,
-                regression: None,
-                error: None,
-                timestamp: "".into(),
-            },
-        );
-        assert!(detect_regression(&current, &prev).is_none());
-    }
-
-    #[test]
-    fn is_fresh_recent_year() {
-        assert!(is_fresh(2025, 180));
-    }
-
-    #[test]
-    fn is_fresh_old_year() {
-        assert!(!is_fresh(2020, 180));
-    }
-
-    #[test]
-    fn load_previous_results_empty() {
-        let tmp = tempfile::tempdir().unwrap();
-        let results = load_previous_results(&tmp.path().join("nonexistent.jsonl")).unwrap();
-        assert!(results.is_empty());
-    }
-
-    #[test]
-    fn load_previous_results_parses_jsonl() {
-        let tmp = tempfile::tempdir().unwrap();
-        let path = tmp.path().join("results.jsonl");
-        let entry = json!({
-            "id": "q1", "passed": true, "results_count": 5,
-            "expected_min": 3, "stale": false, "freshness_days": 30,
-            "expected_freshness_days": 180, "regression": null,
-            "error": null, "timestamp": "2026-01-01T00:00:00Z"
-        });
-        fs::write(&path, serde_json::to_string(&entry).unwrap()).unwrap();
-        let results = load_previous_results(&path).unwrap();
-        assert_eq!(results.len(), 1);
-        assert!(results.get("q1").unwrap().passed);
-    }
-
-    #[test]
-    fn smoke_query_from_barrier_extends() {
-        let tmp = tempfile::tempdir().unwrap();
-        let config_path = tmp.path().join(SMOKE_TESTS_REL_PATH);
-        fs::create_dir_all(config_path.parent().unwrap()).unwrap();
-        fs::write(
-            &config_path,
-            json!({
-                "schema_version": "research-smoke-v1",
-                "queries": [],
-                "barrier_extends": {
-                    "br-001": {
-                        "queries": [{
-                            "id": "br-q1",
-                            "source": "arxiv",
-                            "query": "attention mechanism"
-                        }]
-                    }
-                }
-            })
-            .to_string(),
-        )
-        .unwrap();
-        let queries = load_smoke_config(tmp.path()).unwrap();
-        assert_eq!(queries.len(), 1);
-        assert_eq!(queries[0].id, "br-q1");
-    }
-
-    #[test]
-    fn run_smoke_tests_empty_when_no_config() {
-        let tmp = tempfile::tempdir().unwrap();
-        let result = run_smoke_tests(tmp.path(), None, None).unwrap();
-        assert!(result.is_empty());
+        let resp = build_response(&results);
+        assert_eq!(resp["summary"]["total"], 2);
+        assert_eq!(resp["summary"]["succeeded"], 1);
+        assert_eq!(resp["summary"]["failed"], 1);
     }
 }

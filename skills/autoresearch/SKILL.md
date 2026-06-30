@@ -66,7 +66,7 @@ systematic research and returns candidates.
 - The user wants **experiment reflection** including claim drift detection.
 - The user says "突破不了"/"瓶颈"/"stuck" in an auto-experimentation context.
 - The user wants **structured research logging** (text layer + SQLite FTS5).
-- The user needs **smoke tests** for academic source freshness.
+- The user needs **smoke tests** for quick experiment probes.
 
 ## Do not use
 
@@ -92,7 +92,7 @@ systematic research and returns candidates.
 | `run_recording` | `record-run` | Experiment recording (env + git) |
 | `reflection` | `reflect` | Experiment reflection + drift detection |
 | `log` | `log:record / log:search / log:insight / log:connect` | Layered logging (text + SQLite); bridges `research-log-rs` CLI |
-| `smoke_test` | `smoke-test` | Freshness guard |
+| `smoke_test` | `smoke-test` | Quick directional experiment probes via templates/ |
 | `barrier_escalation` | `barrier <problem>` | **Loop bridge**: systematic research on hard barriers |
 | `sync` | `sync` | Sync to artifact |
 
@@ -142,10 +142,11 @@ Layered logging specification:
 
 ### Smoke test
 
-Smoke test specification:
-- Registry: `artifacts/research-log/smoke-tests.json`
-- Execution: `cargo run -p research-harness --bin autoresearch -- smoke-test [--source <src>] [--barrier <id>]`
-- Freshness metadata on every external_research result
+General-purpose experiment smoke engine:
+- Template dir: `templates/` (any executable)
+- Execution: `cargo run -p research-harness --bin autoresearch -- smoke-test --template <name> --params '[{"key":"val"}]'`
+- Params injected as `EXPERIMENT_<KEY>=<VALUE>` env vars
+- Structured JSON output, LRU+TTL cache, parallel subprocess execution
 
 ### Verification and failure contract
 

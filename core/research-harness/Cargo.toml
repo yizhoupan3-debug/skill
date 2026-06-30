@@ -19,6 +19,7 @@ framework-runtime = { path = "../framework-runtime" }
 core-state = { path = "../core-state" }
 host-projection = { path = "../host-projection" }
 quality-gate = { path = "../quality-gate" }
+runtime-core = { path = "../runtime-core" }
 
 # common
 anyhow.workspace = true
@@ -32,7 +33,11 @@ tracing.workspace = true
 tokio.workspace = true
 futures.workspace = true
 regex.workspace = true
+quick-xml.workspace = true
 sha2.workspace = true
+hex.workspace = true
+fs2.workspace = true
+libc.workspace = true
 mcp-stdio-common = { path = "../../rust_tools/mcp-stdio-common" }
 minilp.workspace = true
 

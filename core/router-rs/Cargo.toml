@@ -25,6 +25,7 @@ core-errors = { path = "../core-errors" }
 framework-core = { path = "../framework-core", features = ["dev-exempt", "test-sync"] }
 framework-runtime = { path = "../framework-runtime" }
 goal-engine = { path = "../goal-engine" }
+observability-core = { path = "../observability-core" }
 browser-mcp = { path = "../../tools/browser-mcp", optional = true }
 mcp-tool-registry = { path = "../mcp-tool-registry" }
 research-harness = { path = "../research-harness", optional = true }
@@ -43,7 +44,6 @@ tungstenite.workspace = true
 fs2.workspace = true
 which.workspace = true
 tracing.workspace = true
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 mimalloc.workspace = true
 
 [[bin]]
@@ -66,7 +66,7 @@ host-opencode = []
 host-codex = []
 browser = ["dep:browser-mcp"]
 codegraph = ["runtime-core/codegraph"]
-research = ["dep:research-harness", "research-harness/smoke"]
+research = ["dep:research-harness"]
 
 [dev-dependencies]
 serial_test = "3"

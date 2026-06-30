@@ -600,7 +600,7 @@ pub struct CurrentArtifactClutterCommand {
 pub enum ResearchCommand {
     /// Detect AI-generated text with probability scoring.
     AigcCheck(ResearchAigcCheckCommand),
-    /// Freshness smoke test for academic data sources (arXiv/Semantic Scholar).
+    /// Run quick probe experiments via templates/ with parameter combinations.
     Smoke(ResearchSmokeCommand),
     /// Verification sub-commands.
     Verify {
@@ -631,15 +631,24 @@ pub struct ResearchAigcCheckCommand {
 
 #[derive(Args, Debug, Clone)]
 pub struct ResearchSmokeCommand {
-    /// Filter by source (arxiv, semantic-scholar).
+    /// Template filename in templates/ directory (must be executable).
     #[arg(long)]
-    pub source: Option<String>,
-    /// Repository root path.
+    pub template: String,
+    /// JSON array of parameter dicts, e.g. '[{"lr":"0.01","bs":"32"}]'.
+    #[arg(long)]
+    pub params: String,
+    /// Max parallel subprocesses (default 4).
+    #[arg(long, default_value = "4")]
+    pub concurrency: Option<usize>,
+    /// Per-experiment timeout in ms (default 60000).
+    #[arg(long)]
+    pub timeout_ms: Option<u64>,
+    /// Skip LRU+TTL cache.
+    #[arg(long)]
+    pub no_cache: bool,
+    /// Repository root path (default: current dir).
     #[arg(long)]
     pub repo_root: Option<PathBuf>,
-    /// Filter by barrier_id.
-    #[arg(long)]
-    pub barrier_id: Option<String>,
 }
 
 #[derive(Args, Debug, Clone)]

@@ -981,17 +981,32 @@ fn dispatch_research_smoke(args: ResearchSmokeCommand) -> Result<(), FrameworkEr
     }
     #[cfg(feature = "research")]
     {
-        let repo_root: Option<std::path::PathBuf> = args
+        let repo_root: std::path::PathBuf = args
             .repo_root
             .clone()
             .filter(|p| !p.as_os_str().is_empty())
-            .or_else(|| std::env::current_dir().ok());
-        let result = research_harness::smoke::run_smoke_tests(
-            repo_root.as_deref().unwrap_or(std::path::Path::new("")),
-            args.source.as_deref(),
-            args.barrier_id.as_deref(),
-        )
-        .map_err(|e| FrameworkError::hook(e.to_string()))?;
+            .or_else(|| std::env::current_dir().ok())
+            .unwrap_or_default();
+
+        // Parse params JSON string
+        let params_value: serde_json::Value =
+            serde_json::from_str(&args.params).map_err(|e| {
+                FrameworkError::validation(format!(
+                    "params must be a valid JSON array: {e}"
+                ))
+            })?;
+
+        // Build arguments JSON matching the MCP tool interface
+        let arguments = serde_json::json!({
+            "template": args.template,
+            "params": params_value,
+            "concurrency": args.concurrency.unwrap_or(4),
+            "timeout_ms": args.timeout_ms.unwrap_or(60000),
+            "no_cache": args.no_cache,
+        });
+
+        let result = research_harness::smoke::run_smoke_tests(&repo_root, &arguments)
+            .map_err(|e| FrameworkError::hook(e.to_string()))?;
         print_json_value(&result)
     }
 }

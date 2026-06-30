@@ -124,10 +124,10 @@
     {
       "id": "research-smoke",
       "category": "should-trigger",
-      "task": "对arXiv和Semantic Scholar数据源做烟雾测试，检查freshness",
+      "task": "跑烟雾测试，快速试探一下这几个参数组合的效果",
       "expected_tool": "research_smoke",
       "forbidden_tools": [],
-      "notes": "数据源烟雾测试：检查学术搜索数据源的健康状态"
+      "notes": "通用实验探测引擎：通过 templates/ 下的可执行模板注入参数为环境变量，并行快速试方向"
     },
     {
       "id": "math-prove-inequality",

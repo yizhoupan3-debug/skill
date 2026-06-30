@@ -3,6 +3,7 @@
 //! Delegated from host-projection's tool dispatcher (Phase 4 T1).
 
 use core_errors::FrameworkError;
+use std::sync::OnceLock;
 use serde_json::{Value, json};
 use std::collections::HashMap;
 
@@ -15,6 +16,7 @@ pub fn handle_research_tool(name: &str, arguments: &Value) -> Result<String, Fra
         "research_claim_drift" => Ok(tool_research_claim_drift(arguments)?),
         "research_review_loop" => Ok(tool_research_review_loop(arguments)?),
         "research_smoke" => Ok(tool_research_smoke(arguments)?),
+        "research_literature_search" => Ok(tool_literature_search(arguments)?),
         _ if name.starts_with("math_") => Ok(math_tool_dispatch(name, arguments)?),
         _ if name.starts_with("research_verification_") => {
             verification_tool_dispatch(name, arguments)
@@ -60,6 +62,33 @@ fn verification_tool_dispatch(name: &str, arguments: &Value) -> Result<String, F
             "unknown verification tool: {name}"
         ))),
     }
+}
+
+// ── Literature search tool ──
+
+fn tool_literature_search(arguments: &Value) -> Result<String, FrameworkError> {
+    let query = arguments
+        .get("query")
+        .and_then(Value::as_str)
+        .ok_or(FrameworkError::validation(
+            "research_literature_search requires 'query' (string)",
+        ))?;
+    let limit = arguments
+        .get("limit")
+        .and_then(Value::as_u64)
+        .unwrap_or(10) as usize;
+    let source_str = arguments
+        .get("source")
+        .and_then(Value::as_str)
+        .unwrap_or("all");
+    let source = match source_str {
+        "semantic-scholar" => crate::search::ExternalSourceArg::SemanticScholar,
+        "arxiv" => crate::search::ExternalSourceArg::Arxiv,
+        _ => crate::search::ExternalSourceArg::All,
+    };
+    let result = crate::search::orchestration::search_raw(query, limit, &source, 20)
+        .map_err(|e| FrameworkError::validation(format!("literature search failed: {e}")))?;
+    serde_json::to_string_pretty(&result).map_err(FrameworkError::Json)
 }
 
 // ── Literature verification ──
@@ -837,22 +866,18 @@ fn tool_math_lean_verify(arguments: &Value) -> Result<String, FrameworkError> {
     .map_err(FrameworkError::Json)
 }
 
-// ── Research smoke test tool ──
+// ── Research smoke test tool (general-purpose experiment runner) ──
 
-#[cfg(feature = "smoke")]
 fn tool_research_smoke(arguments: &Value) -> Result<String, FrameworkError> {
-    let source = arguments.get("source").and_then(Value::as_str);
-    let barrier_id = arguments.get("barrier_id").and_then(Value::as_str);
-    let repo_root = &std::path::Path::new(".");
-    crate::smoke::run_smoke_tests(repo_root, source, barrier_id)
-        .map_err(|e| FrameworkError::validation(format!("smoke test failed: {e}")))
-}
-
-#[cfg(not(feature = "smoke"))]
-fn tool_research_smoke(_arguments: &Value) -> Result<String, FrameworkError> {
-    Err(FrameworkError::validation(
-        "research_smoke requires the 'smoke' feature to be enabled".to_string(),
-    ))
+    // Backward compat guard: old interface (source/barrier_id) is gone
+    if arguments.get("source").is_some() || arguments.get("barrier_id").is_some() {
+        return Err(FrameworkError::validation(
+            "research_smoke 已升级为通用实验引擎。旧参数 source/barrier_id 不再支持。 \
+             请使用 template (string) + params (array of {key: value, ...})。 \
+             templates/ 目录下存放可执行实验模板。",
+        ));
+    }
+    crate::smoke::run_smoke_tests(&std::path::Path::new("."), arguments)
 }
 
 // ── Literature verification tool ──
@@ -872,9 +897,16 @@ fn tool_verification_literature(arguments: &Value) -> Result<String, FrameworkEr
                 .ok_or(FrameworkError::validation(
                     "doi check requires 'doi' (string)",
                 ))?;
-            let rt = tokio::runtime::Builder::new_current_thread()
-                .build()
-                .map_err(|e| FrameworkError::session(format!("runtime: {e}")))?;
+            // Reuse a single tokio runtime across all DOI check calls rather
+            // than creating one per request (which has significant IO driver
+            // initialization overhead).
+            static DOI_RUNTIME: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
+            let rt = DOI_RUNTIME.get_or_init(|| {
+                #[allow(clippy::expect_used)]
+                tokio::runtime::Builder::new_current_thread()
+                    .build()
+                    .expect("failed to build tokio runtime for DOI checker")
+            });
             let reachable = rt
                 .block_on(crate::verification::literature::verify_doi_reachable(doi))
                 .map_err(|e| FrameworkError::validation(format!("doi check failed: {e}")))?;

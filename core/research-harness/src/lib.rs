@@ -22,7 +22,8 @@
 //! | `workspace` | Workspace initialization, file sync, ledger events |
 //! | `text` | Text processing: slugification, XML parsing, content word extraction |
 //! | `provenance` | Git provenance and environment fingerprint capture |
-//! | `smoke` | Smoke tests for academic source freshness |
+//! | `smoke` | General-purpose experiment smoke test engine (quick directional probes) |
+//! | `smoke_cache` | LRU+TTL cache with disk persistence for experiment results |
 
 pub mod aigc;
 pub mod citation;
@@ -37,8 +38,8 @@ pub mod provenance;
 pub mod render;
 pub mod review;
 pub mod search;
-#[cfg(feature = "smoke")]
 pub mod smoke;
+pub mod smoke_cache;
 pub mod state;
 pub mod subprocess;
 pub mod text;
