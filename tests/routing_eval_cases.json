@@ -730,16 +730,6 @@
       "notes": "新覆盖 reproducibility-verification 冷表技能"
     },
     {
-      "id": "eval-research-knowledge-graph-viz",
-      "category": "should-trigger",
-      "task": "查看research-knowledge-graph，帮我导航研究方向间的连接和障碍路径",
-      "focus_skill": "research-knowledge-graph",
-      "expected_owner": "research-knowledge-graph",
-      "expected_overlay": null,
-      "first_turn": true,
-      "notes": "新覆盖 research-knowledge-graph 技能"
-    },
-    {
       "id": "eval-sentry-production-error",
       "category": "should-trigger",
       "task": "Sentry上报了生产错误，帮我排查根因和影响范围",
@@ -912,16 +902,6 @@
       ],
       "first_turn": true,
       "notes": "测试 simplify 在简化场景优先于 code-review-deep"
-    },
-    {
-      "id": "eval-research-knowledge-graph-entity",
-      "category": "should-trigger",
-      "task": "在研究知识图谱中搜一下与attention机制相关的所有实体和连接",
-      "focus_skill": "research-knowledge-graph",
-      "expected_owner": "research-knowledge-graph",
-      "expected_overlay": null,
-      "first_turn": true,
-      "notes": "research-knowledge-graph 附加 case：实体搜索场景"
     }
   ]
 }

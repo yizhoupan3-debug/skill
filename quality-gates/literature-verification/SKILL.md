@@ -86,9 +86,9 @@ research_harness::verification::literature::verify_claim_coverage(claims, refere
 
 ## References
 
-- citation-management skill：[`../citation-management/SKILL.md`](../citation-management/SKILL.md)（引用元数据验证与格式化）
+- citation-management skill：[`../../skills/citation-management/SKILL.md`](../../skills/citation-management/SKILL.md)（引用元数据验证与格式化）
 - paperplain MCP：`mcp__paperplain__fetch_paper` / `mcp__paperplain__find_paper_by_title` / `mcp__paperplain__search_research`
-- claim-evidence 阶梯：[`../paper-workbench/references/claim-evidence-ladder.md`](../paper-workbench/references/claim-evidence-ladder.md)
+- claim-evidence 阶梯：[`../../skills/paper-workbench/references/claim-evidence-ladder.md`](../../skills/paper-workbench/references/claim-evidence-ladder.md)
 
 ## Integration Contract
 

@@ -417,7 +417,7 @@ pub fn runtime_storage_operation(
                     if let Some(parent) = artifact_path.parent() {
                         fs::create_dir_all(parent).map_err(FrameworkError::Io)?;
                     }
-                    fs::write(&artifact_path, payload.as_bytes()).map_err(FrameworkError::Io)?;
+                    core_state_utils::atomic_write::write_atomic_text(&artifact_path, &payload)?;
                 }
                 ResolvedStorageBackend::Sqlite { db_path, .. } => {
                     sqlite_write_text(&path, db_path, &constrained_storage_root, &payload)?

@@ -212,7 +212,6 @@ metadata:
 1. 遍历 42 个 SKILL.md，验证 `scene`、`trigger_hints`、`metadata.platforms` 的实际准确性
 2. 验证每个技能的 `When to use` / `Do not use` 是否具体可操作
 3. 识别低频/零使用技能，考虑折叠或降级
-4. 评估 shared-references 技能与各技能的非重叠性（防止知识碎片化）
 
 ---
 

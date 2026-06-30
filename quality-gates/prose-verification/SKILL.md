@@ -96,10 +96,10 @@ research_harness::verification::prose_qc::count_hedging_words(text)
 
 ## References
 
-- prose-chain-contract：[`../paper-workbench/references/prose-chain-contract.md`](../paper-workbench/references/prose-chain-contract.md)
-- prose-quality-gate：[`../paper-workbench/references/prose-quality-gate.md`](../paper-workbench/references/prose-quality-gate.md)
-- prose-exemplars：[`../paper-workbench/references/prose-exemplars.md`](../paper-workbench/references/prose-exemplars.md)
-- research-language-norms：[`../paper-workbench/references/research-language-norms.md`](../paper-workbench/references/research-language-norms.md)
+- prose-chain-contract：[`../../skills/paper-workbench/references/prose-chain-contract.md`](../../skills/paper-workbench/references/prose-chain-contract.md)
+- prose-quality-gate：[`../../skills/paper-workbench/references/prose-quality-gate.md`](../../skills/paper-workbench/references/prose-quality-gate.md)
+- prose-exemplars：[`../../skills/paper-workbench/references/prose-exemplars.md`](../../skills/paper-workbench/references/prose-exemplars.md)
+- research-language-norms：[`../../skills/paper-workbench/references/research-language-norms.md`](../../skills/paper-workbench/references/research-language-norms.md)
 
 ## Integration Contract
 

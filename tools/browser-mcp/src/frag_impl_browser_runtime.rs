@@ -418,7 +418,7 @@ impl BrowserRuntime {
                 true,
             )
         })?;
-        fs::write(&path, bytes).map_err(|err| {
+        core_state_utils::atomic_write::write_atomic_bytes(&path, &bytes).map_err(|err| {
             browser_error(
                 "SCREENSHOT_FAILED",
                 &format!("write screenshot failed: {err}"),
@@ -663,9 +663,9 @@ impl BrowserRuntime {
         }
         let cdp = self.cdp_mut(&session_id)?;
         let cookies = cdp.call(None, "Storage.getCookies", json!({}))?;
-        fs::write(
+        core_state_utils::atomic_write::write_atomic_text(
             &session_path,
-            serde_json::to_string_pretty(&json!({
+            &serde_json::to_string_pretty(&json!({
                 "schemaVersion": "browser-mcp-rust-session-v1",
                 "savedAt": framework_core::time::current_local_timestamp(),
                 "cookies": cookies.get("cookies").cloned().unwrap_or_else(|| json!([])),

@@ -333,6 +333,7 @@ dependencies = [
  "base64",
  "chrono",
  "core-errors",
+ "core-state-utils",
  "ctor",
  "framework-core",
  "http-util",

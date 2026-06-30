@@ -109,6 +109,19 @@ impl FrameworkError {
             message: message.into(),
         }
     }
+
+    /// Create an `Io` error with `AlreadyExists` kind (for tmp-file collision detection).
+    pub fn already_exists(message: impl Into<String>) -> Self {
+        Self::Io(std::io::Error::new(
+            std::io::ErrorKind::AlreadyExists,
+            message.into(),
+        ))
+    }
+
+    /// Returns `true` when this error is an `Io` error with `AlreadyExists` kind.
+    pub fn is_already_exists(&self) -> bool {
+        matches!(self, Self::Io(err) if err.kind() == std::io::ErrorKind::AlreadyExists)
+    }
 }
 
 impl From<FrameworkError> for String {

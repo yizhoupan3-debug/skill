@@ -417,7 +417,7 @@ host_id: {hid}
             if let Some(parent) = full_path.parent() {
                 fs::create_dir_all(parent).map_err(|e| FrameworkError::Io(e))?;
             }
-            fs::write(&full_path, content).map_err(|e| FrameworkError::Io(e))?;
+            core_state_utils::atomic_write::write_atomic_text(&full_path, content)?;
             generated.push(serde_json::json!({
                 "path": path,
                 "action": "created",

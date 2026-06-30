@@ -90,8 +90,8 @@ research_harness::verification::statistical::check_multiple_comparison_correctio
 
 ## References
 
-- statistical-analysis skill：[`../statistical-analysis/SKILL.md`](../statistical-analysis/SKILL.md)（统计方法选择与解读的知识库）
-- statistical-analysis 因果与预注册：[`../statistical-analysis/references/causal-prereg.md`](../statistical-analysis/references/causal-prereg.md)
+- statistical-analysis skill：[`../../skills/statistical-analysis/SKILL.md`](../../skills/statistical-analysis/SKILL.md)（统计方法选择与解读的知识库）
+- statistical-analysis 因果与预注册：[`../../skills/statistical-analysis/references/causal-prereg.md`](../../skills/statistical-analysis/references/causal-prereg.md)
 
 ## Integration Contract
 

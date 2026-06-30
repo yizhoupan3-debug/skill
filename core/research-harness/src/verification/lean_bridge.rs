@@ -98,7 +98,7 @@ pub fn verify_lean_theorem(script: &str) -> VerificationResult {
     let _guard = CleanupGuard(temp_dir.clone());
 
     let result = (|| -> Result<std::process::Output, FrameworkError> {
-        std::fs::write(&script_path, script).map_err(FrameworkError::Io)?;
+        core_state_utils::atomic_write::write_atomic_text(&script_path, script)?;
         std::process::Command::new("lean")
             .arg(&script_path)
             .stdout(std::process::Stdio::piped())

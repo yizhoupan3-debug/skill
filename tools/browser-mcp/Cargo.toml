@@ -13,6 +13,7 @@ path = "src/lib.rs"
 [dependencies]
 mcp-tool-registry = { path = "../../core/mcp-tool-registry" }
 core-errors = { path = "../../core/core-errors" }
+core-state-utils = { path = "../../core/core-state-utils" }
 framework-core = { path = "../../core/framework-core" }
 http-util = { path = "../../core/http-util" }
 runtime-core = { path = "../../core/runtime-core" }

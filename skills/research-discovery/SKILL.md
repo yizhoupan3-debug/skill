@@ -85,7 +85,7 @@ Start by classifying the task into one or more lanes:
 
 - `research_question`: research objective, novelty claim, and decision the work must support.
 - `external_research`: literature, standards, datasets, repositories, or prior-art lookup when allowed or necessary. Use [`references/academic-sources.md`](references/academic-sources.md) for the five verified-open retrieval sources (arXiv, OpenAlex, CrossRef, PubMed E-utilities, DOAJ); fan out across sources for thorough coverage.
-- `math_background_inquiry`: theory landscape for unknown properties (`theory_background` with `theorem_applicability`, `cross_domain_bridges`, `proof_strategy_hints`, multi-source `retrieval_fanout_plan`); multi-round -> RFV `external_mode=math_background` + [math-background-inquiry.md](../../docs/routing/architecture.md); conjectures -> §D `conjecture_list`. **Mandatory**: every analogy has `breaks_when`; named theorems have `applies_when`/`fails_when`; retrieval fans out arXiv+OpenAlex/CrossRef per [academic-sources.md](references/academic-sources.md).
+- `math_background_inquiry`: theory landscape for unknown properties — candidate theorems with `applies_when` / `fails_when` + cross-domain bridges (theorem level, no proof strategy); multi-source `retrieval_fanout_plan`; multi-round -> RFV `external_mode=math_background` + [docs/math-reasoning-harness.md](../../docs/math-reasoning-harness.md); conjectures -> §D `conjecture_list`. **Mandatory**: every analogy has `breaks_when`; named theorems have `applies_when`/`fails_when`; retrieval fans out arXiv+OpenAlex/CrossRef per [academic-sources.md](references/academic-sources.md). **Boundary contract**: see [discovery-execution-boundary-contract.md §3](references/discovery-execution-boundary-contract.md).
 - `paper_handoff`: only when the task becomes manuscript-level; then hand off to `$paper-workbench` with **`language_register`** + link to [`../paper-workbench/references/prose-chain-contract.md`](../paper-workbench/references/prose-chain-contract.md) when prose is in scope.
 
 Prefer the smallest lane set that can answer the user's real question. Do not
@@ -98,7 +98,7 @@ For research discovery or investigation, return:
 
 - `Research objective`: the concrete question or decision.
 - `Evidence map`: what is known, unknown, and what must be checked.
-- `Method/math risks`: assumptions, derivation gaps, counterexamples, and verifier options.
+- `Theory risks`: theorem-choice errors, analogy limits, evidence gaps, and unfalsifiable assumptions.
 - `Next executable step`: the smallest command, analysis, or investigation that reduces uncertainty.
 
 For deep external research, include a concise retrieval trace when browsing is
@@ -111,14 +111,9 @@ result "verified", "严审通过", or "research-grade" on prose alone.
 
 ## Verification and failure contract
 
-- Treat executable evidence as the default closeout path: commands, notebooks,
-  deterministic probes, benchmark scripts, artifact hashes, or a cited external
-  source trace. Name how to verify the claim before marking it complete.
-- If a lane cannot be verified, return a blocker with the missing input,
-  unavailable source, or unrun command; do not convert it into a confident
-  research conclusion.
-- For tool or data failures, preserve the smallest useful error summary and the
-  next retry path in the evidence map instead of pasting long logs into context.
+Follow the shared verification contract defined in [discovery-execution-boundary-contract.md §5](references/discovery-execution-boundary-contract.md).
+
+Discovery-specific requirement: without external retrieval (when needed and allowed), do not turn "deep research" into unsourced speculation — mark the evidence gap instead.
 
 ## Lane handoffs
 
@@ -163,17 +158,22 @@ into execution territory, hand off to `$research-execution`:
 |---|---|
 | Research question scoping | Experiment design, ablations, baselines |
 | Literature survey, related work | Code verification, deterministic repro |
-| Theory landscape, theorem applicability | Math modeling (phenomenon -> equations) |
-| Knowledge gap analysis | Math verification (assumptions, witnesses) |
-| Novelty claim framing | Reproducibility planning |
+| **Candidate theorem identification** | **Math verification (derivation strategy + checker execution)** |
+| **Novelty / significance assessment (Primary)** | — (hand off to discovery) |
+| **Dataset identification & curation (哪些存在、各自属性)** | **Dataset selection & justification (选哪个做实验)** |
+| **Model selection justification (该领域有哪些 SOTA/候选模型)** | **Model selection & justification (选哪个、为什么、对比条件)** |
+| Knowledge gap analysis | Reproducibility planning |
 
 If a task spans both phases, complete the discovery lanes first, then hand off
-the execution lanes with the discovery outputs as context.
+the execution lanes with the discovery outputs as context. See the full
+boundary contract in [discovery-execution-boundary-contract.md](references/discovery-execution-boundary-contract.md).
 
 ## Hard constraints
 
 - Keep manuscript work out of this front door; hand it to `$paper-workbench` once the object is a paper.
 - Keep experiment design and code/math verification out of this front door; hand them to `$research-execution`.
+- **Math boundary**: do not produce `proof_strategy_hints` (derivation roadmaps) in `math_background_inquiry` — that belongs to `$research-execution` `math_verification`. See [discovery-execution-boundary-contract.md §3](references/discovery-execution-boundary-contract.md).
+- **Loop-back handling**: when `research-execution` sends a loop-back handoff (see [boundary contract §4](references/discovery-execution-boundary-contract.md)), validate the `hypothesis`, run targeted `external_research` or `math_background_inquiry` per the `retrieval_scope`, and return findings to execution. Do not start a full discovery cycle — respond only to the loop-back question.
 - Do not turn "deep research" into unsourced speculation. If external lookup is needed and allowed, use it; otherwise mark the evidence gap.
 - Do not claim math verification without witnesses plus a checker/verifier or a stated blocker.
 - Do not bury the next executable step in prose; make it directly actionable.
@@ -181,10 +181,13 @@ the execution lanes with the discovery outputs as context.
 ## Cross-references
 
 - **Academic sources (verified-open retrieval scaffolding)**: [`references/academic-sources.md`](references/academic-sources.md) — arXiv, OpenAlex, CrossRef, PubMed E-utilities, DOAJ API templates and fan-out patterns for `external_research` lane.
-- Quality Gate research harness: `docs/routing/architecture.md` §Quality Gate
-- External research harness: `docs/routing/architecture.md` §External Research
-- Math background inquiry (deep): `docs/routing/architecture.md` §Math Background
+- **Boundary contract (discovery vs execution)**: [`references/discovery-execution-boundary-contract.md`](references/discovery-execution-boundary-contract.md) — canonical ownership table, math work split, handoff protocols, scenario routing.
+- Quality Gate research harness: [`../../docs/quality-gate.md`](../../docs/quality-gate.md) §Quality Gate
+- Math reasoning harness: [`../../docs/math-reasoning-harness.md`](../../docs/math-reasoning-harness.md) — math background inquiry deep dive (§C)
 - Manuscript stack boundary: [`../paper-workbench/references/RESEARCH_PAPER_STACK.md`](../paper-workbench/references/RESEARCH_PAPER_STACK.md)
 - **Verification skills** (load when lane requires):
-  - `literature_survey` lane → [`../literature-verification/SKILL.md`](../literature-verification/SKILL.md)
-  - `math_background_inquiry` lane → [`../formal-verification/SKILL.md`](../formal-verification/SKILL.md)
+  - `external_research` / `literature_survey` lane → [`../../quality-gates/literature-verification/SKILL.md`](../../quality-gates/literature-verification/SKILL.md)
+  - `math_background_inquiry` lane → [`../../quality-gates/formal-verification/SKILL.md`](../../quality-gates/formal-verification/SKILL.md)
+  - `reproducibility` lane → [`../../quality-gates/reproducibility-verification/SKILL.md`](../../quality-gates/reproducibility-verification/SKILL.md)
+  - `prose` lane (when output contains expository text) → [`../../quality-gates/prose-verification/SKILL.md`](../../quality-gates/prose-verification/SKILL.md)
+  - `code_verification` lane → [`../code-review-deep/SKILL.md`](../code-review-deep/SKILL.md)

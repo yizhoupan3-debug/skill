@@ -23,7 +23,7 @@ short_description: Deep research harness — web-first multi-source fact-checked
 source: local
 trigger_hints:
 - deep research
-- deep-research
+- deep-search
 - web research
 - fact check
 - 网络调研

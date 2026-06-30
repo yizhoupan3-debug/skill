@@ -93,10 +93,10 @@ research_harness::verification::structure::check_figure_references(tex_path)
 
 ## References
 
-- citation-management skill：[`../citation-management/SKILL.md`](../citation-management/SKILL.md)（引用一致性检查）
-- tikz-paper-figure skill：[`../tikz-paper-figure/SKILL.md`](../tikz-paper-figure/SKILL.md)（图表规范）
-- claim-evidence-ladder：[`../paper-workbench/references/claim-evidence-ladder.md`](../paper-workbench/references/claim-evidence-ladder.md)
-- claim-spine-and-section-contract：[`../paper-workbench/references/claim-spine-and-section-contract.md`](../paper-workbench/references/claim-spine-and-section-contract.md)
+- citation-management skill：[`../../skills/citation-management/SKILL.md`](../../skills/citation-management/SKILL.md)（引用一致性检查）
+- tikz-paper-figure skill：[`../../skills/tikz-paper-figure/SKILL.md`](../../skills/tikz-paper-figure/SKILL.md)（图表规范）
+- claim-evidence-ladder：[`../../skills/paper-workbench/references/claim-evidence-ladder.md`](../../skills/paper-workbench/references/claim-evidence-ladder.md)
+- claim-spine-and-section-contract：[`../../skills/paper-workbench/references/claim-spine-and-section-contract.md`](../../skills/paper-workbench/references/claim-spine-and-section-contract.md)
 
 ## Integration Contract
 

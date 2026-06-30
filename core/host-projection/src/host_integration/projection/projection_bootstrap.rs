@@ -432,7 +432,7 @@ pub fn ensure_config_file(config_path: &Path, host_id: &str) -> Result<bool> {
     } else {
         format!("#:schema {header}\n")
     };
-    fs::write(config_path, &header)?;
+    core_state_utils::atomic_write::write_atomic_text(config_path, &header)?;
     Ok(true)
 }
 

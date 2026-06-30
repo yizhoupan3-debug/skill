@@ -112,14 +112,14 @@
     "activation_counts": {
       "default": 12,
       "disabled": 0,
-      "explicit_opt_in": 30
+      "explicit_opt_in": 23
     },
     "loadout_catalog_path": "skills/SKILL_LOADOUTS.json",
     "tier_counts": {
       "core": 12,
       "deprecated": 0,
       "experimental": 0,
-      "optional": 30
+      "optional": 23
     }
   },
   "source": "router-rs framework skills refresh",

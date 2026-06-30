@@ -91,7 +91,7 @@ math_backend_available()                                     # 后端可用状�
 
 ## References
 
-- math-derivation skill：[`../math-derivation/SKILL.md`](../math-derivation/SKILL.md)（推导能力与符号计算知识库）
+- math-derivation skill：[`../../skills/math-derivation/SKILL.md`](../../skills/math-derivation/SKILL.md)（推导能力与符号计算知识库）
 - framework formal_toolchain（Rust）：`core/runtime-core-contracts/src/formal_toolchain.rs`（CAS/SMT token 检测）
 
 ## Integration Contract

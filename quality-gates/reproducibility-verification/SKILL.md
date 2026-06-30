@@ -100,9 +100,9 @@ research_harness::verification::reproducibility::run_reproducibility_audit(exper
 
 ## References
 
-- experiment-reproducibility skill：[`../experiment-reproducibility/SKILL.md`](../experiment-reproducibility/SKILL.md)（可复现性管理知识库）
-- experiment-reproducibility 模板：[`../experiment-reproducibility/references/templates.md`](../experiment-reproducibility/references/templates.md)
-- 科研纪录最低清单：[`../experiment-reproducibility/references/research-record-minimum.md`](../experiment-reproducibility/references/research-record-minimum.md)
+- experiment-reproducibility skill：[`../../skills/experiment-reproducibility/SKILL.md`](../../skills/experiment-reproducibility/SKILL.md)（可复现性管理知识库）
+- experiment-reproducibility 模板：[`../../skills/experiment-reproducibility/references/templates.md`](../../skills/experiment-reproducibility/references/templates.md)
+- 科研纪录最低清单：[`../../skills/experiment-reproducibility/references/research-record-minimum.md`](../../skills/experiment-reproducibility/references/research-record-minimum.md)
 
 ## Integration Contract
 

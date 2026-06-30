@@ -216,7 +216,7 @@ Review lanes → Factcheck → [Findings consolidation] → Adversarial verifica
 - **PR 影响评估**：PR 删除公共函数/接口时，调 `codegraph_impact[depth=3]` 评估下游破坏。
 - **符号定位**：diff 中符号名不在当前文件时，调 `codegraph_search` 定位定义位置。
 
-> 详细场景与参数示例见 [`codegraph-scenarios.md`](../shared-references/codegraph-scenarios.md)。
+> 详细场景与参数示例见 `codegraph-scenarios.md`（已归档）。
 
 ## I7: heterogeneous adversarial review (model-family diversity)
 
@@ -269,7 +269,7 @@ Use when the user allows network/tools or scope touches third-party crates/servi
 
 Review lane **只读**；图谱用于定位与 call-chain 证据，不替代 Read/Grep。
 
-> 工具与场景表：见 [`codegraph-scenarios.md`](../shared-references/codegraph-scenarios.md)。
+> 工具与场景表见 `codegraph-scenarios.md`（已归档）。
 > 何时：宽范围 review 前确认就绪（stale 时在 finding 中加 caveat）；消歧 FQN、核实 path:anchor；P0/P1 需 concrete call chain 时优先于手工 rg；API/行为变更的 blast radius 与测试缺口。
 
 ## Integration / boundaries
