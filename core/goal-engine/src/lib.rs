@@ -20,18 +20,25 @@ pub use dispatcher::{
 };
 pub use kill_switch::{
     acquire_lock, clear_kill_signal, is_kill_signal_active, read_lock_info, release_lock,
-    take_kill_signal, write_kill_signal,
+    take_kill_signal, write_kill_signal, write_signal, take_signal, write_pause_signal,
+    write_resume_signal, write_redirect_signal, write_pause_state, read_pause_state,
+    clear_pause_state, is_pause_state_active,
 };
 pub use report::{render_loop_report, write_loop_report};
-pub use runner::preflight_profile_check;
+pub use runner::{
+    preflight_profile_check, run_loop_pause, run_loop_pause_status, run_loop_redirect,
+    run_loop_resume,
+};
 pub use safety::{assign_safety_for_action, assign_safety_for_file, parse_safety_level};
 pub use state::{
     closeout_path, create_initial_state, generate_run_id, kill_signal_path, lock_path,
-    loop_artifacts_dir, loop_state_path, now_iso, read_loop_state, write_loop_state,
+    loop_artifacts_dir, loop_state_path, now_iso, pause_state_path, read_loop_state,
+    write_loop_state,
 };
 pub use types::{
-    LoopAction, LoopActionRecord, LoopCloseoutAggregate, LoopError, LoopPhase, LoopProfileConfig,
-    LoopRegistryEntry, LoopRegistryRoot, LoopRunState, SafetyLevel,
+    KillSignalAction, KillSignalPayload, LoopAction, LoopActionRecord, LoopCloseoutAggregate,
+    LoopError, LoopPhase, LoopProfileConfig, LoopRegistryEntry, LoopRegistryRoot, LoopRunState,
+    PauseState, SafetyLevel, PAUSE_STATE_SCHEMA_VERSION,
 };
 
 #[cfg(test)]

@@ -1,23 +1,25 @@
 use crate::closeout::{
-    AggregateActionResult, build_aggregate, read_action_record, verify_closeout_with_evidence,
+    AggregateActionResult, build_aggregate, read_action_record,
+    verify_closeout_with_evidence, write_loop_output,
 };
-use crate::dispatcher::{self, SubagentResult};
-use crate::kill_switch::{self, acquire_lock_guarded};
+use crate::dispatcher::{self, SubagentResult, };
+use crate::kill_switch::{self, acquire_lock_guarded, clear_pause_state, read_pause_state};
 use crate::report;
 use crate::safety::assign_safety_for_action;
 use crate::state::{
-    closeout_path, create_initial_state, finish_run, generate_run_id, read_loop_state,
-    start_new_run, transition_phase, update_heartbeat, write_loop_state,
+    closeout_path, create_initial_state, finish_run, generate_run_id,
+    read_loop_state, start_new_run, transition_phase, update_heartbeat, write_loop_state,
 };
 use crate::types::{
-    LoopAction, LoopCloseoutAggregate, LoopError, LoopPhase, LoopProfileConfig, LoopRegistryEntry,
-    LoopRunState, SafetyLevel,
+    KillSignalAction, LoopAction, LoopCloseoutAggregate, LoopError, LoopPhase, LoopProfileConfig,
+    LoopRegistryEntry, LoopRunState, SafetyLevel,
 };
 use std::fs;
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
 use std::path::Path;
-use std::time::Instant;
+use std::thread;
+use std::time::{Duration, Instant};
 
 /// Check whether a loop entry's profile is schedulable.
 /// Returns an error for task profiles which cannot be scheduled for unattended execution.
@@ -29,6 +31,7 @@ pub fn preflight_profile_check(entry: &LoopRegistryEntry) -> Result<(), LoopErro
                 .to_string(),
         )),
         "loop-auto" => Ok(()),
+        "interactive" => Ok(()),
         other => Err(LoopError::UnknownProfile(other.to_string())),
     }
 }
@@ -64,13 +67,47 @@ pub fn run_loop(ctx: &RunContext) -> Result<LoopCloseoutAggregate, LoopError> {
     let mut depth_remaining = ctx.depth_remaining;
 
     loop {
+        // Clean any stale pause state from a prior crash.
+        let _ = clear_pause_state(ctx.repo_root, loop_id);
+
         let mut state = match read_loop_state(ctx.repo_root, loop_id)? {
             Some(s) => s,
             None => create_initial_state(loop_id, &entry.profile),
         };
 
         let run_id = generate_run_id(loop_id);
+
+        // ── Checkpoint restart: rescue completed dispatch entries ──
+        // If the previous run crashed mid-loop (e.g. after action 2/5),
+        // LOOP_RUN_STATE.json still has current_run with dispatch entries
+        // showing which actions already completed. Rescue those so the new
+        // run skips already-completed actions.
+        // NOTE: only "done" is rescued; "failed" actions should be retried.
+        let rescued_dispatch: std::collections::HashMap<String, String> = state
+            .current_run
+            .as_ref()
+            .map(|run| {
+                run.dispatch
+                    .iter()
+                    .filter(|(_, status)| status.as_str() == "done")
+                    .map(|(k, v)| (k.clone(), v.clone()))
+                    .collect()
+            })
+            .unwrap_or_default();
+
         start_new_run(&mut state, &run_id);
+
+        // Re-insert rescued entries into the new current_run.dispatch
+        if !rescued_dispatch.is_empty() {
+            tracing::info!(
+                "checkpoint restart: rescued {} completed action(s) from previous run",
+                rescued_dispatch.len()
+            );
+            if let Some(ref mut run) = state.current_run {
+                run.dispatch.extend(rescued_dispatch);
+            }
+        }
+
         // Initialize anti-drift original goal snapshot on first run
         if state.anti_drift.original_goal_snapshot.is_none() {
             state.anti_drift.original_goal_snapshot = read_goal_snapshot(ctx.repo_root, entry);
@@ -182,14 +219,42 @@ fn run_loop_inner(
             spawn_first_nudge: true,
             cost_budget: entry.cost_budget.clone(),
             escalation: None,
+            interactive_capable: false,
+            pause_timeout_secs: None,
         });
     let safety_map = assign_safety_levels(&actions, entry);
     check_budget_preflight(&profile_config)?;
 
     transition_phase(state, LoopPhase::Running);
     let mut results: Vec<(String, AggregateActionResult)> = Vec::new();
+    // Action output cache: populated after each committed action, consumed
+    // by subsequent actions that reference this action via consumed_action_ids.
+    let mut action_outputs: std::collections::HashMap<String, serde_json::Value> =
+        std::collections::HashMap::new();
 
     for action in &actions {
+        // ── Checkpoint restart: skip actions already completed ──
+        // This check MUST happen before the unconditional dispatch insert below
+        // (line 239), otherwise rescued "done" entries would be overwritten.
+        if let Some(ref run) = state.current_run {
+            if run
+                .dispatch
+                .get(&action.action_id)
+                .map(|s| s == "done")
+                .unwrap_or(false)
+            {
+                tracing::info!(
+                    action_id = %action.action_id,
+                    "skipping already-completed action (checkpoint restart)"
+                );
+                results.push((
+                    action.action_id.clone(),
+                    AggregateActionResult::Skipped,
+                ));
+                continue;
+            }
+        }
+
         let level = safety_map
             .get(&action.action_id)
             .cloned()
@@ -218,13 +283,88 @@ fn run_loop_inner(
                     run.dispatch
                         .insert(action.action_id.clone(), "running".to_string());
                 }
-                let sub_result = dispatcher::run_action_sync(
-                    ctx.repo_root,
-                    &entry.loop_id,
-                    run_id,
-                    action,
-                    ctx.timeout,
+
+                // Pre-dispatch: write consumed action outputs as files the subagent can read.
+                if !action.consumed_action_ids.is_empty() {
+                    let action_outputs_dir = ctx
+                        .repo_root
+                        .join("artifacts/loop")
+                        .join(&entry.loop_id)
+                        .join("action_outputs");
+                    for consumed_id in &action.consumed_action_ids {
+                        if let Some(output) = action_outputs.get(consumed_id) {
+                            let out_path = action_outputs_dir.join(format!("{consumed_id}.json"));
+                            if let Some(parent) = out_path.parent() {
+                                let _ = std::fs::create_dir_all(parent);
+                            }
+                            let _ = core_state_utils::atomic_write::write_atomic_json(
+                                &out_path,
+                                output,
+                            );
+                        }
+                    }
+                }
+
+                let sub_protocol = crate::types::SubagentProtocol::resolve(
+                    entry.subagent_protocol.as_deref(),
                 );
+
+                // Wrap dispatch in an inner loop to support pause→resume re-dispatch
+                let sub_result = 'exec: loop {
+                    match dispatcher::run_action_sync(
+                        ctx.repo_root,
+                        &entry.loop_id,
+                        run_id,
+                        action,
+                        ctx.timeout,
+                        sub_protocol,
+                    ) {
+                        Ok(output) => break 'exec Ok(output),
+                        Err(LoopError::PauseSignaled(_)) | Err(LoopError::Paused(_)) => {
+                            // Enter pause state
+                            transition_phase(state, LoopPhase::Paused);
+                            if let Err(e) = write_loop_state(ctx.repo_root, &entry.loop_id, state) {
+                                tracing::error!("failed to write loop state on pause: {e}");
+                            }
+
+                            match pause_wait_loop(ctx.repo_root, &entry.loop_id) {
+                                Ok(PauseCommand::Resume) => {
+                                    tracing::info!(action = %action.action_id, "pause-resumed");
+                                    transition_phase(state, LoopPhase::Running);
+                                    update_heartbeat(state);
+                                    if let Err(e) = write_loop_state(ctx.repo_root, &entry.loop_id, state) {
+                                        tracing::error!("failed to write loop state on resume: {e}");
+                                    }
+                                    let _ = clear_pause_state(ctx.repo_root, &entry.loop_id);
+                                    continue 'exec; // re-dispatch same action
+                                }
+                                Ok(PauseCommand::Redirect { .. }) => {
+                                    tracing::info!(action = %action.action_id, "pause-redirected");
+                                    transition_phase(state, LoopPhase::Running);
+                                    update_heartbeat(state);
+                                    if let Err(e) = write_loop_state(ctx.repo_root, &entry.loop_id, state) {
+                                        tracing::error!("failed to write loop state on redirect: {e}");
+                                    }
+                                    let _ = clear_pause_state(ctx.repo_root, &entry.loop_id);
+                                    break 'exec Err(LoopError::Redirected(
+                                        "redirected during pause".into(),
+                                    ));
+                                }
+                                Ok(PauseCommand::Kill) => {
+                                    let _ = clear_pause_state(ctx.repo_root, &entry.loop_id);
+                                    break 'exec Err(LoopError::KillSignaled(
+                                        "killed during pause".into(),
+                                    ));
+                                }
+                                Err(e) => {
+                                    let _ = clear_pause_state(ctx.repo_root, &entry.loop_id);
+                                    break 'exec Err(e);
+                                }
+                            }
+                        }
+                        Err(e) => break 'exec Err(e),
+                    }
+                };
                 match sub_result {
                     Ok(output) => {
                         let aggregate_result = evaluate_subagent_output(
@@ -234,6 +374,34 @@ fn run_loop_inner(
                             action,
                             &output,
                         );
+
+                        // Post-dispatch: capture action output from closeout record
+                        if let AggregateActionResult::Committed { .. } = &aggregate_result {
+                            let closeout_dir = ctx
+                                .repo_root
+                                .join("artifacts/loop")
+                                .join(&entry.loop_id)
+                                .join("closeout");
+                            let closeout_file = closeout_dir.join(format!(
+                                "{run_id}-{}.json",
+                                action.action_id
+                            ));
+                            let action_out = std::fs::read_to_string(&closeout_file)
+                                .ok()
+                                .and_then(|raw| serde_json::from_str(&raw).ok())
+                                .unwrap_or_else(|| serde_json::json!({
+                                    "action_id": &action.action_id,
+                                    "status": "committed"
+                                }));
+                            action_outputs.insert(action.action_id.clone(), action_out);
+                            // ── Checkpoint: persist state after committed action ──
+                            // This enables crash recovery: if the process dies between
+                            // actions, the next run skips already-"done" actions.
+                            if let Err(e) = write_loop_state(ctx.repo_root, &entry.loop_id, state) {
+                                tracing::warn!("failed to write action checkpoint: {e}");
+                            }
+                        }
+
                         if let Some(ref mut run) = state.current_run {
                             let status = match &aggregate_result {
                                 AggregateActionResult::Committed { .. } => "done",
@@ -264,6 +432,16 @@ fn run_loop_inner(
                         ));
                         return Err(LoopError::Timeout(secs));
                     }
+                    Err(LoopError::Redirected(msg)) => {
+                        results.push((
+                            action.action_id.clone(),
+                            AggregateActionResult::Interrupted,
+                        ));
+                        if let Some(ref mut run) = state.current_run {
+                            run.dispatch.insert(action.action_id.clone(), "redirected".to_string());
+                        }
+                        tracing::info!(action = %action.action_id, "redirected: {msg}");
+                    }
                     Err(e) => {
                         results.push((
                             action.action_id.clone(),
@@ -279,6 +457,8 @@ fn run_loop_inner(
 
     transition_phase(state, LoopPhase::Verifying);
     let mut aggregate = build_aggregate(run_id, &entry.loop_id, &actions, results);
+    // Write LOOP_OUTPUT.json for downstream consumers
+    write_loop_output(ctx.repo_root, &entry.loop_id, &aggregate);
 
     // ── Quality Gate (verify_quality_gate) ──
     // Two-stage exit gate: Stage 1 anti-fraud evidence check + Stage 2 scene-dispatched checker evaluation.
@@ -523,6 +703,130 @@ fn run_loop_inner(
     Ok(aggregate)
 }
 
+// ── Pause / Resume support ──
+
+/// Command returned by `pause_wait_loop` indicating how to proceed.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) enum PauseCommand {
+    /// Resume the action with original parameters.
+    Resume,
+    /// Redirect: skip to next action (human changed the goal).
+    Redirect,
+    /// Kill: terminate the loop.
+    Kill,
+}
+
+/// Maximum time a loop can remain paused before timing out (1 hour, matching lock staleness).
+const PAUSE_TIMEOUT_SECS: u64 = 3600;
+
+/// Enter a tight polling loop while the loop is paused.
+///
+/// Polls for signals on `.loop-kill/{loop_id}`. On `Resume`, returns `Ok(Resume)`.
+/// On `Redirect`, returns `Ok(Redirect)`. On `Kill`, returns `Ok(Kill)`.
+/// If no signal arrives within the timeout, returns `Err(Timeout)`.
+///
+/// During the wait, the loop lock is refreshed every 60s to prevent stale
+/// lock takeover by other processes.
+pub(crate) fn pause_wait_loop(
+    repo_root: &Path,
+    loop_id: &str,
+) -> Result<PauseCommand, LoopError> {
+    let deadline = Instant::now() + Duration::from_secs(PAUSE_TIMEOUT_SECS);
+    let mut last_refresh = Instant::now();
+
+    loop {
+        // Refresh lock every 60s to prevent staleness
+        if last_refresh.elapsed().as_secs() >= 60 {
+            let _ = kill_switch::refresh_lock(repo_root);
+            last_refresh = Instant::now();
+        }
+
+        match crate::kill_switch::take_signal(repo_root, loop_id) {
+            Ok(Some(payload)) => match payload.action {
+                KillSignalAction::Resume => {
+                    tracing::info!(%loop_id, "pause-wait: resume signal received");
+                    return Ok(PauseCommand::Resume);
+                }
+                KillSignalAction::Redirect { .. } => {
+                    tracing::info!(%loop_id, "pause-wait: redirect signal received");
+                    return Ok(PauseCommand::Redirect);
+                }
+                KillSignalAction::Kill => {
+                    tracing::info!(%loop_id, "pause-wait: kill signal received");
+                    return Ok(PauseCommand::Kill);
+                }
+                KillSignalAction::PauseWithFeedback { feedback } => {
+                    // Update the existing PauseState's feedback field
+                    if let Ok(Some(mut pause_state)) = read_pause_state(repo_root, loop_id) {
+                        pause_state.feedback = Some(feedback);
+                        let _ = kill_switch::write_pause_state(repo_root, &pause_state);
+                        tracing::info!(%loop_id, "pause-wait: feedback updated");
+                    }
+                }
+                KillSignalAction::Pause => {
+                    // Already paused — no-op
+                }
+            },
+            Ok(None) => {}
+            Err(e) => {
+                tracing::warn!(%loop_id, error = %e, "pause-wait: signal read error");
+            }
+        }
+
+        if Instant::now() > deadline {
+            // Pause timeout — clear state and return error
+            let _ = clear_pause_state(repo_root, loop_id);
+            return Err(LoopError::Timeout(PAUSE_TIMEOUT_SECS));
+        }
+
+        thread::sleep(Duration::from_secs(dispatcher::KILL_POLL_INTERVAL_SECS));
+    }
+}
+
+// ── Public API ──
+
+/// Send a pause signal to a running loop, optionally injecting human feedback.
+///
+/// The running subprocess is terminated, the action context is persisted to
+/// `.loop-pause/{loop_id}`, and the loop enters a pause-wait cycle.
+/// Call `run_loop_resume`, `run_loop_redirect`, or `run_loop_kill` to continue.
+///
+/// Returns an error if the signal file could not be written.
+pub fn run_loop_pause(
+    repo_root: &Path,
+    loop_id: &str,
+    feedback: Option<&str>,
+) -> Result<(), LoopError> {
+    let action_id = read_pause_state(repo_root, loop_id)
+        .ok()
+        .flatten()
+        .map(|s| s.action_id)
+        .unwrap_or_else(|| "unknown".to_string());
+    crate::kill_switch::write_pause_signal(repo_root, loop_id, &action_id, feedback)
+}
+
+/// Send a resume signal to a paused loop.
+/// The paused action is re-dispatched with its original parameters (and any
+/// injected feedback from a prior `run_loop_pause` call).
+pub fn run_loop_resume(repo_root: &Path, loop_id: &str) -> Result<(), LoopError> {
+    crate::kill_switch::write_resume_signal(repo_root, loop_id)
+}
+
+/// Send a redirect signal to a paused loop.
+/// The current action is skipped and the loop continues with the next action.
+pub fn run_loop_redirect(repo_root: &Path, loop_id: &str) -> Result<(), LoopError> {
+    crate::kill_switch::write_redirect_signal(repo_root, loop_id, "redirected")
+}
+
+/// Read the current pause state for a loop, if any.
+/// Returns `Ok(Some(PauseState))` when the loop is paused, `Ok(None)` otherwise.
+pub fn run_loop_pause_status(
+    repo_root: &Path,
+    loop_id: &str,
+) -> Result<Option<crate::types::PauseState>, LoopError> {
+    read_pause_state(repo_root, loop_id)
+}
+
 /// Result of a barrier escalation attempt.
 struct BarrierResult {
     candidates: Vec<String>,
@@ -539,6 +843,67 @@ impl BarrierResult {
 /// Prefers `ROUTER_RS_AUTORESEARCH_BIN` env var; falls back to `cargo run` slow-path.
 fn resolve_autoresearch_binary() -> Result<String, LoopError> {
     Ok(crate::env_flags::autoresearch_binary())
+}
+
+/// Spawn an autoresearch barrier subprocess, unifying the cargo-run slow-path and
+/// binary fast-path into a single code path. Returns the subprocess output.
+fn spawn_autoresearch_barrier(
+    autoresearch_bin: &str,
+    repo_root: &Path,
+    loop_id: &str,
+    run_id: &str,
+    problem: &str,
+    timeout_secs: u64,
+) -> Result<std::process::Output, LoopError> {
+    use std::process::Command;
+
+    let mut cmd;
+    if autoresearch_bin.is_empty() {
+        // Cargo run slow-path: compile and run via cargo with a timeout
+        cmd = Command::new("cargo");
+        cmd.args([
+            "run",
+            "-p",
+            "research-harness",
+            "--bin",
+            "autoresearch",
+            "--",
+        ]);
+    } else {
+        // Binary fast-path: use pre-compiled binary
+        cmd = Command::new(autoresearch_bin);
+    }
+
+    // Common args and working directory
+    cmd.args(["barrier", "--problem", problem, "--loop-id", loop_id, "--run-id", run_id])
+        .current_dir(repo_root);
+
+    // SAFETY: setrlimit is async-signal-safe; pre_exec runs in single-threaded forked child.
+    #[cfg(unix)]
+    unsafe {
+        cmd.pre_exec(|| dispatcher::apply_subprocess_rlimits());
+    }
+
+    let label = if autoresearch_bin.is_empty() {
+        "barrier-escalation (cargo)"
+    } else {
+        "barrier-escalation (binary)"
+    };
+
+    let child = cmd
+        .spawn()
+        .map_err(|e| LoopError::SpawnFailed(format!("{label}: {e}")))?;
+
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(timeout_secs);
+    crate::dispatcher::poll_subprocess(
+        child,
+        repo_root,
+        loop_id,
+        label,
+        deadline,
+        std::time::Duration::from_secs(timeout_secs),
+        None, // no pause support for barrier escalation
+    )
 }
 
 /// Execute barrier escalation: shell out to `autoresearch barrier --problem <desc>`.
@@ -560,74 +925,27 @@ fn barrier_escalation(
     // Use pre-compiled binary if available (via ROUTER_RS_AUTORESEARCH_BIN),
     // otherwise fall back to cargo run slow-path.
     let autoresearch_bin = resolve_autoresearch_binary()?;
-    let output = if autoresearch_bin.is_empty() {
-        // Slow-path: compile and run via cargo with a timeout
-        let mut cmd = std::process::Command::new("cargo");
-        cmd.args([
-            "run",
-            "-p",
-            "research-harness",
-            "--bin",
-            "autoresearch",
-            "--",
-            "barrier",
-            "--problem",
-            &problem,
-            "--loop-id",
-            loop_id,
-            "--run-id",
-            run_id,
-        ])
-        .current_dir(repo_root);
 
-        #[cfg(unix)]
-        unsafe {
-            cmd.pre_exec(|| dispatcher::apply_subprocess_rlimits());
-        }
+    // Acquire SubagentPermit for barrier escalation subprocess (consistent with dispatch path).
+    let _permit = dispatcher::SubagentPermit::acquire(dispatcher::subagent_semaphore());
 
-        let child = cmd
-            .spawn()
-            .map_err(|e| LoopError::SpawnFailed(format!("barrier escalation: {e}")))?;
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(300);
-        crate::dispatcher::poll_subprocess(
-            child,
-            repo_root,
-            loop_id,
-            "barrier-escalation",
-            deadline,
-            std::time::Duration::from_secs(300),
-        )?
-    } else {
-        let mut cmd = std::process::Command::new(&autoresearch_bin);
-        cmd.args([
-            "barrier",
-            "--problem",
-            &problem,
-            "--loop-id",
-            loop_id,
-            "--run-id",
-            run_id,
-        ])
-        .current_dir(repo_root);
+    // Use max_research_time_min for subprocess timeout instead of hardcoded 300s.
+    let max_time_secs = u64::from(
+        entry
+            .research
+            .as_ref()
+            .map(|r| r.max_research_time_min)
+            .unwrap_or(30),
+    ) * 60;
 
-        #[cfg(unix)]
-        unsafe {
-            cmd.pre_exec(|| dispatcher::apply_subprocess_rlimits());
-        }
-
-        let child = cmd
-            .spawn()
-            .map_err(|e| LoopError::SpawnFailed(format!("barrier autoresearch: {e}")))?;
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(300);
-        crate::dispatcher::poll_subprocess(
-            child,
-            repo_root,
-            loop_id,
-            "barrier-escalation",
-            deadline,
-            std::time::Duration::from_secs(300),
-        )?
-    };
+    let output = spawn_autoresearch_barrier(
+        &autoresearch_bin,
+        repo_root,
+        loop_id,
+        run_id,
+        &problem,
+        max_time_secs,
+    )?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -648,21 +966,37 @@ fn barrier_escalation(
         .as_ref()
         .map(|r| r.auto_resume)
         .unwrap_or(true);
-    let candidates = discover_barrier_candidates(repo_root);
+    let require_human_approval = entry
+        .research
+        .as_ref()
+        .map(|r| r.require_human_approval)
+        .unwrap_or(false);
+    let freshness_window_secs = u64::from(
+        entry
+            .research
+            .as_ref()
+            .map(|r| r.freshness_window_min)
+            .unwrap_or(60),
+    ) * 60;
+    let candidates = discover_barrier_candidates(repo_root, freshness_window_secs);
 
     tracing::info!(
-        "[goal-engine] barrier escalation to {escalation_target}: {} candidates, auto_resume={auto_resume}",
+        "[goal-engine] barrier escalation to {escalation_target}: {} candidates, \
+         auto_resume={auto_resume}, require_human_approval={require_human_approval}",
         candidates.len()
     );
 
     Ok(BarrierResult {
         candidates,
-        will_resume: auto_resume,
+        will_resume: auto_resume && !require_human_approval,
     })
 }
 
 /// Scan artifacts/research-barrier/ for the most recent BARRIER_REPORT.json.
-fn discover_barrier_candidates(repo_root: &Path) -> Vec<String> {
+fn discover_barrier_candidates(
+    repo_root: &Path,
+    freshness_window_secs: u64,
+) -> Vec<String> {
     let barrier_dir = repo_root.join("artifacts").join("research-barrier");
     if !barrier_dir.exists() {
         return vec![];
@@ -694,11 +1028,11 @@ fn discover_barrier_candidates(repo_root: &Path) -> Vec<String> {
     if let Some(latest) = entries.last() {
         let report_path = latest.path().join("BARRIER_REPORT.json");
         if report_path.exists()
-            // Freshness check: skip barrier reports older than 1 hour
+            // Freshness check: skip barrier reports older than configured window
             && let Ok(metadata) = std::fs::metadata(&report_path)
             && let Ok(modified) = metadata.modified()
             && let Ok(age) = modified.elapsed()
-            && age < std::time::Duration::from_secs(3600)
+            && age < std::time::Duration::from_secs(freshness_window_secs)
             && let Ok(content) = std::fs::read_to_string(&report_path)
             && let Ok(report) = serde_json::from_str::<serde_json::Value>(&content)
             && let Some(candidates) = report.get("candidates").and_then(|c| c.as_array())
@@ -748,6 +1082,10 @@ fn discover_actions(
     cmd.args(["-p", &handoff])
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped());
+
+    // Acquire SubagentPermit for discovery subprocess (consistent with dispatch path).
+    let _permit = dispatcher::SubagentPermit::acquire(dispatcher::subagent_semaphore());
+
     #[cfg(unix)]
     unsafe {
         cmd.pre_exec(|| dispatcher::apply_subprocess_rlimits());
@@ -770,6 +1108,7 @@ fn discover_actions(
         "discovery",
         deadline,
         timeout_duration,
+        None, // no pause support for discovery phase
     )?;
 
     if !output.status.success() {
@@ -783,6 +1122,7 @@ fn discover_actions(
             scope_paths: Vec::new(),
             safety: default_safety.to_string(),
             description: Some(format!("Discovery fallback for skill: {skill_name}")),
+            consumed_action_ids: Vec::new(),
         }]);
     }
 
@@ -858,6 +1198,7 @@ fn parse_discovery_output(
                 scope_paths,
                 safety: safety.to_string(),
                 description,
+                consumed_action_ids: Vec::new(),
             })
         })
         .collect())
@@ -905,6 +1246,82 @@ fn evaluate_subagent_output(
     action: &LoopAction,
     output: &SubagentResult,
 ) -> AggregateActionResult {
+    let _eval_start = std::time::Instant::now();
+
+    // V1 protocol: check inline closeout from parsed SubagentOutput first.
+    if let Some(ref parsed) = output.parsed_output {
+        if let Some(ref closeout) = parsed.closeout {
+            // Inline closeout: verify via closeout+evidence rules (reduced file IO —
+            // reads EVIDENCE_INDEX.json but skips the closeout JSON file read).
+            let verification =
+                verify_closeout_with_evidence(closeout, repo_root, &action.action_id);
+
+            let scope_violations = if !action.scope_paths.is_empty() {
+                dispatcher::check_scope_compliance(repo_root, &action.scope_paths)
+            } else {
+                Vec::new()
+            };
+
+            if !scope_violations.is_empty() {
+                tracing::warn!(
+                    "scope violation in action {} (V1 inline): {:?}",
+                    action.action_id,
+                    scope_violations
+                );
+                let mut violations = verification.violations;
+                violations.push(format!("scope_violation: {:?}", scope_violations));
+                return AggregateActionResult::Failed {
+                    reason: violations.join("; "),
+                };
+            }
+
+            if verification.closeout_allowed {
+                let record_path = closeout_path(repo_root, loop_id, run_id, &action.action_id);
+                // Write inline closeout to traditional closeout file for downstream
+                // consumers (report module, closeout gate) that read closeout_path.
+                if let Some(ref closeout_val) = parsed.closeout {
+                    let record = crate::types::LoopActionRecord {
+                        schema_version: crate::closeout::LOOP_CLOSEOUT_AGGREGATE_SCHEMA_VERSION
+                            .to_string(),
+                        loop_id: loop_id.to_string(),
+                        run_id: run_id.to_string(),
+                        action_id: action.action_id.clone(),
+                        safety_level: action.safety.clone(),
+                        closeout: closeout_val.clone(),
+                    };
+                    if let Ok(json) = serde_json::to_value(&record) {
+                        if let Some(parent) = record_path.parent() {
+                            let _ = std::fs::create_dir_all(parent);
+                        }
+                        let _ = core_state_utils::atomic_write::write_atomic_json(
+                            &record_path, &json,
+                        );
+                    }
+                }
+                return AggregateActionResult::Committed {
+                    closeout_path: Some(record_path.display().to_string()),
+                    commit_sha: None,
+                };
+            } else {
+                return AggregateActionResult::Failed {
+                    reason: verification.violations.join("; "),
+                };
+            }
+        }
+        // Inline closeout absent: fall through to success/error from parsed output.
+        if !parsed.success {
+            let err = parsed
+                .error
+                .as_deref()
+                .unwrap_or("V1 subagent reported failure (no detail)");
+            return AggregateActionResult::Failed {
+                reason: err.to_string(),
+            };
+        }
+        // parsed.success=true but no closeout → continue to file-based check below.
+    }
+
+    // V0 / file-based path: read closeout record from disk.
     let record_path = closeout_path(repo_root, loop_id, run_id, &action.action_id);
     if let Ok(Some(record)) = read_action_record(repo_root, loop_id, run_id, &action.action_id) {
         let verification =
@@ -1021,12 +1438,19 @@ mod tests {
             verify_quality_gate: None,
             verify_closeout_gate: None,
             static_actions: None,
+            subagent_protocol: None,
         }
     }
 
     #[test]
     fn test_accepts_loop_auto() {
         let entry = make_entry("loop-auto");
+        assert!(preflight_profile_check(&entry).is_ok());
+    }
+
+    #[test]
+    fn test_accepts_interactive() {
+        let entry = make_entry("interactive");
         assert!(preflight_profile_check(&entry).is_ok());
     }
 
@@ -1054,6 +1478,7 @@ mod tests {
             scope_paths: Vec::new(),
             safety: "L1".into(),
             description: None,
+            consumed_action_ids: Vec::new(),
         }]);
         let tmp = tempfile::TempDir::new().unwrap();
         let actions = discover_actions(&entry, tmp.path()).unwrap();
@@ -1132,6 +1557,8 @@ some trailing text"#;
             spawn_first_nudge: true,
             cost_budget: None,
             escalation: None,
+            interactive_capable: false,
+            pause_timeout_secs: None,
         };
         assert!(check_budget_preflight(&profile).is_ok());
     }
@@ -1149,6 +1576,8 @@ some trailing text"#;
                 daily_tokens: None,
             }),
             escalation: None,
+            interactive_capable: false,
+            pause_timeout_secs: None,
         };
         assert!(check_budget_preflight(&profile).is_ok());
     }
@@ -1166,6 +1595,8 @@ some trailing text"#;
                 daily_tokens: None,
             }),
             escalation: None,
+            interactive_capable: false,
+            pause_timeout_secs: None,
         };
         let result = check_budget_preflight(&profile);
         assert!(result.is_err());
@@ -1197,7 +1628,7 @@ some trailing text"#;
     #[test]
     fn barrier_candidates_empty_dir() {
         let tmp = tempfile::TempDir::new().unwrap();
-        let candidates = discover_barrier_candidates(tmp.path());
+        let candidates = discover_barrier_candidates(tmp.path(), 3600);
         assert!(candidates.is_empty());
     }
 
@@ -1205,7 +1636,7 @@ some trailing text"#;
     fn barrier_candidates_no_barrier_dir() {
         let tmp = tempfile::TempDir::new().unwrap();
         // no artifacts/research-barrier/ directory at all
-        let candidates = discover_barrier_candidates(tmp.path());
+        let candidates = discover_barrier_candidates(tmp.path(), 3600);
         assert!(candidates.is_empty());
     }
 
@@ -1221,7 +1652,7 @@ some trailing text"#;
             barrier_dir.join("BARRIER_REPORT.json"),
             serde_json::to_string_pretty(&report).unwrap(),
         ).unwrap();
-        let candidates = discover_barrier_candidates(tmp.path());
+        let candidates = discover_barrier_candidates(tmp.path(), 3600);
         assert_eq!(candidates.len(), 2);
         assert!(candidates.contains(&"candidate-1".to_string()));
         assert!(candidates.contains(&"candidate-2".to_string()));
