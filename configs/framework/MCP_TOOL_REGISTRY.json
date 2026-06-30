@@ -1,9 +1,9 @@
 {
   "schema_version": "mcp-tool-registry-v2",
   "scope": {
-    "total_count": 76,
+    "total_count": 79,
     "builtin_count": 22,
-    "research_count": 20,
+    "research_count": 23,
     "independent_count": 15,
     "external_count": 19,
     "_comment": "auto-generated — update via tools when adding/removing tools. This is the SOLE source of truth for all tool routing."
@@ -1494,6 +1494,80 @@
             "type": "string",
             "description": "新目标描述"
           }
+        }
+      }
+    },
+    {
+      "slug": "research_literature_search",
+      "display_name": "文献搜索",
+      "description": "跨 arXiv 和 Semantic Scholar 搜索学术文献，支持模糊匹配和权威排序",
+      "layer": "research",
+      "dispatch_domain": "domain:research",
+      "owner": "research",
+      "trigger_hints": ["文献搜索", "学术搜索", "论文搜索", "literature search", "reference search"],
+      "mcp_server": "research-harness",
+      "tool_flags": ["readonly", "network"],
+      "input_schema": {
+        "type": "object",
+        "required": ["query"],
+        "properties": {
+          "query": {"type": "string", "description": "搜索查询文本"},
+          "limit": {"type": "integer", "description": "每源最大结果数（默认 20，最大 100）"},
+          "source": {"type": "string", "enum": ["all", "semantic-scholar", "arxiv"], "description": "搜索源（默认 all）"},
+          "year_from": {"type": "integer", "description": "最早出版年份（含）"},
+          "year_to": {"type": "integer", "description": "最晚出版年份（含）"},
+          "sort_by": {"type": "string", "enum": ["relevance", "date"], "description": "排序方式（默认 relevance）"},
+          "categories": {"type": "string", "description": "arXiv 分类过滤（逗号分隔，如 'cs.AI,cs.LG'）"},
+          "advanced_query": {"type": "string", "description": "arXiv 高级原生查询（覆盖 query）"},
+          "fuzzy_query": {"type": "boolean", "description": "启用模糊/宽泛匹配（默认 false）"},
+          "prefer_authoritative": {"type": "boolean", "description": "启用双通道权威排序（默认 false）"}
+        }
+      }
+    },
+    {
+      "slug": "research_verification_prose",
+      "display_name": "行文验证",
+      "description": "验证论文文本质控：术语一致性、学术套话(slop)检测、hedging 适度性",
+      "layer": "research",
+      "dispatch_domain": "domain:research",
+      "owner": "research",
+      "trigger_hints": ["行文", "prose", "术语", "slop", "hedging", "文本质控"],
+      "mcp_server": "research-harness",
+      "tool_flags": ["readonly"],
+      "input_schema": {
+        "type": "object",
+        "required": ["check", "text"],
+        "properties": {
+          "check": {"type": "string", "enum": ["terminology", "slop", "hedging"], "description": "检查类型"},
+          "text": {"type": "string", "description": "待检查文本"},
+          "glossary": {"type": "object", "description": "可选术语表（check=terminology 时使用）"},
+          "language": {"type": "string", "enum": ["en", "zh"], "description": "可选语言（check=slop 时使用，默认 en）"}
+        }
+      }
+    },
+    {
+      "slug": "research_verification_statistical",
+      "display_name": "统计验证",
+      "description": "验证统计声明：GRIM 测试、p 值合理性、多重比较校正",
+      "layer": "research",
+      "dispatch_domain": "domain:research",
+      "owner": "research",
+      "trigger_hints": ["统计验证", "GRIM", "p值", "多重比较", "statistical"],
+      "mcp_server": "research-harness",
+      "tool_flags": ["readonly"],
+      "input_schema": {
+        "type": "object",
+        "required": ["check"],
+        "properties": {
+          "check": {"type": "string", "enum": ["grim", "p_value", "multiple_comparison"], "description": "检查类型"},
+          "mean": {"type": "number", "description": "样本均值（grim 时必须）"},
+          "n": {"type": "integer", "description": "样本量（grim 时必须）"},
+          "decimals": {"type": "integer", "description": "小数位数（grim 可选，默认 2）"},
+          "observed": {"type": "number", "description": "观测 p 值（p_value 时必须）"},
+          "expected": {"type": "number", "description": "期望 p 值（p_value 时必须）"},
+          "tolerance": {"type": "number", "description": "允许误差（p_value 可选，默认 0.01）"},
+          "num_tests": {"type": "integer", "description": "检验总数（multiple_comparison 时必须）"},
+          "correction_applied": {"type": "boolean", "description": "是否已校正（multiple_comparison 可选）"}
         }
       }
     },

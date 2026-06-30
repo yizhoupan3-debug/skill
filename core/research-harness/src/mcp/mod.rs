@@ -131,13 +131,48 @@ pub fn tool_definitions() -> Vec<Value> {
             }),
         ),
         tool_def(
+            "math_prove_inequality",
+            "用 SMT solver (Z3) 证明数学不等式",
+            json!({
+                "type": "object",
+                "properties": {
+                    "expression": {"type": "string", "description": "不等式表达式"},
+                    "variables": {"type": "array", "items": {"type": "string"}, "description": "变量名列表"}
+                },
+                "required": ["expression"]
+            }),
+        ),
+        tool_def(
+            "math_asymptotic_chain",
+            "验证渐近关系链的正确性",
+            json!({ "type": "object", "properties": {} }),
+        ),
+        tool_def(
+            "math_backend_available",
+            "检查 Z3/SymPy/Lean 验证后端是否可用",
+            json!({ "type": "object", "properties": {} }),
+        ),
+        tool_def(
+            "math_lean_verify",
+            "用 Lean 做定理形式化验证",
+            json!({
+                "type": "object",
+                "required": ["expression"],
+                "properties": {
+                    "expression": {"type": "string", "description": "Lean 定理表达式"}
+                }
+            }),
+        ),
+        tool_def(
             "research_verification_prose",
             "验证论文文本质控（术语/slop/hedging）",
             json!({
                 "type": "object",
                 "properties": {
                     "check": {"type": "string", "description": "检查类型：terminology/slop/hedging"},
-                    "text": {"type": "string", "description": "待检查文本"}
+                    "text": {"type": "string", "description": "待检查文本"},
+                    "glossary": {"type": "object", "description": "可选术语表（check=terminology 时使用）：{术语→标准译名} 映射"},
+                    "language": {"type": "string", "enum": ["en", "zh"], "description": "可选语言（check=slop 时使用）：en=英语 (default), zh=中文"}
                 },
                 "required": ["check", "text"]
             }),
@@ -149,10 +184,71 @@ pub fn tool_definitions() -> Vec<Value> {
                 "type": "object",
                 "properties": {
                     "check": {"type": "string", "description": "检查类型：grim/p_value/multiple_comparison"},
-                    "mean": {"type": "number", "description": "样本均值（grim 检查）"},
-                    "n": {"type": "integer", "description": "样本量（grim 检查）"}
+                    "mean": {"type": "number", "description": "样本均值（grim 检查时必须）"},
+                    "n": {"type": "integer", "description": "样本量（grim 检查时必须）"},
+                    "decimals": {"type": "integer", "description": "小数位数（grim 检查可选，默认 2）"},
+                    "observed": {"type": "number", "description": "观测 p 值（p_value 检查时必须）"},
+                    "expected": {"type": "number", "description": "期望 p 值（p_value 检查时必须）"},
+                    "tolerance": {"type": "number", "description": "允许误差（p_value 检查可选，默认 0.01）"},
+                    "num_tests": {"type": "integer", "description": "检验总数（multiple_comparison 检查时必须）"},
+                    "correction_applied": {"type": "boolean", "description": "是否已应用多重比较校正（multiple_comparison 检查可选）"}
                 },
                 "required": ["check"]
+            }),
+        ),
+        tool_def(
+            "research_smoke",
+            "对 arXiv 和 Semantic Scholar 做数据源可达性烟雾测试",
+            json!({ "type": "object", "properties": {} }),
+        ),
+        tool_def(
+            "research_verification_literature",
+            "验证文献引用准确性：DOI 可达性检查、声明覆盖率计算",
+            json!({
+                "type": "object",
+                "properties": {
+                    "check": {"type": "string", "enum": ["doi", "claim_coverage"], "description": "验证类型"},
+                    "doi": {"type": "string", "description": "DOI 标识符（check=doi 时必须）"},
+                    "claims": {"type": "array", "items": {"type": "string"}, "description": "声明列表"},
+                    "references": {"type": "array", "items": {"type": "string"}, "description": "引用列表"}
+                },
+                "required": ["check"]
+            }),
+        ),
+        tool_def(
+            "research_verification_structure",
+            "验证文档结构完整性：LaTeX 编译检查、图表引用一致性",
+            json!({
+                "type": "object",
+                "required": ["check", "path"],
+                "properties": {
+                    "check": {"type": "string", "enum": ["latex", "figures"], "description": "验证类型"},
+                    "path": {"type": "string", "description": "TeX 文件路径"}
+                }
+            }),
+        ),
+        tool_def(
+            "research_verification_reproducibility",
+            "验证实验可重复性：种子设置、确定性重跑、环境可复制、数据版本、checkpoint恢复、全审计",
+            json!({
+                "type": "object",
+                "required": ["check"],
+                "properties": {
+                    "check": {"type": "string", "enum": ["seed", "deterministic", "environment", "data_versioned", "checkpoint", "full_audit"], "description": "验证类型"},
+                    "path": {"type": "string", "description": "实验目录路径"}
+                }
+            }),
+        ),
+        tool_def(
+            "research_verification_formal",
+            "形式验证：量纲一致性检查",
+            json!({
+                "type": "object",
+                "required": ["check", "equation"],
+                "properties": {
+                    "check": {"type": "string", "enum": ["dimensional"], "description": "验证类型"},
+                    "equation": {"type": "string", "description": "数学表达式字符串"}
+                }
             }),
         ),
         tool_literature_search(),
