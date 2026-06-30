@@ -28,6 +28,83 @@
   ],
   "skills": [
     [
+      "research",
+      "L2",
+      "owner",
+      "none",
+      "P2",
+      "统一科研前门：内部自动路由到 discovery（文献/理论）、execution（实验/数学/代码）、paper-workbench（手稿/审稿/润色）、research-harness（研究工作区/CLI）四个 lane。单一入口，内部 lane 分发。",
+      "preferred",
+      [
+        "科研",
+        "研究",
+        "research",
+        "学术调研",
+        "文献综述",
+        "实验设计",
+        "论文审稿",
+        "数学建模",
+        "研究方向",
+        "理论背景",
+        "ablation",
+        "benchmark",
+        "手稿",
+        "paper",
+        "实验方案",
+        "科学计算",
+        "实验分析",
+        "研究问题",
+        "文献调研"
+      ],
+      "local",
+      "skills/research/SKILL.md",
+      null,
+      "skill",
+      [],
+      "统一科研前门——文献调研、实验设计、手稿审改、研究工作区",
+      [
+        "research",
+        "discovery",
+        "execution",
+        "paper",
+        "manuscript",
+        "theory",
+        "experiment"
+      ],
+      null,
+      null,
+      {
+        "platforms": [
+          "supported"
+        ],
+        "tags": [
+          "research",
+          "discovery",
+          "execution",
+          "paper",
+          "manuscript",
+          "theory",
+          "experiment"
+        ],
+        "version": "1.0.0"
+      },
+      "low",
+      [
+        "Read",
+        "Write",
+        "Edit",
+        "Bash",
+        "Grep",
+        "WebSearch",
+        "WebFetch"
+      ],
+      null,
+      "conditional",
+      null,
+      "research",
+      null
+    ],
+    [
       "agent-swarm-orchestration",
       "L0",
       "gate",
@@ -91,12 +168,12 @@
       null
     ],
     [
-      "autoresearch",
-      "L2",
+      "research-workspace",
+      "L3",
       "owner",
       "none",
       "P2",
-      "Research workspace CLI — claims, hypotheses, runs, logs, barrier escalation, smoke tests. Backed by core/research-harness.",
+      "研究工作区 CLI — claim/假设/实验记录/smoke test/barrier 升级（原名 autoresearch）",
       "optional",
       [
         "研究工作区",
@@ -125,11 +202,11 @@
         "autoresearch"
       ],
       "local",
-      "skills/autoresearch/SKILL.md",
+      "skills/research/research-harness/SKILL.md",
       null,
       "skill",
       [],
-      "Research workspace CLI — claims, hypotheses, runs, logs, barrier escalation",
+      "研究工作区 CLI — claim/假设/实验记录/smoke test/barrier 升级",
       [
         "research",
         "workspace",
@@ -170,7 +247,7 @@
     ],
     [
       "citation-management",
-      "L2",
+      "L3",
       "owner",
       "none",
       "P2",
@@ -312,11 +389,11 @@
     ],
     [
       "deep-search",
-      "L2",
+      "L3",
       "owner",
       "none",
       "P2",
-      "Deep web search harness — fan-out web searches, fetch sources, verify claims, synthesize cited report.",
+      "通用深度搜索引擎 — web 多源覆盖+事实核查+综合报告",
       "preferred",
       [
         "deep research",
@@ -338,7 +415,7 @@
       null,
       "skill",
       [],
-      "Deep research harness — web-first multi-source fact-checked report",
+      "通用深度搜索引擎 — web 多源覆盖+事实核查+综合报告",
       [
         "research",
         "harness",
@@ -371,7 +448,7 @@
       null,
       "approve",
       null,
-      "research",
+      "general",
       null
     ],
     [
@@ -1117,10 +1194,10 @@
     ],
     [
       "paper-workbench",
-      "L2",
+      "L3",
       "owner",
       "none",
-      "P1",
+      "P2",
       "论文全流程前门：自动路由 reviewer/writer lane，一站式审稿、返修、投稿。按顶刊/顶会标准把关，支持 rebuttal、R&R、cover letter 全流程。",
       "preferred",
       [
@@ -1164,7 +1241,7 @@
         "$paper-workbench"
       ],
       "project",
-      "skills/paper-workbench/SKILL.md",
+      "skills/research/paper-workbench/SKILL.md",
       null,
       "skill",
       [
@@ -1551,10 +1628,12 @@
         "research-discovery"
       ],
       "local",
-      "skills/research-discovery/SKILL.md",
+      "skills/research/lanes/discovery.md",
       null,
       "skill",
-      [],
+      [
+        "disabled"
+      ],
       "Research discovery, literature survey, and theory-background router",
       [
         "research",
@@ -1622,10 +1701,12 @@
         "research-execution"
       ],
       "local",
-      "skills/research-execution/SKILL.md",
+      "skills/research/lanes/execution.md",
       null,
       "skill",
-      [],
+      [
+        "disabled"
+      ],
       "Research execution lanes — experiment design, math, code, reproducibility",
       [
         "research",
@@ -2750,5 +2831,6 @@
       "general",
       null
     ]
-  ]
+  ],
+  "_comment": "auto-generated — update via migration (2026-07-01). research skill refactoring applied."
 }

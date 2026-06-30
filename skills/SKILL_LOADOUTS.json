@@ -12,9 +12,8 @@
       "description": "Default research harness: discovery + execution + workspace + manuscript + citation + stats + repro + deep research + question + story.",
       "tier_activation": "default",
       "skill_slugs": [
-        "research-discovery",
-        "research-execution",
-        "autoresearch",
+        "research",
+        "research-workspace",
         "paper-workbench",
         "citation-management",
         "statistical-analysis",
