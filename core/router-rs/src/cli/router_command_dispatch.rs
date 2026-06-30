@@ -1291,25 +1291,6 @@ fn dispatch_web_fetch(args: WebFetchCommand) -> Result<(), FrameworkError> {
         matches!(status.as_u16(), 301 | 302 | 303 | 307 | 308)
     }
 
-    /// Check that a redirect does NOT downgrade from HTTPS to a weaker scheme.
-    /// Uses `reqwest::Url::scheme()` (normalised by the URL parser) rather than
-    /// string prefix matching, which would be vulnerable to case-based bypass
-    /// (e.g. `HTTPS://` → `http://`).
-    fn check_scheme_downgrade(
-        original: &reqwest::Url,
-        target: &reqwest::Url,
-    ) -> Result<(), FrameworkError> {
-        if original.scheme() == "https" && target.scheme() != "https" {
-            return Err(FrameworkError::validation(format!(
-                "web_fetch refused redirect from HTTPS to {}: {} → {}",
-                target.scheme(),
-                original,
-                target,
-            )));
-        }
-        Ok(())
-    }
-
     // Manual redirect loop with SSRF check at each hop.
     let mut current_url = parsed_url;
     let max_hops: u32 = 5;
@@ -1358,7 +1339,7 @@ fn dispatch_web_fetch(args: WebFetchCommand) -> Result<(), FrameworkError> {
                 web_fetch_guard::resolve_web_fetch_redirect(&current_url, &location)?;
 
             // HTTPS → HTTP scheme downgrade check (uses Url::scheme()).
-            check_scheme_downgrade(&current_url, &resolved_url)?;
+            web_fetch_guard::check_redirect_scheme_downgrade(&current_url, &resolved_url)?;
 
             // DNS pinning for the redirect target: if the host changed, rebuild
             // the client so the next HTTP request is pinned against rebinding.

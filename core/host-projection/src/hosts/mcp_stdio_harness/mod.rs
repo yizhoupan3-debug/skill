@@ -148,6 +148,8 @@ mod tools;
 use tools::*;
 mod task_tools;
 use task_tools::*;
+mod output_tools;
+use output_tools::*;
 mod mcp_tool_handlers;
 use mcp_tool_handlers::*;
 #[cfg(any(test, feature = "test-support"))]
@@ -231,6 +233,21 @@ impl ToolDispatchTable {
 static DISPATCH_TABLE: OnceLock<ToolDispatchTable> = OnceLock::new();
 
 /// Lazily-initialized CompositeRegistry of built-in (router-rs) tool handlers.
+///
+/// ## Tools NOT in MCP_TOOL_REGISTRY (intentional)
+/// The following browser-mcp session/background/runtime tools are dispatched
+/// at the MCP protocol level by the browser-mcp server itself, NOT through
+/// this registry or the NL tool routing (MCP_TOOL_REGISTRY.json):
+///
+///   `session_launch`, `session_list`, `session_inspect`, `session_terminate`,
+///   `session_mark_blocked`, `session_resume_due`, `session_classify_block`,
+///   `background_inspect`, `background_list`, `background_terminate`,
+///   `runtime_heartbeat`, `get_attached_runtime_events`
+///
+/// These are internal protocol tools, not user-facing routing targets.
+/// They are NOT registered in MCP_TOOL_REGISTRY.json by design.
+/// Security guards in `framework_core::hook_policy::dangerous_mcp_tool_reason`
+/// provide pre-guard interception for the high-risk subset.
 static REGISTRY: OnceLock<CompositeRegistry> = OnceLock::new();
 
 /// Known CLI-routed tools used as fallback when MCP_TOOL_REGISTRY.json is unavailable.
@@ -266,6 +283,7 @@ pub(super) fn dispatch_tool(
         r.register(ToolDomainTools);
         r.register(TaskCrudTools);
         r.register(GoalCloseoutTools);
+        r.register(TaskOutputTools);
         r
     });
 

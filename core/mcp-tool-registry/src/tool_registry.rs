@@ -3,6 +3,18 @@
 //! Caching layer uses TTL-based invalidation (default 60s) so edits to the JSON
 //! file are picked up at most 60s after the last load, without requiring a restart
 //! or manual `invalidate_tool_cache` call.
+//!
+//! ## Registry scope
+//!
+//! MCP_TOOL_REGISTRY.json contains tools that should be accessible via NL routing.
+//! The following browser-mcp session/background/runtime tools are intentionally
+//! NOT registered here — they are internal MCP protocol tools dispatched by the
+//! browser-mcp server directly, not user-facing routing targets:
+//!
+//!   session_launch, session_list, session_inspect, session_terminate,
+//!   session_mark_blocked, session_resume_due, session_classify_block,
+//!   background_inspect, background_list, background_terminate,
+//!   runtime_heartbeat, get_attached_runtime_events
 
 use std::collections::{HashMap, HashSet};
 use std::fs;

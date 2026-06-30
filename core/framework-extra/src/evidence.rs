@@ -25,6 +25,17 @@ type Result<T> = std::result::Result<T, FrameworkError>;
 
 const MAX_POST_TOOL_EVIDENCE_ARTIFACTS: usize = 120;
 
+/// Compute a fast integrity hash for the evidence chain (EV-F007).
+/// Uses DefaultHasher (SipHash); this is tamper-detection, not cryptographic security.
+fn compute_chain_hash(prev_hash: &str, content: &str) -> String {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+    let mut hasher = DefaultHasher::new();
+    prev_hash.hash(&mut hasher);
+    content.hash(&mut hasher);
+    format!("{:016x}", hasher.finish())
+}
+
 fn coerce_exit_code_value(value: Option<&Value>) -> Option<i64> {
     let value = value?;
     if let Some(n) = value.as_i64() {
@@ -220,7 +231,15 @@ pub fn append_evidence_index_merged_row(
         });
         let tx_payload = Value::Object(entry.clone());
         if !is_duplicate {
-            rows.push(entry);
+            // EV-F007: Compute chain_hash for integrity verification.
+            let prev_hash = rows.last()
+                .and_then(|r| r.get("chain_hash").and_then(Value::as_str))
+                .unwrap_or("genesis");
+            let content = serde_json::to_string(&Value::Object(entry.clone())).unwrap_or_default();
+            let chain_hash = compute_chain_hash(prev_hash, &content);
+            let mut entry_with_hash = entry.clone();
+            entry_with_hash.insert("chain_hash".to_string(), json!(chain_hash));
+            rows.push(entry_with_hash);
         }
 
         if rows.len() > MAX_POST_TOOL_EVIDENCE_ARTIFACTS {

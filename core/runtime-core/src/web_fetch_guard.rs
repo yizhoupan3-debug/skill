@@ -1,5 +1,13 @@
 //! SSRF guards for MCP `web_fetch` and `browser_open` (public internet only).
 //! Used by both browser-mcp and framework (router-rs/host-projection).
+//!
+//! LAST SYNCED: 2026-06-30 — canonical version, also inlined in
+//! research-harness/src/util.rs. Keep both in sync; the inlined copy
+//! uses anyhow::Result instead of FrameworkError, and the comments
+//! are slightly shorter.
+//!
+//! ## Additions to this file
+//! When adding SSRF logic here, mirror the change in the inlined copy.
 
 use std::borrow::Cow;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, ToSocketAddrs};
@@ -169,6 +177,25 @@ pub fn resolve_web_fetch_addresses(host: &str, port: u16) -> Result<Vec<std::net
         }
     }
     Ok(addrs)
+}
+
+/// Check that a redirect does NOT downgrade from HTTPS to a weaker scheme.
+/// Uses `reqwest::Url::scheme()` (normalised by the URL parser) rather than
+/// string prefix matching, which would be vulnerable to case-based bypass
+/// (e.g. `HTTPS://` → `http://`).
+pub fn check_redirect_scheme_downgrade(
+    original: &reqwest::Url,
+    target: &reqwest::Url,
+) -> Result<()> {
+    if original.scheme() == "https" && target.scheme() != "https" {
+        return Err(FrameworkError::validation(format!(
+            "web_fetch refused redirect from HTTPS to {}: {} → {}",
+            target.scheme(),
+            original,
+            target,
+        )));
+    }
+    Ok(())
 }
 
 /// Validates URLs for `browser_open` - blocks non-http(s) schemes (`file://`,
@@ -360,5 +387,122 @@ mod tests {
             .map(|host| (host.to_string(), super::validate_web_fetch_host_basic(host)))
             .collect();
         insta::assert_debug_snapshot!(results);
+    }
+
+    // ── Redirect chain edge cases ──
+
+    #[test]
+    fn rejects_redirect_relative_path_to_localhost() {
+        let base = reqwest::Url::parse("https://example.com/path/").unwrap();
+        assert!(resolve_web_fetch_redirect(&base, "../localhost").is_err());
+    }
+
+    #[test]
+    fn rejects_redirect_with_private_ip_hostname() {
+        let base = reqwest::Url::parse("https://example.com/").unwrap();
+        // Schema-less redirect that uses a private IP hostname
+        assert!(resolve_web_fetch_redirect(&base, "//10.0.0.1/secret").is_err());
+    }
+
+    #[test]
+    fn rejects_redirect_with_ipv6_loopback() {
+        let base = reqwest::Url::parse("https://example.com/").unwrap();
+        assert!(resolve_web_fetch_redirect(&base, "http://[::1]/").is_err());
+        assert!(resolve_web_fetch_redirect(&base, "http://[0:0:0:0:0:0:0:1]/").is_err());
+        assert!(resolve_web_fetch_redirect(&base, "http://[::ffff:127.0.0.1]/").is_err());
+    }
+
+    #[test]
+    fn rejects_redirect_with_blocked_host_suffix() {
+        let base = reqwest::Url::parse("https://example.com/").unwrap();
+        assert!(resolve_web_fetch_redirect(&base, "http://my.internal/").is_err());
+        assert!(resolve_web_fetch_redirect(&base, "http://service.local/").is_err());
+    }
+
+    #[test]
+    fn rejects_redirect_with_empty_location() {
+        let base = reqwest::Url::parse("https://example.com/").unwrap();
+        // An empty location should fail to join
+        assert!(resolve_web_fetch_redirect(&base, "").is_err());
+    }
+
+    #[test]
+    fn rejects_redirect_non_http_scheme() {
+        let base = reqwest::Url::parse("https://example.com/").unwrap();
+        assert!(resolve_web_fetch_redirect(&base, "file:///etc/passwd").is_err());
+        assert!(resolve_web_fetch_redirect(&base, "data:text/html,<script>").is_err());
+    }
+
+    #[test]
+    fn rejects_redirect_to_cgnat_range() {
+        let base = reqwest::Url::parse("https://example.com/").unwrap();
+        assert!(resolve_web_fetch_redirect(&base, "http://100.64.0.1/").is_err());
+        assert!(resolve_web_fetch_redirect(&base, "http://100.127.255.255/").is_err());
+    }
+
+    #[test]
+    fn rejects_redirect_to_benchmarking_range() {
+        let base = reqwest::Url::parse("https://example.com/").unwrap();
+        assert!(resolve_web_fetch_redirect(&base, "http://198.18.0.1/").is_err());
+        assert!(resolve_web_fetch_redirect(&base, "http://198.19.255.255/").is_err());
+    }
+
+    // ── Scheme downgrade detection ──
+
+    #[test]
+    fn accepts_same_scheme_redirect() {
+        let base = reqwest::Url::parse("https://example.com/").unwrap();
+        // HTTPS → HTTPS is allowed
+        let target = reqwest::Url::parse("https://api.example.com/v2").unwrap();
+        assert!(super::check_redirect_scheme_downgrade(&base, &target).is_ok());
+    }
+
+    #[test]
+    fn accepts_http_to_https_upgrade() {
+        let base = reqwest::Url::parse("http://example.com/").unwrap();
+        let target = reqwest::Url::parse("https://example.com/").unwrap();
+        assert!(super::check_redirect_scheme_downgrade(&base, &target).is_ok());
+    }
+
+    #[test]
+    fn rejects_https_to_http_downgrade() {
+        let base = reqwest::Url::parse("https://example.com/").unwrap();
+        let target = reqwest::Url::parse("http://example.com/").unwrap();
+        let result = super::check_redirect_scheme_downgrade(&base, &target);
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("downgrade"), "error should mention 'downgrade': {err}");
+    }
+
+    #[test]
+    fn validate_and_resolve_web_fetch_url_rejects_zero_port() {
+        let result = super::validate_and_resolve_web_fetch_url("http://example.com:0/");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn validate_web_fetch_host_basic_rejects_empty() {
+        assert!(super::validate_web_fetch_host_basic("").is_err());
+    }
+
+    #[test]
+    fn validate_web_fetch_host_basic_rejects_trailing_dot_empty() {
+        assert!(super::validate_web_fetch_host_basic(".").is_err());
+    }
+
+    #[test]
+    fn browser_open_rejects_cgnat() {
+        assert!(validate_browser_open_url("http://100.64.0.1/").is_err());
+        assert!(validate_browser_open_url("http://100.127.255.255/").is_err());
+    }
+
+    #[test]
+    fn browser_open_rejects_benchmarking() {
+        assert!(validate_browser_open_url("http://198.18.0.1/").is_err());
+    }
+
+    #[test]
+    fn browser_open_rejects_zero_port() {
+        assert!(validate_browser_open_url("http://example.com:0/").is_err());
     }
 }

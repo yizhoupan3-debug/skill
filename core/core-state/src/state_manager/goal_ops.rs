@@ -24,6 +24,36 @@ fn strip_stale_annotations(state: &mut Value) {
     }
 }
 
+// ── T-SG-001: Goal state machine — formal transition matrix ──
+//
+// Single source of truth for all valid goal status transitions.
+// Every mutation path MUST validate against this matrix.
+const VALID_GOAL_STATUSES: &[&str] = &[
+    "running", "paused", "blocked", "review_pending", "completed", "failed",
+];
+
+/// Check whether a goal status transition is allowed by the state machine.
+/// Returns true only for transitions explicitly listed in the matrix.
+fn is_valid_goal_transition(from: &str, to: &str) -> bool {
+    matches!(
+        (from, to),
+        // Operational transitions
+        ("running", "paused")
+            | ("running", "blocked")
+            | ("running", "review_pending")
+            | ("running", "completed")
+            | ("running", "failed")
+        // Recovery transitions
+            | ("paused", "running")
+            | ("blocked", "running")
+            | ("review_pending", "running")
+        // Terminal transitions (one-way)
+            | ("paused", "failed")
+            | ("blocked", "failed")
+            | ("review_pending", "failed")
+    )
+}
+
 /// Merge or replace array fields during amend (GOAL-009).
 /// When `merge` is true, new items are appended to the existing array.
 /// When `merge` is false (default), the existing array is replaced entirely.
@@ -283,6 +313,37 @@ fn apply_optional_goal_fields_from_payload(
     Ok(())
 }
 
+/// Verify the integrity hash chain of evidence artifacts (EV-F007).
+/// Logs a warning if the chain is broken but does not block.
+fn verify_evidence_chain_integrity(artifacts: &[Value]) {
+    let mut prev_hash = "genesis";
+    for (idx, entry) in artifacts.iter().enumerate() {
+        let stored_hash = entry.get("chain_hash").and_then(Value::as_str).unwrap_or("");
+        if stored_hash.is_empty() {
+            // Pre-chain entries (before EV-F007) are acceptable.
+            prev_hash = "";
+            continue;
+        }
+        if prev_hash.is_empty() {
+            // Previous entry had no hash — chain starts here.
+            prev_hash = stored_hash;
+            continue;
+        }
+        // We can't recompute the full hash without the original content,
+        // but we can check that consecutive hashes are non-empty and distinct
+        // (a basic sanity check). Full verification would require storing the
+        // content alongside, which is too expensive for the read path.
+        if stored_hash == prev_hash {
+            tracing::warn!(
+                index = idx,
+                hash = %stored_hash,
+                "evidence chain integrity: duplicate hash at index {idx} — possible tampering"
+            );
+        }
+        prev_hash = stored_hash;
+    }
+}
+
 fn task_evidence_artifacts_for_task(repo_root: &Path, task_id: &str) -> Vec<Value> {
     use super::EVIDENCE_INDEX_FILENAME;
     if task_id.trim().is_empty() {
@@ -304,10 +365,13 @@ fn task_evidence_artifacts_for_task(repo_root: &Path, task_id: &str) -> Vec<Valu
     let Ok(val) = serde_json::from_str::<Value>(&raw) else {
         return Vec::new();
     };
-    val.get("artifacts")
+    let artifacts = val.get("artifacts")
         .and_then(Value::as_array)
         .cloned()
-        .unwrap_or_default()
+        .unwrap_or_default();
+    // EV-F007: Verify evidence chain integrity (advisory — warn but don't block).
+    verify_evidence_chain_integrity(&artifacts);
+    artifacts
 }
 
 fn evidence_row_is_self_attested(entry: &Value) -> bool {
@@ -599,6 +663,59 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
             Ok(json!({
                 "ok": true,
                 "operation": "checkpoint",
+                "task_id": task_id,
+                "goal_state_path": path.display().to_string(),
+            }))
+        }
+        "fail" => {
+            let task_id = resolve_task_id_strict(&payload)?;
+            crate::utils::path_guard::validate_task_id_component(&task_id)?;
+            let path = goal_state_path_for_task(&repo_root, &task_id)?;
+            let mut state = read_goal_state(&repo_root, Some(&task_id))?.ok_or_else(|| {
+                FrameworkError::not_found(format!("GOAL_STATE missing at {}", path.display()))
+            })?;
+            // Stale guard
+            if state.get("stale").and_then(Value::as_bool) == Some(true) {
+                return Err(FrameworkError::validation(
+                    "cannot fail a stale goal — session_id does not match current session",
+                ));
+            }
+            // Cannot fail already-terminal goals
+            let current_status = state.get("status").and_then(Value::as_str).unwrap_or("");
+            if current_status == "completed" || current_status == "failed" {
+                return Err(FrameworkError::validation(format!(
+                    "goal is already in '{current_status}' status — cannot fail"
+                )));
+            }
+            strip_stale_annotations(&mut state);
+            let obj = state
+                .as_object_mut()
+                .ok_or_else(|| FrameworkError::validation("GOAL_STATE root must be object"))?;
+            obj.insert("status".to_string(), json!("failed"));
+            obj.insert(
+                "failed_at".to_string(),
+                json!(framework_core::time::now_iso()),
+            );
+            obj.insert(
+                "updated_at".to_string(),
+                json!(framework_core::time::now_iso()),
+            );
+            // Record failure reason if provided
+            if let Some(reason) = payload.get("reason").and_then(Value::as_str) {
+                obj.insert("failure_reason".to_string(), json!(reason));
+            }
+            write_atomic_json(&path, &state)?;
+            let tx = crate::task_ledger::LedgerTransaction::new("goal_failed", state.clone())
+                .with_schema_version(1);
+            crate::task_ledger::append_transaction_assuming_l1_held(&repo_root, &task_id, tx)
+                .map_err(|e| {
+                    FrameworkError::validation(format!("TASK_LEDGER append failed: {e}"))
+                })?;
+            // Neutralize pointers since the goal is now terminal
+            neutralize_task_pointers_for_task(&repo_root, &task_id)?;
+            Ok(json!({
+                "ok": true,
+                "operation": "fail",
                 "task_id": task_id,
                 "goal_state_path": path.display().to_string(),
             }))
@@ -1336,9 +1453,7 @@ fn set_terminal_flags(
     // since loop semantics keep goals at "running" after iteration complete.
     // P2-019: Also guard against completed/archived, consistent with amend path.
     // T-SG-002: Validate that the requested status is a known goal status.
-    const VALID_GOAL_STATUSES: &[&str] = &[
-        "running", "paused", "blocked", "review_pending", "completed",
-    ];
+    // Uses the module-level VALID_GOAL_STATUSES constant (T-SG-001).
     if !VALID_GOAL_STATUSES.contains(&status) {
         return Err(FrameworkError::validation(format!(
             "framework_goal_drive: invalid goal status '{status}' — must be one of {VALID_GOAL_STATUSES:?}"
@@ -1346,6 +1461,12 @@ fn set_terminal_flags(
     }
 
     let current = obj.get("status").and_then(Value::as_str).unwrap_or("");
+    // T-SG-001: Validate transition against the formal state machine matrix.
+    if !is_valid_goal_transition(current, status) {
+        return Err(FrameworkError::validation(format!(
+            "goal transition '{current}' → '{status}' is not allowed by the state machine"
+        )));
+    }
     if current == "completed" {
         return Err(FrameworkError::validation(format!(
             "cannot set status '{status}' on a completed goal"

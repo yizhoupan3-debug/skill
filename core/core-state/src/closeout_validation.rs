@@ -137,69 +137,69 @@ pub fn closeout_record_schema_version() -> &'static str {
 
 // ── Internal types (serialization-only) ───────────────────────────────
 
-#[derive(Debug, Clone, serde::Deserialize, Default)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default, PartialEq)]
 #[serde(deny_unknown_fields)]
-struct CloseoutRecord {
+pub struct CloseoutRecord {
     #[serde(default)]
-    schema_version: String,
+    pub schema_version: String,
     #[serde(default)]
-    task_id: String,
+    pub task_id: String,
     #[allow(dead_code)] // deserialized for schema completeness, not read
     #[serde(default)]
-    started_at: Option<String>,
+    pub started_at: Option<String>,
     #[allow(dead_code)]
     #[serde(default)]
-    ended_at: Option<String>,
+    pub ended_at: Option<String>,
     #[serde(default)]
-    changed_files: Vec<String>,
+    pub changed_files: Vec<String>,
     #[serde(default)]
-    commands_run: Vec<CloseoutCommand>,
+    pub commands_run: Vec<CloseoutCommand>,
     #[serde(default)]
-    artifacts_checked: Vec<CloseoutArtifact>,
+    pub artifacts_checked: Vec<CloseoutArtifact>,
     #[serde(default)]
-    verification_status: String,
+    pub verification_status: String,
     #[serde(default)]
-    blockers: Vec<String>,
+    pub blockers: Vec<String>,
     #[serde(default)]
-    risks: Vec<String>,
+    pub risks: Vec<String>,
     #[serde(default)]
-    summary: String,
+    pub summary: String,
     #[allow(dead_code)]
     #[serde(default)]
-    notes: Option<String>,
+    pub notes: Option<String>,
 }
 
-#[derive(Debug, Clone, serde::Deserialize, Default)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default, PartialEq)]
 #[serde(deny_unknown_fields)]
-struct CloseoutCommand {
+pub struct CloseoutCommand {
     #[serde(default)]
-    command: String,
+    pub command: String,
     #[serde(default)]
-    exit_code: i64,
+    pub exit_code: i64,
     #[allow(dead_code)]
     #[serde(default)]
-    duration_ms: Option<i64>,
+    pub duration_ms: Option<i64>,
     #[allow(dead_code)]
     #[serde(default)]
-    stdout_summary: Option<String>,
+    pub stdout_summary: Option<String>,
     #[allow(dead_code)]
     #[serde(default)]
-    stderr_summary: Option<String>,
+    pub stderr_summary: Option<String>,
 }
 
-#[derive(Debug, Clone, serde::Deserialize, Default)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default, PartialEq)]
 #[serde(deny_unknown_fields)]
-struct CloseoutArtifact {
+pub struct CloseoutArtifact {
     #[serde(default)]
-    path: String,
+    pub path: String,
     #[serde(default)]
-    exists: bool,
+    pub exists: bool,
     #[allow(dead_code)]
     #[serde(default)]
-    size_bytes: Option<i64>,
+    pub size_bytes: Option<i64>,
     #[allow(dead_code)]
     #[serde(default)]
-    checks: Option<Vec<String>>,
+    pub checks: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -422,6 +422,28 @@ fn evaluate_record(record: &CloseoutRecord, ctx: Option<&CloseoutEvidenceContext
                 "verification_status=passed and commands_run is empty, and EVIDENCE_INDEX.json has no successful rows",
             ));
             missing.push("evidence_index_successful_row".into());
+        }
+    }
+
+    // CV-002: Goal prediction verification (EV-6 integration).
+    // When a goal prediction exists, verify that the closeout outcome matches expectations.
+    // severity=warn by design (advisory, not blocking) — the prediction is a dry-run hint.
+    if let Some(ctx) = ctx {
+        if let Some(ref prediction) = ctx.goal_prediction {
+            let verifications = crate::goal_prediction::verify_prediction_against_closeout(
+                prediction,
+                &record.verification_status,
+                &record.summary,
+            );
+            for v in verifications {
+                if !v.matched {
+                    violations.push(CloseoutViolation::new(
+                        &v.rule,
+                        &v.severity,
+                        &v.detail,
+                    ));
+                }
+            }
         }
     }
 

@@ -34,6 +34,10 @@ pub struct LedgerTransaction {
     pub seq: Option<u64>,
     #[serde(default)]
     pub schema_version: Option<i64>,
+    /// EV-F013: Integrity hash chain — SHA-like fingerprint linking to the
+    /// previous transaction's chain_hash.  Readers verify continuity on load.
+    #[serde(default)]
+    pub chain_hash: Option<String>,
 }
 
 impl LedgerTransaction {
@@ -49,6 +53,7 @@ impl LedgerTransaction {
             idempotency_key: None,
             seq: None,
             schema_version: None,
+            chain_hash: None,
         }
     }
 
@@ -69,6 +74,36 @@ impl LedgerTransaction {
         self.seq = Some(seq);
         self
     }
+}
+
+/// Compute a fast integrity hash for the task ledger chain (EV-F013).
+/// Uses DefaultHasher (SipHash); this is tamper-detection, not cryptographic security.
+fn compute_chain_hash(prev_hash: &str, content: &str) -> String {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+    let mut hasher = DefaultHasher::new();
+    prev_hash.hash(&mut hasher);
+    content.hash(&mut hasher);
+    format!("{:016x}", hasher.finish())
+}
+
+/// Extract the `chain_hash` from the last valid JSONL line of file content.
+/// Returns `"genesis"` when no chain_hash is found (empty file or pre-chain entries).
+fn last_chain_hash_from_content(content: &str) -> String {
+    for line in content.lines().rev() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || !trimmed.starts_with('{') {
+            continue;
+        }
+        if let Ok(tx) = serde_json::from_str::<LedgerTransaction>(trimmed) {
+            if let Some(h) = tx.chain_hash {
+                if !h.is_empty() {
+                    return h;
+                }
+            }
+        }
+    }
+    "genesis".to_string()
 }
 
 /// Write a `state_checkpoint` entry capturing the current effective state
@@ -101,7 +136,15 @@ pub fn write_state_checkpoint(
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }
-    let serialized = serde_json::to_string(&tx)?;
+    // EV-F013: Compute chain_hash for the checkpoint entry.
+    let prev_hash = fs::read_to_string(&path)
+        .ok()
+        .map(|c| last_chain_hash_from_content(&c))
+        .unwrap_or_else(|| "genesis".to_string());
+    let content_for_hash = serde_json::to_string(&tx)?;
+    let mut final_tx = tx;
+    final_tx.chain_hash = Some(compute_chain_hash(&prev_hash, &content_for_hash));
+    let serialized = serde_json::to_string(&final_tx)?;
     let mut file = OpenOptions::new().create(true).append(true).open(&path)?;
     writeln!(file, "{}", serialized)?;
     file.sync_all()?;
@@ -186,6 +229,12 @@ pub fn append_transaction_assuming_l1_held(
             let mut final_tx = tx;
             final_tx.seq = Some(line_count);
 
+            // EV-F013: Compute chain_hash from prev_hash + content (without chain_hash).
+            let prev_hash = last_chain_hash_from_content(&content);
+            let content_for_hash = serde_json::to_string(&final_tx)?;
+            let chain_hash = compute_chain_hash(&prev_hash, &content_for_hash);
+            final_tx.chain_hash = Some(chain_hash);
+
             let serialized = serde_json::to_string(&final_tx)?;
 
             let mut file = OpenOptions::new().create(true).append(true).open(&path)?;
@@ -236,6 +285,11 @@ pub fn append_transaction_assuming_l1_held(
             // File does not exist yet — first entry, seq = 0.
             let mut final_tx = tx;
             final_tx.seq = Some(0);
+
+            // EV-F013: First entry — chain starts from "genesis".
+            let content_for_hash = serde_json::to_string(&final_tx)?;
+            let chain_hash = compute_chain_hash("genesis", &content_for_hash);
+            final_tx.chain_hash = Some(chain_hash);
 
             let serialized = serde_json::to_string(&final_tx)?;
 
@@ -296,6 +350,7 @@ mod tests {
             idempotency_key: None,
             seq: None,
             schema_version: Some(1),
+            chain_hash: None,
         };
         for bad in ["", "../x", "a/b", ".."] {
             let err = append_transaction(&tmp, bad, tx.clone()).expect_err("reject");
@@ -329,6 +384,7 @@ mod tests {
             idempotency_key: None,
             seq: None,
             schema_version: Some(1),
+            chain_hash: None,
         };
         append_transaction_assuming_l1_held(&tmp, "t1", tx).expect("append");
         let path = task_ledger_path(&tmp, "t1").expect("path");
@@ -352,6 +408,7 @@ mod tests {
                 idempotency_key: Some(format!("key-{i}")),
                 seq: None,
                 schema_version: Some(1),
+                chain_hash: None,
             };
             append_transaction_assuming_l1_held(&tmp, "t2", tx).expect("append");
         }
@@ -364,6 +421,7 @@ mod tests {
             idempotency_key: Some("key-1".to_string()),
             seq: None,
             schema_version: Some(1),
+            chain_hash: None,
         };
         append_transaction_assuming_l1_held(&tmp, "t2", dup).expect("dedup should be no-op");
 

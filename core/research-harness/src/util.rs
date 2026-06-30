@@ -104,6 +104,7 @@ pub(crate) fn value_to_string(v: &Value) -> String {
 // ── HTTP Client Factories ──
 
 /// Build a blocking HTTP client with a bounded timeout.
+/// No DNS pinning — use `build_pinned_blocking_client` for user-provided URLs.
 pub(crate) fn blocking_client(timeout_secs: u64) -> anyhow::Result<reqwest::blocking::Client> {
     use anyhow::Context;
     reqwest::blocking::Client::builder()
@@ -112,7 +113,39 @@ pub(crate) fn blocking_client(timeout_secs: u64) -> anyhow::Result<reqwest::bloc
         .context("failed to build blocking HTTP client")
 }
 
+/// Build a blocking HTTP client with DNS pinning for SSRF-safe requests.
+///
+/// Pins the given host to pre-validated addresses, preventing DNS rebinding
+/// TOCTOU between validation and actual HTTP connection.
+/// Use this for user-provided URLs (DOIs, arbitrary fetch targets).
+///
+/// NOTE: currently unused (async DOI path builds its own client);
+/// kept here as the canonical pattern for future blocking HTTP paths.
+#[allow(dead_code)]
+pub(crate) fn build_pinned_blocking_client(
+    host: &str,
+    addrs: &[std::net::SocketAddr],
+    timeout_secs: u64,
+) -> anyhow::Result<reqwest::blocking::Client> {
+    use anyhow::Context;
+    let mut builder = reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(timeout_secs.clamp(3, 120)))
+        .redirect(reqwest::redirect::Policy::none());
+    for addr in addrs {
+        builder = builder.resolve(host, *addr);
+    }
+    builder.build().context("failed to build pinned blocking HTTP client")
+}
+
 // ── SSRF Guard (inlined from runtime-core/web_fetch_guard.rs) ──
+// LAST SYNCED: 2026-06-30 — keep in sync with canonical version.
+// Differences (intentional): uses anyhow::Result not FrameworkError;
+// comments simplified; no Url/SocketAddr return.
+//
+// When adding SSRF logic here, mirror the change in runtime-core.
+// The canonical version also provides validate_and_resolve_web_fetch_url()
+// which returns (Url, Vec<SocketAddr>) for DNS pinning — use that pattern
+// for new code paths that carry user-provided URLs.
 
 /// Check if an IPv4 address is forbidden (private, loopback, link-local, metadata, etc.).
 fn is_forbidden_ipv4(ip: std::net::Ipv4Addr) -> bool {
@@ -197,8 +230,37 @@ fn resolve_and_validate(host: &str, port: u16) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Resolve and validate, returning the validated addresses for DNS pinning.
+fn resolve_and_validate_return(host: &str, port: u16) -> anyhow::Result<Vec<std::net::SocketAddr>> {
+    use std::net::ToSocketAddrs;
+    let lookup = host
+        .strip_prefix('[')
+        .and_then(|h| h.strip_suffix(']'))
+        .unwrap_or(host);
+    let addrs: Vec<std::net::SocketAddr> = (lookup, port)
+        .to_socket_addrs()
+        .map_err(|e| anyhow::anyhow!("DNS lookup failed for {host}: {e}"))?
+        .collect();
+    if addrs.is_empty() {
+        anyhow::bail!("DNS lookup returned no addresses for {host}");
+    }
+    for addr in &addrs {
+        match addr.ip() {
+            std::net::IpAddr::V4(v4) if is_forbidden_ipv4(v4) => {
+                anyhow::bail!("blocked resolved address: {}", addr.ip())
+            }
+            std::net::IpAddr::V6(v6) if is_forbidden_ipv6(v6) => {
+                anyhow::bail!("blocked resolved address: {}", addr.ip())
+            }
+            _ => {}
+        }
+    }
+    Ok(addrs)
+}
+
 /// Validate a URL for SSRF safety before making an HTTP request.
 /// Checks scheme, host suffixes, IP literals, and DNS resolution.
+/// Returns `(host, resolved_addrs)` for DNS pinning.
 pub(crate) fn validate_url_for_fetch(url: &str) -> anyhow::Result<()> {
     let parsed = reqwest::Url::parse(url.trim())
         .map_err(|e| anyhow::anyhow!("invalid URL: {url}: {e}"))?;
@@ -216,6 +278,37 @@ pub(crate) fn validate_url_for_fetch(url: &str) -> anyhow::Result<()> {
     });
     resolve_and_validate(host, port)?;
     Ok(())
+}
+
+/// Validate a URL for SSRF safety AND return resolved addresses for DNS pinning.
+///
+/// Like `validate_url_for_fetch`, but returns the parsed URL and resolved
+/// `(host, addrs)` pair so callers can build a DNS-pinned client.
+/// Use this for user-provided URLs (DOIs, arbitrary fetch targets) to
+/// prevent DNS rebinding TOCTOU between validation and HTTP connection.
+///
+/// # Errors
+/// Returns error on invalid URL, forbidden host/IP, or unresolvable DNS.
+pub(crate) fn validate_and_resolve_for_fetch(
+    url: &str,
+) -> anyhow::Result<(String, Vec<std::net::SocketAddr>)> {
+    let parsed = reqwest::Url::parse(url.trim())
+        .map_err(|e| anyhow::anyhow!("invalid URL: {url}: {e}"))?;
+    if !matches!(parsed.scheme(), "http" | "https") {
+        anyhow::bail!("only http(s) URLs allowed: {url}");
+    }
+    let host = parsed
+        .host_str()
+        .ok_or_else(|| anyhow::anyhow!("URL missing host: {url}"))?
+        .to_string();
+    validate_host(&host)?;
+    let port = parsed.port().unwrap_or(if parsed.scheme() == "https" {
+        443
+    } else {
+        80
+    });
+    let addrs = resolve_and_validate_return(host.as_str(), port)?;
+    Ok((host, addrs))
 }
 
 // ── Novelty Gate Helpers ──
@@ -310,6 +403,34 @@ mod tests {
     fn validate_url_blocks_loopback_ip() {
         assert!(validate_url_for_fetch("http://127.0.0.1/secret").is_err());
         assert!(validate_url_for_fetch("http://[::1]/secret").is_err());
+    }
+
+    #[test]
+    fn validate_and_resolve_for_fetch_accepts_public_url_and_returns_addrs() {
+        // validate_and_resolve_for_fetch should accept public URLs and return (host, addrs).
+        let result = validate_and_resolve_for_fetch("https://8.8.8.8/");
+        assert!(result.is_ok(), "public IP should be accepted: {:?}", result.err());
+        let (host, addrs) = result.unwrap();
+        assert_eq!(host, "8.8.8.8");
+        assert!(!addrs.is_empty());
+    }
+
+    #[test]
+    fn validate_and_resolve_for_fetch_rejects_loopback() {
+        assert!(validate_and_resolve_for_fetch("http://127.0.0.1/").is_err());
+        assert!(validate_and_resolve_for_fetch("http://localhost/").is_err());
+        assert!(validate_and_resolve_for_fetch("http://[::1]/").is_err());
+    }
+
+    #[test]
+    fn validate_and_resolve_for_fetch_rejects_non_http() {
+        assert!(validate_and_resolve_for_fetch("file:///etc/passwd").is_err());
+    }
+
+    #[test]
+    fn validate_and_resolve_for_fetch_rejects_private_ip() {
+        assert!(validate_and_resolve_for_fetch("http://10.0.0.1/").is_err());
+        assert!(validate_and_resolve_for_fetch("http://192.168.1.1/").is_err());
     }
 
     #[test]

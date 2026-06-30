@@ -2,34 +2,29 @@
 
 use anyhow::Result;
 use std::collections::HashSet;
-use std::sync::LazyLock;
-
-/// 进程级共享 HTTP 客户端，避免每次 DOI 检查都新建 Client（TLS 握手 + 连接池初始化开销）。
-/// 使用 Option 避免 TLS 不可用时 panic 永久毒化 LazyLock。
-static DOI_CLIENT: LazyLock<Option<reqwest::Client>> = LazyLock::new(|| {
-    reqwest::Client::builder()
-        .user_agent("research-harness/0.1")
-        .timeout(std::time::Duration::from_secs(10))
-        .redirect(reqwest::redirect::Policy::limited(5))
-        .build()
-        .ok()
-});
 
 /// 验证 DOI 是否可解析（网络可达）。
 ///
 /// 通过向 https://doi.org/<doi> 发送 HEAD 请求，检查 3xx/2xx 响应。
-/// 使用进程级共享 Client 复用 TCP/TLS 连接。
+/// 每请求构建一次 DNS-pinned client 以防止 DNS rebinding TOCTOU。
 pub async fn verify_doi_reachable(doi: &str) -> Result<bool> {
     let url = if doi.starts_with("http") {
         doi.to_string()
     } else {
         format!("https://doi.org/{doi}")
     };
-    crate::util::validate_url_for_fetch(&url)?;
+    // SSRF validation + DNS resolution in one pass, returns pinned addresses.
+    let (host, addrs) = crate::util::validate_and_resolve_for_fetch(&url)?;
 
-    let client = DOI_CLIENT.as_ref().ok_or_else(|| {
-        anyhow::anyhow!("DOI client unavailable: TLS backend not initialized")
-    })?;
+    // Build a per-request client with DNS pinning to prevent DNS rebinding.
+    let client = reqwest::Client::builder()
+        .user_agent("research-harness/0.1")
+        .timeout(std::time::Duration::from_secs(10))
+        .redirect(reqwest::redirect::Policy::limited(5));
+    let client = addrs
+        .iter()
+        .fold(client, |b, addr| b.resolve(&host, *addr))
+        .build()?;
     let resp = client.head(&url).send().await?;
     Ok(resp.status().is_success() || resp.status().is_redirection())
 }
@@ -105,5 +100,18 @@ mod tests {
     fn empty_claims_full_coverage() {
         let coverage = verify_claim_coverage(&[], &["anything".into()]).unwrap();
         assert!((coverage - 1.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn verify_doi_reachable_rejects_invalid_doi() {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        // A clearly invalid DOI should fail URL validation before making a request.
+        let result = rt.block_on(verify_doi_reachable(""));
+        assert!(result.is_err(), "empty DOI should be rejected: {:?}", result);
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("invalid") || err.contains("host") || err.contains("URL"),
+            "error should mention reason (invalid/host/URL): {err}"
+        );
     }
 }

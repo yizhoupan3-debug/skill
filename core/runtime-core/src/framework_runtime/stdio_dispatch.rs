@@ -320,25 +320,35 @@ fn dispatch_runtime_stdio_request(op: &str, payload: Value) -> Result<Value, Fra
         "background_state" => Err(FrameworkError::hook(
             "background_state requires L5 state feature (compile-time gate)",
         )),
-        // "session_supervisor" dispatch key also routes to orchestrator
-        // operations via the RuntimeCoreHooks handle_orchestrator_operation.
-        "session_supervisor" => framework_core::runtime_hooks::try_hooks()
-            .ok_or_else(|| {
-                FrameworkError::hook(
-                    "RuntimeCoreHooks not registered — call runtime_core::init_hooks() first",
-                )
-            })?
-            .handle_orchestrator_operation(payload),
-        "describe_transport" => build_trace_transport_descriptor(payload),
-        "describe_handoff" => build_trace_handoff_descriptor(payload),
-        "checkpoint_resume_manifest" => build_checkpoint_resume_manifest(payload),
+        "session_supervisor" => {
+            framework_kernel::runtime_hooks::try_hooks()
+                .ok_or_else(|| FrameworkError::hook("runtime hooks not registered"))?
+                .handle_orchestrator_operation(payload)
+        }
+        "describe_transport" => {
+            build_trace_transport_descriptor(payload)
+        }
+        "describe_handoff" => {
+            build_trace_handoff_descriptor(payload)
+        }
+        "checkpoint_resume_manifest" => {
+            build_checkpoint_resume_manifest(payload)
+        }
         "runtime_checkpoint_control_plane" => {
             build_checkpoint_control_plane_compiler_payload(payload)
         }
-        "write_transport_binding" => write_transport_binding_payload(payload),
-        "write_checkpoint_resume_manifest" => write_checkpoint_resume_manifest_payload(payload),
-        "attach_runtime_event_transport" => attach_runtime_event_transport(payload),
-        "subscribe_attached_runtime_events" => subscribe_attached_runtime_events(payload),
+        "write_transport_binding" => {
+            write_transport_binding_payload(payload)
+        }
+        "write_checkpoint_resume_manifest" => {
+            write_checkpoint_resume_manifest_payload(payload)
+        }
+        "attach_runtime_event_transport" => {
+            attach_runtime_event_transport(payload)
+        }
+        "subscribe_attached_runtime_events" => {
+            subscribe_attached_runtime_events(payload)
+        }
         "cleanup_attached_runtime_event_transport" => {
             cleanup_attached_runtime_event_transport(payload)
         }
@@ -416,14 +426,14 @@ fn dispatch_framework_stdio_request(op: &str, payload: Value) -> Result<Value, F
             let content = resolver.resolve_one(&hash)?;
             Ok(serde_json::json!({ "content": content }))
         }
-        "framework_session_artifact_write" => write_framework_session_artifacts(payload),
-        "framework_hook_evidence_append" => framework_hook_evidence_append(payload),
+        "framework_session_artifact_write" => {
+            write_framework_session_artifacts(payload)
+        }
+        "framework_hook_evidence_append" => {
+            framework_hook_evidence_append(payload)
+        }
         "framework_goal_drive" => runtime_infra::kernel_utils::framework_goal_drive(payload),
-        "framework_quality_gate" => {
-            // First-class entry point for the two-stage quality gate.
-            // Accepts the same payload structure as the quality gate entry point:
-            //   { repo_root, task_id, goal, scene (default GENERAL),
-            //     sub_scene (optional), round (default 1), output_data (optional) }
+        "framework_rfv_loop" => {
             let repo_root_str = payload
                 .get("repo_root")
                 .and_then(|v| v.as_str())

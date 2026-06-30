@@ -91,6 +91,15 @@ fn validate_complete_transition(repo_root: &Path, task_id: &str) -> TransitionVe
         .join(tid)
         .join("GOAL_STATE.json");
     if !goal_state_path.is_file() {
+        // D5: No GOAL_STATE.json = no active task.
+        // If evidence exists for this task_id, verify it before auto-passing.
+        let (has_ev, ev_ok) =
+            crate::state_manager::task_evidence_artifacts_summary_for_task(repo_root, tid);
+        if has_ev && !ev_ok {
+            return TransitionVerdict::blocked(format!(
+                "task '{tid}' has no GOAL_STATE.json but evidence exists and indicates failure"
+            ));
+        }
         return TransitionVerdict::allowed(
             "no GOAL_STATE.json found for this task — D5 auto-pass",
         );
