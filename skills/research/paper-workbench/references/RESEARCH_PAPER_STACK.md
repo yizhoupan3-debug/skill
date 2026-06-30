@@ -57,7 +57,7 @@
 
 长周期科研与改稿应把**可冷启动叙事**落在仓库里，而不是只留在对话里：
 
-- **框架连续性目录**：[`artifacts/current/`](../../../artifacts/current/) 下的 `SESSION_SUMMARY` / `NEXT_ACTIONS` / `EVIDENCE_INDEX`（及同层相关指针）是跨会话接力的机器可读真源；分层与开关以 [`docs/README.md`](../../../docs/README.md) 为准。
+- **框架连续性目录**：[`artifacts/current/`](../../../../artifacts/current/) 下的 `SESSION_SUMMARY` / `NEXT_ACTIONS` / `EVIDENCE_INDEX`（及同层相关指针）是跨会话接力的机器可读真源；分层与开关以 [`docs/README.md`](../../../../docs/README.md) 为准。
 - **手稿主张帐本**：`paper_story/CLAIM_LEDGER.md`（与 `EVIDENCE_ANCHOR_MAP` 等）冻结 claim 天花板与证据锚；主张—证据纪律只信 [`claim-evidence-ladder.md`](claim-evidence-ladder.md)。
 - **手稿 prose 轮次账（可选）**：`paper_story/PROSE_QC_LOG.md`（模板见 [`prose-chain-contract.md`](prose-chain-contract.md)）；全链路见同文件。
 - **阴性结果**：与阳性结果同等记录（失败条件、为何仍信息量足够、是否影响 claim 收窄）；避免「只写成功路径」造成不可复核的故事线。
@@ -66,7 +66,7 @@
 
 ## 宿主与专科入口（真源一段）
 
-手稿专科（`paper-workbench` / `paper-writing` / `paper-reviewer` 等）的**叙事与门控 prose 宿主无关**：热路由 owner 以 [`../../../../skills/SKILL_ROUTING_RUNTIME.json`](../../../../skills/SKILL_ROUTING_RUNTIME.json) 为准（当前仅 `paper-workbench` + `paper-writing` 热表；`paper-reviewer` 内联）；技能安装与宿主投影以 **`router-rs framework host-integration install --to <host>`**（及宿主文档中的 sync 子命令）为准，勿在文档里硬编码单宿主路径当第二真源。扩展规则见 [`docs/README.md`](../../../docs/README.md)。
+手稿专科（`paper-workbench` / `paper-writing` / `paper-reviewer` 等）的**叙事与门控 prose 宿主无关**：热路由 owner 以 [`../../../../skills/SKILL_ROUTING_RUNTIME.json`](../../../../skills/SKILL_ROUTING_RUNTIME.json) 为准（当前仅 `paper-workbench` + `paper-writing` 热表；`paper-reviewer` 内联）；技能安装与宿主投影以 **`router-rs framework host-integration install --to <host>`**（及宿主文档中的 sync 子命令）为准，勿在文档里硬编码单宿主路径当第二真源。扩展规则见 [`docs/README.md`](../../../../docs/README.md)。
 
 - **`$paper-workbench`**：在**所有宿主**上均为**用户可显式 invocation 的前门**（`user-invocable`，宿主以各环境 `SKILL.md` / 路由为准）。
 - **`$paper-writing` / `$paper-reviewer`**：保持 **`disable-model-invocation: true`** 与既有元数据语义，表示它们**不是**与 workbench 并列的「第二个用户入口」，而是 workbench **在任一支宿主上内联调用的专科契约**（审稿、润色 lane）。revision 由 workbench 自身 inline 处理（`edit_scope` gate）。这与「只有一个手稿前门」不矛盾：**用户只打 workbench；模型在对话内按 lane 加载专科 SKILL**。

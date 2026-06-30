@@ -114,7 +114,7 @@ handoff_evidence: <向下游传递的结构化上下文>
 
 - **内部 lane 路由协议**：[references/research-lane-routing.md](references/research-lane-routing.md) — 内部分发规则、math 分工线、scenario routing table
 - **学术来源检索**：[references/academic-sources.md](references/academic-sources.md) — arXiv / OpenAlex / CrossRef / PubMed / DOAJ API
-- **手稿 prose chain**：[references/prose-chain-contract.md](references/prose-chain-contract.md)
+- **手稿 prose chain**：[paper-workbench/references/prose-chain-contract.md](paper-workbench/references/prose-chain-contract.md)
 - **质量门（退出门）**：`$formal-verification` / `$literature-verification` / `$prose-verification` / `$reproducibility-verification` / `$statistical-verification` / `$structure-verification`（均为 L4，作为 loop engine 退出门自动触发）
 - **旧路径映射**：[../LEGACY_MAP.md](../LEGACY_MAP.md)
 
