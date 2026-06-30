@@ -1,14 +1,10 @@
 //! Skill refresh and validate — self-contained skill-layer CLI entry points.
 //!
 //! This module owns the complete skill lifecycle: validate, refresh,
-//! generate health/approval, write tiers and companion stubs.
+//! write companion stubs.
 //! router-rs calls these functions directly; no runtime-infra middleman.
 
-use crate::constants;
-use crate::paths;
 use core_errors::FrameworkError;
-use serde_json::{Value, json};
-use std::fs;
 use std::path::Path;
 
 // ---------------------------------------------------------------------------
@@ -55,7 +51,7 @@ pub fn validate_skills(repo_root: &Path) -> Result<(), FrameworkError> {
 // refresh
 // ---------------------------------------------------------------------------
 
-/// Full refresh: write tiers, companion stubs, health manifest, approval policy.
+/// Full refresh: write companion stubs, approval policy.
 pub fn refresh_skills(cmd: &SkillsCommand) -> Result<(), FrameworkError> {
     if !cmd.write && !cmd.backfill && cmd.generate.is_none() {
         return validate_skills(&cmd.repo_root);
@@ -122,44 +118,7 @@ pub fn refresh_skills(cmd: &SkillsCommand) -> Result<(), FrameworkError> {
     if !cmd.write {
         return Ok(());
     }
-    write_skill_tiers_from_surface_policy(&cmd.repo_root)?;
-    validate_skills(&cmd.repo_root)?;
-    generate_health_manifest(&cmd.repo_root)
+    validate_skills(&cmd.repo_root)
 }
 
-/// Generate health manifest and approval policy.
-pub fn generate_health_manifest(repo_root: &Path) -> Result<(), FrameworkError> {
-    crate::health::generate_health_manifest(repo_root)
-}
-
-// ---------------------------------------------------------------------------
-// write_skill_tiers
-// ---------------------------------------------------------------------------
-
-fn write_skill_tiers_from_surface_policy(repo_root: &Path) -> Result<(), FrameworkError> {
-    let policy_path = paths::surface_policy_json(repo_root);
-    let policy: Value = serde_json::from_str(&fs::read_to_string(&policy_path)?)?;
-    let activation_counts = policy
-        .pointer("/skill_system/activation_counts")
-        .cloned()
-        .unwrap_or_else(|| json!({}));
-    let tier_counts = policy
-        .pointer("/skill_system/tier_counts")
-        .cloned()
-        .unwrap_or_else(|| json!({}));
-    let out = json!({
-        "schema_version": constants::SCHEMA_TIERS,
-        "source_of_truth": false,
-        "derived_from": "configs/framework/FRAMEWORK_SURFACE_POLICY.json",
-        "report_status": "generated_debug_report",
-        "summary": {
-            "activation_counts": activation_counts,
-            "tier_counts": tier_counts,
-        }
-    });
-    let dest = paths::tiers_json(repo_root);
-    core_state_utils::atomic_write::write_atomic_json(&dest, &out)
-}
-
-// ---------------------------------------------------------------------------
 // ---------------------------------------------------------------------------

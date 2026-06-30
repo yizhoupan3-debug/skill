@@ -1,0 +1,17 @@
+[package]
+name = "observability-core"
+version = "0.1.0"
+edition = "2024"
+description = "L1 observability infrastructure: subscriber init, log rotation, panic hooks"
+
+[lints]
+workspace = true
+
+[dependencies]
+tracing.workspace = true
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
+tracing-appender.workspace = true
+chrono.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true

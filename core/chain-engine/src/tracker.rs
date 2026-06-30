@@ -131,27 +131,33 @@ pub fn process_timeouts(root: &mut ChainDagRoot) -> TimeoutResult {
 
 /// Check if an ISO-8601 timestamp is older than `max_secs` from now.
 fn is_timed_out(started_at: &str, now: &str, max_secs: u64) -> bool {
-    // Simple heuristic: compare second-level ISO timestamps
-    // YYYY-MM-DDTHH:MM:SS format — extract the time portion and do a rough check
     let start_secs = parse_iso_seconds(started_at);
     let now_secs = parse_iso_seconds(now);
     match (start_secs, now_secs) {
         (Some(s), Some(n)) => n.saturating_sub(s) >= max_secs,
+        // P3.3: Parse failure defaults to false (no expiry) rather than
+        // falsely expiring a group. The `now_iso()` function always produces
+        // valid timestamps, so this only triggers on unusual inputs.
         _ => false,
     }
 }
 
-/// Parse an ISO-8601 timestamp and return seconds since epoch (or approximate).
+/// Parse an ISO-8601 timestamp and return seconds since Unix epoch (P3.3 fix).
+/// Supports RFC 3339 (2026-06-30T12:34:56Z) with optional fractional seconds
+/// and common timezone suffixes (±HH:MM). Falls back to naive UTC parsing for
+/// timestamps without timezone info (produced by framework_core::time::now_iso).
 fn parse_iso_seconds(iso: &str) -> Option<u64> {
-    // Handle common ISO formats: "2026-06-30T12:34:56Z" or "2026-06-30T12:34:56.123Z"
-    let clean = iso.trim_end_matches('Z').trim_end_matches('z');
-    // Parse just the date/time part
-    let dt = chrono::NaiveDateTime::parse_from_str(clean, "%Y-%m-%dT%H:%M:%S")
-        .or_else(|_| chrono::NaiveDateTime::parse_from_str(clean, "%Y-%m-%dT%H:%M:%S%.f"))
-        .ok()?;
-    // Use a fixed epoch offset — relative comparison is what matters
-    let epoch = chrono::NaiveDateTime::parse_from_str("2026-01-01T00:00:00", "%Y-%m-%dT%H:%M:%S").ok()?;
-    Some((dt - epoch).num_seconds().max(0) as u64)
+    // Try RFC 3339 first (handles full timezone data).
+    chrono::DateTime::parse_from_rfc3339(iso)
+        .or_else(|_| {
+            // Fallback for naive UTC timestamps (no timezone suffix).
+            let clean = iso.trim_end_matches('Z').trim_end_matches('z');
+            chrono::NaiveDateTime::parse_from_str(clean, "%Y-%m-%dT%H:%M:%S")
+                .or_else(|_| chrono::NaiveDateTime::parse_from_str(clean, "%Y-%m-%dT%H:%M:%S%.f"))
+                .map(|ndt| ndt.and_utc().into())
+        })
+        .ok()
+        .map(|dt| dt.timestamp() as u64)
 }
 
 /// Process failed tasks: apply retry policies and failure strategies.
@@ -218,6 +224,14 @@ pub fn process_failures(root: &mut ChainDagRoot) -> FailureActionResult {
                         && task.status != TaskStatus::Failed
                         && task.status != TaskStatus::RetryScheduled
                     {
+                        // P3.1: Warn when a running task is being skipped — the DAG
+                        // status changes but the subagent is NOT stopped.
+                        if task.status == TaskStatus::Running {
+                            tracing::warn!(
+                                task_id = %task.task_id,
+                                "AbortDag: skipping running task (subagent not stopped)",
+                            );
+                        }
                         task.status = TaskStatus::Skipped;
                         task.error = Some("aborted by failure strategy".to_string());
                         ids.push(task.task_id.clone());

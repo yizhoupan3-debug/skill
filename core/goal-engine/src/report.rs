@@ -122,7 +122,7 @@ pub fn write_loop_report(
     let dir = loop_reports_dir(repo_root, loop_id);
     fs::create_dir_all(&dir)?;
     let path = dir.join(format!("{}.md", run_id));
-    fs::write(&path, report)?;
+    core_state_utils::atomic_write::write_atomic_text(&path, report)?;
     Ok(path.display().to_string())
 }
 

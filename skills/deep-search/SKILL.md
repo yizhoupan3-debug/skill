@@ -11,7 +11,7 @@ metadata:
   - fact-check
   - multi-source
   version: '1.1.0'
-name: deep-research
+name: deep-search
 scene: research
 risk: low
 routing_gate: approve
@@ -36,7 +36,7 @@ trigger_hints:
 - investigate claims
 - verify claims
 ---
-# Deep Research
+# Deep Search
 
 This skill provides a **web-first deep research harness** that fans out across
 multiple web searches, fetches source documents, adversarially verifies claims,
@@ -170,7 +170,7 @@ Return:
 
 This skill and `research-discovery` / `research-execution` are complementary:
 
-| Concern | `deep-research` (this skill) | `research-discovery` | `research-execution` |
+| Concern | `deep-search` (this skill) | `research-discovery` | `research-execution` |
 |---|---|---|---|
 | Web-first general research report | Primary | -- | -- |
 | Claim verification via multi-source cross-reference | Primary | -- | -- |

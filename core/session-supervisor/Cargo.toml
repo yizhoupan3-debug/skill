@@ -16,6 +16,7 @@ framework-core = { path = "../framework-core" }
 framework-runtime = { path = "../framework-runtime" }
 core-state-utils = { path = "../core-state-utils" }
 core-state = { path = "../core-state" }
+observability-core = { path = "../observability-core" }
 runtime-storage = { path = "../runtime-storage" }
 chrono.workspace = true
 libc.workspace = true

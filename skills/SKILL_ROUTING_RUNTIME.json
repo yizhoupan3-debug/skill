@@ -660,7 +660,7 @@
         "formal-verification"
       ],
       "local",
-      "skills/formal-verification/SKILL.md",
+      "quality-gates/formal-verification/SKILL.md",
       null,
       "skill",
       [],
@@ -938,7 +938,7 @@
         "literature-verification"
       ],
       "local",
-      "skills/literature-verification/SKILL.md",
+      "quality-gates/literature-verification/SKILL.md",
       null,
       "skill",
       [],
@@ -1357,7 +1357,7 @@
         "prose-verification"
       ],
       "local",
-      "skills/prose-verification/SKILL.md",
+      "quality-gates/prose-verification/SKILL.md",
       null,
       "skill",
       [],
@@ -1480,7 +1480,7 @@
         "reproducibility-verification"
       ],
       "local",
-      "skills/reproducibility-verification/SKILL.md",
+      "quality-gates/reproducibility-verification/SKILL.md",
       null,
       "skill",
       [],
@@ -1662,75 +1662,6 @@
       ],
       null,
       "conditional",
-      null,
-      "research",
-      null
-    ],
-    [
-      "research-knowledge-graph",
-      "L2",
-      "owner",
-      "none",
-      "P2",
-      "Research Knowledge Graph — navigate, visualize, trace connections between entries, manage entities, cross-workspace search.",
-      "preferred",
-      [
-        "知识图谱",
-        "research graph",
-        "研究方向连接",
-        "实体管理",
-        "research-knowledge-graph",
-        "研究路径追溯",
-        "知识关联",
-        "研究方向关系",
-        "knowledge graph",
-        "跨工作区搜索",
-        "研究关系图",
-        "kg viz",
-        "研究历史追溯",
-        "barrier route",
-        "障碍路径",
-        "entity search",
-        "hub search",
-        "连接查询",
-        "研究知识图谱可视化"
-      ],
-      "local",
-      "skills/research-knowledge-graph/SKILL.md",
-      null,
-      "skill",
-      [],
-      "Research Knowledge Graph — navigate, visualize, trace connections",
-      [
-        "research",
-        "knowledge-graph",
-        "graph",
-        "entities",
-        "hub"
-      ],
-      null,
-      null,
-      {
-        "platforms": [
-          "supported"
-        ],
-        "tags": [
-          "research",
-          "knowledge-graph",
-          "graph",
-          "entities",
-          "hub"
-        ],
-        "version": "1.0.0"
-      },
-      "low",
-      [
-        "Read",
-        "Bash",
-        "Grep"
-      ],
-      null,
-      "local",
       null,
       "research",
       null
@@ -2235,7 +2166,7 @@
         "statistical-verification"
       ],
       "local",
-      "skills/statistical-verification/SKILL.md",
+      "quality-gates/statistical-verification/SKILL.md",
       null,
       "skill",
       [],
@@ -2290,7 +2221,7 @@
         "structure-verification"
       ],
       "local",
-      "skills/structure-verification/SKILL.md",
+      "quality-gates/structure-verification/SKILL.md",
       null,
       "skill",
       [],
@@ -2812,47 +2743,6 @@
         "Read",
         "Bash",
         "Agent"
-      ],
-      null,
-      "local",
-      null,
-      "general",
-      null
-    ],
-    [
-      "shared-references",
-      "L0",
-      "none",
-      "none",
-      "P3",
-      "Shared reference library — cross-skill lookup tables, glossary, domain constants, and reference data. Not a standalone skill; consumed by other skills.",
-      "n/a",
-      [],
-      "framework",
-      "skills/shared-references/SKILL.md",
-      null,
-      "reference",
-      [],
-      "Cross-skill reference data: lookup tables, glossary, domain constants",
-      null,
-      null,
-      null,
-      {
-        "platforms": [
-          "supported"
-        ],
-        "tags": [
-          "reference",
-          "glossary",
-          "constants"
-        ],
-        "version": "1.0.0"
-      },
-      "low",
-      [
-        "Read",
-        "Bash",
-        "WebFetch"
       ],
       null,
       "local",

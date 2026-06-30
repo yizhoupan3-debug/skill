@@ -6,6 +6,37 @@ use regex::Regex;
 use std::collections::{HashMap, HashSet};
 use std::sync::{LazyLock, Mutex, OnceLock};
 
+// ── Pre-compiled regexes for common arXiv XML tags ──
+// These avoid Mutex contention on the dynamic cache for the hot-path tags
+// used during arXiv Atom XML parsing.
+
+static ARXIV_TAG_TITLE: OnceLock<Regex> = OnceLock::new();
+static ARXIV_TAG_SUMMARY: OnceLock<Regex> = OnceLock::new();
+static ARXIV_TAG_ID: OnceLock<Regex> = OnceLock::new();
+static ARXIV_TAG_PUBLISHED: OnceLock<Regex> = OnceLock::new();
+
+fn get_static_xml_tag_re(tag: &str) -> Option<&'static Regex> {
+    match tag {
+        "title" => Some(ARXIV_TAG_TITLE.get_or_init(|| {
+            #[allow(clippy::expect_used)]
+            Regex::new(r"(?s)<title(?:\s[^>]*)?>(.*?)</title>").expect("title regex")
+        })),
+        "summary" => Some(ARXIV_TAG_SUMMARY.get_or_init(|| {
+            #[allow(clippy::expect_used)]
+            Regex::new(r"(?s)<summary(?:\s[^>]*)?>(.*?)</summary>").expect("summary regex")
+        })),
+        "id" => Some(ARXIV_TAG_ID.get_or_init(|| {
+            #[allow(clippy::expect_used)]
+            Regex::new(r"(?s)<id(?:\s[^>]*)?>(.*?)</id>").expect("id regex")
+        })),
+        "published" => Some(ARXIV_TAG_PUBLISHED.get_or_init(|| {
+            #[allow(clippy::expect_used)]
+            Regex::new(r"(?s)<published(?:\s[^>]*)?>(.*?)</published>").expect("published regex")
+        })),
+        _ => None,
+    }
+}
+
 // ── Slug ──
 pub fn slugify(text: &str) -> String {
     let lowered = text.trim().to_lowercase();
@@ -54,9 +85,18 @@ pub fn decode_xml_entities(raw: &str) -> String {
 }
 
 /// Extract and decode the text content between XML tags, with regex caching.
-/// Cache is bounded at MAX_XML_TAG_CACHE_ENTRIES to prevent unbounded growth
-/// when called with many distinct tag names across sessions.
+///
+/// Performance: common arXiv tags ("title", "summary", "id", "published") use
+/// pre-compiled static regexes and bypass the Mutex cache entirely.
+/// Dynamic cache is bounded at MAX_XML_TAG_CACHE_ENTRIES for custom tags.
 pub fn xml_text_between(raw: &str, tag: &str) -> Option<String> {
+    // Fast path: pre-compiled regex for common arXiv XML tags — no Mutex needed.
+    if let Some(re) = get_static_xml_tag_re(tag) {
+        let captures = re.captures(raw)?;
+        return Some(decode_xml_entities(captures.get(1)?.as_str().trim()));
+    }
+
+    // Fallback: dynamic Mutex-guarded cache for rare/custom tags.
     const MAX_XML_TAG_CACHE_ENTRIES: usize = 64;
     static XML_TAG_RE_CACHE: LazyLock<Mutex<HashMap<String, Regex>>> =
         LazyLock::new(|| Mutex::new(HashMap::new()));

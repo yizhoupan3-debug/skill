@@ -1,5 +1,4 @@
-//! Citation management: audit, BibTeX rendering, DOI validation.
+//! Citation management: audit, BibTeX rendering.
 
 pub mod audit;
-pub mod doi;
 pub mod render;

@@ -254,13 +254,13 @@ pub struct ScaffoldCommand {
 pub enum SkillsSubcommand {
     /// Check SKILL_MANIFEST / SKILL_ROUTING_RUNTIME paths and GSD rows.
     Validate(MaintRepoArgs),
-    /// Write derived reports (e.g. SKILL_TIERS.json) then validate.
+    /// Write derived reports then validate.
     Refresh {
         #[arg(long, alias = "framework-root")]
         repo_root: Option<PathBuf>,
         #[arg(long, default_value = "false")]
         write: bool,
-        /// Emit minimal PLUGIN/HEALTH companion stubs (not policy-complete; prefer checked-in catalogs).
+        /// Emit companion stubs (not policy-complete; prefer checked-in catalogs).
         #[arg(long, default_value = "false")]
         write_companions: bool,
         /// Backfill null registry columns from SKILL.md frontmatter.

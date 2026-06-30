@@ -67,7 +67,7 @@ scope: architecture-reference
 
 | Crate | 路径 | 层标 | 说明 |
 |-------|------|------|------|
-| `skill-layer` | `core/skill-layer` | L2 | **Skill 层核心**：frontmatter 类型解析、skills/ 发现、SKILL_HEALTH_MANIFEST.json 生成 |
+| `skill-layer` | `core/skill-layer` | L2 | **Skill 层核心**：frontmatter 类型解析、skills/ 发现、验证、刷新 |
 
 **设计约束**：Skill 层只做元数据管理。执行（包括 agent 提示、工具调用、退出条件）由运行层通过 runtime-core hooks 实现。
 

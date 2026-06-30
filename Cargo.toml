@@ -36,6 +36,7 @@ members = [
     "core/framework-extra",
     "core/runtime-infra",
     "core/goal-engine",
+    "core/observability-core",
     "core/research-harness",
     "core/framework-maint",
     "core/codegraph-rs",
@@ -85,6 +86,7 @@ rayon = "1.10"
 regex = "1.11.1"
 reqwest = { version = "0.12.15", default-features = false, features = ["blocking", "gzip", "json", "rustls-tls"] }
 rusqlite = { version = "0.32", features = ["bundled"] }
+quick-xml = "0.36"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 serde_yml = "=0.0.12"
@@ -93,6 +95,8 @@ tempfile = "3.15"
 tokio = { version = "1.44", features = ["sync", "rt", "macros", "time"] }
 mockall = "0.13"
 tracing = "0.1"
+tracing-appender = "0.2"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tungstenite = "0.24"
 which = "8"
 

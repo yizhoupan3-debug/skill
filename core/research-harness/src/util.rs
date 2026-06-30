@@ -7,6 +7,8 @@
 //! and search modules import from this module.
 
 use serde_json::Value;
+use std::collections::HashMap;
+use std::sync::{Mutex, OnceLock};
 
 /// Extract a string field, returning `""` if missing.
 pub(crate) fn str_field<'a>(value: &'a Value, key: &str) -> &'a str {
@@ -104,13 +106,26 @@ pub(crate) fn value_to_string(v: &Value) -> String {
 // ── HTTP Client Factories ──
 
 /// Build a blocking HTTP client with a bounded timeout.
-/// No DNS pinning — use `build_pinned_blocking_client` for user-provided URLs.
+/// Uses a cached client per timeout value to reuse TCP connection pools
+/// across repeated search calls within a session.
 pub(crate) fn blocking_client(timeout_secs: u64) -> anyhow::Result<reqwest::blocking::Client> {
     use anyhow::Context;
-    reqwest::blocking::Client::builder()
-        .timeout(std::time::Duration::from_secs(timeout_secs.clamp(3, 120)))
+    let timeout = timeout_secs.clamp(3, 120);
+    // Cache a shared client per distinct timeout so the connection pool
+    // survives across calls (avoids TCP/TLS handshake per search).
+    static CLIENT_CACHE: OnceLock<Mutex<HashMap<u64, reqwest::blocking::Client>>> =
+        OnceLock::new();
+    let cache = CLIENT_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+    let mut guard = cache.lock().map_err(|e| anyhow::anyhow!("client cache lock: {e}"))?;
+    if let Some(cached) = guard.get(&timeout) {
+        return Ok(cached.clone());
+    }
+    let client = reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(timeout))
         .build()
-        .context("failed to build blocking HTTP client")
+        .context("failed to build blocking HTTP client")?;
+    guard.insert(timeout, client.clone());
+    Ok(client)
 }
 
 /// Build a blocking HTTP client with DNS pinning for SSRF-safe requests.
@@ -118,9 +133,6 @@ pub(crate) fn blocking_client(timeout_secs: u64) -> anyhow::Result<reqwest::bloc
 /// Pins the given host to pre-validated addresses, preventing DNS rebinding
 /// TOCTOU between validation and actual HTTP connection.
 /// Use this for user-provided URLs (DOIs, arbitrary fetch targets).
-///
-/// NOTE: currently unused (async DOI path builds its own client);
-/// kept here as the canonical pattern for future blocking HTTP paths.
 #[allow(dead_code)]
 pub(crate) fn build_pinned_blocking_client(
     host: &str,
@@ -137,153 +149,25 @@ pub(crate) fn build_pinned_blocking_client(
     builder.build().context("failed to build pinned blocking HTTP client")
 }
 
-// ── SSRF Guard (inlined from runtime-core/web_fetch_guard.rs) ──
-// LAST SYNCED: 2026-06-30 — keep in sync with canonical version.
-// Differences (intentional): uses anyhow::Result not FrameworkError;
-// comments simplified; no Url/SocketAddr return.
-//
-// When adding SSRF logic here, mirror the change in runtime-core.
-// The canonical version also provides validate_and_resolve_web_fetch_url()
-// which returns (Url, Vec<SocketAddr>) for DNS pinning — use that pattern
-// for new code paths that carry user-provided URLs.
+// ── SSRF Guard (delegates to runtime_core::web_fetch_guard) ──
+// Uses the canonical implementation from runtime-core instead of an inlined
+// duplicate. This ensures redirect-chain security checks (scheme downgrade
+// detection, DNS pinning) are always in sync.
 
-/// Check if an IPv4 address is forbidden (private, loopback, link-local, metadata, etc.).
-fn is_forbidden_ipv4(ip: std::net::Ipv4Addr) -> bool {
-    let o = ip.octets();
-    ip.is_loopback()
-        || ip.is_private()
-        || ip.is_link_local()
-        || ip.is_unspecified()
-        || o[0] == 0
-        || (o[0] == 169 && o[1] == 254) // AWS/GCP metadata
-        || (o[0] == 100 && (o[1] & 0xC0) == 64) // CGNAT 100.64.0.0/10
-        || (o[0] == 198 && (o[1] & 0xFE) == 18) // benchmarking 198.18.0.0/15
-}
-
-/// Check if an IPv6 address is forbidden.
-fn is_forbidden_ipv6(ip: std::net::Ipv6Addr) -> bool {
-    ip.is_loopback()
-        || ip.is_unspecified()
-        || ip.is_unique_local()
-        || ip.is_unicast_link_local()
-        || ip.is_multicast()
-        || ip.to_ipv4_mapped().is_some_and(is_forbidden_ipv4)
-}
-
-/// Validate a hostname for SSRF safety (blocked suffixes + IP literal checks).
-fn validate_host(host: &str) -> anyhow::Result<()> {
-    const BLOCKED_SUFFIXES: &[&str] = &[".localhost", ".local", ".internal"];
-    let host = host.trim().trim_end_matches('.');
-    let lower = host.to_ascii_lowercase();
-    if lower == "localhost" || lower.ends_with(".localhost") {
-        anyhow::bail!("blocked host: {host}");
-    }
-    for suffix in BLOCKED_SUFFIXES {
-        if lower.ends_with(suffix) {
-            anyhow::bail!("blocked host suffix: {host}");
-        }
-    }
-    // Strip IPv6 brackets for IP literal check
-    let bare = host
-        .strip_prefix('[')
-        .and_then(|h| h.strip_suffix(']'))
-        .unwrap_or(host);
-    if let Ok(ip) = bare.parse::<std::net::IpAddr>() {
-        match ip {
-            std::net::IpAddr::V4(v4) if is_forbidden_ipv4(v4) => {
-                anyhow::bail!("blocked IP: {host}")
-            }
-            std::net::IpAddr::V6(v6) if is_forbidden_ipv6(v6) => {
-                anyhow::bail!("blocked IP: {host}")
-            }
-            _ => {}
-        }
-    }
-    Ok(())
-}
-
-/// Resolve a hostname and validate all resolved addresses for SSRF safety.
-fn resolve_and_validate(host: &str, port: u16) -> anyhow::Result<()> {
-    use std::net::ToSocketAddrs;
-    let lookup = host
-        .strip_prefix('[')
-        .and_then(|h| h.strip_suffix(']'))
-        .unwrap_or(host);
-    let addrs: Vec<std::net::SocketAddr> = (lookup, port)
-        .to_socket_addrs()
-        .map_err(|e| anyhow::anyhow!("DNS lookup failed for {host}: {e}"))?
-        .collect();
-    if addrs.is_empty() {
-        anyhow::bail!("DNS lookup returned no addresses for {host}");
-    }
-    for addr in &addrs {
-        match addr.ip() {
-            std::net::IpAddr::V4(v4) if is_forbidden_ipv4(v4) => {
-                anyhow::bail!("blocked resolved address: {}", addr.ip())
-            }
-            std::net::IpAddr::V6(v6) if is_forbidden_ipv6(v6) => {
-                anyhow::bail!("blocked resolved address: {}", addr.ip())
-            }
-            _ => {}
-        }
-    }
-    Ok(())
-}
-
-/// Resolve and validate, returning the validated addresses for DNS pinning.
-fn resolve_and_validate_return(host: &str, port: u16) -> anyhow::Result<Vec<std::net::SocketAddr>> {
-    use std::net::ToSocketAddrs;
-    let lookup = host
-        .strip_prefix('[')
-        .and_then(|h| h.strip_suffix(']'))
-        .unwrap_or(host);
-    let addrs: Vec<std::net::SocketAddr> = (lookup, port)
-        .to_socket_addrs()
-        .map_err(|e| anyhow::anyhow!("DNS lookup failed for {host}: {e}"))?
-        .collect();
-    if addrs.is_empty() {
-        anyhow::bail!("DNS lookup returned no addresses for {host}");
-    }
-    for addr in &addrs {
-        match addr.ip() {
-            std::net::IpAddr::V4(v4) if is_forbidden_ipv4(v4) => {
-                anyhow::bail!("blocked resolved address: {}", addr.ip())
-            }
-            std::net::IpAddr::V6(v6) if is_forbidden_ipv6(v6) => {
-                anyhow::bail!("blocked resolved address: {}", addr.ip())
-            }
-            _ => {}
-        }
-    }
-    Ok(addrs)
-}
+use runtime_core::web_fetch_guard;
 
 /// Validate a URL for SSRF safety before making an HTTP request.
 /// Checks scheme, host suffixes, IP literals, and DNS resolution.
-/// Returns `(host, resolved_addrs)` for DNS pinning.
 pub(crate) fn validate_url_for_fetch(url: &str) -> anyhow::Result<()> {
-    let parsed = reqwest::Url::parse(url.trim())
-        .map_err(|e| anyhow::anyhow!("invalid URL: {url}: {e}"))?;
-    if !matches!(parsed.scheme(), "http" | "https") {
-        anyhow::bail!("only http(s) URLs allowed: {url}");
-    }
-    let host = parsed
-        .host_str()
-        .ok_or_else(|| anyhow::anyhow!("URL missing host: {url}"))?;
-    validate_host(host)?;
-    let port = parsed.port().unwrap_or(if parsed.scheme() == "https" {
-        443
-    } else {
-        80
-    });
-    resolve_and_validate(host, port)?;
-    Ok(())
+    web_fetch_guard::validate_and_resolve_web_fetch_url(url)
+        .map(|_| ())
+        .map_err(|e| anyhow::anyhow!("{e}"))
 }
 
 /// Validate a URL for SSRF safety AND return resolved addresses for DNS pinning.
 ///
-/// Like `validate_url_for_fetch`, but returns the parsed URL and resolved
-/// `(host, addrs)` pair so callers can build a DNS-pinned client.
+/// Like `validate_url_for_fetch`, but returns the host and resolved addresses
+/// so callers can build a DNS-pinned client.
 /// Use this for user-provided URLs (DOIs, arbitrary fetch targets) to
 /// prevent DNS rebinding TOCTOU between validation and HTTP connection.
 ///
@@ -292,22 +176,12 @@ pub(crate) fn validate_url_for_fetch(url: &str) -> anyhow::Result<()> {
 pub(crate) fn validate_and_resolve_for_fetch(
     url: &str,
 ) -> anyhow::Result<(String, Vec<std::net::SocketAddr>)> {
-    let parsed = reqwest::Url::parse(url.trim())
-        .map_err(|e| anyhow::anyhow!("invalid URL: {url}: {e}"))?;
-    if !matches!(parsed.scheme(), "http" | "https") {
-        anyhow::bail!("only http(s) URLs allowed: {url}");
-    }
+    let (parsed, addrs) = web_fetch_guard::validate_and_resolve_web_fetch_url(url)
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
     let host = parsed
         .host_str()
-        .ok_or_else(|| anyhow::anyhow!("URL missing host: {url}"))?
+        .unwrap_or("")
         .to_string();
-    validate_host(&host)?;
-    let port = parsed.port().unwrap_or(if parsed.scheme() == "https" {
-        443
-    } else {
-        80
-    });
-    let addrs = resolve_and_validate_return(host.as_str(), port)?;
     Ok((host, addrs))
 }
 
@@ -407,7 +281,6 @@ mod tests {
 
     #[test]
     fn validate_and_resolve_for_fetch_accepts_public_url_and_returns_addrs() {
-        // validate_and_resolve_for_fetch should accept public URLs and return (host, addrs).
         let result = validate_and_resolve_for_fetch("https://8.8.8.8/");
         assert!(result.is_ok(), "public IP should be accepted: {:?}", result.err());
         let (host, addrs) = result.unwrap();

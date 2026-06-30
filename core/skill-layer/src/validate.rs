@@ -198,8 +198,6 @@ pub fn validate_all(repo_root: &Path) -> Result<ValidationReport, FrameworkError
 
     // 7. Check optional generated files exist (as warnings)
     let optional_files = [
-        ("SKILL_TIERS.json", paths::tiers_json(repo_root)),
-        ("SKILL_HEALTH_MANIFEST.json", paths::health_json(repo_root)),
         ("SKILL_LOADOUTS.json", paths::loadouts_json(repo_root)),
     ];
     for (name, path) in optional_files {

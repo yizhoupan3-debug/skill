@@ -9,7 +9,7 @@
 //!
 //! | Module | Responsibility |
 //! |--------|---------------|
-//! | `search` | Literature search (Semantic Scholar, arXiv, paperplain MCP bridge), claim-driven research orchestration |
+//! | `search` | Literature search (Semantic Scholar, arXiv via quick-xml, paperplain MCP bridge), two-layer fuzzy+authoritative orchestration (SearchOptions: year range, arXiv category/date/advanced query, DOI/IF/conference-tier scoring), claim-driven research loop |
 //! | `claims` | Claim ledger management, drift detection, ceiling computation, hypothesis/run/reflect lifecycle |
 //! | `log` | Research activity logging (SQLite FTS5), knowledge graph, entity extraction |
 //! | `citation` | Citation audit, BibTeX rendering, DOI validation |

@@ -183,7 +183,7 @@ When a task spans both skills, the recommended flow is:
 - Reproducibility minimum record: [`../experiment-reproducibility/references/research-record-minimum.md`](../experiment-reproducibility/references/research-record-minimum.md)
 - Discovery counterpart: [`../research-discovery/SKILL.md`](../research-discovery/SKILL.md)
 - **Verification skills** (load when lane requires):
-  - `math_verification` / `math_modeling` lane → [`../formal-verification/SKILL.md`](../formal-verification/SKILL.md)
-  - `reproducibility` lane → [`../reproducibility-verification/SKILL.md`](../reproducibility-verification/SKILL.md)
+  - `math_verification` / `math_modeling` lane → [`../../quality-gates/formal-verification/SKILL.md`](../../quality-gates/formal-verification/SKILL.md)
+  - `reproducibility` lane → [`../../quality-gates/reproducibility-verification/SKILL.md`](../../quality-gates/reproducibility-verification/SKILL.md)
   - `code_verification` lane → [`../code-review-deep/SKILL.md`](../code-review-deep/SKILL.md)
-  - `prose` lane (when research output contains expository text) → [`../prose-verification/SKILL.md`](../prose-verification/SKILL.md)
+  - `prose` lane (when research output contains expository text) → [`../../quality-gates/prose-verification/SKILL.md`](../../quality-gates/prose-verification/SKILL.md)

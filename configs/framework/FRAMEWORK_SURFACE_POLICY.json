@@ -36,9 +36,6 @@
     }
   },
   "deprecated_or_foldable_reports": [],
-  "derived_reports": [
-    "skills/SKILL_TIERS.json"
-  ],
   "kernel": {
     "canonical_axes": [
       "routing",
@@ -102,6 +99,7 @@
     "source_roots": [
       "tools/browser-mcp/src/",
       "scripts/",
+      "quality-gates/",
       "skills/",
       "docs/",
       "tests/",
@@ -117,7 +115,6 @@
       "explicit_opt_in": 30
     },
     "loadout_catalog_path": "skills/SKILL_LOADOUTS.json",
-    "tier_catalog_path": "skills/SKILL_TIERS.json",
     "tier_counts": {
       "core": 12,
       "deprecated": 0,

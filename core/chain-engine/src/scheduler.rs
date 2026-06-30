@@ -8,17 +8,25 @@ use core_errors::FrameworkError;
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
+use std::sync::{Mutex, OnceLock};
 
 use crate::compat;
 use crate::types::{
     ChainDagRoot, ChainMode, ConditionOperator, ConditionType, DagCondition, DagTaskEntry, TaskStatus,
 };
 
-/// Find tasks whose dependency and capacity constraints are satisfied,
+/// Find tasks whose dependency, condition, and capacity constraints are satisfied,
 /// and transition their status to "running".
 ///
+/// `task_outputs` provides completed task outputs for evaluating `OutputField` and
+/// `Expression` conditions. Pass an empty map when outputs are unavailable — `Status`
+/// conditions are always evaluated from the in-memory DAG state.
+///
 /// Returns the IDs of tasks that were transitioned to running.
-pub fn advance_dag(root: &mut ChainDagRoot) -> Vec<String> {
+pub fn advance_dag(
+    root: &mut ChainDagRoot,
+    task_outputs: &HashMap<String, core_state::task_output::TaskOutput>,
+) -> Vec<String> {
     if root.mode != ChainMode::Dag || root.paused {
         return Vec::new();
     }
@@ -50,6 +58,12 @@ pub fn advance_dag(root: &mut ChainDagRoot) -> Vec<String> {
             continue;
         }
         if !dependencies_met_cached(task, &status_map) {
+            continue;
+        }
+        // P1.1: Evaluate condition gate — skip tasks whose condition is not met.
+        // Status conditions use the in-memory DAG state map; OutputField/Expression
+        // require task outputs (loaded by the caller).
+        if !condition_met(task, &status_map, task_outputs) {
             continue;
         }
         any_eligible = true;
@@ -127,6 +141,79 @@ fn dependencies_met_cached(
         }
     }
     true
+}
+
+/// Evaluate whether a pending task's condition gate is satisfied.
+///
+/// - No condition → always eligible (returns true).
+/// - `Status` condition → compared against source task's DAG status.
+/// - `OutputField` / `Expression` → delegated to [`evaluate_condition`] (needs task outputs).
+fn condition_met(
+    task: &DagTaskEntry,
+    status_map: &HashMap<&str, &TaskStatus>,
+    task_outputs: &HashMap<String, core_state::task_output::TaskOutput>,
+) -> bool {
+    let Some(ref condition) = task.condition else {
+        return true; // No condition = always eligible.
+    };
+    match condition.condition_type {
+        ConditionType::Status => {
+            // Evaluate against the source task's DAG execution status.
+            let raw_status = match status_map.get(condition.source.as_str()) {
+                Some(TaskStatus::Completed) => "completed",
+                Some(TaskStatus::Failed) => "failed",
+                Some(TaskStatus::Skipped) => "skipped",
+                Some(TaskStatus::Pending) => "pending",
+                Some(TaskStatus::Running) => "running",
+                Some(TaskStatus::Blocked) => "blocked",
+                Some(TaskStatus::RetryScheduled) => "retry_scheduled",
+                None => return false, // Source not found → fail closed.
+            };
+            compare_values(
+                &Value::String(raw_status.to_string()),
+                &condition.value,
+                &condition.operator,
+            )
+        }
+        ConditionType::OutputField | ConditionType::Expression => {
+            // OutputField/Expression need the source task's TASK_OUTPUT.json data.
+            evaluate_condition(task, task_outputs)
+        }
+    }
+}
+
+/// Load TASK_OUTPUT for all completed/skipped tasks referenced by DAG conditions.
+///
+/// This is an optimization — only loads outputs that the scheduler actually needs
+/// for condition evaluation. Callers of `advance_dag` that have `repo_root` should
+/// call this before invoking the scheduler.
+pub fn load_condition_task_outputs(
+    repo_root: &Path,
+    root: &ChainDagRoot,
+) -> Result<HashMap<String, core_state::task_output::TaskOutput>, FrameworkError> {
+    // Collect unique condition source task IDs.
+    let sources: HashSet<&str> = root
+        .tasks
+        .iter()
+        .filter_map(|t| t.condition.as_ref().map(|c| c.source.as_str()))
+        .collect();
+
+    let mut outputs = HashMap::new();
+    for src in sources {
+        if outputs.contains_key(src) {
+            continue;
+        }
+        // Only load if the source task has terminal DAG status (output is final).
+        if let Some(src_task) = root.task_by_id(src) {
+            if !src_task.status.is_terminal() {
+                continue;
+            }
+        }
+        if let Ok(Some(output)) = core_state::task_output::read_task_output(repo_root, src) {
+            outputs.insert(src.to_string(), output);
+        }
+    }
+    Ok(outputs)
 }
 
 /// Count currently running tasks globally and per parallel group.
@@ -441,7 +528,8 @@ fn compare_values(actual: &Value, expected: &Value, op: &ConditionOperator) -> b
 pub fn load_advance_write(repo_root: &Path) -> Result<Vec<String>, FrameworkError> {
     let path = crate::chain_file_path(repo_root);
     let mut root = compat::load_chain_file(&path)?;
-    let ready = advance_dag(&mut root);
+    let task_outputs = load_condition_task_outputs(repo_root, &root)?;
+    let ready = advance_dag(&mut root, &task_outputs);
     // Only write if there were actual transitions (dirty check).
     if !ready.is_empty() {
         write_chain_file(&path, &root)?;
@@ -449,7 +537,28 @@ pub fn load_advance_write(repo_root: &Path) -> Result<Vec<String>, FrameworkErro
     Ok(ready)
 }
 
+/// Process-level mutex guarding the TASK_CHAIN.json RMW cycle.
+///
+/// Prevents concurrent read-modify-write between the background poller thread
+/// and manual `chain_dag_tick` MCP calls. Without this guard, simultaneous
+/// RMW cycles in the same process could corrupt the chain file or lose
+/// intermediate updates.
+///
+/// Cross-process locking (flock / lockfile) is NOT yet implemented — a note
+/// in `engine.rs` describes this as a future enhancement. For single-process
+/// deployments (the current design), this mutex is sufficient.
+pub fn with_chain_lock<R>(f: impl FnOnce() -> R) -> R {
+    static CHAIN_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    let _guard = CHAIN_LOCK
+        .get_or_init(|| Mutex::new(()))
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    f()
+}
+
 /// Write a ChainDagRoot back to disk atomically.
+/// NOTE: does NOT acquire the chain lock — callers should wrap their full RMW
+/// cycle with [`with_chain_lock`] if concurrent access is expected.
 pub fn write_chain_file(
     path: &Path,
     root: &ChainDagRoot,
@@ -482,7 +591,7 @@ mod tests {
             },
         ]);
         // First tick: only 'a' is ready
-        let ready = advance_dag(&mut chain);
+        let ready = advance_dag(&mut chain, &HashMap::new());
         assert_eq!(ready.len(), 1);
         assert_eq!(ready[0], "a");
         assert_eq!(chain.tasks[0].status, TaskStatus::Running);
@@ -491,7 +600,7 @@ mod tests {
         // Complete 'a' manually
         chain.tasks[0].status = TaskStatus::Completed;
         // Second tick: 'b' should now be ready
-        let ready = advance_dag(&mut chain);
+        let ready = advance_dag(&mut chain, &HashMap::new());
         assert_eq!(ready.len(), 1);
         assert_eq!(ready[0], "b");
     }
@@ -518,12 +627,12 @@ mod tests {
         ]);
 
         // Tick 1: root only
-        assert_eq!(advance_dag(&mut chain).len(), 1);
+        assert_eq!(advance_dag(&mut chain, &HashMap::new()).len(), 1);
         assert_eq!(chain.tasks[0].status, TaskStatus::Running);
         chain.tasks[0].status = TaskStatus::Completed;
 
         // Tick 2: left + right (both ready)
-        let ready = advance_dag(&mut chain);
+        let ready = advance_dag(&mut chain, &HashMap::new());
         assert_eq!(ready.len(), 2);
         assert!(ready.contains(&"left".to_string()));
         assert!(ready.contains(&"right".to_string()));
@@ -531,7 +640,7 @@ mod tests {
         chain.tasks[2].status = TaskStatus::Completed;
 
         // Tick 3: merge
-        let ready = advance_dag(&mut chain);
+        let ready = advance_dag(&mut chain, &HashMap::new());
         assert_eq!(ready.len(), 1);
         assert_eq!(ready[0], "merge");
     }
@@ -545,7 +654,7 @@ mod tests {
         ]);
         chain.global_config.max_concurrent_tasks = 2;
 
-        let ready = advance_dag(&mut chain);
+        let ready = advance_dag(&mut chain, &HashMap::new());
         assert_eq!(ready.len(), 2);
         assert_eq!(
             chain.tasks.iter().filter(|t| t.status == TaskStatus::Running).count(),
@@ -573,7 +682,7 @@ mod tests {
         ]);
 
         // Tick 1: only 'a' is ready (b depends on a)
-        let ready = advance_dag(&mut chain);
+        let ready = advance_dag(&mut chain, &HashMap::new());
         assert_eq!(ready.len(), 1);
         assert_eq!(ready[0], "a");
         assert_eq!(chain.tasks[2].status, TaskStatus::Pending); // 'c' blocked
@@ -582,7 +691,7 @@ mod tests {
         chain.tasks[0].status = TaskStatus::Completed;
 
         // Tick 2: 'b' becomes ready (dependency 'a' is done)
-        let ready = advance_dag(&mut chain);
+        let ready = advance_dag(&mut chain, &HashMap::new());
         assert_eq!(ready.len(), 1);
         assert_eq!(ready[0], "b");
         assert_eq!(chain.tasks[2].status, TaskStatus::Pending); // 'c' still blocked
@@ -591,7 +700,7 @@ mod tests {
         chain.tasks[1].status = TaskStatus::Completed;
 
         // Tick 3: 'c' becomes ready (both dependencies resolved)
-        let ready = advance_dag(&mut chain);
+        let ready = advance_dag(&mut chain, &HashMap::new());
         assert_eq!(ready.len(), 1);
         assert_eq!(ready[0], "c");
     }

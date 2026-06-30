@@ -183,13 +183,20 @@ fn tool_def(name: &str, description: &str, input_schema: Value) -> Value {
 fn tool_literature_search() -> Value {
     tool_def(
         "research_literature_search",
-        "Search academic literature across arXiv and Semantic Scholar",
+        "Search academic literature across arXiv and Semantic Scholar. Supports fuzzy matching and authoritative filtering.",
         json!({
             "type": "object",
             "properties": {
                 "query": {"type": "string", "description": "Search query (plain text)"},
-                "limit": {"type": "integer", "description": "Max results per source (default 10, max 20)"},
-                "source": {"type": "string", "enum": ["all", "semantic-scholar", "arxiv"], "description": "Source to search (default all)"}
+                "limit": {"type": "integer", "description": "Max results per source (default 20, max 100)"},
+                "source": {"type": "string", "enum": ["all", "semantic-scholar", "arxiv"], "description": "Source to search (default all)"},
+                "year_from": {"type": "integer", "description": "Minimum publication year (inclusive)"},
+                "year_to": {"type": "integer", "description": "Maximum publication year (inclusive)"},
+                "sort_by": {"type": "string", "enum": ["relevance", "date"], "description": "Sort order (default relevance)"},
+                "categories": {"type": "string", "description": "arXiv category filter, comma-separated (e.g. 'cs.AI,cs.LG')"},
+                "advanced_query": {"type": "string", "description": "Advanced arXiv native query (e.g. 'au:vaswani AND ti:attention'). Overrides 'query' for arXiv only."},
+                "fuzzy_query": {"type": "boolean", "description": "Enable fuzzy/broad matching — arXiv uses raw text with OR expansion instead of all: keyword (default false)"},
+                "prefer_authoritative": {"type": "boolean", "description": "Enable two-pass authoritative ranking — fetches up to 3x results, scores by DOI/venue/citations/recency, demotes preprints (default false)"}
             },
             "required": ["query"]
         }),

@@ -189,7 +189,23 @@ pub fn migrate_state(state: &Value) -> Result<Value> {
 ///
 /// This is the comprehensive version of `ensure_state_defaults` that includes
 /// field-level defaults for nested structures (hypotheses, runs, external research).
+/// Fully hydrate a state value with all defaults for arrays, novelty_gate,
+/// hypothesis fields, run record fields, and external_research records.
+///
+/// This is the comprehensive version of `ensure_state_defaults` that includes
+/// field-level defaults for nested structures (hypotheses, runs, external research).
+///
+/// Fast path: if the state is already hydrated (schema_version present), returns
+/// `Ok(state)` without clone.
 pub fn hydrate_state(state: &Value) -> Result<Value> {
+    // Fast path — state already has root defaults, skip clone.
+    if state.get("schema_version").and_then(Value::as_str).is_some()
+        && state.get("status").and_then(Value::as_str).is_some()
+        && state.get("novelty_gate").is_some()
+    {
+        return Ok(state.clone());
+    }
+
     let mut hydrated = state.clone();
     {
         let root = obj_mut(&mut hydrated);

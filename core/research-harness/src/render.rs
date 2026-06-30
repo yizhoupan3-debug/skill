@@ -1137,7 +1137,7 @@ pub fn sync_managed_file(
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }
-    fs::write(path, final_content)?;
+    core_state_utils::atomic_write::write_atomic_text(path, &final_content)?;
     Ok(())
 }
 

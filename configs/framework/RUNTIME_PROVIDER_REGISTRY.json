@@ -267,7 +267,6 @@
     "status": "declared",
     "inputs": [
       "tests/routing_eval_cases.json",
-      "skills/SKILL_HEALTH_MANIFEST.json",
       "skills/SKILL_ROUTING_RUNTIME_EXPLAIN.json",
       "configs/framework/HARNESS_BEHAVIORAL_EVAL_CASES.json",
       "configs/framework/HARNESS_FAILURE_TAXONOMY.json"

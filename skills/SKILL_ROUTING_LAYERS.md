@@ -54,9 +54,9 @@ L2  code-review-deep, citation-management, deep-search, gitx,
     research-execution
 L3  design-md, doc, experiment-reproducibility, mcp-server-management, pdf,
     slides, spreadsheets, tikz-paper-figure, visual-review
-L4  formal-verification, literature-verification, math-derivation,
-    prose-verification, python-env-management, reproducibility-verification,
-    statistical-analysis, statistical-verification, structure-verification
+L4  quality-gates/formal-verification, quality-gates/literature-verification, math-derivation,
+    quality-gates/prose-verification, python-env-management, quality-gates/reproducibility-verification,
+    statistical-analysis, quality-gates/statistical-verification, quality-gates/structure-verification
 Runtime lanes  planning, execution/code, language/framework, platform/integration,
                verification/review, memory and prompt policy, research workflow
 ```
@@ -86,7 +86,7 @@ Runtime lanes  planning, execution/code, language/framework, platform/integratio
 - `infographic` vs `tikz-paper-figure` → 静态信息图/知识卡片（HTML）vs 代码驱动科研图表（matplotlib/TikZ）
 - `infographic` vs `slides` → 单页信息图 vs 多页演示文稿
 - `tikz-paper-figure` vs `diagramming` → TikZ 矢量图（LaTeX 编译）vs Mermaid/Graphviz 文本图
-- `tikz-paper-figure` vs `structure-verification` → 生成 TikZ 图 vs 验证 LaTeX 编译正确性
+- `tikz-paper-figure` vs `quality-gates/structure-verification` → 生成 TikZ 图 vs 验证 LaTeX 编译正确性
 - `email-template` vs `doc` → HTML 邮件（邮件客户端渲染）vs Word 文档（.docx）
 - `algo-trading` vs `statistical-analysis` → 交易策略+数据获取+回测 vs 通用统计方法+假设检验
 - `visual-review` vs `pdf` / `doc` / `spreadsheets` → 看证据 vs 改 artifact

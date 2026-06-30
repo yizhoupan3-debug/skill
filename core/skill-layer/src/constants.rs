@@ -14,11 +14,6 @@ pub const SCHEMA_RUNTIME: &str = "skill-routing-runtime-v3";
 // Skill registry schemas (generated / write side)
 // ---------------------------------------------------------------------------
 
-/// `skills/SKILL_TIERS.json` — tier classification (generated).
-pub const SCHEMA_TIERS: &str = "skill-tiers-v1";
-/// `skills/SKILL_HEALTH_MANIFEST.json` — health manifest (generated).
-pub const SCHEMA_HEALTH: &str = "skill-health-manifest-v1";
-
 // ---------------------------------------------------------------------------
 // CLI / harness schemas
 // ---------------------------------------------------------------------------

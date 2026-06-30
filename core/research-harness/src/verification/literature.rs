@@ -8,6 +8,10 @@ use std::collections::HashSet;
 /// 通过向 https://doi.org/<doi> 发送 HEAD 请求，检查 3xx/2xx 响应。
 /// 每请求构建一次 DNS-pinned client 以防止 DNS rebinding TOCTOU。
 pub async fn verify_doi_reachable(doi: &str) -> Result<bool> {
+    let doi = doi.trim();
+    if doi.is_empty() {
+        anyhow::bail!("empty DOI");
+    }
     let url = if doi.starts_with("http") {
         doi.to_string()
     } else {
@@ -113,8 +117,8 @@ mod tests {
         assert!(result.is_err(), "empty DOI should be rejected: {:?}", result);
         let err = result.unwrap_err().to_string();
         assert!(
-            err.contains("invalid") || err.contains("host") || err.contains("URL"),
-            "error should mention reason (invalid/host/URL): {err}"
+            err.contains("empty") || err.contains("invalid") || err.contains("host") || err.contains("URL"),
+            "error should mention reason (empty/invalid/host/URL): {err}"
         );
     }
 }

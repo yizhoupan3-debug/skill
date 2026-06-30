@@ -76,7 +76,7 @@ fn tool_literature_search(arguments: &Value) -> Result<String, FrameworkError> {
     let limit = arguments
         .get("limit")
         .and_then(Value::as_u64)
-        .unwrap_or(10) as usize;
+        .unwrap_or(20) as usize;
     let source_str = arguments
         .get("source")
         .and_then(Value::as_str)
@@ -86,7 +86,45 @@ fn tool_literature_search(arguments: &Value) -> Result<String, FrameworkError> {
         "arxiv" => crate::search::ExternalSourceArg::Arxiv,
         _ => crate::search::ExternalSourceArg::All,
     };
-    let result = crate::search::orchestration::search_raw(query, limit, &source, 20)
+    let year_from = arguments.get("year_from").and_then(Value::as_u64).map(|y| y as u32);
+    let year_to = arguments.get("year_to").and_then(Value::as_u64).map(|y| y as u32);
+    let sort_by = match arguments.get("sort_by").and_then(Value::as_str) {
+        Some("date") => crate::search::SortBy::Date,
+        _ => crate::search::SortBy::Relevance,
+    };
+    let categories = arguments
+        .get("categories")
+        .and_then(Value::as_str)
+        .filter(|s| !s.is_empty())
+        .map(String::from);
+    let advanced_query = arguments
+        .get("advanced_query")
+        .and_then(Value::as_str)
+        .filter(|s| !s.is_empty())
+        .map(String::from);
+    let fuzzy_query = arguments
+        .get("fuzzy_query")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let prefer_authoritative = arguments
+        .get("prefer_authoritative")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+
+    let opts = crate::search::SearchOptions {
+        query: query.to_string(),
+        limit,
+        source,
+        year_from,
+        year_to,
+        sort_by,
+        categories,
+        advanced_query,
+        fuzzy_query,
+        prefer_authoritative,
+        ..crate::search::SearchOptions::new(query)
+    };
+    let result = crate::search::orchestration::search_raw(&opts)
         .map_err(|e| FrameworkError::validation(format!("literature search failed: {e}")))?;
     serde_json::to_string_pretty(&result).map_err(FrameworkError::Json)
 }

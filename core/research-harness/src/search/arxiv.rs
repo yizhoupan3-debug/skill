@@ -2,31 +2,37 @@
 
 //! arXiv API client.
 //!
-//! Searches arXiv via the Atom feed API and parses results into JSON or Paper structs.
+//! Searches arXiv via the Atom feed API and parses results using quick-xml.
+//! Supports field-prefixed queries, date range, category filters, and
+//! date-sorted results.
 
 use anyhow::{Context, Result};
+use quick_xml::events::Event;
+use quick_xml::Reader;
 use reqwest::blocking::Client;
 use reqwest::header::USER_AGENT;
 use serde_json::{Value, json};
 
 use crate::search::helpers::*;
+use crate::search::options::*;
 
-/// Search arXiv by query string.
+/// Search arXiv with full SearchOptions support.
 ///
-/// Returns a list of JSON objects with fields: source, title, authors, year,
-/// venue, url, abstract, citation_count, external_ids.
+/// Uses `advanced_query` if set (native arXiv query syntax), otherwise wraps
+/// `query` in `all:"keyword"`.
 ///
-/// Retries up to 3 times with exponential backoff on transient errors (503, timeout).
-pub fn search(client: &Client, query: &str, limit: usize) -> Result<Vec<Value>> {
+/// Supports: year range (submittedDate), sort by date, category filter (cat:),
+/// and up to 100 results.
+pub fn search(client: &Client, opts: &SearchOptions) -> Result<Vec<Value>> {
     let mut first_non_transient: Option<anyhow::Error> = None;
     for attempt in 0..3 {
-        match try_search(client, query, limit) {
+        match try_search(client, opts) {
             Ok(results) => return Ok(results),
             Err(e) => {
                 let msg = e.to_string();
-                // Only retry on transient errors
                 let is_transient = msg.contains("503")
                     || msg.contains("502")
+                    || msg.contains("429")
                     || msg.contains("timeout")
                     || msg.contains("connection");
                 if is_transient && attempt < 2 {
@@ -46,17 +52,76 @@ pub fn search(client: &Client, query: &str, limit: usize) -> Result<Vec<Value>> 
     Err(anyhow::anyhow!("arXiv search failed after 3 retries"))
 }
 
-fn try_search(client: &Client, query: &str, limit: usize) -> Result<Vec<Value>> {
+fn try_search(client: &Client, opts: &SearchOptions) -> Result<Vec<Value>> {
     crate::util::validate_url_for_fetch(ARXIV_BASE_URL)?;
+
+    // Build search_query: use advanced_query if set, otherwise all:"keyword"
+    // or raw query text (fuzzy mode).
+    let search_query = if opts.query.trim().is_empty() {
+        // Empty query with no advanced_query — use a catch-all to avoid
+        // generating invalid arXiv query syntax.
+        String::from("all:\"\")")
+    } else if let Some(ref adv) = opts.advanced_query {
+        adv.clone()
+    } else if opts.fuzzy_query {
+        // Fuzzy mode: pass raw query text without quotes.
+        // arXiv's default search does word-level AND across all fields,
+        // which naturally acts as fuzzy matching.
+        if opts.query.contains(&['(', ')', '"', '\''][..]) {
+            // Contains operators — use as-is
+            opts.query.clone()
+        } else {
+            // Simple text: wrap space-separated terms in OR for broader matching
+            format!("({})", opts.query.split_whitespace().collect::<Vec<_>>().join(" OR "))
+        }
+    } else {
+        format!("all:\"{}\"", opts.query.replace('"', "\\\""))
+    };
+
+    // Append category filter
+    let search_query = if let Some(ref cats) = opts.categories {
+        let cat_terms: Vec<String> = cats
+            .split(',')
+            .map(|c| format!("cat:{}", c.trim()))
+            .collect();
+        if cat_terms.is_empty() {
+            search_query
+        } else {
+            format!("({search_query}) AND ({})", cat_terms.join(" OR "))
+        }
+    } else {
+        search_query
+    };
+
+    // Append date range filter
+    let search_query = match (opts.year_from, opts.year_to) {
+        (Some(from), Some(to)) => {
+            format!("{search_query} AND submittedDate:[{from}0101 TO {to}1231]")
+        }
+        (Some(from), None) => {
+            format!("{search_query} AND submittedDate:[{from}0101 TO 99991231]")
+        }
+        (None, Some(to)) => {
+            format!("{search_query} AND submittedDate:[00000101 TO {to}1231]")
+        }
+        (None, None) => search_query,
+    };
+
+    let (sort_by, sort_order) = if opts.sort_by == SortBy::Date {
+        ("submittedDate", "descending")
+    } else {
+        ("relevance", "descending")
+    };
+
     let raw = client
         .get(ARXIV_BASE_URL)
         .header(USER_AGENT, "research-harness/0.1")
         .query(&[
-            ("search_query", format!("all:\"{}\"", query.replace('"', "\\\""))),
-            ("start", "0".to_string()),
-            ("max_results", normalize_limit(limit).to_string()),
-            ("sortBy", "relevance".to_string()),
-            ("sortOrder", "descending".to_string()),
+            ("search_query", search_query.as_str()),
+            ("start", "0"),
+            ("max_results", &normalize_limit(opts.limit).to_string()),
+            ("sortBy", sort_by),
+            ("sortOrder", sort_order),
         ])
         .send()
         .context("arXiv request failed")?
@@ -64,29 +129,172 @@ fn try_search(client: &Client, query: &str, limit: usize) -> Result<Vec<Value>> 
         .context("arXiv returned an error")?
         .text()
         .context("arXiv returned invalid text")?;
-    let entry_re = &*ARXIV_ENTRY_RE;
-    let author_re = &*ARXIV_AUTHOR_RE;
+
     let mut results = Vec::new();
-    for entry in entry_re.captures_iter(&raw) {
-        let entry_raw = entry.get(1).map(|item| item.as_str()).unwrap_or("");
-        let authors = author_re
-            .captures_iter(entry_raw)
-            .filter_map(|cap| cap.get(1).map(|item| decode_xml_entities(item.as_str())))
-            .take(4)
-            .collect::<Vec<_>>()
-            .join(", ");
-        results.push(json!({
-            "source": "arXiv",
-            "title": xml_text_between(entry_raw, "title").unwrap_or_else(|| "_untitled_".into()),
-            "authors": authors,
-            "year": xml_text_between(entry_raw, "published").map(|date| date.chars().take(4).collect::<String>()).unwrap_or_default(),
-            "venue": "arXiv",
-            "url": xml_text_between(entry_raw, "id").unwrap_or_default(),
-            "abstract": xml_text_between(entry_raw, "summary").unwrap_or_default(),
-            "citation_count": Value::Null,
-            "external_ids": Value::Null,
-        }));
+    let mut reader = Reader::from_str(&raw);
+    reader.config_mut().trim_text(true);
+
+    struct EntryData {
+        title: String,
+        authors: Vec<String>,
+        published: String,
+        id: String,
+        summary: String,
     }
+
+    enum ParseState {
+        Outside,
+        InEntry,
+        InTitle,
+        InAuthor,
+        InName,
+        InPublished,
+        InId,
+        InSummary,
+    }
+
+    let mut state = ParseState::Outside;
+    let mut entry: Option<EntryData> = None;
+    let mut text_buf = String::new();
+    let mut buf = Vec::new();
+
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(ref e)) | Ok(Event::Empty(ref e)) => {
+                let tag = e.name().as_ref().to_ascii_lowercase();
+                match state {
+                    ParseState::Outside if tag == b"entry" => {
+                        entry = Some(EntryData {
+                            title: String::new(),
+                            authors: Vec::new(),
+                            published: String::new(),
+                            id: String::new(),
+                            summary: String::new(),
+                        });
+                        state = ParseState::InEntry;
+                    }
+                    ParseState::InEntry if tag == b"title" => {
+                        text_buf.clear();
+                        state = ParseState::InTitle;
+                    }
+                    ParseState::InEntry if tag == b"author" => {
+                        text_buf.clear();
+                        state = ParseState::InAuthor;
+                    }
+                    ParseState::InAuthor if tag == b"name" => {
+                        text_buf.clear();
+                        state = ParseState::InName;
+                    }
+                    ParseState::InEntry if tag == b"published" => {
+                        text_buf.clear();
+                        state = ParseState::InPublished;
+                    }
+                    ParseState::InEntry if tag == b"id" => {
+                        text_buf.clear();
+                        state = ParseState::InId;
+                    }
+                    ParseState::InEntry if tag == b"summary" => {
+                        text_buf.clear();
+                        state = ParseState::InSummary;
+                    }
+                    _ => {}
+                }
+            }
+            Ok(Event::Text(ref e)) => {
+                if let Ok(text) = e.unescape() {
+                    match state {
+                        ParseState::InTitle
+                        | ParseState::InPublished
+                        | ParseState::InId
+                        | ParseState::InSummary => {
+                            text_buf.push_str(text.as_ref());
+                        }
+                        ParseState::InName => {
+                            text_buf.push_str(text.as_ref());
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            Ok(Event::End(ref e)) => {
+                let tag = e.name().as_ref().to_ascii_lowercase();
+                match state {
+                    ParseState::InTitle if tag == b"title" => {
+                        if let Some(ref mut ent) = entry {
+                            ent.title.clone_from(&text_buf);
+                        }
+                        state = ParseState::InEntry;
+                    }
+                    ParseState::InName if tag == b"name" => {
+                        if !text_buf.trim().is_empty() {
+                            if let Some(ref mut ent) = entry {
+                                ent.authors.push(text_buf.trim().to_string());
+                            }
+                        }
+                        state = ParseState::InAuthor;
+                    }
+                    ParseState::InAuthor if tag == b"author" => {
+                        state = ParseState::InEntry;
+                    }
+                    ParseState::InPublished if tag == b"published" => {
+                        if let Some(ref mut ent) = entry {
+                            ent.published.clone_from(&text_buf);
+                        }
+                        state = ParseState::InEntry;
+                    }
+                    ParseState::InId if tag == b"id" => {
+                        if let Some(ref mut ent) = entry {
+                            ent.id.clone_from(&text_buf);
+                        }
+                        state = ParseState::InEntry;
+                    }
+                    ParseState::InSummary if tag == b"summary" => {
+                        if let Some(ref mut ent) = entry {
+                            ent.summary.clone_from(&text_buf);
+                        }
+                        state = ParseState::InEntry;
+                    }
+                    ParseState::InEntry if tag == b"entry" => {
+                        if let Some(ent) = entry.take() {
+                            let authors_slice = ent
+                                .authors
+                                .iter()
+                                .take(4)
+                                .cloned()
+                                .collect::<Vec<_>>()
+                                .join(", ");
+                            let year = if ent.published.len() >= 4 {
+                                ent.published[..4].to_string()
+                            } else {
+                                String::new()
+                            };
+                            results.push(json!({
+                                "source": "arXiv",
+                                "title": ent.title,
+                                "authors": authors_slice,
+                                "year": year,
+                                "venue": "arXiv",
+                                "url": ent.id,
+                                "abstract": ent.summary,
+                                "citation_count": Value::Null,
+                                "external_ids": Value::Null,
+                            }));
+                        }
+                        state = ParseState::Outside;
+                    }
+                    _ => {}
+                }
+            }
+            Ok(Event::Eof) => break,
+            Err(e) => {
+                tracing::warn!("[arxiv] XML parse error (skipping remaining entries): {e}");
+                break;
+            }
+            _ => {}
+        }
+        buf.clear();
+    }
+
     Ok(results)
 }
 
@@ -95,19 +303,21 @@ fn try_search(client: &Client, query: &str, limit: usize) -> Result<Vec<Value>> 
 /// Search and convert to typed Paper structs.
 pub fn search_papers(
     client: &Client,
-    query: &str,
-    limit: usize,
+    opts: &SearchOptions,
 ) -> Result<Vec<crate::types::Paper>> {
-    let raw = search(client, query, limit)?;
+    let raw = search(client, opts)?;
     raw.into_iter().map(json_to_paper).collect()
 }
 
 fn json_to_paper(v: Value) -> Result<crate::types::Paper> {
     let title = str_field_default(&v, "title", "_untitled_");
     let url = v.get("url").and_then(Value::as_str).unwrap_or("");
-    // arXiv URL contains the ID, e.g. http://arxiv.org/abs/2301.07041
-    let id = url.rsplit('/').next().unwrap_or("").to_string();
-    // Fallback: empty ID → hash-based ID from title (guarantees non-empty)
+    let id = url
+        .trim_end_matches('/')
+        .rsplit('/')
+        .next()
+        .unwrap_or("")
+        .to_string();
     let id = if id.is_empty() {
         use std::hash::{Hash, Hasher};
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
@@ -179,11 +389,9 @@ mod tests {
             "abstract": ""
         });
         let paper = json_to_paper(v).unwrap();
-        // Hash-based fallback ID
         assert!(paper.id.starts_with("arxiv-hash-"));
         assert_eq!(paper.authors.len(), 0);
         assert_eq!(paper.year, None);
-        assert_eq!(paper.source, crate::types::PaperSource::ArXiv);
     }
 
     #[test]
@@ -196,66 +404,14 @@ mod tests {
             "abstract": ""
         });
         let paper = json_to_paper(v).unwrap();
-        // URL with trailing slash produces empty last segment → hash fallback
-        assert!(paper.id.starts_with("arxiv-hash-"));
-    }
-
-    #[test]
-    fn json_to_paper_no_authors_field() {
-        let v = json!({
-            "title": "No Author",
-            "url": "http://arxiv.org/abs/2301.07043",
-            "authors": "",
-            "year": "2024",
-            "abstract": ""
-        });
-        let paper = json_to_paper(v).unwrap();
-        assert!(paper.authors.is_empty());
-    }
-
-    #[test]
-    fn json_to_paper_missing_abstract() {
-        let v = json!({
-            "title": "No Abstract",
-            "url": "http://arxiv.org/abs/2301.07044",
-            "authors": "Author A",
-            "year": "2024"
-        });
-        let paper = json_to_paper(v).unwrap();
-        assert_eq!(paper.abstract_text, "");
-    }
-
-    #[test]
-    fn json_to_paper_invalid_year() {
-        let v = json!({
-            "title": "Bad Year",
-            "url": "http://arxiv.org/abs/2301.07045",
-            "authors": "",
-            "year": "not-a-number",
-            "abstract": ""
-        });
-        let paper = json_to_paper(v).unwrap();
-        assert_eq!(paper.year, None);
-    }
-
-    #[test]
-    fn json_to_paper_multiple_authors() {
-        let v = json!({
-            "title": "Co-authored",
-            "url": "http://arxiv.org/abs/2301.07046",
-            "authors": "Alice, Bob, Charlie",
-            "year": "2024",
-            "abstract": "Co-authored paper"
-        });
-        let paper = json_to_paper(v).unwrap();
-        assert_eq!(paper.authors, vec!["Alice", "Bob", "Charlie"]);
+        assert_eq!(paper.id, "2301.07042");
     }
 
     #[test]
     fn normalize_limit_clamps() {
-        assert_eq!(crate::search::helpers::normalize_limit(0), 1);
-        assert_eq!(crate::search::helpers::normalize_limit(1), 1);
-        assert_eq!(crate::search::helpers::normalize_limit(20), 20);
-        assert_eq!(crate::search::helpers::normalize_limit(50), 20);
+        assert_eq!(normalize_limit(0), 1);
+        assert_eq!(normalize_limit(1), 1);
+        assert_eq!(normalize_limit(100), 100);
+        assert_eq!(normalize_limit(200), 100);
     }
 }

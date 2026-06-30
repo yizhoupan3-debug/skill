@@ -23,17 +23,6 @@ const MAX_WORKER_EVENTS: usize = 100;
 /// removed from the store to prevent unbounded Vec + state.json growth.
 const TERMINATED_WORKER_RETENTION_SECS: i64 = 3600; // 1 hour
 
-/// Maximum retention for worker log files (seconds). Log files of terminated
-/// workers older than this are deleted.
-const WORKER_LOG_RETENTION_SECS: i64 = 86_400; // 24 hours
-
-pub fn worker_log_path(state_path: &Path, worker_id: &str) -> PathBuf {
-    let state_dir = state_path.parent().unwrap_or_else(|| Path::new("."));
-    state_dir
-        .join("logs")
-        .join(format!("{}.log", sanitize_segment(worker_id)))
-}
-
 pub fn load_store(path: &Path) -> Result<SessionSupervisorStore, FrameworkError> {
     if !path.is_file() {
         return Ok(SessionSupervisorStore {
@@ -172,76 +161,6 @@ pub fn compact_terminated_workers(workers: &mut Vec<WorkerSessionRecord>, now: &
     });
 }
 
-/// Remove worker log files for workers that no longer exist in the store,
-/// older than `WORKER_LOG_RETENTION_SECS`. Best-effort, logs warnings on failure.
-pub fn cleanup_stale_logs(state_path: &std::path::Path, workers: &[WorkerSessionRecord]) {
-    let logs_dir = state_path.parent().unwrap_or_else(|| std::path::Path::new(".")).join("logs");
-    if !logs_dir.is_dir() {
-        return;
-    }
-    // Collect active worker IDs
-    let active_ids: std::collections::HashSet<String> = workers.iter().map(|w| sanitize_segment(&w.worker_id)).collect();
-    let now_dt = match Utc::now().checked_sub_signed(chrono::Duration::seconds(WORKER_LOG_RETENTION_SECS)) {
-        Some(dt) => dt,
-        None => return,
-    };
-    if let Ok(entries) = std::fs::read_dir(&logs_dir) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if !path.is_file() || path.extension().and_then(|e| e.to_str()) != Some("log") {
-                continue;
-            }
-            // Extract worker_id from filename (strip .log extension)
-            let stem = match path.file_stem().and_then(|s| s.to_str()) {
-                Some(s) => s.to_string(),
-                None => continue,
-            };
-            // Skip if worker is still tracked in store
-            if active_ids.contains(&stem) {
-                continue;
-            }
-            // Check file age
-            let metadata = match path.metadata() {
-                Ok(m) => m,
-                Err(_) => continue,
-            };
-            let modified = match metadata.modified() {
-                Ok(t) => {
-                    let dur = t.duration_since(std::time::SystemTime::UNIX_EPOCH).unwrap_or_default();
-                    DateTime::from_timestamp(dur.as_secs() as i64, dur.subsec_nanos())
-                }
-                Err(_) => None
-            };
-            match modified {
-                Some(mtime) if mtime > now_dt => continue, // too recent
-                _ => {}
-            }
-            if let Err(e) = std::fs::remove_file(&path) {
-                tracing::debug!("cleanup_stale_logs: remove {} failed ({e})", path.display());
-            }
-        }
-    }
-}
-
-pub fn sanitize_segment(value: &str) -> String {
-    let mut slug = String::new();
-    let mut previous_dash = false;
-    for ch in value.chars() {
-        if ch.is_ascii_alphanumeric() {
-            slug.push(ch.to_ascii_lowercase());
-            previous_dash = false;
-        } else if !previous_dash {
-            slug.push('-');
-            previous_dash = true;
-        }
-    }
-    let slug = slug.trim_matches('-').to_string();
-    if slug.is_empty() {
-        "worker".to_string()
-    } else {
-        slug
-    }
-}
 
 pub fn ensure_lane_contract_metadata(
     metadata: Value,

@@ -23,10 +23,6 @@ pub fn skills_root(repo_root: &Path) -> PathBuf {
 
 /// `skills/SKILL_ROUTING_RUNTIME.json` — hot routing surface.
 pub const SKILL_ROUTING_RUNTIME_JSON: &str = "SKILL_ROUTING_RUNTIME.json";
-/// `skills/SKILL_TIERS.json` — tier classification.
-pub const SKILL_TIERS_JSON: &str = "SKILL_TIERS.json";
-/// `skills/SKILL_HEALTH_MANIFEST.json` — health manifest.
-pub const SKILL_HEALTH_MANIFEST_JSON: &str = "SKILL_HEALTH_MANIFEST.json";
 /// `skills/SKILL_LOADOUTS.json` — skill loadout profiles.
 pub const SKILL_LOADOUTS_JSON: &str = "SKILL_LOADOUTS.json";
 
@@ -46,16 +42,6 @@ pub const FRAMEWORK_SURFACE_POLICY_JSON: &str = "configs/framework/FRAMEWORK_SUR
 /// `repo_root/skills/SKILL_ROUTING_RUNTIME.json`
 pub fn runtime_json(repo_root: &Path) -> PathBuf {
     skills_root(repo_root).join(SKILL_ROUTING_RUNTIME_JSON)
-}
-
-/// `repo_root/skills/SKILL_TIERS.json`
-pub fn tiers_json(repo_root: &Path) -> PathBuf {
-    skills_root(repo_root).join(SKILL_TIERS_JSON)
-}
-
-/// `repo_root/skills/SKILL_HEALTH_MANIFEST.json`
-pub fn health_json(repo_root: &Path) -> PathBuf {
-    skills_root(repo_root).join(SKILL_HEALTH_MANIFEST_JSON)
 }
 
 /// `repo_root/skills/SKILL_LOADOUTS.json`

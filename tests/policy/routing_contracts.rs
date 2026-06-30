@@ -333,36 +333,7 @@ fn codex_sync_preserves_existing_agents_codex_delta_file() {
     }
 }
 
-#[test]
-fn framework_surface_policy_is_the_activation_source_of_truth() {
-    let surface =
-        read_json(&project_root().join("configs/framework/FRAMEWORK_SURFACE_POLICY.json"));
-    let tiers = read_json(&project_root().join("skills/SKILL_TIERS.json"));
 
-    assert_eq!(surface["source_of_truth"], true);
-    assert_eq!(
-        surface["derived_reports"],
-        serde_json::json!(["skills/SKILL_TIERS.json"])
-    );
-    assert_eq!(
-        surface["deprecated_or_foldable_reports"],
-        serde_json::json!([])
-    );
-    assert_eq!(
-        surface["kernel"]["canonical_axes"],
-        serde_json::json!(["routing", "memory", "continuity", "host_projection"])
-    );
-    assert_eq!(tiers["source_of_truth"], false);
-    assert_eq!(
-        tiers["derived_from"],
-        "configs/framework/FRAMEWORK_SURFACE_POLICY.json"
-    );
-    assert_eq!(tiers["report_status"], "generated_debug_report");
-    assert_eq!(
-        surface["skill_system"]["activation_counts"],
-        tiers["summary"]["activation_counts"]
-    );
-}
 
 #[test]
 fn runtime_hot_index_is_minimal() {
@@ -624,37 +595,6 @@ fn hot_runtime_codex_only_slugs_have_no_extra_hosts() {
             );
         }
     }
-}
-
-#[test]
-fn plugin_catalog_routing_metadata_and_health_manifest_form_closed_loop() {
-    let runtime = read_json(&project_root().join("skills/SKILL_ROUTING_RUNTIME.json"));
-    let health = read_json(&project_root().join("skills/SKILL_HEALTH_MANIFEST.json"));
-
-    assert!(!runtime["keys"].as_array().expect("keys").is_empty());
-    assert_eq!(health["schema_version"], "skill-health-manifest-v1");
-    assert_eq!(health["source_of_truth"], false);
-    assert!(health["skills"].is_object());
-    assert!(!runtime["keys"].as_array().expect("keys").is_empty());
-
-    let runtime_slugs: HashSet<String> = runtime["skills"]
-        .as_array()
-        .expect("runtime skills")
-        .iter()
-        .filter_map(|row| row[0].as_str().map(str::to_string))
-        .collect();
-    assert!(runtime_slugs.contains("skill-framework-developer"));
-}
-
-#[test]
-fn plugin_catalog_routing_metadata_companion_schemas_contract() {
-    let health = read_json(&project_root().join("skills/SKILL_HEALTH_MANIFEST.json"));
-
-    assert_eq!(health["schema_version"], "skill-health-manifest-v1");
-    assert!(
-        health["skills"].is_object(),
-        "health manifest must list skills"
-    );
 }
 
 #[test]

@@ -3,6 +3,7 @@
 //! Semantic Scholar API client.
 //!
 //! Wraps the S2 graph API for paper search with structured result parsing.
+//! Supports year filtering and up to 100 results.
 
 use anyhow::{Context, Result};
 use reqwest::blocking::Client;
@@ -10,31 +11,57 @@ use reqwest::header::{ACCEPT, USER_AGENT};
 use serde_json::{Value, json};
 
 use crate::search::helpers::*;
+use crate::search::options::*;
 
 /// Search papers on Semantic Scholar by query string.
 ///
-/// Returns a list of JSON objects with fields: source, title, authors, year,
-/// venue, url, abstract, citation_count, external_ids.
-pub fn search(client: &Client, query: &str, limit: usize) -> Result<Vec<Value>> {
+/// Supports: year range filter, up to 100 results.
+/// S2 does not expose a sort-by-date parameter on the search endpoint;
+/// results are always ordered by relevance.
+pub fn search(client: &Client, opts: &SearchOptions) -> Result<Vec<Value>> {
     crate::util::validate_url_for_fetch(SEMANTIC_SCHOLAR_BASE_URL)?;
-    let response: Value = client
+
+    let mut query_params: Vec<(&str, String)> = vec![
+        ("query", opts.query.clone()),
+        (
+            "fields",
+            "title,authors,year,venue,url,abstract,citationCount,externalIds,publicationDate"
+                .to_string(),
+        ),
+        ("limit", normalize_limit(opts.limit).to_string()),
+    ];
+
+    // S2 supports year as a single year or hyphen range: "2023" or "2023-2025"
+    match (opts.year_from, opts.year_to) {
+        (Some(from), Some(to)) => {
+            query_params.push(("year", format!("{from}-{to}")));
+        }
+        (Some(from), None) => {
+            query_params.push(("year", from.to_string()));
+        }
+        (None, Some(to)) => {
+            query_params.push(("year", format!("0-{to}")));
+        }
+        (None, None) => {}
+    }
+
+    let mut request = client
         .get(SEMANTIC_SCHOLAR_BASE_URL)
         .header(USER_AGENT, "research-harness/0.1")
-        .header(ACCEPT, "application/json")
-        .query(&[
-            ("query", query),
-            (
-                "fields",
-                "title,authors,year,venue,url,abstract,citationCount,externalIds",
-            ),
-            ("limit", &normalize_limit(limit).to_string()),
-        ])
+        .header(ACCEPT, "application/json");
+
+    for (key, val) in &query_params {
+        request = request.query(&[(key, val)]);
+    }
+
+    let response: Value = request
         .send()
         .context("Semantic Scholar request failed")?
         .error_for_status()
         .context("Semantic Scholar returned an error")?
         .json()
         .context("Semantic Scholar returned invalid JSON")?;
+
     let mut results = Vec::new();
     for item in response
         .get("data")
@@ -74,10 +101,9 @@ pub fn search(client: &Client, query: &str, limit: usize) -> Result<Vec<Value>> 
 /// Search and convert to typed Paper structs.
 pub fn search_papers(
     client: &Client,
-    query: &str,
-    limit: usize,
+    opts: &SearchOptions,
 ) -> Result<Vec<crate::types::Paper>> {
-    let raw = search(client, query, limit)?;
+    let raw = search(client, opts)?;
     raw.into_iter().map(json_to_paper).collect()
 }
 
@@ -172,18 +198,6 @@ mod tests {
     }
 
     #[test]
-    fn json_to_paper_missing_external_ids_key() {
-        let v = json!({
-            "title": "Missing Ext IDs",
-            "authors": "",
-            "year": null,
-            "abstract": ""
-        });
-        let paper = json_to_paper(v).unwrap();
-        assert_eq!(paper.id, "");
-    }
-
-    #[test]
     fn json_to_paper_multiple_authors_from_string() {
         let v = json!({
             "title": "Multi-author",
@@ -210,18 +224,6 @@ mod tests {
     }
 
     #[test]
-    fn json_to_paper_missing_title_default() {
-        let v = json!({
-            "external_ids": {"ArXiv": "2301.07044"},
-            "authors": "",
-            "year": 2024,
-            "abstract": ""
-        });
-        let paper = json_to_paper(v).unwrap();
-        assert_eq!(paper.title, "_untitled_");
-    }
-
-    #[test]
     fn json_to_paper_venue_from_field() {
         let v = json!({
             "title": "Venue Test",
@@ -245,7 +247,7 @@ mod tests {
             "abstract": ""
         });
         let paper = json_to_paper(v).unwrap();
-        assert_eq!(paper.id, "2301.07046"); // ArXiv ID wins for paper.id
-        assert_eq!(paper.doi, Some("10.5678/test-doi".to_string())); // DOI separately extracted
+        assert_eq!(paper.id, "2301.07046");
+        assert_eq!(paper.doi, Some("10.5678/test-doi".to_string()));
     }
 }

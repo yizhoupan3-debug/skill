@@ -10,7 +10,6 @@ pub mod discovery;
 pub mod frontmatter;
 pub mod frontmatter_parser;
 pub mod generate;
-pub mod health;
 pub mod paths;
 pub mod refresh;
 pub mod validate;

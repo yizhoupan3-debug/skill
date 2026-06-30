@@ -37,11 +37,6 @@
       "compare": "byte-for-byte"
     },
     {
-      "path": "skills/SKILL_TIERS.json",
-      "generator": "cargo run --quiet --manifest-path core/router-rs/Cargo.toml -- framework skills refresh --framework-root \"$PWD\" --write",
-      "compare": "byte-for-byte"
-    },
-    {
       "path": "skills/SKILL_ROUTING_INDEX.md",
       "generator": "cargo run --quiet --manifest-path core/router-rs/Cargo.toml -- framework skills refresh --framework-root \"$PWD\" --write --write-companions",
       "compare": "normalized-text"
@@ -68,11 +63,6 @@
     },
     {
       "path": "skills/SKILL_ROUTING_METADATA.json",
-      "generator": "cargo run --quiet --manifest-path core/router-rs/Cargo.toml -- framework skills refresh --framework-root \"$PWD\" --write --write-companions",
-      "compare": "byte-for-byte"
-    },
-    {
-      "path": "skills/SKILL_HEALTH_MANIFEST.json",
       "generator": "cargo run --quiet --manifest-path core/router-rs/Cargo.toml -- framework skills refresh --framework-root \"$PWD\" --write --write-companions",
       "compare": "byte-for-byte"
     },

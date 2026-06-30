@@ -20,7 +20,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use crate::compat;
-use crate::scheduler::{advance_dag, is_chain_complete, write_chain_file};
+use crate::scheduler::{advance_dag, is_chain_complete, load_condition_task_outputs, with_chain_lock, write_chain_file};
 use crate::tracker::process_post_tick;
 
 /// Default polling interval in seconds.
@@ -102,40 +102,44 @@ fn poll_loop(repo_root: &Path, chain_id: &str, interval_secs: u64, stop: &Atomic
     }
 }
 
-/// Execute a single poll tick. Returns `true` if the chain is complete.
+/// Execute a single poll tick under the process-level chain lock.
+/// Returns `true` if the chain is complete.
 fn poll_tick(repo_root: &Path, path: &Path) -> Result<bool, FrameworkError> {
-    if !path.is_file() {
-        return Err(FrameworkError::not_found("TASK_CHAIN.json not found".to_string()));
-    }
+    with_chain_lock(|| -> Result<bool, FrameworkError> {
+        if !path.is_file() {
+            return Err(FrameworkError::not_found("TASK_CHAIN.json not found".to_string()));
+        }
 
-    let mut root = compat::load_chain_file(path)?;
+        let mut root = compat::load_chain_file(path)?;
 
-    // Check if paused
-    if root.paused {
-        return Ok(false);
-    }
+        // Check if paused
+        if root.paused {
+            return Ok(false);
+        }
 
-    // Check if already complete
-    if is_chain_complete(&root) {
-        return Ok(true);
-    }
+        // Check if already complete
+        if is_chain_complete(&root) {
+            return Ok(true);
+        }
 
-    // Run the scheduler
-    advance_dag(&mut root);
+        // Run the scheduler — load task outputs for condition evaluation (P1.1 fix)
+        let task_outputs = load_condition_task_outputs(repo_root, &root)?;
+        advance_dag(&mut root, &task_outputs);
 
-    // Process timeouts and failures
-    process_post_tick(&mut root);
+        // Process timeouts and failures
+        process_post_tick(&mut root);
 
-    // Write back
-    write_chain_file(path, &root)?;
+        // Write back
+        write_chain_file(path, &root)?;
 
-    // Generate CHAIN_OUTPUT.json on completion
-    if is_chain_complete(&root) {
-        let _ = core_state::chain_output::build_and_write_chain_aggregate(repo_root);
-        return Ok(true);
-    }
+        // Generate CHAIN_OUTPUT.json on completion
+        if is_chain_complete(&root) {
+            let _ = core_state::chain_output::build_and_write_chain_aggregate(repo_root);
+            return Ok(true);
+        }
 
-    Ok(false)
+        Ok(false)
+    })
 }
 
 /// A handle to a running poller thread. Dropping the handle stops the poller.

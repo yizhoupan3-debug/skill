@@ -5,12 +5,13 @@ use std::path::Path;
 use std::sync::OnceLock;
 
 use core_errors::FrameworkError;
+use observability_core::{sanitize, worker_log_path};
 
 use crate::driver::{build_driver_command, default_resume_mode, driver_id_for_host};
 use crate::process::{launch_process, process_is_alive, terminate_process};
 use crate::runtime::{
     add_seconds_rfc3339, ensure_lane_contract_metadata, optional_i64, optional_non_empty_string,
-    push_event, required_non_empty_string, sanitize_segment, upsert_worker, worker_log_path,
+    push_event, required_non_empty_string, upsert_worker,
 };
 use crate::types::{
     BlockClassification, DEFAULT_BACKOFF_SECONDS, SessionSupervisorStore, WorkerSessionRecord,
@@ -34,7 +35,7 @@ pub fn launch_worker(
     let worker_id = optional_non_empty_string(payload, "worker_id").unwrap_or_else(|| {
         format!(
             "{}-{}",
-            sanitize_segment(&host),
+            sanitize(&host),
             Utc::now().timestamp_millis()
         )
     });

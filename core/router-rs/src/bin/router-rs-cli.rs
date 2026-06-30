@@ -50,13 +50,18 @@ fn main() -> Result<(), FrameworkError> {
     #[cfg(feature = "research")]
     research_harness::init_hooks();
 
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("off")),
-        )
-        .with_target(false)
-        .init();
+    // Initialise observability (tracing subscriber + panic hook).
+    observability_core::init(observability_core::ObservabilityConfig {
+        log_dir: None,
+        default_level: "warn".to_string(),
+        stderr: true,
+        with_target: false,
+    })
+    .unwrap_or_else(|e| {
+        // If observability init fails (e.g. log-dir creation), fall back to
+        // raw stderr so the user still sees operation-critical diagnostics.
+        eprintln!("observability init (stderr fallback): {e}");
+    });
     let mut args: Vec<std::ffi::OsString> = std::env::args_os().collect();
     if args.len() > 1
         && let Some(cmd) = args[1].to_str()

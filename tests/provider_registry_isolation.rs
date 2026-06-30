@@ -82,8 +82,6 @@ fn auxiliary_json_files_have_lifecycle_field() {
     let repo_root = std::path::PathBuf::from(manifest_dir);
 
     let cases: &[(&str, &str)] = &[
-        ("skills/SKILL_TIERS.json", "write-only"),
-        ("skills/SKILL_HEALTH_MANIFEST.json", "write-only"),
         ("skills/SKILL_PLUGIN_CATALOG.json", "write-only"),
         (
             "configs/framework/RUNTIME_PROVIDER_REGISTRY.json",

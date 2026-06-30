@@ -35,7 +35,7 @@ pub fn save_ledger(path: &Path, claims: &[Claim]) -> Result<()> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }
-    fs::write(path, markdown)
+    core_state_utils::atomic_write::write_atomic_text(path, &markdown)
         .with_context(|| format!("failed to write claim ledger: {}", path.display()))?;
     Ok(())
 }

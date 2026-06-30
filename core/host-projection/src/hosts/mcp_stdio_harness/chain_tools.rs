@@ -4,7 +4,7 @@
 //! These tools allow creating and managing DAG task chains with conditional
 //! branching, fan-out/fan-in, retry policies, and timeout groups.
 
-use chain_engine::scheduler::{advance_dag, validate_dag, write_chain_file};
+use chain_engine::scheduler::{advance_dag, load_condition_task_outputs, validate_dag, with_chain_lock, write_chain_file};
 use chain_engine::tracker::process_post_tick;
 use chain_engine::types::{
     ChainDagRoot, ChainMode, DagTaskEntry, TaskStatus,
@@ -173,14 +173,22 @@ pub(crate) fn tool_chain_dag_tick(
         ));
     }
 
-    // Run the scheduler
-    let ready = advance_dag(&mut root);
+    // Run the scheduler + write under the chain lock (P2.1: prevent concurrent RMW cycles)
+    let (ready, timeout_result, failure_result) =
+        with_chain_lock(
+            || -> std::result::Result<
+                (Vec<String>, chain_engine::tracker::TimeoutResult, chain_engine::tracker::FailureActionResult),
+                FrameworkError,
+            > {
+                let task_outputs = load_condition_task_outputs(repo_root, &root)?;
+                let ready = advance_dag(&mut root, &task_outputs);
+                let (timeout_result, failure_result) = process_post_tick(&mut root);
+                write_chain_file(&path, &root)?;
+                Ok((ready, timeout_result, failure_result))
+            },
+        )?;
 
-    // Process timeouts and failures
-    let (timeout_result, failure_result) = process_post_tick(&mut root);
-
-    // Write back
-    write_chain_file(&path, &root)?;
+    // Build response (outside the chain lock — no blocking during JSON serialization)
 
     // Build response
     Ok(serde_json::to_string(&json!({

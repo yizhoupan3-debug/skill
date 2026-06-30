@@ -76,7 +76,7 @@ pub fn write_kill_signal(repo_root: &Path, loop_id: &str) -> Result<(), LoopErro
         now,
         framework_core::time::now_iso(),
     );
-    fs::write(&path, content)
+    core_state_utils::atomic_write::write_atomic_text(&path, &content)
         .map_err(|e| LoopError::Io(format!("write kill signal {}: {e}", path.display())))?;
     Ok(())
 }
@@ -137,6 +137,8 @@ pub fn clear_all_kill_signals(repo_root: &Path) -> Result<(), LoopError> {
 /// signal), this function accepts any `KillSignalPayload` and writes the
 /// full JSON schema. Backward-compatible: existing readers that only check
 /// file existence (e.g. `is_kill_signal_active`) continue to work.
+///
+/// Uses atomic write (temp + fsync + rename) for crash safety (P2.2 fix).
 pub fn write_signal(repo_root: &Path, payload: &KillSignalPayload) -> Result<(), LoopError> {
     let path = kill_signal_path(repo_root, &payload.loop_id);
     if let Some(parent) = path.parent() {
@@ -145,7 +147,7 @@ pub fn write_signal(repo_root: &Path, payload: &KillSignalPayload) -> Result<(),
     }
     let content = serde_json::to_string(payload)
         .map_err(|e| LoopError::Serde(format!("serialize signal: {e}")))?;
-    fs::write(&path, content)
+    core_state_utils::atomic_write::write_atomic_text(&path, &content)
         .map_err(|e| LoopError::Io(format!("write signal {}: {e}", path.display())))?;
     Ok(())
 }
@@ -234,7 +236,7 @@ pub fn write_redirect_signal(
 
 /// Write a pause state to disk for the given loop.
 /// The file is stored at `.loop-pause/{loop_id}` as a JSON blob.
-/// Atomic write semantics: serialized to string, then written via `fs::write`.
+/// Uses atomic write (temp + fsync + rename) for crash safety (P2.2 fix).
 pub fn write_pause_state(repo_root: &Path, state: &PauseState) -> Result<(), LoopError> {
     let path = pause_state_path(repo_root, &state.loop_id);
     if let Some(parent) = path.parent() {
@@ -243,7 +245,7 @@ pub fn write_pause_state(repo_root: &Path, state: &PauseState) -> Result<(), Loo
     }
     let content = serde_json::to_string(state)
         .map_err(|e| LoopError::Serde(format!("serialize pause state: {e}")))?;
-    fs::write(&path, content)
+    core_state_utils::atomic_write::write_atomic_text(&path, &content)
         .map_err(|e| LoopError::Io(format!("write pause state {}: {e}", path.display())))?;
     Ok(())
 }

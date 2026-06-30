@@ -320,22 +320,17 @@ fn generated_artifacts_status_reports_undeclared_markers_across_reverse_referenc
     );
     write_text(
         &framework_root.join("configs/framework/FRAMEWORK_SURFACE_POLICY.json"),
-        r#"{"status":"fresh","marker":"generated-by-test","derived_reports":["skills/SKILL_TIERS.json"]}
+        r#"{"status":"fresh","marker":"generated-by-test"}
 "#,
     );
     write_text(
         &framework_root.join("scripts/generate-surface.sh"),
         r##"mkdir -p configs/framework
-	printf '%s\n' '{"status":"fresh","marker":"generated-by-test","derived_reports":["skills/SKILL_TIERS.json"]}' > configs/framework/FRAMEWORK_SURFACE_POLICY.json
+	printf '%s\n' '{"status":"fresh","marker":"generated-by-test"}' > configs/framework/FRAMEWORK_SURFACE_POLICY.json
 "##,
     );
     write_text(
         &framework_root.join("skills/SKILL_EXTRA.json"),
-        r#"{"marker":"generated-by-test"}
-"#,
-    );
-    write_text(
-        &framework_root.join("skills/SKILL_TIERS.json"),
         r#"{"marker":"generated-by-test"}
 "#,
     );
@@ -380,10 +375,6 @@ fn generated_artifacts_status_reports_undeclared_markers_across_reverse_referenc
         );
     }
     assert!(!undeclared.contains(&json!("tests/source.rs")));
-    assert!(
-        !undeclared.contains(&json!("skills/SKILL_TIERS.json")),
-        "derived reports declared by FRAMEWORK_SURFACE_POLICY.json should not be flagged"
-    );
 }
 
 #[test]

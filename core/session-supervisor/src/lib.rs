@@ -135,7 +135,7 @@ pub fn handle_session_supervisor_operation(payload: Value) -> Result<Value, Fram
                 let _ = process::reap_stale_agents(&cwd, stale_after_secs);
             }
             // Side-effect: clean up orphaned worker log files
-            runtime::cleanup_stale_logs(&state_path, &store.workers);
+            observability_core::cleanup_stale_logs(&state_path, &store.workers.iter().map(|w| w.worker_id.clone()).collect::<Vec<_>>());
             let idle_observation = idle_observation_side_effect(&payload, &store.workers);
             Ok(json!({
                 "schema_version": SESSION_SUPERVISOR_SCHEMA_VERSION,

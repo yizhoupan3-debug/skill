@@ -348,6 +348,14 @@ fn run_loop_inner(
                                 &out_path,
                                 output,
                             );
+                        } else {
+                            // P3.2: Warn when a consumed action output is missing —
+                            // the subagent will see an incomplete context.
+                            tracing::warn!(
+                                action_id = %action.action_id,
+                                consumed_id = %consumed_id,
+                                "consumed_action_id has no output — missing or skipped dependency",
+                            );
                         }
                     }
                 }
@@ -1431,9 +1439,16 @@ fn evaluate_subagent_output(
                         if let Some(parent) = record_path.parent() {
                             let _ = std::fs::create_dir_all(parent);
                         }
-                        let _ = core_state_utils::atomic_write::write_atomic_json(
+                        // P3.4: Log write failures so closeout file absence can be diagnosed.
+                        if let Err(e) = core_state_utils::atomic_write::write_atomic_json(
                             &record_path, &json,
-                        );
+                        ) {
+                            tracing::warn!(
+                                action_id = %action.action_id,
+                                error = %e,
+                                "failed to write closeout record to disk",
+                            );
+                        }
                     }
                 }
                 return AggregateActionResult::Committed {

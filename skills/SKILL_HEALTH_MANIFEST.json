@@ -1,9 +1,0 @@
-{
-  "note": "Auto-populated after routing audit (2026-06-25). Set active=true when health scan completes.",
-  "schema_version": "skill-health-manifest-v1",
-  "active": false,
-  "skills": {},
-  "source_of_truth": false,
-  "version": 2,
-  "lifecycle": "write-only"
-}

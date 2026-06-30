@@ -351,7 +351,8 @@ pub fn save_handoff(state: &Value, handoff_dir: &Path) -> std::io::Result<PathBu
     let path = dir.join("claim-ledger.json");
     let json = serde_json::to_string_pretty(&handoff)
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
-    fs::write(&path, json)?;
+    core_state_utils::atomic_write::write_atomic_text(&path, &json)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
     Ok(path)
 }
 

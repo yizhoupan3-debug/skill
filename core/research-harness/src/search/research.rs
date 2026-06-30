@@ -14,6 +14,8 @@ use std::sync::{Arc, OnceLock};
 
 use crate::search::helpers::*;
 use crate::search::strategy::*;
+use crate::search::options::SearchOptions;
+use crate::text::compact_words;
 use crate::util::{arr, arr_mut, novelty_arr, novelty_gate, novelty_gate_mut, value_to_string};
 
 fn ensure_state_defaults(state: &Value) -> Value {
@@ -107,17 +109,23 @@ pub fn research_claim_with_client(
     let query = default_research_query(source_record.as_ref(), explicit_query)?;
     let mut results = Vec::new();
     let mut errors = Vec::new();
+    let search_opts = SearchOptions {
+        query: query.clone(),
+        limit,
+        source: source.clone(),
+        ..SearchOptions::new(&query)
+    };
     if matches!(
         source,
         ExternalSourceArg::All | ExternalSourceArg::SemanticScholar
     ) {
-        match crate::search::semantic_scholar::search(client, &query, limit) {
+        match crate::search::semantic_scholar::search(client, &search_opts) {
             Ok(items) => results.extend(items),
             Err(err) => errors.push(format!("semantic-scholar: {err}")),
         }
     }
     if matches!(source, ExternalSourceArg::All | ExternalSourceArg::Arxiv) {
-        match crate::search::arxiv::search(client, &query, limit) {
+        match crate::search::arxiv::search(client, &search_opts) {
             Ok(items) => results.extend(items),
             Err(err) => errors.push(format!("arxiv: {err}")),
         }
@@ -174,27 +182,30 @@ pub fn research_all_claims(
     max_claims: usize,
     timeout_secs: u64,
 ) -> Result<Value> {
-    let mut next_state = ensure_state_defaults(state);
-    let records = claim_records_for_batch(&next_state, max_claims);
+    let hydrated = ensure_state_defaults(state);
+    let records = claim_records_for_batch(&hydrated, max_claims);
     if records.is_empty() {
         bail!("No claims available. Run draft-claims first.");
     }
     // Pre-filter: skip claims that already have matching external research
+    // (read-only on the original state — no clone needed).
     let to_process: Vec<Value> = records
         .into_iter()
         .filter(|record| {
             let claim_id = record.get("claim_id").and_then(Value::as_str);
             match default_research_query(Some(record), None) {
-                Ok(q) => !has_matching_external_research(&next_state, claim_id, &q, source),
+                Ok(q) => !has_matching_external_research(&hydrated, claim_id, &q, source),
                 Err(_) => true,
             }
         })
         .collect();
     if to_process.is_empty() {
-        return Ok(next_state);
+        return Ok(hydrated);
     }
+    // Clone once for mutation and share a snapshot with workers.
+    let mut next_state = hydrated.clone();
     let client = Arc::new(http_client(timeout_secs)?);
-    let state_ref = Arc::new(next_state.clone());
+    let state_ref = Arc::new(hydrated);
     let source = source.clone();
     let worker_count = to_process.len().clamp(1, 4);
     let (result_tx, result_rx) = std::sync::mpsc::channel();
@@ -257,17 +268,10 @@ pub fn research_all_claims(
             Err(e) => errors.push(e),
         }
     }
+    // Worker threads always exit normally — each iteration inside is wrapped
+    // in catch_unwind, so handle.join() cannot fail here.
     for handle in handles {
-        if let Err(e) = handle.join() {
-            let msg = if let Some(s) = e.downcast_ref::<&str>() {
-                s.to_string()
-            } else if let Some(s) = e.downcast_ref::<String>() {
-                s.clone()
-            } else {
-                "worker thread panicked (unreachable — catch_unwind should cover)".to_string()
-            };
-            tracing::warn!("[research-harness] join failed for worker thread: {msg}");
-        }
+        let _ = handle.join();
     }
     if !errors.is_empty() && arr(&next_state, "external_research").is_empty() {
         bail!("External research failed: {}", errors.join("; "));

@@ -88,7 +88,7 @@ eval-route ──→ framework-extra ──→ routing-engine
 
 | Crate | 路径 | 声明的 L 编号 | 说明 |
 |-------|------|-------------|------|
-| `skill-layer` | `core/skill-layer` | L2 | **Skill 层核心**：frontmatter 类型解析、skills/ 目录发现、SKILL_HEALTH_MANIFEST.json 生成 |
+| `skill-layer` | `core/skill-layer` | L2 | **Skill 层核心**：frontmatter 类型解析、skills/ 目录发现、验证、刷新 |
 
 **目录归属**：
 - `skills/*/SKILL.md` → 技能元数据（47 个技能）
