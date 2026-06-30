@@ -24,13 +24,20 @@ pub(crate) fn is_valid(s: &str) -> bool {
 }
 
 /// Return `s` if valid, otherwise `GENERAL`. Never panics.
-pub(crate) fn normalize(s: &str) -> &str {
+///
+/// When an invalid scene is encountered, logs at `WARN` level (not `ERROR` — the
+/// calling code may handle the fallback gracefully). The caller SHOULD check the
+/// return value and surface a routing advisory if it differs from the input.
+pub fn normalize(s: &str) -> &str {
     if is_valid(s) {
         s
     } else {
-        tracing::error!(
+        tracing::warn!(
             invalid_scene = s,
-            "QG scene: unknown scene normalized to GENERAL — this indicates a routing bug at the call site"
+            normalized_to = GENERAL,
+            "QG scene: unknown scene '{s}' normalized to '{GENERAL}' — \
+             this indicates a routing bug at the call site. \
+             Check GOAL_STATE.scene or the checker registration target."
         );
         GENERAL
     }

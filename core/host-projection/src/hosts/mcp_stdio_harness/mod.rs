@@ -253,7 +253,9 @@ static DISPATCH_TABLE: OnceLock<ToolDispatchTable> = OnceLock::new();
 static REGISTRY: OnceLock<CompositeRegistry> = OnceLock::new();
 
 /// Known CLI-routed tools used as fallback when MCP_TOOL_REGISTRY.json is unavailable.
-const KNOWN_CLI_TOOLS: &[&str] = &[];
+/// These are mapped to `McpDispatchTarget::CliSubprocess` for process isolation.
+/// Keep in sync with MCP_TOOL_REGISTRY.json entries that have mcp_server="router-rs-cli".
+const KNOWN_CLI_TOOLS: &[&str] = &["web_fetch"];
 
 /// Dispatch a tool call through the global CompositeRegistry,
 /// falling through to the external research-tool handler when
@@ -303,12 +305,34 @@ pub(super) fn dispatch_tool(
         let connection_session_id = connection_session_id.to_string();
         let (tx, rx) = mpsc::channel();
         std::thread::spawn(move || {
-            let reg = REGISTRY
-                .get()
-                .unwrap_or_else(|| panic!("REGISTRY not initialized before dispatch"));
-            let ctx = ToolCallContext { repo_root, host_id, connection_session_id };
-            let result = reg.dispatch(&tn, &a, &ctx);
-            let _ = tx.send(result);
+            let tn_captured = tn.clone();
+            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                let reg = REGISTRY
+                    .get()
+                    .unwrap_or_else(|| panic!("REGISTRY not initialized before dispatch"));
+                let ctx = ToolCallContext { repo_root, host_id, connection_session_id };
+                reg.dispatch(&tn_captured, &a, &ctx)
+            }));
+            let _ = tx.send(match result {
+                Ok(r) => r,
+                Err(panic_info) => {
+                    let msg = if let Some(s) = panic_info.downcast_ref::<&str>() {
+                        s.to_string()
+                    } else if let Some(s) = panic_info.downcast_ref::<String>() {
+                        s.clone()
+                    } else {
+                        "unknown panic".to_string()
+                    };
+                    tracing::error!(
+                        tool = %tn,
+                        panic_msg = %msg,
+                        "builtin tool dispatch thread panicked"
+                    );
+                    Err(FrameworkError::hook(format!(
+                        "internal error: {tn} dispatch panicked: {msg}"
+                    )))
+                }
+            });
         });
         return match rx.recv_timeout(Duration::from_secs(60)) {
             Ok(r) => r,
@@ -336,6 +360,38 @@ const PROTOCOL_VERSION: &str = "2024-11-05";
 const SERVER_NAME: &str = "router-rs-framework";
 const SERVER_VERSION: &str = "0.1.0-rust";
 const MAX_MCP_CONTENT_LENGTH: usize = 4 * 1024 * 1024;
+
+/// Install a global panic hook that logs panic details via `tracing::error`.
+/// Should be called once per process at the MCP server entry point.
+/// Returns a guard that, when dropped, restores the previous hook.
+pub fn install_mcp_panic_hook() -> &'static () {
+    static PANIC_HOOK_INSTALLED: std::sync::OnceLock<()> = std::sync::OnceLock::new();
+    PANIC_HOOK_INSTALLED.get_or_init(|| {
+        let prev = std::panic::take_hook();
+        std::panic::set_hook(Box::new(move |panic_info| {
+            let msg = if let Some(s) = panic_info.payload().downcast_ref::<&str>() {
+                s.to_string()
+            } else if let Some(s) = panic_info.payload().downcast_ref::<String>() {
+                s.clone()
+            } else {
+                format!("{:?}", panic_info.payload())
+            };
+            let location = panic_info
+                .location()
+                .map(|loc| format!("{}:{}", loc.file(), loc.line()))
+                .unwrap_or_else(|| "unknown".to_string());
+            tracing::error!(
+                panic_msg = %msg,
+                panic_location = %location,
+                "MCP server thread panicked — see location for details. \
+                 This is a bug; please report it."
+            );
+            // Call the previous hook for default panic behavior (backtrace, abort)
+            prev(panic_info);
+        }));
+    });
+    PANIC_HOOK_INSTALLED.get().unwrap()
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum McpTransportMode {

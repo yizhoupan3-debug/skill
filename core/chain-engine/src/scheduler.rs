@@ -24,50 +24,84 @@ pub fn advance_dag(root: &mut ChainDagRoot) -> Vec<String> {
         return Vec::new();
     }
 
+    // Extract values from global_config before any mutable borrow of root
+    let max_concurrent_tasks = root.global_config.max_concurrent_tasks;
+    if max_concurrent_tasks == 0 {
+        return Vec::new();
+    }
+
     // Phase 0: mark retry_scheduled tasks whose backoff has expired as pending.
     handle_expired_backoffs(root);
 
-    let mut ready: Vec<String> = Vec::new();
-    let gc = &root.global_config;
+    // Pre-build dependency status map (PERF-P2-002: O(n²) → O(n))
+    let status_map: HashMap<&str, &TaskStatus> = root
+        .tasks
+        .iter()
+        .map(|t| (t.task_id.as_str(), &t.status))
+        .collect();
 
-    // Count currently running tasks per parallel group and globally.
-    let (global_running, group_running) = count_running(&root.tasks);
-    let global_capacity = gc.max_concurrent_tasks as usize;
+    // Phase 1: collect all eligible tasks (regardless of capacity)
+    // to enable fair round-robin selection (CE-17).
+    let mut eligible_by_group: std::collections::HashMap<Option<&str>, Vec<&str>> =
+        std::collections::HashMap::new();
+    let mut any_eligible = false;
 
-    // Phase 2: find ready tasks and transition them to running.
     for task in &root.tasks {
         if task.status != TaskStatus::Pending && task.status != TaskStatus::RetryScheduled {
             continue;
         }
-
-        // Check global concurrency capacity.
-        if global_running + ready.len() >= global_capacity {
-            break;
-        }
-
-        // Check dependency completion.
-        if !dependencies_met(task, &root.tasks) {
+        if !dependencies_met_cached(task, &status_map) {
             continue;
         }
-
-        // Check parallel group capacity.
-        if let Some(ref pg) = task.parallel_group {
-            let group_count = group_running.get(pg.as_str()).copied().unwrap_or(0)
-                + ready.iter().filter(|t| {
-                    root.task_by_id(t)
-                        .and_then(|e| e.parallel_group.as_deref())
-                        == Some(pg.as_str())
-                }).count();
-            // No explicit per-group limit; global capacity bounds it.
-            if group_count > 0 && group_count >= global_capacity / 2.max(1) {
-                continue;
-            }
-        }
-
-        ready.push(task.task_id.clone());
+        any_eligible = true;
+        let group_key = task.parallel_group.as_deref();
+        eligible_by_group.entry(group_key).or_default().push(task.task_id.as_str());
     }
 
-    // Apply transitions in a separate loop to avoid borrow conflicts.
+    if !any_eligible {
+        return Vec::new();
+    }
+
+    // Phase 2: round-robin select from groups until capacity is reached (CE-17 fairness).
+    let group_keys: Vec<Option<&str>> = eligible_by_group.keys().copied().collect();
+    let (global_running, group_running) = count_running(&root.tasks);
+    let global_capacity = max_concurrent_tasks as usize;
+    let group_cap = (global_capacity + 1) / 2; // ceil division (CE-09 fix)
+
+    let mut ready: Vec<String> = Vec::new();
+    loop {
+        let mut any_added = false;
+        for gk in &group_keys {
+            if global_running + ready.len() >= global_capacity {
+                break;
+            }
+            let tasks = eligible_by_group.get_mut(gk).unwrap();
+            if tasks.is_empty() {
+                continue;
+            }
+            // Check per-group capacity (only for named groups, CE-09 fix)
+            let running_in_group = gk.map_or(0, |g| group_running.get(g).copied().unwrap_or(0));
+            // Only apply group caps to tasks with an explicit parallel_group
+            if gk.is_some() && running_in_group + ready.iter().filter(|t| {
+                root.task_by_id(t)
+                    .and_then(|e| e.parallel_group.as_deref())
+                    == *gk
+            }).count() >= group_cap {
+                continue;
+            }
+            // Take the first task from this group
+            if let Some(tid) = tasks.first().copied() {
+                ready.push(tid.to_string());
+                tasks.remove(0);
+                any_added = true;
+            }
+        }
+        if !any_added || global_running + ready.len() >= global_capacity {
+            break;
+        }
+    }
+
+    // Apply transitions
     for task_id in &ready {
         if let Some(task) = root.task_by_id_mut(task_id) {
             task.status = TaskStatus::Running;
@@ -77,6 +111,23 @@ pub fn advance_dag(root: &mut ChainDagRoot) -> Vec<String> {
     }
 
     ready
+}
+
+/// Cached version of dependency check using a pre-built status map (PERF-P2-002).
+fn dependencies_met_cached(
+    task: &DagTaskEntry,
+    status_map: &HashMap<&str, &TaskStatus>,
+) -> bool {
+    if task.depends_on.is_empty() {
+        return true;
+    }
+    for dep_id in &task.depends_on {
+        match status_map.get(dep_id.as_str()) {
+            Some(TaskStatus::Completed) | Some(TaskStatus::Skipped) => {}
+            _ => return false,
+        }
+    }
+    true
 }
 
 /// Count currently running tasks globally and per parallel group.
@@ -116,13 +167,15 @@ fn dependencies_met(task: &DagTaskEntry, all_tasks: &[DagTaskEntry]) -> bool {
 
 /// Handle retry_scheduled tasks whose backoff has expired — move them back to pending.
 fn handle_expired_backoffs(root: &mut ChainDagRoot) {
-    let now = framework_core::time::now_iso();
+    let now = chrono::Utc::now();
     for task in &mut root.tasks {
         if task.status == TaskStatus::RetryScheduled {
             if let Some(ref backoff_until) = task.backoff_until {
-                if backoff_until.as_str() <= now.as_str() {
-                    task.status = TaskStatus::Pending;
-                    task.backoff_until = None;
+                if let Ok(deadline) = chrono::DateTime::parse_from_rfc3339(backoff_until) {
+                    if now >= deadline {
+                        task.status = TaskStatus::Pending;
+                        task.backoff_until = None;
+                    }
                 }
             }
         }
@@ -166,10 +219,7 @@ pub fn validate_dag(root: &ChainDagRoot) -> Result<(), FrameworkError> {
         }
     }
 
-    // Check all dependency references resolve and detect cycles via DFS
-    let mut visited: HashSet<&str> = HashSet::new();
-    let mut in_stack: HashSet<&str> = HashSet::new();
-
+    // Check all dependency references resolve
     for task in &root.tasks {
         for dep in &task.depends_on {
             if !ids.contains(dep.as_str()) {
@@ -179,49 +229,90 @@ pub fn validate_dag(root: &ChainDagRoot) -> Result<(), FrameworkError> {
                 )));
             }
         }
-        // Cycle detection via DFS
-        if !visited.contains(task.task_id.as_str()) {
-            let mut stack = Vec::new();
-            if detect_cycle(task.task_id.as_str(), &root.tasks, &mut visited, &mut in_stack, &mut stack) {
+        // CE-12: Validate condition.source references
+        if let Some(ref cond) = task.condition {
+            if !ids.contains(cond.source.as_str()) {
                 return Err(FrameworkError::validation(format!(
-                    "cycle detected in chain: {}",
-                    stack.join(" -> ")
+                    "task '{}' condition references unknown task '{}'",
+                    task.task_id, cond.source
                 )));
             }
+        }
+    }
+
+    // Cycle detection via iterative DFS (CE-06: avoid stack overflow on deep chains)
+    for task in &root.tasks {
+        let mut visited: HashSet<&str> = HashSet::new();
+        if has_cycle_iterative(task.task_id.as_str(), &root.tasks) {
+            return Err(FrameworkError::validation(format!(
+                "cycle detected in chain starting from '{}'",
+                task.task_id
+            )));
         }
     }
 
     Ok(())
 }
 
-fn detect_cycle<'a>(
-    node: &'a str,
+/// Iterative cycle detection using explicit stack (CE-06: avoid stack overflow).
+fn has_cycle_iterative<'a>(
+    start_node: &'a str,
     tasks: &'a [DagTaskEntry],
-    visited: &mut HashSet<&'a str>,
-    in_stack: &mut HashSet<&'a str>,
-    path: &mut Vec<&'a str>,
 ) -> bool {
-    if in_stack.contains(node) {
-        path.push(node);
-        return true;
-    }
-    if visited.contains(node) {
-        return false;
-    }
-    visited.insert(node);
-    in_stack.insert(node);
-    path.push(node);
+    // Build adjacency list
+    let task_map: HashMap<&str, &[String]> = tasks
+        .iter()
+        .map(|t| (t.task_id.as_str(), t.depends_on.as_slice()))
+        .collect();
 
-    if let Some(task) = tasks.iter().find(|t| t.task_id == node) {
-        for dep in &task.depends_on {
-            if detect_cycle(dep.as_str(), tasks, visited, in_stack, path) {
-                return true;
+    let mut visited: HashSet<&str> = HashSet::new();
+    let mut in_stack: HashSet<&str> = HashSet::new();
+
+    struct StackFrame<'a> {
+        node: &'a str,
+        deps: &'a [String],
+        index: usize,
+    }
+
+    let mut stack: Vec<StackFrame> = Vec::new();
+
+    visited.insert(start_node);
+    in_stack.insert(start_node);
+    if let Some(deps) = task_map.get(start_node) {
+        stack.push(StackFrame {
+            node: start_node,
+            deps,
+            index: 0,
+        });
+    }
+
+    while let Some(frame) = stack.last_mut() {
+        if frame.index >= frame.deps.len() {
+            let frame = stack.pop().unwrap();
+            in_stack.remove(frame.node);
+            continue;
+        }
+
+        let dep = frame.deps[frame.index].as_str();
+        frame.index += 1;
+
+        if in_stack.contains(dep) {
+            return true; // Cycle detected
+        }
+
+        if !visited.contains(dep) {
+            visited.insert(dep);
+            in_stack.insert(dep);
+            if let Some(deps) = task_map.get(dep) {
+                stack.push(StackFrame {
+                    node: dep,
+                    deps,
+                    index: 0,
+                });
             }
         }
     }
 
-    path.pop();
-    in_stack.remove(node);
     false
 }
 
@@ -305,28 +396,28 @@ fn compare_values(actual: &Value, expected: &Value, op: &ConditionOperator) -> b
             if let (Some(a), Some(b)) = (actual.as_f64(), expected.as_f64()) {
                 a > b
             } else {
-                actual.as_str() > expected.as_str()
+                false // non-numeric types cannot be ordered
             }
         }
         ConditionOperator::Gte => {
             if let (Some(a), Some(b)) = (actual.as_f64(), expected.as_f64()) {
                 a >= b
             } else {
-                actual.as_str() >= expected.as_str()
+                false
             }
         }
         ConditionOperator::Lt => {
             if let (Some(a), Some(b)) = (actual.as_f64(), expected.as_f64()) {
                 a < b
             } else {
-                actual.as_str() < expected.as_str()
+                false
             }
         }
         ConditionOperator::Lte => {
             if let (Some(a), Some(b)) = (actual.as_f64(), expected.as_f64()) {
                 a <= b
             } else {
-                actual.as_str() <= expected.as_str()
+                false
             }
         }
         ConditionOperator::In => {
@@ -352,25 +443,20 @@ pub fn load_advance_write(repo_root: &Path) -> Result<Vec<String>, FrameworkErro
     let path = crate::chain_file_path(repo_root);
     let mut root = compat::load_chain_file(&path)?;
     let ready = advance_dag(&mut root);
-    if !ready.is_empty() || root.mode == ChainMode::Dag {
+    // Only write if there were actual transitions (dirty check).
+    if !ready.is_empty() {
         write_chain_file(&path, &root)?;
     }
     Ok(ready)
 }
 
-/// Write a ChainDagRoot back to disk.
+/// Write a ChainDagRoot back to disk atomically.
 pub fn write_chain_file(
     path: &Path,
     root: &ChainDagRoot,
 ) -> Result<(), FrameworkError> {
-    let json = serde_json::to_string_pretty(root)
-        .map_err(|e| FrameworkError::Json(e))?;
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|e| FrameworkError::Io(e))?;
-    }
-    std::fs::write(path, &json)
-        .map_err(|e| FrameworkError::Io(e))?;
+    let value = serde_json::to_value(root)?;
+    core_state_utils::atomic_write::write_atomic_json(path, &value)?;
     Ok(())
 }
 

@@ -130,8 +130,8 @@ pub fn write_chain_output(
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    let json_str = serde_json::to_string_pretty(output)?;
-    std::fs::write(&path, json_str)?;
+    let value = serde_json::to_value(output)?;
+    crate::utils::atomic_write::write_atomic_json(&path, &value)?;
     Ok(())
 }
 

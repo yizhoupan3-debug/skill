@@ -264,6 +264,11 @@ pub(crate) fn tool_task_complete(
         .filter(|s| !s.is_empty())
         .map(str::to_string);
 
+    // P2-01: Validate explicit task_id before any path construction
+    if let Some(ref tid) = explicit_task_id {
+        core_state_utils::path_guard::validate_task_id_component(tid)?;
+    }
+
     let task_id_owned = explicit_task_id.clone().or_else(|| {
         core_state::state_manager::read_active_task_id(repo_root)
     })
@@ -276,6 +281,10 @@ pub(crate) fn tool_task_complete(
     // Check goal existence OUTSIDE the task write lock to avoid nested flock
     // (framework_goal_drive acquires its own lock internally).
     // On Linux, nested flock on the same fd-description returns EWOULDBLOCK.
+    //
+    // TOCTOU (P3-03): Between this check and framework_goal_drive below, a
+    // concurrent thread could delete the goal. framework_goal_drive handles
+    // this gracefully (returns "GOAL_STATE missing" error). Non-critical.
     let task_dir = repo_root.join("artifacts/current").join(&task_id_owned);
     let goal_path = task_dir.join("GOAL_STATE.json");
     let has_goal = goal_path.is_file()

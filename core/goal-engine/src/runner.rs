@@ -110,7 +110,10 @@ pub fn run_loop(ctx: &RunContext) -> Result<LoopCloseoutAggregate, LoopError> {
 
         // Initialize anti-drift original goal snapshot on first run
         if state.anti_drift.original_goal_snapshot.is_none() {
-            state.anti_drift.original_goal_snapshot = read_goal_snapshot(ctx.repo_root, entry);
+            if let Some(snapshot) = read_goal_snapshot(ctx.repo_root, entry) {
+                state.anti_drift.original_goal_snapshot = Some(snapshot.text);
+                state.anti_drift.last_amended_at = snapshot.amended_at;
+            }
         }
         transition_phase(&mut state, LoopPhase::Pending);
 
@@ -177,8 +180,10 @@ pub fn run_loop(ctx: &RunContext) -> Result<LoopCloseoutAggregate, LoopError> {
                 break Ok(agg);
             }
             Err(LoopError::ResearchEscalation(msg)) => {
-                // Research completed with candidates: restart the loop to consume them
+                // Research completed with candidates: restart the loop to consume them.
+                // Archive the interrupted run to history before restarting (P1-002 fix).
                 tracing::info!("[goal-engine] {msg}");
+                finish_run(&mut state, "research_escalation");
                 state.circuit_breaker.consecutive_failures = 0;
                 if let Err(e) = write_loop_state(ctx.repo_root, loop_id, &state) {
                     tracing::error!("failed to write loop state on research escalation: {e}");
@@ -676,8 +681,37 @@ fn run_loop_inner(
     if state.anti_drift.review_cycle_count >= 10000 {
         state.anti_drift.review_cycle_count = 0;
     }
-    let should_check = crate::drift::should_check_drift(&state.anti_drift);
+
+    // ── Goal amend detection (P1-001) ──
+    // Read the current goal state for drift comparison.
     let current_goal = read_goal_snapshot(ctx.repo_root, entry);
+
+    // If the user amended the goal (GOAL_STATE.amended_at is newer than
+    // anti_drift.last_amended_at), reset the original_goal_snapshot so that
+    // subsequent drift checks compare against the new goal rather than falsely
+    // flagging a user-authorized change as scope creep.
+    if let Some(snapshot) = &current_goal {
+        if let Some(amended_at) = &snapshot.amended_at {
+            let needs_reset = match &state.anti_drift.last_amended_at {
+                Some(last) => amended_at > last,
+                None => true,
+            };
+            if needs_reset {
+                tracing::info!(
+                    loop_id = %entry.loop_id,
+                    amended_at = %amended_at,
+                    prev_last_amended_at = ?state.anti_drift.last_amended_at,
+                    "anti-drift: goal was amended — resetting original_goal_snapshot"
+                );
+                state.anti_drift.original_goal_snapshot = Some(snapshot.text.clone());
+                state.anti_drift.last_amended_at = Some(amended_at.clone());
+                // Reset the review cycle count so the next drift check starts fresh
+                state.anti_drift.review_cycle_count = 0;
+            }
+        }
+    }
+
+    let should_check = crate::drift::should_check_drift(&state.anti_drift);
     if current_goal.is_none() && should_check && state.anti_drift.original_goal_snapshot.is_some() {
         tracing::warn!(
             review_cycle = state.anti_drift.review_cycle_count,
@@ -685,7 +719,7 @@ fn run_loop_inner(
             "anti-drift check skipped: cannot read current goal (GOAL_STATE.json not found)"
         );
     }
-    if should_check && let Some(current_goal_text) = current_goal {
+    if should_check && let Some(ref current_goal_text) = current_goal.map(|s| s.text) {
         let result = crate::drift::perform_drift_check(&mut state.anti_drift, &current_goal_text);
         tracing::warn!(
             review_cycle = result.review_cycle,
@@ -1498,8 +1532,17 @@ pub fn run_loop_kill_all(repo_root: &Path) -> Result<(), LoopError> {
     Ok(())
 }
 
-/// Read the current goal text from GOAL_STATE.json for drift comparison.
-fn read_goal_snapshot(repo_root: &Path, entry: &LoopRegistryEntry) -> Option<String> {
+/// Snapshot data read from GOAL_STATE.json for drift comparison.
+struct GoalSnapshot {
+    /// The goal text.
+    text: String,
+    /// Optional amended_at timestamp — when present and newer than
+    /// `anti_drift.last_amended_at`, the original snapshot should be reset.
+    amended_at: Option<String>,
+}
+
+/// Read the current goal text and amend timestamp from GOAL_STATE.json for drift comparison.
+fn read_goal_snapshot(repo_root: &Path, entry: &LoopRegistryEntry) -> Option<GoalSnapshot> {
     let goal_path = core_state::state_manager::goal_state_path_for_task(
         repo_root,
         &entry.loop_id,
@@ -1509,7 +1552,12 @@ fn read_goal_snapshot(repo_root: &Path, entry: &LoopRegistryEntry) -> Option<Str
     }
     let raw = std::fs::read_to_string(&goal_path).ok()?;
     let val: serde_json::Value = serde_json::from_str(&raw).ok()?;
-    val.get("goal").and_then(|g| g.as_str()).map(String::from)
+    let text = val.get("goal").and_then(|g| g.as_str()).map(String::from)?;
+    let amended_at = val
+        .get("amended_at")
+        .and_then(|g| g.as_str())
+        .map(String::from);
+    Some(GoalSnapshot { text, amended_at })
 }
 
 #[allow(clippy::unwrap_used, clippy::expect_used)]
@@ -1781,7 +1829,8 @@ some trailing text"#;
         let goal_path = goal_dir.join("GOAL_STATE.json");
         std::fs::write(&goal_path, serde_json::to_string_pretty(&goal).unwrap()).unwrap();
         let snapshot = read_goal_snapshot(tmp.path(), &entry);
-        assert_eq!(snapshot.as_deref(), Some("Implement feature X"));
+        assert_eq!(snapshot.as_ref().map(|s| s.text.as_str()), Some("Implement feature X"));
+        assert!(snapshot.as_ref().and_then(|s| s.amended_at.as_deref()).is_none());
     }
 
     #[test]

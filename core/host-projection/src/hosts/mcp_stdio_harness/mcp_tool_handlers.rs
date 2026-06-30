@@ -39,9 +39,10 @@ impl CompositeRegistry {
         let idx = self.handlers.len();
         for name in handler.tool_names() {
             if self.name_to_handler.contains_key(name) {
-                tracing::warn!(
+                tracing::error!(
                     "CompositeRegistry: duplicate tool name '{name}' \
-                     registered — existing handler will be overwritten"
+                     registered — existing handler WILL be overwritten. \
+                     Fix tool registration to avoid silent dispatch divergence."
                 );
             }
             self.name_to_handler.insert(name, idx);

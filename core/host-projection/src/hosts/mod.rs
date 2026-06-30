@@ -51,6 +51,8 @@ pub fn run_agent_mcp_loop(
     repo_root_arg: Option<&Path>,
     host_id: &str,
 ) -> Result<(), FrameworkError> {
+    // Install global panic hook at the MCP server entry point
+    mcp_stdio_harness::install_mcp_panic_hook();
     let repo_root = framework_core::repo_roots::resolve_repo_root_arg(repo_root_arg)?;
     let stdin = io::stdin();
     let stdout = io::stdout();

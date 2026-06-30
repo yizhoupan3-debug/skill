@@ -330,9 +330,12 @@ pub fn compact_trace_stream(
         reason: None,
         run_id: manifest
             .get("run_id")
-            .or_else(|| manifest.get("session_id"))
             .and_then(Value::as_str)
-            .unwrap_or_default()
+            .ok_or_else(|| {
+                TraceError::validation(
+                    "compact manifest missing required field 'run_id'".to_string(),
+                )
+            })?
             .to_string(),
         job_id: manifest
             .get("job_id")

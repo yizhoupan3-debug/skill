@@ -36,6 +36,7 @@ pub mod security_checker;
 
 use std::path::Path;
 
+#[cfg(test)]
 use quality_gate::scene;
 
 /// Recursively find all non-hidden `.rs` files under the given root directory.

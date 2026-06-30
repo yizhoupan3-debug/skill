@@ -12,6 +12,7 @@ name = "chain_engine"
 [dependencies]
 core-errors = { path = "../core-errors" }
 core-state = { path = "../core-state" }
+core-state-utils = { path = "../core-state-utils" }
 framework-core = { path = "../framework-core" }
 serde.workspace = true
 serde_json.workspace = true

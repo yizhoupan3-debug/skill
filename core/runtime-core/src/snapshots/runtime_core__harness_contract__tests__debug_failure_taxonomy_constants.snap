@@ -1,6 +1,5 @@
 ---
 source: core/runtime-core/src/harness_contract.rs
-assertion_line: 85
 expression: FAILURE_TAXONOMY
 ---
 [

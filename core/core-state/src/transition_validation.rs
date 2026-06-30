@@ -81,6 +81,11 @@ fn validate_complete_transition(repo_root: &Path, task_id: &str) -> TransitionVe
         return TransitionVerdict::blocked("task_id is empty");
     }
 
+    // P2-03: Validate task_id before path construction
+    if let Err(e) = crate::utils::path_guard::validate_task_id_component(tid) {
+        return TransitionVerdict::blocked(format!("invalid task_id: {e}"));
+    }
+
     // D5: No GOAL_STATE.json or task directory = no active task → auto-pass.
     // Check GOAL_STATE.json existence directly rather than TASK_POINTERS.tasks array,
     // because write_active_task_pointer does not populate the tasks array.

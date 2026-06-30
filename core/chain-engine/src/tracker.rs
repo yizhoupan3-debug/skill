@@ -46,37 +46,62 @@ pub fn process_timeouts(root: &mut ChainDagRoot) -> TimeoutResult {
     }
 
     let now = framework_core::time::now_iso();
-    let mut groups: HashMap<&str, Vec<(&str, &str)>> = HashMap::new(); // group_id → [(task_id, started_at)]
-    let mut group_timeout: HashMap<&str, u64> = HashMap::new();
+    // Track group-level info: for each timeout group, find the earliest started_at
+    // across ALL tasks in the group (including completed/failed ones).
+    struct GroupInfo {
+        max_seconds: u64,
+        earliest_started: Option<String>,
+        running_tasks: Vec<String>,
+    }
+
+    let mut groups: std::collections::HashMap<&str, GroupInfo> = std::collections::HashMap::new();
 
     for task in &root.tasks {
-        if let Some(ref tg) = task.timeout_group {
-            if task.status == TaskStatus::Running {
-                let entry = groups.entry(tg.group_id.as_str()).or_default();
-                if let Some(ref started) = task.started_at {
-                    entry.push((task.task_id.as_str(), started.as_str()));
-                }
-                group_timeout.entry(tg.group_id.as_str()).or_insert(tg.max_seconds);
+        let Some(ref tg) = task.timeout_group else { continue };
+
+        let info = groups.entry(tg.group_id.as_str()).or_insert(GroupInfo {
+            max_seconds: tg.max_seconds,
+            earliest_started: None,
+            running_tasks: Vec::new(),
+        });
+
+        // Validate max_seconds consistency (CE-13 fix)
+        if info.max_seconds != tg.max_seconds {
+            tracing::warn!(
+                "timeout group '{}' has inconsistent max_seconds: {} vs {}",
+                tg.group_id, info.max_seconds, tg.max_seconds
+            );
+        }
+
+        // Track earliest started_at across ALL tasks in this group
+        if let Some(ref started) = task.started_at {
+            let is_earlier = info.earliest_started.as_ref().map_or(true, |earliest| {
+                started.as_str() < earliest.as_str()
+            });
+            if is_earlier {
+                info.earliest_started = Some(started.clone());
             }
+        }
+
+        // Track running tasks for the group
+        if task.status == TaskStatus::Running {
+            info.running_tasks.push(task.task_id.clone());
         }
     }
 
     let mut tasks_failed = Vec::new();
     let mut groups_expired = Vec::new();
 
-    // Collect expired groups — capture all needed data before mutable borrow.
+    // Collect expired groups
     let expired: Vec<(String, Vec<String>, u64)> = groups
         .iter()
-        .filter_map(|(group_id, tasks)| {
-            let max_secs = *group_timeout.get(group_id)?;
-            let expired = tasks.iter().any(|(_, started_at)| {
-                is_timed_out(started_at, &now, max_secs)
-            });
-            if expired {
+        .filter_map(|(group_id, info)| {
+            let earliest = info.earliest_started.as_ref()?;
+            if is_timed_out(earliest, &now, info.max_seconds) {
                 Some((
                     group_id.to_string(),
-                    tasks.iter().map(|(id, _)| id.to_string()).collect(),
-                    max_secs,
+                    info.running_tasks.clone(),
+                    info.max_seconds,
                 ))
             } else {
                 None
@@ -187,35 +212,57 @@ pub fn process_failures(root: &mut ChainDagRoot) -> FailureActionResult {
     match root.global_config.on_any_failure {
         FailureStrategy::AbortDag => {
             action.dag_aborted = true;
-            // Skip all non-terminal tasks
-            for task in &mut root.tasks {
-                if !task.status.is_terminal()
-                    && task.status != TaskStatus::Failed
-                    && task.status != TaskStatus::RetryScheduled
-                {
-                    task.status = TaskStatus::Skipped;
-                    task.error = Some("aborted by failure strategy".to_string());
-                    action.tasks_skipped.push(task.task_id.clone());
+            let skipped_ids: Vec<String> = {
+                let mut ids = Vec::new();
+                // Skip all non-terminal tasks
+                for task in &mut root.tasks {
+                    if !task.status.is_terminal()
+                        && task.status != TaskStatus::Failed
+                        && task.status != TaskStatus::RetryScheduled
+                    {
+                        task.status = TaskStatus::Skipped;
+                        task.error = Some("aborted by failure strategy".to_string());
+                        ids.push(task.task_id.clone());
+                        action.tasks_skipped.push(task.task_id.clone());
+                    }
                 }
-            }
-            // Also skip retry-scheduled tasks (no point retrying an aborted DAG)
+                // Also skip retry-scheduled tasks
+                for task in &mut root.tasks {
+                    if task.status == TaskStatus::RetryScheduled {
+                        task.status = TaskStatus::Skipped;
+                        task.error = Some("aborted by failure strategy".to_string());
+                        ids.push(task.task_id.clone());
+                        action.tasks_skipped.push(task.task_id.clone());
+                    }
+                }
+                ids
+            };
+            // CE-11: Populate caused_skips on the failed tasks
             for task in &mut root.tasks {
-                if task.status == TaskStatus::RetryScheduled {
-                    task.status = TaskStatus::Skipped;
-                    task.error = Some("aborted by failure strategy".to_string());
-                    action.tasks_skipped.push(task.task_id.clone());
+                if task.status == TaskStatus::Failed {
+                    task.caused_skips = skipped_ids.clone();
                 }
             }
         }
         FailureStrategy::PauseDag => {
             action.dag_paused = true;
             root.paused = true;
-            // Block remaining pending/ready tasks
+            let blocked_ids: Vec<String> = {
+                let mut ids = Vec::new();
+                for task in &mut root.tasks {
+                    if task.status == TaskStatus::Pending || task.status == TaskStatus::RetryScheduled {
+                        task.status = TaskStatus::Blocked;
+                        task.error = Some("paused by failure strategy".to_string());
+                        ids.push(task.task_id.clone());
+                        action.tasks_skipped.push(task.task_id.clone());
+                    }
+                }
+                ids
+            };
+            // CE-11: Populate caused_skips on the failed tasks
             for task in &mut root.tasks {
-                if task.status == TaskStatus::Pending || task.status == TaskStatus::RetryScheduled {
-                    task.status = TaskStatus::Blocked;
-                    task.error = Some("paused by failure strategy".to_string());
-                    action.tasks_skipped.push(task.task_id.clone());
+                if task.status == TaskStatus::Failed {
+                    task.caused_skips = blocked_ids.clone();
                 }
             }
         }

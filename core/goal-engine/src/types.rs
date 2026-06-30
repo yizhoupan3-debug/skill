@@ -635,6 +635,11 @@ pub struct AntiDriftState {
     /// History of all drift checks performed (capped at 20 entries).
     #[serde(default)]
     pub drift_check_history: Vec<DriftCheckResult>,
+    /// Timestamp of the last amend that reset the original_goal_snapshot.
+    /// When GOAL_STATE's `amended_at` is newer than this value, the snapshot
+    /// is refreshed to reflect user-authorized goal changes (P1-001 fix).
+    #[serde(default)]
+    pub last_amended_at: Option<String>,
 }
 
 impl Default for AntiDriftState {
@@ -645,6 +650,7 @@ impl Default for AntiDriftState {
             original_goal_snapshot: None,
             last_drift_check: None,
             drift_check_history: Vec::new(),
+            last_amended_at: None,
         }
     }
 }
@@ -954,6 +960,10 @@ pub enum LoopError {
     /// Redirect signal received — action should re-spawn with new goal.
     #[error("Action redirected: {0}")]
     Redirected(String),
+
+    /// Invalid phase transition — state machine invariant violated.
+    #[error("Invalid phase transition: {0}")]
+    PhaseTransition(String),
 }
 
 impl From<serde_json::Error> for LoopError {
@@ -982,7 +992,8 @@ impl From<LoopError> for FrameworkError {
             LoopError::PauseSignaled(msg)
             | LoopError::Paused(msg)
             | LoopError::PauseKilled(msg)
-            | LoopError::Redirected(msg) => FrameworkError::hook(msg),
+            | LoopError::Redirected(msg)
+            | LoopError::PhaseTransition(msg) => FrameworkError::hook(msg),
         }
     }
 }

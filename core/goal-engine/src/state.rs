@@ -111,7 +111,7 @@ pub fn create_initial_state(loop_id: &str, profile: &str) -> LoopRunState {
 }
 
 /// Transition the loop runner to a new phase, updating the heartbeat and refresh timestamp.
-/// Logs a warning when the transition is not in the valid set, but still allows it.
+/// Returns `Err` when the transition is not in the valid set.
 /// Emits a structured phase_transition event with from/to fields for observability.
 pub fn transition_phase(state: &mut LoopRunState, new_phase: LoopPhase) {
     let from = state.phase.clone();
@@ -146,6 +146,54 @@ pub fn transition_phase(state: &mut LoopRunState, new_phase: LoopPhase) {
         to = %new_phase,
         "phase transition"
     );
+}
+
+/// Strict phase transition — same as `transition_phase` but returns `Err` when the
+/// transition is invalid instead of allowing it. Use this in code paths where the
+/// state machine must not silently accept illegal transitions.
+pub fn transition_phase_strict(state: &mut LoopRunState, new_phase: LoopPhase) -> Result<(), LoopError> {
+    let from = state.phase.clone();
+    let current_str = &state.phase;
+    let current = [
+        LoopPhase::Pending,
+        LoopPhase::Discovering,
+        LoopPhase::Preflight,
+        LoopPhase::Running,
+        LoopPhase::Verifying,
+        LoopPhase::Completed,
+        LoopPhase::Escalated,
+        LoopPhase::Interrupted,
+    ]
+    .iter()
+    .find(|p| p.as_str() == current_str);
+
+    if let Some(current) = current {
+        let valid = current.valid_transitions();
+        if !valid.contains(&new_phase) {
+            return Err(LoopError::PhaseTransition(format!(
+                "invalid transition: {} → {}",
+                current.as_str(),
+                new_phase.as_str(),
+            )));
+        }
+    } else {
+        // Unknown phase string — log and allow
+        tracing::warn!(
+            from = %current_str,
+            to = %new_phase.as_str(),
+            "LoopPhase: unknown current phase — allowing transition"
+        );
+    }
+
+    state.phase = new_phase.as_str().to_string();
+    state.last_heartbeat = now_iso();
+    state.last_refreshed_at = now_iso();
+    tracing::info!(
+        from = %from,
+        to = %new_phase,
+        "phase transition (strict)"
+    );
+    Ok(())
 }
 
 /// Initialise a new run within the loop state, setting the run ID and started-at timestamp.

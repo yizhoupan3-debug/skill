@@ -1,6 +1,5 @@
 ---
 source: core/runtime-core/src/harness_contract.rs
-assertion_line: 90
 expression: failure_taxonomy_values()
 ---
 [

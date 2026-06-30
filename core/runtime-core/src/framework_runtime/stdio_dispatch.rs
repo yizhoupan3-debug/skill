@@ -321,7 +321,7 @@ fn dispatch_runtime_stdio_request(op: &str, payload: Value) -> Result<Value, Fra
             "background_state requires L5 state feature (compile-time gate)",
         )),
         "session_supervisor" => {
-            framework_kernel::runtime_hooks::try_hooks()
+            framework_core::runtime_hooks::try_hooks()
                 .ok_or_else(|| FrameworkError::hook("runtime hooks not registered"))?
                 .handle_orchestrator_operation(payload)
         }

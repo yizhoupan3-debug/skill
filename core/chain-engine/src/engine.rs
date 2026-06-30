@@ -7,8 +7,10 @@
 //! 4. Generates CHAIN_OUTPUT.json when the chain completes
 //! 5. Writes back to disk
 //!
-//! The poller uses file locking (`apply_task_ledger_mutation`) for
-//! cross-process safety. The lock uses `ROUTER_RS_TASK_LEDGER_FLOCK`.
+//! NOTE: Currently does NOT use cross-process file locking. The `poll_tick`
+//! RMW cycle is not lock-protected. For production use with concurrent
+//! `chain_dag_tick` callers, wrap TASK_CHAIN.json access with
+//! `apply_task_ledger_mutation`.
 
 use core_errors::FrameworkError;
 use std::path::Path;
@@ -62,13 +64,15 @@ pub fn spawn_dag_poller(
     })
 }
 
-/// The main polling loop.
+/// The main polling loop with exponential backoff on errors.
 fn poll_loop(repo_root: &Path, chain_id: &str, interval_secs: u64, stop: &AtomicBool) {
     let path = crate::chain_file_path(repo_root);
-    let interval = Duration::from_secs(interval_secs);
+    let base_interval = Duration::from_secs(interval_secs);
+    let max_backoff = Duration::from_secs(60);
+    let mut error_backoff = Duration::ZERO;
 
     loop {
-        thread::sleep(interval);
+        thread::sleep(base_interval + error_backoff);
 
         // Check stop signal
         if stop.load(Ordering::Relaxed) {
@@ -80,16 +84,20 @@ fn poll_loop(repo_root: &Path, chain_id: &str, interval_secs: u64, stop: &Atomic
         let result = poll_tick(repo_root, &path);
         match result {
             Ok(true) => {
-                // Chain is complete — exit
                 tracing::info!(%chain_id, "chain completed — poller exiting");
                 return;
             }
             Ok(false) => {
-                // Chain still running, continue polling
+                error_backoff = Duration::ZERO; // Reset on success
             }
             Err(e) => {
                 tracing::warn!(%chain_id, error = %e, "chain poller tick failed");
-                // Continue polling on transient errors
+                // Exponential backoff: 5s, 10s, 20s, 40s, max 60s
+                error_backoff = if error_backoff == Duration::ZERO {
+                    Duration::from_secs(5)
+                } else {
+                    (error_backoff * 2).min(max_backoff)
+                };
             }
         }
     }
@@ -138,7 +146,7 @@ pub struct PollerHandle {
 }
 
 impl PollerHandle {
-    /// Signal the poller to stop on its next iteration.
+    /// Signal the poller to stop on its next iteration and join the thread.
     pub fn stop(&mut self) {
         self.stop_flag.store(true, Ordering::Relaxed);
         if let Some(handle) = self.thread.take() {
@@ -146,15 +154,27 @@ impl PollerHandle {
         }
     }
 
+    /// Signal the poller to stop without joining (non-blocking).
+    /// Use when blocking on join is not acceptable (e.g. in Drop).
+    pub fn signal_stop(&self) {
+        self.stop_flag.store(true, Ordering::Relaxed);
+    }
+
     /// Check if the poller thread is still running.
     pub fn is_running(&self) -> bool {
-        !self.stop_flag.load(Ordering::Relaxed)
+        if self.stop_flag.load(Ordering::Relaxed) {
+            return false;
+        }
+        self.thread.as_ref().map_or(false, |h| !h.is_finished())
     }
 }
 
 impl Drop for PollerHandle {
     fn drop(&mut self) {
-        self.stop();
+        // Signal stop but don't block on join (avoid indefinite blocking in Drop).
+        self.signal_stop();
+        // The thread continues running; it will exit on next iteration.
+        // If attached JoinHandle is dropped without join, the thread is detached.
     }
 }
 

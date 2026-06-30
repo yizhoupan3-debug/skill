@@ -1,6 +1,5 @@
 ---
 source: core/runtime-core/src/harness_contract.rs
-assertion_line: 95
 expression: harness_contract()
 ---
 Object {
