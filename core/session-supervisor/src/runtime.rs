@@ -20,6 +20,15 @@ use crate::types::{
 /// when this limit is reached, preventing unbounded Vec growth (P1 leak).
 const MAX_WORKER_EVENTS: usize = 100;
 
+/// Maximum retention for terminated worker records (seconds). Workers in
+/// terminal states (interrupted, failed, completed) older than this are
+/// removed from the store to prevent unbounded Vec + state.json growth.
+const TERMINATED_WORKER_RETENTION_SECS: i64 = 3600; // 1 hour
+
+/// Maximum retention for worker log files (seconds). Log files of terminated
+/// workers older than this are deleted.
+const WORKER_LOG_RETENTION_SECS: i64 = 86_400; // 24 hours
+
 pub fn worker_log_path(state_path: &Path, worker_id: &str) -> PathBuf {
     let state_dir = state_path.parent().unwrap_or_else(|| Path::new("."));
     state_dir
@@ -163,6 +172,82 @@ pub fn push_event(
     if worker.events.len() > MAX_WORKER_EVENTS {
         let excess = worker.events.len() - MAX_WORKER_EVENTS;
         worker.events.drain(..excess);
+    }
+}
+
+/// Remove workers from the store that have been in a terminal state
+/// (interrupted, completed, failed) longer than `TERMINATED_WORKER_RETENTION_SECS`.
+/// Prevents unbounded Vec and state.json growth (P2).
+pub fn compact_terminated_workers(workers: &mut Vec<WorkerSessionRecord>, now: &str) {
+    let now_dt = match parse_rfc3339(now) {
+        Ok(dt) => dt,
+        Err(e) => {
+            tracing::warn!("compact_terminated_workers: invalid timestamp ({e})");
+            return;
+        }
+    };
+    let terminal_statuses = ["interrupted", "completed", "failed"];
+    workers.retain(|w| {
+        if !terminal_statuses.contains(&w.status.as_str()) {
+            return true; // not terminal — keep
+        }
+        let updated = match parse_rfc3339(&w.updated_at) {
+            Ok(dt) => dt,
+            Err(_) => return true, // unparseable — keep to be safe
+        };
+        let age_secs = now_dt.signed_duration_since(updated).num_seconds();
+        age_secs < TERMINATED_WORKER_RETENTION_SECS
+    });
+}
+
+/// Remove worker log files for workers that no longer exist in the store,
+/// older than `WORKER_LOG_RETENTION_SECS`. Best-effort, logs warnings on failure.
+pub fn cleanup_stale_logs(state_path: &std::path::Path, workers: &[WorkerSessionRecord]) {
+    let logs_dir = state_path.parent().unwrap_or_else(|| std::path::Path::new(".")).join("logs");
+    if !logs_dir.is_dir() {
+        return;
+    }
+    // Collect active worker IDs
+    let active_ids: std::collections::HashSet<String> = workers.iter().map(|w| sanitize_segment(&w.worker_id)).collect();
+    let now_dt = match Utc::now().checked_sub_signed(chrono::Duration::seconds(WORKER_LOG_RETENTION_SECS)) {
+        Some(dt) => dt,
+        None => return,
+    };
+    if let Ok(entries) = std::fs::read_dir(&logs_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if !path.is_file() || path.extension().and_then(|e| e.to_str()) != Some("log") {
+                continue;
+            }
+            // Extract worker_id from filename (strip .log extension)
+            let stem = match path.file_stem().and_then(|s| s.to_str()) {
+                Some(s) => s.to_string(),
+                None => continue,
+            };
+            // Skip if worker is still tracked in store
+            if active_ids.contains(&stem) {
+                continue;
+            }
+            // Check file age
+            let metadata = match path.metadata() {
+                Ok(m) => m,
+                Err(_) => continue,
+            };
+            let modified = match metadata.modified() {
+                Ok(t) => {
+                    let dur = t.duration_since(std::time::SystemTime::UNIX_EPOCH).unwrap_or_default();
+                    DateTime::from_timestamp(dur.as_secs() as i64, dur.subsec_nanos())
+                }
+                Err(_) => None
+            };
+            match modified {
+                Some(mtime) if mtime > now_dt => continue, // too recent
+                _ => {}
+            }
+            if let Err(e) = std::fs::remove_file(&path) {
+                tracing::debug!("cleanup_stale_logs: remove {} failed ({e})", path.display());
+            }
+        }
     }
 }
 

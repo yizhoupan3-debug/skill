@@ -123,14 +123,19 @@ pub fn handle_session_supervisor_operation(payload: Value) -> Result<Value, Fram
             let stale_after_secs = runtime::optional_i64(&payload, "stale_after_secs")
                 .unwrap_or(DEFAULT_WORKER_STALE_AFTER_SECS);
             reap_stale_workers(&mut store.workers, &now, stale_after_secs)?;
+            runtime::compact_terminated_workers(&mut store.workers, &now);
             for worker in &mut store.workers {
                 reconcile_process_state(worker);
             }
             save_store(&state_path, &store)?;
-            // Side-effect: reap stale agent health entries
+            // Side-effect: reap stale agent health entries (use the stale-after
+            // value as retention — agents terminal longer than the worker stale
+            // threshold are removed)
             if let Ok(cwd) = std::env::current_dir() {
                 let _ = process::reap_stale_agents(&cwd, stale_after_secs);
             }
+            // Side-effect: clean up orphaned worker log files
+            runtime::cleanup_stale_logs(&state_path, &store.workers);
             let idle_observation = idle_observation_side_effect(&payload, &store.workers);
             Ok(json!({
                 "schema_version": SESSION_SUPERVISOR_SCHEMA_VERSION,
