@@ -1,6 +1,13 @@
 //! B0 kernel DI: TokenizerProvider (B1→B0), review context probes, and route cache invalidator.
 //!
 //! Telemetry bootstrap (LogAggregator, TelemetryObserver) removed per v10 Wave 2d.
+//!
+//! # Cross-session cleanup
+//! On first bootstrap, stale task pointers in `artifacts/current/` are cleared
+//! to prevent cross-session leakage (a 3-day-old `active_task_id` would otherwise
+//! be read as current by `load_framework_runtime_view`). Task subdirectories with
+//! evidence artifacts are preserved — only index and pointer files are reset.
+
 use routing_engine::routing_runtime_watch;
 use std::sync::Once;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -29,8 +36,112 @@ static BOOTSTRAP_ONCE: Once = Once::new();
 pub fn ensure_kernel_bootstrap() {
     BOOTSTRAP_ONCE.call_once(|| {
         bootstrap_core(); // tokenizer + probes (all modes need these)
+        clear_stale_artifact_pointers(); // P0: prevent cross-session pointer leakage
         spawn_routing_runtime_cache_invalidator();
     });
+}
+
+#[cfg(target_os = "linux")]
+fn current_exe_name() -> Option<String> {
+    std::env::current_exe()
+        .ok()?
+        .file_name()?
+        .to_str()
+        .map(|s| s.to_string())
+}
+
+#[cfg(not(target_os = "linux"))]
+fn current_exe_name() -> Option<String> {
+    std::env::current_exe()
+        .ok()?
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .map(|s| s.to_string())
+}
+
+/// Clear stale task pointers from `artifacts/current/` at bootstrap,
+/// preventing cross-session leakage (P0). Only runs in the main CLI
+/// process (not in subagent binaries) to avoid corrupting the parent
+/// session's state.
+///
+/// # Safety
+/// - Only clears pointer/index files (active_task.json, focus_task.json,
+///   task_registry.json, and the `active_task_id`/`focus_task_id` fields
+///   of TASK_POINTERS.json).
+/// - Task subdirectories with evidence artifacts are **not** deleted.
+/// - Subagent binaries (containing "subagent", "agent-daemon", or the
+///   value of `ROUTER_RS_SUBAGENT_BIN` in their path) skip this step.
+fn clear_stale_artifact_pointers() {
+    // Only run in the main process — skip if we're a subagent
+    if let Some(exe) = current_exe_name() {
+        let exe_lower = exe.to_ascii_lowercase();
+        if exe_lower.contains("subagent")
+            || exe_lower.contains("agent-daemon")
+            || exe_lower.contains("subagent-permit")
+        {
+            return;
+        }
+    }
+
+    let cwd = match std::env::current_dir() {
+        Ok(d) => d,
+        Err(e) => {
+            tracing::debug!("clear_stale_artifact_pointers: no cwd ({e})");
+            return;
+        }
+    };
+    let artifact_dir = cwd.join("artifacts/current");
+    if !artifact_dir.is_dir() {
+        return; // nothing to clean
+    }
+
+    // 1. Reset TASK_POINTERS.json: clear active/focus IDs and tasks array
+    let pointers_path = artifact_dir.join("TASK_POINTERS.json");
+    if pointers_path.is_file() {
+        let raw = match std::fs::read_to_string(&pointers_path) {
+            Ok(r) => r,
+            Err(e) => {
+                tracing::debug!("clear_stale_artifact_pointers: read failed ({e})");
+                return;
+            }
+        };
+        // Check if there's actually stale data before writing
+        let should_clear = raw.contains(r#""active_task_id""#)
+            || raw.contains(r#""focus_task_id""#);
+        if should_clear {
+            let mut data: serde_json::Value = match serde_json::from_str(&raw) {
+                Ok(v) => v,
+                Err(_) => serde_json::json!({}),
+            };
+            if let Some(obj) = data.as_object_mut() {
+                obj.remove("active_task_id");
+                obj.remove("focus_task_id");
+                if let Some(tasks) = obj.get_mut("tasks").and_then(|v| v.as_array_mut()) {
+                    tasks.clear();
+                }
+            }
+            if let Err(e) =
+                core_state_utils::atomic_write::write_atomic_json(&pointers_path, &data)
+            {
+                tracing::warn!(
+                    "clear_stale_artifact_pointers: write TASK_POINTERS.json failed ({e})"
+                );
+            }
+        }
+    }
+
+    // 2. Remove legacy pointer files
+    for name in ["active_task.json", "focus_task.json", "task_registry.json"] {
+        let path = artifact_dir.join(name);
+        if path.is_file() {
+            if let Err(e) = std::fs::remove_file(&path) {
+                tracing::debug!(
+                    "clear_stale_artifact_pointers: remove {} failed ({e})",
+                    path.display()
+                );
+            }
+        }
+    }
 }
 
 /// Core DI: tokenizer provider + review context probes.

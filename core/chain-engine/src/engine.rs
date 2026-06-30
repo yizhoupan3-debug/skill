@@ -17,7 +17,7 @@ use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use crate::compat;
 use crate::scheduler::{advance_dag, is_chain_complete, write_chain_file};
@@ -170,10 +170,24 @@ impl PollerHandle {
 
 impl Drop for PollerHandle {
     fn drop(&mut self) {
-        // Signal stop but don't block on join (avoid indefinite blocking in Drop).
         self.signal_stop();
-        // The thread continues running; it will exit on next iteration.
-        // If attached JoinHandle is dropped without join, the thread is detached.
+        // Best-effort: wait up to 500ms for the thread to notice the stop flag
+        // and exit. If the thread is blocked on sleep() it wakes within 5s at
+        // most (base_interval), but the 500ms cap prevents indefinite blocking
+        // in Drop (which would deadlock if the Drop is called from a thread
+        // that the poller depends on). If the timeout expires, the JoinHandle
+        // is dropped (thread detached) — the thread exits on its next iteration.
+        if let Some(handle) = self.thread.take() {
+            let deadline = Instant::now() + Duration::from_millis(500);
+            while Instant::now() < deadline {
+                if handle.is_finished() {
+                    let _ = handle.join();
+                    return;
+                }
+                thread::sleep(Duration::from_millis(50));
+            }
+            // Timeout — thread remains running; will exit on next poll cycle.
+        }
     }
 }
 

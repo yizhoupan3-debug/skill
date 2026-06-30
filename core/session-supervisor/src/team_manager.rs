@@ -275,6 +275,10 @@ pub fn add_team_member(
 }
 
 /// Remove a member from a team.
+///
+/// Removes the member from the team's `members` Vec (individual member files
+/// on disk preserve the history). Previously only status-updated, which caused
+/// unbounded Vec accumulation on active teams (P2 leak).
 pub fn remove_team_member(
     repo_root: &Path,
     team_id: &str,
@@ -289,10 +293,8 @@ pub fn remove_team_member(
 
         unregister_agent(repo_root, agent_id, terminal_status, error, now)?;
 
-        if let Some(member) = team.members.iter_mut().find(|m| m.agent_id == agent_id) {
-            member.status = terminal_status.to_string();
-            member.completed_at = Some(now.to_string());
-        }
+        // Actually remove the member from Vec (history preserved in member file on disk)
+        team.members.retain(|m| m.agent_id != agent_id);
 
         team.updated_at = now.to_string();
         Ok(())

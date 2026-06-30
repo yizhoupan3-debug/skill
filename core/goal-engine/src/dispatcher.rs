@@ -68,8 +68,15 @@ impl<'a> SubagentPermit<'a> {
 
 impl Drop for SubagentPermit<'_> {
     fn drop(&mut self) {
-        if let Ok(mut count) = self.sem.lock().map_err(|e| e.into_inner()) {
-            *count += 1;
+        match self.sem.lock() {
+            Ok(mut count) => *count += 1,
+            Err(poisoned) => {
+                // Recover from poison: into_inner() extracts the Mutex value
+                // and clears the poison flag. Without this recovery, the permit
+                // is permanently leaked and the semaphore count drifts.
+                let mut count = poisoned.into_inner();
+                *count += 1;
+            }
         }
     }
 }

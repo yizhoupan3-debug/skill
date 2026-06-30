@@ -591,7 +591,7 @@ pub fn live_execute_http_client() -> Result<&'static reqwest::blocking::Client, 
         return Ok(client);
     }
     let mut builder = reqwest::blocking::Client::builder().timeout(Duration::from_secs(30));
-    // Inherit proxy configuration from environment (cached at process level).
+    // Inherit proxy configuration from environment (no process-level caching).
     if let Some(proxy_url) = http_util::cached_proxy_url()
         && let Ok(proxy) = reqwest::Proxy::all(proxy_url)
     {

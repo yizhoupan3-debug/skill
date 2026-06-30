@@ -16,6 +16,10 @@ use crate::types::{
     WorkerSessionRecord,
 };
 
+/// Maximum number of events kept per worker. Oldest events are truncated
+/// when this limit is reached, preventing unbounded Vec growth (P1 leak).
+const MAX_WORKER_EVENTS: usize = 100;
+
 pub fn worker_log_path(state_path: &Path, worker_id: &str) -> PathBuf {
     let state_dir = state_path.parent().unwrap_or_else(|| Path::new("."));
     state_dir
@@ -153,6 +157,13 @@ pub fn push_event(
         timestamp: timestamp.to_string(),
         detail,
     });
+    // Cap at MAX_WORKER_EVENTS to prevent unbounded Vec growth.
+    // Workers persist in the store indefinitely (never removed), so without
+    // this cap, every lifecycle transition accumulates a permanent event.
+    if worker.events.len() > MAX_WORKER_EVENTS {
+        let excess = worker.events.len() - MAX_WORKER_EVENTS;
+        worker.events.drain(..excess);
+    }
 }
 
 pub fn sanitize_segment(value: &str) -> String {

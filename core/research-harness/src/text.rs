@@ -54,7 +54,10 @@ pub fn decode_xml_entities(raw: &str) -> String {
 }
 
 /// Extract and decode the text content between XML tags, with regex caching.
+/// Cache is bounded at MAX_XML_TAG_CACHE_ENTRIES to prevent unbounded growth
+/// when called with many distinct tag names across sessions.
 pub fn xml_text_between(raw: &str, tag: &str) -> Option<String> {
+    const MAX_XML_TAG_CACHE_ENTRIES: usize = 64;
     static XML_TAG_RE_CACHE: LazyLock<Mutex<HashMap<String, Regex>>> =
         LazyLock::new(|| Mutex::new(HashMap::new()));
     let re = match XML_TAG_RE_CACHE
@@ -66,6 +69,10 @@ pub fn xml_text_between(raw: &str, tag: &str) -> Option<String> {
         None => {
             let pattern = Regex::new(&format!(r"(?s)<{tag}(?:\s[^>]*)?>(.*?)</{tag}>")).ok()?;
             if let Ok(mut cache) = XML_TAG_RE_CACHE.lock() {
+                // Evict oldest entries when over capacity to prevent unbounded growth
+                if cache.len() >= MAX_XML_TAG_CACHE_ENTRIES {
+                    cache.clear();
+                }
                 cache.insert(tag.to_string(), pattern.clone());
             }
             pattern
