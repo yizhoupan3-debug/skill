@@ -195,3 +195,74 @@ impl GateChecker for Inequality {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
+    use super::*;
+    use quality_gate::checker::GateChecker;
+    use quality_gate::types::CheckContext;
+
+    fn ctx(output_data: Option<serde_json::Value>) -> CheckContext {
+        CheckContext {
+            scene: "test".into(),
+            sub_scene: None,
+            goal: "test".into(),
+            round: 1,
+            repo_root: std::path::PathBuf::from("."),
+            task_id: "t1".into(),
+            evidence_path: None,
+            runtime_handle: None,
+            output_data,
+            evaluated_at: "2026-01-01T00:00:00Z".into(),
+        }
+    }
+
+    #[test]
+    fn no_data_returns_passed() {
+        let gate = Inequality;
+        let result = gate.check(&ctx(None));
+        assert!(result.passed);
+        assert_eq!(result.findings.len(), 1);
+        assert_eq!(result.findings[0].id, "inequality_no_data");
+        assert!(matches!(result.findings[0].severity, Severity::C));
+    }
+
+    #[test]
+    fn no_inequalities_array_returns_passed() {
+        let gate = Inequality;
+        let data = serde_json::json!({ "timeout_ms": 5000 });
+        let result = gate.check(&ctx(Some(data)));
+        assert!(result.passed);
+        assert_eq!(result.findings[0].id, "inequality_no_expressions");
+    }
+
+    #[test]
+    fn feasible_system_passes() {
+        let gate = Inequality;
+        let data = serde_json::json!({
+            "inequalities": ["x <= 10", "x >= 0"]
+        });
+        let result = gate.check(&ctx(Some(data)));
+        assert!(result.passed);
+        assert!(result
+            .findings
+            .iter()
+            .any(|f| f.id == "inequality_feasible"));
+    }
+
+    #[test]
+    fn infeasible_system_fails() {
+        let gate = Inequality;
+        // Contradictory constraints: x >= 5 AND x <= 3
+        let data = serde_json::json!({
+            "inequalities": ["x >= 5", "x <= 3"]
+        });
+        let result = gate.check(&ctx(Some(data)));
+        assert!(!result.passed);
+        assert!(result
+            .findings
+            .iter()
+            .any(|f| f.id == "inequality_infeasible"));
+    }
+}

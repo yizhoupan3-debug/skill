@@ -156,3 +156,74 @@ impl GateChecker for Symbolic {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
+    use super::*;
+    use quality_gate::checker::GateChecker;
+    use quality_gate::types::CheckContext;
+
+    fn ctx(output_data: Option<serde_json::Value>) -> CheckContext {
+        CheckContext {
+            scene: "test".into(),
+            sub_scene: None,
+            goal: "test".into(),
+            round: 1,
+            repo_root: std::path::PathBuf::from("."),
+            task_id: "t1".into(),
+            evidence_path: None,
+            runtime_handle: None,
+            output_data,
+            evaluated_at: "2026-01-01T00:00:00Z".into(),
+        }
+    }
+
+    #[test]
+    fn no_data_returns_passed() {
+        let gate = Symbolic;
+        let result = gate.check(&ctx(None));
+        assert!(result.passed);
+        assert_eq!(result.findings.len(), 1);
+        assert_eq!(result.findings[0].id, "symbolic_no_data");
+        assert!(matches!(result.findings[0].severity, Severity::C));
+    }
+
+    #[test]
+    fn identity_proof_passes() {
+        let gate = Symbolic;
+        let data = serde_json::json!({
+            "identity": { "lhs": "x^2 + 2*x + 1", "rhs": "(x+1)^2" }
+        });
+        let result = gate.check(&ctx(Some(data)));
+        assert!(result.passed);
+        let id_finding = result.findings.iter().find(|f| f.id == "symbolic_identity");
+        assert!(matches!(id_finding.unwrap().severity, Severity::C));
+    }
+
+    #[test]
+    fn identity_failure_fails_gate() {
+        let gate = Symbolic;
+        let data = serde_json::json!({
+            "identity": { "lhs": "x^2", "rhs": "x^3" }
+        });
+        let result = gate.check(&ctx(Some(data)));
+        assert!(!result.passed);
+        let id_finding = result.findings.iter().find(|f| f.id == "symbolic_identity");
+        assert!(matches!(id_finding.unwrap().severity, Severity::B));
+    }
+
+    #[test]
+    fn growth_classification_passes() {
+        let gate = Symbolic;
+        let data = serde_json::json!({
+            "growth": { "expr": "x^3 + 2*x", "var": "x" }
+        });
+        let result = gate.check(&ctx(Some(data)));
+        assert!(result.passed);
+        assert!(result
+            .findings
+            .iter()
+            .any(|f| f.id == "symbolic_growth"));
+    }
+}

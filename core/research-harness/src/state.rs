@@ -139,7 +139,7 @@ pub fn migrate_state(state: &Value) -> Result<Value> {
         .and_then(Value::as_str)
         .unwrap_or("")
         .to_string();
-    for hypothesis in arr_mut(&mut migrated, "hypotheses") {
+    for hypothesis in arr_mut(&mut migrated, "hypotheses")? {
         let hypothesis_id = str_field(hypothesis, "id").to_string();
         let mut status = hypothesis
             .get("status")
@@ -169,7 +169,7 @@ pub fn migrate_state(state: &Value) -> Result<Value> {
         }
         item.insert("status".into(), json!(status));
     }
-    for record in arr_mut(&mut migrated, "run_history") {
+    for record in arr_mut(&mut migrated, "run_history")? {
         let Some(item) = record.as_object_mut() else {
             continue;
         };
@@ -228,19 +228,19 @@ pub fn hydrate_state(state: &Value) -> Result<Value> {
         gate.entry("decision").or_insert(Value::Null);
     }
     let updated_at = str_field(&hydrated, "updated_at").to_string();
-    for hypothesis in arr_mut(&mut hydrated, "hypotheses") {
+    for hypothesis in arr_mut(&mut hydrated, "hypotheses")? {
         let item = hypothesis
             .as_object_mut()
             .ok_or_else(|| anyhow::anyhow!("hypothesis must be object"))?;
         ensure_hypothesis_defaults(item, &updated_at);
     }
-    for record in arr_mut(&mut hydrated, "run_history") {
+    for record in arr_mut(&mut hydrated, "run_history")? {
         let item = record
             .as_object_mut()
             .ok_or_else(|| anyhow::anyhow!("run record must be object"))?;
         ensure_run_record_defaults(item);
     }
-    for record in arr_mut(&mut hydrated, "external_research") {
+    for record in arr_mut(&mut hydrated, "external_research")? {
         let item = record
             .as_object_mut()
             .ok_or_else(|| anyhow::anyhow!("external research record must be object"))?;

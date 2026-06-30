@@ -110,3 +110,70 @@ impl GateChecker for Reproducibility {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
+    use super::*;
+    use quality_gate::checker::GateChecker;
+    use quality_gate::types::CheckContext;
+
+    fn ctx_with_repo(repo_root: std::path::PathBuf) -> CheckContext {
+        CheckContext {
+            scene: "test".into(),
+            sub_scene: None,
+            goal: "test".into(),
+            round: 1,
+            repo_root,
+            task_id: "t1".into(),
+            evidence_path: None,
+            runtime_handle: None,
+            output_data: None,
+            evaluated_at: "2026-01-01T00:00:00Z".into(),
+        }
+    }
+
+    #[test]
+    fn empty_dir_runs_audit() {
+        let dir = tempfile::tempdir().expect("create tempdir");
+        let gate = Reproducibility;
+        let result = gate.check(&ctx_with_repo(dir.path().to_path_buf()));
+        // The audit runs; seed_set will FAIL since no code files exist
+        assert!(!result.passed);
+        let seed_finding = result
+            .findings
+            .iter()
+            .find(|f| f.id == "reproducibility_seed_set");
+        assert!(seed_finding.is_some());
+        assert!(matches!(seed_finding.unwrap().severity, Severity::P0));
+    }
+
+    #[test]
+    fn seed_present_passes_gate() {
+        let dir = tempfile::tempdir().expect("create tempdir");
+        // Create a Python file with a seed setting
+        std::fs::write(dir.path().join("train.py"), "import torch\ntorch.manual_seed(42)\n")
+            .expect("write py file");
+        let gate = Reproducibility;
+        let result = gate.check(&ctx_with_repo(dir.path().to_path_buf()));
+        // seed_set should PASS; other checks may vary
+        let seed_finding = result
+            .findings
+            .iter()
+            .find(|f| f.id == "reproducibility_seed_set");
+        assert!(seed_finding.is_none());
+    }
+
+    #[test]
+    fn findings_severity_mapping() {
+        let dir = tempfile::tempdir().expect("create tempdir");
+        let gate = Reproducibility;
+        let result = gate.check(&ctx_with_repo(dir.path().to_path_buf()));
+        // Verify that seed_set failure maps to P0 severity
+        for finding in &result.findings {
+            if finding.id == "reproducibility_seed_set" {
+                assert!(matches!(finding.severity, Severity::P0));
+            }
+        }
+    }
+}

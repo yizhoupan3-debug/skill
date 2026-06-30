@@ -296,6 +296,12 @@ fn tool_math_proof_dag_init(arguments: &Value) -> Result<String, FrameworkError>
     let bp = crate::proof_dag::Blueprint::new(goal, name);
     let serialized = crate::proof_dag_serialize::serialize_blueprint(&bp)?;
     if let Ok(mut guard) = get_or_create_dag_store().lock() {
+        const MAX_DAGS: usize = 64;
+        if guard.len() >= MAX_DAGS && !guard.contains_key(&dag_id) {
+            return Err(FrameworkError::validation(format!(
+                "DAG store limit reached ({MAX_DAGS}). Delete unused DAGs first."
+            )));
+        }
         guard.insert(dag_id, bp);
     }
     Ok(serialized)

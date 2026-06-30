@@ -129,3 +129,70 @@ impl GateChecker for Structure {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
+    use super::*;
+    use quality_gate::checker::GateChecker;
+    use quality_gate::types::CheckContext;
+
+    fn ctx_with_repo(repo_root: std::path::PathBuf) -> CheckContext {
+        CheckContext {
+            scene: "test".into(),
+            sub_scene: None,
+            goal: "test".into(),
+            round: 1,
+            repo_root,
+            task_id: "t1".into(),
+            evidence_path: None,
+            runtime_handle: None,
+            output_data: None,
+            evaluated_at: "2026-01-01T00:00:00Z".into(),
+        }
+    }
+
+    #[test]
+    fn no_tex_files_returns_passed() {
+        let dir = tempfile::tempdir().expect("create tempdir");
+        let gate = Structure;
+        let result = gate.check(&ctx_with_repo(dir.path().to_path_buf()));
+        assert!(result.passed);
+        assert!(result.findings.is_empty());
+    }
+
+    #[test]
+    fn valid_tex_passes() {
+        let dir = tempfile::tempdir().expect("create tempdir");
+        let tex_path = dir.path().join("paper.tex");
+        std::fs::write(
+            &tex_path,
+            "\\documentclass{article}\n\\begin{document}\nHello world\n\\end{document}\n",
+        )
+        .expect("write tex");
+        let gate = Structure;
+        let result = gate.check(&ctx_with_repo(dir.path().to_path_buf()));
+        assert!(result.passed);
+    }
+
+    #[test]
+    fn unbalanced_braces_fails() {
+        let dir = tempfile::tempdir().expect("create tempdir");
+        let tex_path = dir.path().join("paper.tex");
+        // Unbalanced braces: extra opening brace
+        std::fs::write(
+            &tex_path,
+            "\\documentclass{article}\n\\begin{document}\n{unbalanced\n\\end{document}\n",
+        )
+        .expect("write tex");
+        let gate = Structure;
+        let result = gate.check(&ctx_with_repo(dir.path().to_path_buf()));
+        assert!(!result.passed);
+        let finding = result
+            .findings
+            .iter()
+            .find(|f| f.id == "structure_latex_compilable");
+        assert!(finding.is_some());
+        assert!(matches!(finding.unwrap().severity, Severity::P0));
+    }
+}

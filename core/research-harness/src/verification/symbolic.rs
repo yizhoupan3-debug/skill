@@ -345,7 +345,7 @@ pub fn eval(expr: &Expr, vars: &HashMap<String, f64>) -> Result<f64, FrameworkEr
 pub fn display(expr: &Expr) -> String {
     match expr {
         Expr::Const(c) => {
-            if c.fract() == 0.0 {
+            if c.fract() == 0.0 && *c >= i64::MIN as f64 && *c <= i64::MAX as f64 {
                 format!("{}", *c as i64)
             } else {
                 format!("{c}")

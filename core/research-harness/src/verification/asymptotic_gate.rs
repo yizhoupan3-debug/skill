@@ -166,3 +166,72 @@ impl GateChecker for Asymptotic {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
+    use super::*;
+    use quality_gate::checker::GateChecker;
+    use quality_gate::types::CheckContext;
+
+    fn ctx(output_data: Option<serde_json::Value>) -> CheckContext {
+        CheckContext {
+            scene: "test".into(),
+            sub_scene: None,
+            goal: "test".into(),
+            round: 1,
+            repo_root: std::path::PathBuf::from("."),
+            task_id: "t1".into(),
+            evidence_path: None,
+            runtime_handle: None,
+            output_data,
+            evaluated_at: "2026-01-01T00:00:00Z".into(),
+        }
+    }
+
+    #[test]
+    fn no_data_returns_passed() {
+        let gate = Asymptotic;
+        let result = gate.check(&ctx(None));
+        assert!(result.passed);
+        assert_eq!(result.findings.len(), 1);
+        assert_eq!(result.findings[0].id, "asymptotic_no_data");
+        assert!(matches!(result.findings[0].severity, Severity::C));
+    }
+
+    #[test]
+    fn valid_claim_passes() {
+        let gate = Asymptotic;
+        let data = serde_json::json!({
+            "claim": { "f": "x", "g": "x^2", "relation": "much_less", "var": "x", "regime": "oo" }
+        });
+        let result = gate.check(&ctx(Some(data)));
+        assert!(result.passed);
+        let claim_finding = result.findings.iter().find(|f| f.id.starts_with("asymptotic_claim"));
+        assert!(claim_finding.is_some());
+        assert!(matches!(claim_finding.unwrap().severity, Severity::C));
+    }
+
+    #[test]
+    fn invalid_claim_fails() {
+        let gate = Asymptotic;
+        let data = serde_json::json!({
+            "claim": { "f": "x^3", "g": "x", "relation": "much_less", "var": "x", "regime": "oo" }
+        });
+        let result = gate.check(&ctx(Some(data)));
+        assert!(!result.passed);
+        let claim_finding = result.findings.iter().find(|f| f.id.starts_with("asymptotic_claim"));
+        assert!(matches!(claim_finding.unwrap().severity, Severity::B));
+    }
+
+    #[test]
+    fn magnitude_estimate_runs() {
+        let gate = Asymptotic;
+        let data = serde_json::json!({
+            "magnitude_estimate": { "expr": "n^2 + n", "var": "n", "regime": "oo" }
+        });
+        let result = gate.check(&ctx(Some(data)));
+        assert!(result.passed);
+        assert!(result.findings.iter().any(|f| f.id.starts_with("asymptotic_mag")));
+    }
+}

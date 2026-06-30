@@ -41,6 +41,14 @@ pub fn init_workspace(
     base_dir: &Path,
     mode: &str,
 ) -> Result<std::path::PathBuf> {
+    // Path traversal guard
+    if project.is_empty()
+        || project.contains('/')
+        || project.contains('\\')
+        || project.contains("..")
+    {
+        anyhow::bail!("project name must not contain path separators or '..': {project}");
+    }
     let base = if base_dir.is_absolute() {
         base_dir.to_path_buf()
     } else {

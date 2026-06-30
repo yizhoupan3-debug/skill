@@ -216,3 +216,64 @@ fn find_paper_files(root: &Path) -> Vec<std::path::PathBuf> {
 
     files
 }
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
+    use super::*;
+    use quality_gate::checker::GateChecker;
+    use quality_gate::types::CheckContext;
+
+    fn ctx_with_repo(repo_root: std::path::PathBuf) -> CheckContext {
+        CheckContext {
+            scene: "test".into(),
+            sub_scene: None,
+            goal: "test".into(),
+            round: 1,
+            repo_root,
+            task_id: "t1".into(),
+            evidence_path: None,
+            runtime_handle: None,
+            output_data: None,
+            evaluated_at: "2026-01-01T00:00:00Z".into(),
+        }
+    }
+
+    #[test]
+    fn no_paper_files_returns_passed() {
+        let dir = tempfile::tempdir().expect("create tempdir");
+        let gate = ProseQCChecker;
+        let result = gate.check(&ctx_with_repo(dir.path().to_path_buf()));
+        assert!(result.passed);
+        assert_eq!(result.findings.len(), 1);
+        assert_eq!(result.findings[0].id, "prose_qc_no_paper");
+        assert!(matches!(result.findings[0].severity, Severity::C));
+    }
+
+    #[test]
+    fn clean_paper_passes() {
+        let dir = tempfile::tempdir().expect("create tempdir");
+        let paper_path = dir.path().join("paper.tex");
+        std::fs::write(&paper_path, "We present a method for analysis.").expect("write paper");
+        let gate = ProseQCChecker;
+        let result = gate.check(&ctx_with_repo(dir.path().to_path_buf()));
+        assert!(result.passed);
+        assert!(result.findings.is_empty());
+    }
+
+    #[test]
+    fn paper_with_hedging_words_detected() {
+        let dir = tempfile::tempdir().expect("create tempdir");
+        let paper_path = dir.path().join("paper.tex");
+        // Construct text with >20 hedging words to trigger a finding
+        let hedging_phrase = "This may possibly rather quite arguably somewhat potentially. ";
+        let text = hedging_phrase.repeat(9); // ~63 hedging words, > 50 threshold for Warning
+        std::fs::write(&paper_path, &text).expect("write paper");
+        let gate = ProseQCChecker;
+        let result = gate.check(&ctx_with_repo(dir.path().to_path_buf()));
+        assert!(result.passed);
+        let hedge_finding = result.findings.iter().find(|f| f.id == "prose_qc_hedging");
+        assert!(hedge_finding.is_some());
+        assert!(matches!(hedge_finding.unwrap().severity, Severity::Warning));
+    }
+}

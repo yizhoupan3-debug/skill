@@ -5,7 +5,7 @@
 use serde_json::{Value, json};
 
 use super::helpers::compact_words;
-use crate::util::{novelty_gate, novelty_gate_mut, str_field, str_field_default};
+use crate::util::{novelty_arr, novelty_gate, novelty_gate_mut, str_field, str_field_default};
 
 // ── 公开 API ──
 
@@ -205,16 +205,6 @@ pub fn verification_standard_for_priority(priority: &str) -> &'static str {
         "later" => "Can proceed with weaker evidence if the claim is narrow and low-risk.",
         _ => "Standard verification.",
     }
-}
-
-// ── State-aware novelty gate helpers ──
-
-fn novelty_arr<'a>(state: &'a Value, key: &str) -> &'a [Value] {
-    novelty_gate(state)
-        .get(key)
-        .and_then(Value::as_array)
-        .map(|a| a.as_slice())
-        .unwrap_or(&[])
 }
 
 // ── State-aware search plan & brief ──

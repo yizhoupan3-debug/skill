@@ -115,3 +115,72 @@ impl GateChecker for SympyBridge {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
+    use super::*;
+    use quality_gate::checker::GateChecker;
+    use quality_gate::types::CheckContext;
+
+    fn ctx(output_data: Option<serde_json::Value>) -> CheckContext {
+        CheckContext {
+            scene: "test".into(),
+            sub_scene: None,
+            goal: "test".into(),
+            round: 1,
+            repo_root: std::path::PathBuf::from("."),
+            task_id: "t1".into(),
+            evidence_path: None,
+            runtime_handle: None,
+            output_data,
+            evaluated_at: "2026-01-01T00:00:00Z".into(),
+        }
+    }
+
+    #[test]
+    fn sympy_available_data_none_returns_passed() {
+        let gate = SympyBridge;
+        let result = gate.check(&ctx(None));
+        assert!(result.passed);
+        assert_eq!(result.findings.len(), 1);
+        assert_eq!(result.findings[0].id, "sympy_no_data");
+        assert!(matches!(result.findings[0].severity, Severity::C));
+    }
+
+    #[test]
+    fn identity_passes() {
+        let gate = SympyBridge;
+        let data = serde_json::json!({
+            "identity": { "lhs": "x^2 + 2*x + 1", "rhs": "(x+1)^2" }
+        });
+        let result = gate.check(&ctx(Some(data)));
+        assert!(result.passed);
+        let id_finding = result.findings.iter().find(|f| f.id == "sympy_identity");
+        assert!(matches!(id_finding.unwrap().severity, Severity::C));
+    }
+
+    #[test]
+    fn identity_fail_fails_gate() {
+        let gate = SympyBridge;
+        let data = serde_json::json!({
+            "identity": { "lhs": "x^2", "rhs": "x^3" }
+        });
+        let result = gate.check(&ctx(Some(data)));
+        assert!(!result.passed);
+        let id_finding = result.findings.iter().find(|f| f.id == "sympy_identity");
+        assert!(matches!(id_finding.unwrap().severity, Severity::B));
+    }
+
+    #[test]
+    fn simplify_passes() {
+        let gate = SympyBridge;
+        let data = serde_json::json!({
+            "simplify": "x^2 + 2*x + 1"
+        });
+        let result = gate.check(&ctx(Some(data)));
+        assert!(result.passed);
+        let simp = result.findings.iter().find(|f| f.id == "sympy_simplify");
+        assert!(matches!(simp.unwrap().severity, Severity::C));
+    }
+}

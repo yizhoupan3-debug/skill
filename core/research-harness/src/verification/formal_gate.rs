@@ -108,3 +108,72 @@ impl GateChecker for DimensionalConsistency {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
+    use super::*;
+    use quality_gate::checker::GateChecker;
+    use quality_gate::types::CheckContext;
+
+    fn ctx(output_data: Option<serde_json::Value>) -> CheckContext {
+        CheckContext {
+            scene: "test".into(),
+            sub_scene: None,
+            goal: "test".into(),
+            round: 1,
+            repo_root: std::path::PathBuf::from("."),
+            task_id: "t1".into(),
+            evidence_path: None,
+            runtime_handle: None,
+            output_data,
+            evaluated_at: "2026-01-01T00:00:00Z".into(),
+        }
+    }
+
+    #[test]
+    fn no_data_returns_passed() {
+        let gate = DimensionalConsistency;
+        let result = gate.check(&ctx(None));
+        assert!(result.passed);
+        assert_eq!(result.findings.len(), 1);
+        assert_eq!(result.findings[0].id, "formal_no_data");
+        assert!(matches!(result.findings[0].severity, Severity::C));
+    }
+
+    #[test]
+    fn no_equations_array_returns_passed() {
+        let gate = DimensionalConsistency;
+        let data = serde_json::json!({ "other_key": "value" });
+        let result = gate.check(&ctx(Some(data)));
+        assert!(result.passed);
+        assert_eq!(result.findings[0].id, "formal_no_equations");
+    }
+
+    #[test]
+    fn consistent_equation_passes() {
+        let gate = DimensionalConsistency;
+        // An equation with matching dimension annotations on both sides
+        let data = serde_json::json!({
+            "equations": ["[L] = [L]"]
+        });
+        let result = gate.check(&ctx(Some(data)));
+        assert!(result.passed);
+        let eq_finding = result.findings.iter().find(|f| f.id == "dimensional_eq_0");
+        assert!(eq_finding.is_some());
+        assert!(matches!(eq_finding.unwrap().severity, Severity::C));
+    }
+
+    #[test]
+    fn inconsistent_equation_fails() {
+        let gate = DimensionalConsistency;
+        // Mismatched dimension annotations: [L] on left, [L][T] on right
+        let data = serde_json::json!({
+            "equations": ["[L] = [L][T]"]
+        });
+        let result = gate.check(&ctx(Some(data)));
+        assert!(!result.passed);
+        let eq_finding = result.findings.iter().find(|f| f.id == "dimensional_eq_0");
+        assert!(matches!(eq_finding.unwrap().severity, Severity::B));
+    }
+}

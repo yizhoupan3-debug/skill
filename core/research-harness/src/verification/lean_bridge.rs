@@ -78,7 +78,11 @@ pub fn verify_lean_theorem(script: &str) -> VerificationResult {
     }
 
     // Write script to temp file and run lean
-    let temp_dir = std::env::temp_dir().join(format!("lean_verify_{}", std::process::id()));
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    let temp_dir = std::env::temp_dir().join(format!("lean_verify_{nanos:016x}"));
     if let Err(e) = std::fs::create_dir_all(&temp_dir) {
         tracing::warn!("[lean_bridge] failed to create temp dir: {e}");
     }

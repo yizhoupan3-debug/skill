@@ -10,7 +10,8 @@ use std::fs;
 use std::path::Path;
 
 use crate::util::{
-    arr, novelty_gate, str_field, str_field_default, value_as_string_list, value_to_string,
+    arr, novelty_arr, novelty_gate, novelty_str, str_field, str_field_default,
+    value_as_string_list, value_to_string,
 };
 
 // ── 自包含辅助函数 ──
@@ -26,21 +27,6 @@ fn join_string_array(values: &[Value]) -> String {
     } else {
         joined
     }
-}
-
-fn novelty_str<'a>(state: &'a Value, key: &str, default: &'a str) -> &'a str {
-    novelty_gate(state)
-        .get(key)
-        .and_then(Value::as_str)
-        .unwrap_or(default)
-}
-
-fn novelty_arr<'a>(state: &'a Value, key: &str) -> &'a [Value] {
-    novelty_gate(state)
-        .get(key)
-        .and_then(Value::as_array)
-        .map(|a| a.as_slice())
-        .unwrap_or(&[])
 }
 
 fn format_string_list(values: &[String], empty: &str) -> String {
@@ -73,6 +59,7 @@ pub const REUSE_INDEX_BLOCK_END: &str = "<!-- autoresearch:reuse-index:end -->";
 
 // ── 基础格式化 ──
 
+/// 将管道符和换行替换为安全字符，防止 Markdown 表格渲染破坏。
 pub fn escape_table_cell(value: &str) -> String {
     // Replace pipe and newlines — both break markdown table rendering.
     value
@@ -81,6 +68,7 @@ pub fn escape_table_cell(value: &str) -> String {
         .replace('\r', " ")
 }
 
+/// 将 overlap 等级字符串格式化为带彩色指示符的文本。
 pub fn format_overlap_risk(overlap: &str) -> String {
     match overlap {
         "low" => "🟢 low".into(),
@@ -185,6 +173,7 @@ fn summarize_remaining_risks(state: &Value) -> Vec<String> {
     }
 }
 
+/// 从研究状态生成 findings managed summary Markdown，包含证据规则、剩余风险和定位策略。
 pub fn render_findings_summary(state: &Value) -> String {
     let mut lines = vec!["## Managed Summary".into(), String::new()];
     lines.push(format!(
@@ -261,6 +250,7 @@ pub fn render_findings_summary(state: &Value) -> String {
 
 // ── Novelty Gate 摘要 ──
 
+/// 生成 novelty gate managed summary Markdown，包含状态、评估和 claim 比较矩阵。
 pub fn render_novelty_gate_summary(state: &Value) -> String {
     let records = novelty_arr(state, "claim_records");
     let mut lines = vec![
@@ -311,6 +301,7 @@ pub fn render_novelty_gate_summary(state: &Value) -> String {
 
 // ── Reuse Index 摘要 ──
 
+/// 生成可复用结果索引摘要，标注缺失注解的 run。
 pub fn render_reuse_index_summary(state: &Value) -> String {
     let runs = crate::claims::lifecycle::reusable_runs(state);
     let mut lines = vec![
@@ -358,6 +349,7 @@ pub fn render_reuse_index_summary(state: &Value) -> String {
 
 // ── Search Plan 摘要 ──
 
+/// 生成搜索计划 managed summary Markdown，包含优先级排序和查询阶梯。
 pub fn render_search_plan_summary(state: &Value) -> String {
     let plan = crate::search::strategy::current_search_plan(state);
     let top = plan
@@ -457,6 +449,7 @@ pub fn render_search_plan_summary(state: &Value) -> String {
 
 // ── Claims 摘要 ──
 
+/// 生成 claim 提取 managed summary Markdown，包含草稿 claim 列表和必要证据。
 pub fn render_claims_summary(state: &Value) -> String {
     let drafts = novelty_arr(state, "draft_claims");
     let top = drafts
@@ -530,6 +523,7 @@ pub fn render_claims_summary(state: &Value) -> String {
 
 // ── Current Context 摘要 ──
 
+/// 生成当前上下文摘要，包含新鲜度分析、近期 run 和决策。
 pub fn render_current_context_summary(state: &Value) -> String {
     let freshness = crate::claims::lifecycle::state_freshness(state);
     let brief = crate::search::strategy::current_brief(state);
@@ -650,6 +644,7 @@ pub fn render_current_context_summary(state: &Value) -> String {
 
 // ── Hypothesis Card ──
 
+/// 将 hypothesis Value 格式化为完整的 hypothesis card Markdown。
 pub fn format_hypothesis_card(hypothesis: &Value) -> String {
     [
         "# Hypothesis Card",
@@ -741,6 +736,7 @@ pub fn format_hypothesis_card(hypothesis: &Value) -> String {
 
 // ── Protocol ──
 
+/// 将 hypothesis Value 格式化为实验协议模板 Markdown。
 pub fn format_protocol(hypothesis: &Value) -> String {
     [
         "# Experiment Protocol",
@@ -814,6 +810,7 @@ pub fn format_protocol(hypothesis: &Value) -> String {
 
 // ── Run Record ──
 
+/// 将 run record Value 格式化为完整的 run record Markdown。
 pub fn format_run_record(record: &Value) -> String {
     let metric_name = str_field_default(record, "metric_name", "metric");
     let metric_value = str_field_default(record, "metric_value", "value");
@@ -926,6 +923,7 @@ pub fn format_run_record(record: &Value) -> String {
 
 // ── Reflection Note ──
 
+/// 将决策 Value 格式化为 reflection note Markdown。
 pub fn format_reflection_note(decision: &Value) -> String {
     [
         "# Reflection Note",
@@ -960,6 +958,7 @@ pub fn format_reflection_note(decision: &Value) -> String {
 
 // ── Resume ──
 
+/// 从研究状态生成单行 key:value 格式的 resume 摘要。
 pub fn format_resume(state: &Value) -> String {
     let freshness = crate::claims::lifecycle::state_freshness(state);
     let brief = crate::search::strategy::current_brief(state);
@@ -1048,6 +1047,7 @@ pub fn format_resume(state: &Value) -> String {
 
 // ── Status ──
 
+/// 从研究状态生成多行 key:value 格式的状态摘要。
 pub fn format_status(state: &Value) -> String {
     let mut lines = vec![
         format!("project: {}", str_field(state, "project")),
@@ -1094,6 +1094,7 @@ pub fn format_status(state: &Value) -> String {
 
 // ── Managed File Sync ──
 
+/// 在 Markdown 文本中插入或替换 managed block（由 start/end 标记界定）。
 pub fn upsert_managed_block(
     text: &str,
     block_start: &str,
@@ -1118,6 +1119,7 @@ pub fn upsert_managed_block(
     }
 }
 
+/// 将 managed block 内容同步到文件，创建或更新 managed 区域。
 pub fn sync_managed_file(
     path: &Path,
     header: &str,

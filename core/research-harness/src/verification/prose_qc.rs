@@ -32,6 +32,7 @@ pub fn check_terminology_consistency(
 }
 
 /// Check if a substring occurrence is at a word boundary in the text.
+/// `start` and `needle_len` are byte offsets (from `str::find`).
 fn is_whole_word(haystack: &str, start: usize, needle_len: usize) -> bool {
     let before_ok = start == 0
         || !haystack[..start]
@@ -39,6 +40,7 @@ fn is_whole_word(haystack: &str, start: usize, needle_len: usize) -> bool {
             .last()
             .map_or(false, |c| c.is_alphanumeric());
     let after_pos = start + needle_len;
+    // Safety: after_pos is derived from a valid match, so it falls on a char boundary.
     let after_ok = after_pos >= haystack.len()
         || !haystack[after_pos..]
             .chars()

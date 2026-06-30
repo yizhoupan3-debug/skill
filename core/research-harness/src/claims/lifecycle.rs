@@ -9,8 +9,8 @@ use serde_json::{Value, json};
 use std::path::Path;
 
 use crate::util::{
-    arr, arr_mut, novelty_gate, novelty_gate_mut, set_key, str_field, str_field_default,
-    value_as_string_list,
+    arr, arr_mut, novelty_arr, novelty_gate_mut, novelty_str, set_key, str_field,
+    str_field_default, value_as_string_list,
 };
 
 // ── 自包含辅助函数 ──
@@ -60,25 +60,6 @@ fn merge_string_array(existing: &Value, additions: &[String]) -> Value {
         }
     }
     json!(merged)
-}
-
-fn novelty_str<'a>(state: &'a Value, key: &str, default: &'a str) -> &'a str {
-    novelty_gate(state)
-        .get(key)
-        .and_then(Value::as_str)
-        .unwrap_or(default)
-}
-
-fn novelty_arr<'a>(state: &'a Value, key: &str) -> &'a [Value] {
-    novelty_gate(state)
-        .get(key)
-        .and_then(Value::as_array)
-        .map(|a| a.as_slice())
-        .unwrap_or(&[])
-}
-
-fn slugify(text: &str) -> String {
-    crate::text::slugify(text)
 }
 
 fn ensure_state_defaults(state: &Value) -> Result<Value> {
@@ -201,7 +182,7 @@ pub fn transition_hypothesis(
     new_status: &str,
     reason: Option<&str>,
 ) -> Result<()> {
-    let hypotheses = arr_mut(state, "hypotheses");
+    let hypotheses = arr_mut(state, "hypotheses")?;
     let h = hypotheses
         .get_mut(index)
         .ok_or_else(|| anyhow!("Missing hypothesis index"))?;
@@ -241,7 +222,7 @@ pub fn transition_hypothesis(
         "status_updated_at".into(),
         json!(framework_core::time::now_iso()),
     );
-    let backlog = arr_mut(state, "hypothesis_backlog");
+    let backlog = arr_mut(state, "hypothesis_backlog")?;
     if new_status == "queued" {
         if !backlog.iter().any(|v| v.as_str() == Some(&hid)) {
             backlog.push(json!(hid));
@@ -273,7 +254,7 @@ pub fn add_hypothesis(state: &Value, input: HypothesisInput<'_>) -> Result<Value
         .hypothesis_id
         .map(ToString::to_string)
         .unwrap_or_else(|| {
-            let slug = slugify(input.claim);
+            let slug = crate::text::slugify(input.claim);
             if slug.len() <= 40 {
                 slug
             } else {
@@ -299,8 +280,8 @@ pub fn add_hypothesis(state: &Value, input: HypothesisInput<'_>) -> Result<Value
         "priority": input.priority, "status": "queued", "status_reason": Value::Null,
         "status_updated_at": framework_core::time::now_iso(), "created_at": framework_core::time::now_iso(),
     });
-    arr_mut(&mut next, "hypotheses").push(entry);
-    let backlog = arr_mut(&mut next, "hypothesis_backlog");
+    arr_mut(&mut next, "hypotheses")?.push(entry);
+    let backlog = arr_mut(&mut next, "hypothesis_backlog")?;
     if !backlog.iter().any(|v| v.as_str() == Some(&id)) {
         backlog.push(json!(id.clone()));
     }
@@ -399,7 +380,7 @@ pub fn record_run(state: &Value, input: &RecordRunInput<'_>, _workspace: &Path) 
         "override_reason": input.override_reason,
         "recorded_at": framework_core::time::now_iso(),
     });
-    arr_mut(&mut next, "run_history").push(record);
+    arr_mut(&mut next, "run_history")?.push(record);
     transition_hypothesis(
         &mut next,
         index,
@@ -428,7 +409,7 @@ pub struct RunAnnotationInput<'a> {
 
 pub fn annotate_run(state: &Value, run_id: &str, input: RunAnnotationInput<'_>) -> Result<Value> {
     let mut next = ensure_state_defaults(state)?;
-    let Some(record) = arr_mut(&mut next, "run_history")
+    let Some(record) = arr_mut(&mut next, "run_history")?
         .iter_mut()
         .find(|r| r.get("run_id").and_then(Value::as_str) == Some(run_id))
     else {
@@ -523,7 +504,7 @@ pub fn reflect(
         "reason": reason, "interpretation": reason, "next_step": next_step,
         "recorded_at": framework_core::time::now_iso(),
     });
-    arr_mut(&mut next, "decisions").push(decision);
+    arr_mut(&mut next, "decisions")?.push(decision);
     set_key(&mut next, "current_direction", json!(direction));
     match direction {
         "CONCLUDE" => {
@@ -541,12 +522,15 @@ pub fn reflect(
             set_key(&mut next, "stage", json!(STAGE_INNER_LOOP));
             transition_hypothesis(&mut next, index, "parked", Some(reason))?;
         }
-        _ => {
-            tracing::warn!(
-                "[research-harness] reflect: unknown direction '{direction}', falling back to active"
-            );
+        "DEEPEN" | "BROADEN" => {
             set_key(&mut next, "stage", json!(STAGE_INNER_LOOP));
             transition_hypothesis(&mut next, index, "active", Some(reason))?;
+        }
+        _ => {
+            return Err(anyhow::anyhow!(
+                "unknown reflect direction: '{direction}'. \
+                 Expected DEEPEN, BROADEN, PIVOT, or CONCLUDE."
+            ));
         }
     }
     if let Some(target_id) = activate_hypothesis {
@@ -895,7 +879,7 @@ mod tests {
     #[test]
     fn transition_hypothesis_valid() {
         let mut s = gate_passed_state();
-        arr_mut(&mut s, "hypotheses").push(json!({"id": "h1", "claim": "c", "status": "queued", "status_updated_at": framework_core::time::now_iso(), "created_at": framework_core::time::now_iso()}));
+        arr_mut(&mut s, "hypotheses").unwrap().push(json!({"id": "h1", "claim": "c", "status": "queued", "status_updated_at": framework_core::time::now_iso(), "created_at": framework_core::time::now_iso()}));
         let idx = find_hypothesis_index(&s, "h1").unwrap();
         transition_hypothesis(&mut s, idx, "active", Some("activated")).unwrap();
         assert_eq!(
@@ -910,7 +894,7 @@ mod tests {
     #[test]
     fn transition_hypothesis_invalid() {
         let mut s = gate_passed_state();
-        arr_mut(&mut s, "hypotheses").push(json!({"id": "h1", "claim": "c", "status": "concluded", "status_updated_at": framework_core::time::now_iso(), "created_at": framework_core::time::now_iso()}));
+        arr_mut(&mut s, "hypotheses").unwrap().push(json!({"id": "h1", "claim": "c", "status": "concluded", "status_updated_at": framework_core::time::now_iso(), "created_at": framework_core::time::now_iso()}));
         let idx = find_hypothesis_index(&s, "h1").unwrap();
         assert!(transition_hypothesis(&mut s, idx, "active", None).is_err());
     }

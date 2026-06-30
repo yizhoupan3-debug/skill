@@ -348,10 +348,16 @@ fn solve_via_minilp(system: &InequalitySystem) -> Result<HashMap<String, f64>, F
             InequalitySense::Gt => ComparisonOp::Ge, // use ≥ with epsilon margin
         };
 
-        // For strict inequalities, use epsilon-adjusted bound
+        // For strict inequalities, use relative epsilon-adjusted bound
         let adjusted_rhs = match c.sense {
-            InequalitySense::Lt => c.rhs - 1e-7,
-            InequalitySense::Gt => c.rhs + 1e-7,
+            InequalitySense::Lt => {
+                let epsilon = c.rhs.abs() * 1e-7 + 1e-10;
+                c.rhs - epsilon
+            }
+            InequalitySense::Gt => {
+                let epsilon = c.rhs.abs() * 1e-7 + 1e-10;
+                c.rhs + epsilon
+            }
             _ => c.rhs,
         };
 

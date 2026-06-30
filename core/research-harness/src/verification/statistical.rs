@@ -17,9 +17,6 @@ pub fn grim_test(observed_mean: f64, n: usize, decimals: usize) -> Result<bool> 
     if n == 0 {
         return Err(anyhow::anyhow!("sample size n must be > 0"));
     }
-    if observed_mean < 0.0 {
-        return Err(anyhow::anyhow!("observed_mean must be >= 0"));
-    }
 
     // 重建均值：round(N × mean) / N
     let sum = n as f64 * observed_mean;

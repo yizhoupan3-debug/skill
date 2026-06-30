@@ -168,3 +168,71 @@ impl GateChecker for StatisticalChecker {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
+    use super::*;
+    use quality_gate::checker::GateChecker;
+    use quality_gate::types::CheckContext;
+
+    fn ctx(output_data: Option<serde_json::Value>) -> CheckContext {
+        CheckContext {
+            scene: "test".into(),
+            sub_scene: None,
+            goal: "test".into(),
+            round: 1,
+            repo_root: std::path::PathBuf::from("."),
+            task_id: "t1".into(),
+            evidence_path: None,
+            runtime_handle: None,
+            output_data,
+            evaluated_at: "2026-01-01T00:00:00Z".into(),
+        }
+    }
+
+    #[test]
+    fn no_data_returns_passed() {
+        let gate = StatisticalChecker;
+        let result = gate.check(&ctx(None));
+        assert!(result.passed);
+        assert_eq!(result.findings.len(), 1);
+        assert_eq!(result.findings[0].id, "statistical_no_data");
+        assert!(matches!(result.findings[0].severity, Severity::C));
+    }
+
+    #[test]
+    fn grim_consistent_passes() {
+        let gate = StatisticalChecker;
+        // mean=3.5, n=100, decimals=2 → sum=350, round(350)=350, reconstructed=3.50 → consistent
+        let data = serde_json::json!({
+            "grim": { "mean": 3.50, "n": 100, "decimals": 2 }
+        });
+        let result = gate.check(&ctx(Some(data)));
+        assert!(result.passed);
+        let grim = result.findings.iter().find(|f| f.id == "statistical_grim");
+        assert!(matches!(grim.unwrap().severity, Severity::C));
+    }
+
+    #[test]
+    fn p_value_consistent_passes() {
+        let gate = StatisticalChecker;
+        let data = serde_json::json!({
+            "p_value": { "observed": 0.05, "expected": 0.05, "tolerance": 0.01 }
+        });
+        let result = gate.check(&ctx(Some(data)));
+        assert!(result.passed);
+    }
+
+    #[test]
+    fn p_value_inconsistent_fails() {
+        let gate = StatisticalChecker;
+        let data = serde_json::json!({
+            "p_value": { "observed": 0.03, "expected": 0.95, "tolerance": 0.01 }
+        });
+        let result = gate.check(&ctx(Some(data)));
+        assert!(!result.passed);
+        let pv = result.findings.iter().find(|f| f.id == "statistical_p_value");
+        assert!(matches!(pv.unwrap().severity, Severity::B));
+    }
+}

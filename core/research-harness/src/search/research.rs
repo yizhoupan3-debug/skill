@@ -14,15 +14,7 @@ use std::sync::{Arc, OnceLock};
 
 use crate::search::helpers::*;
 use crate::search::strategy::*;
-use crate::util::{novelty_gate, novelty_gate_mut, value_to_string};
-
-fn novelty_arr<'a>(state: &'a Value, key: &str) -> &'a [Value] {
-    novelty_gate(state)
-        .get(key)
-        .and_then(Value::as_array)
-        .map(|a| a.as_slice())
-        .unwrap_or(&[])
-}
+use crate::util::{arr, arr_mut, novelty_arr, novelty_gate, novelty_gate_mut, value_to_string};
 
 fn ensure_state_defaults(state: &Value) -> Value {
     // Delegate to state::hydrate_state — the comprehensive version with
@@ -31,24 +23,6 @@ fn ensure_state_defaults(state: &Value) -> Value {
         tracing::warn!("[research-harness] ensure_state_defaults: hydrate_state failed: {e}");
         state.clone()
     })
-}
-
-fn arr<'a>(state: &'a Value, key: &str) -> &'a [Value] {
-    state
-        .get(key)
-        .and_then(Value::as_array)
-        .map(|a| a.as_slice())
-        .unwrap_or(&[])
-}
-
-fn arr_mut<'a>(state: &'a mut Value, key: &str) -> Result<&'a mut Vec<Value>> {
-    state
-        .as_object_mut()
-        .ok_or_else(|| anyhow::anyhow!("state must be object"))?
-        .entry(key.to_string())
-        .or_insert_with(|| json!([]))
-        .as_array_mut()
-        .ok_or_else(|| anyhow::anyhow!("expected array for key '{key}'"))
 }
 
 // ── Query building ──

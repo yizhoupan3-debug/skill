@@ -270,12 +270,8 @@ impl Blueprint {
         };
 
         if node_is_leaf {
-            // Leaf: mark as pending — actual verification requires external call
-            let status = if node_backend.map_or(false, |b| b.is_automated()) {
-                VerificationStatus::Pass
-            } else {
-                VerificationStatus::Warn
-            };
+            // Leaf: default to Skip — actual verification requires external call
+            let status = VerificationStatus::Skip;
             let result = VerificationResultExt::new(status, round);
             self.status.insert(node_id.to_string(), result.clone());
             return Ok(result);
@@ -596,10 +592,10 @@ mod tests {
         bp.decompose("root", children, false).unwrap();
         bp.verify().unwrap();
         assert_eq!(bp.round, 1);
-        // Both leaves should have Pass (automated backends)
-        // OR node: at least one Pass → overall Pass
+        // Both leaves default to Skip (actual verification requires external call)
+        // OR node: all Skip → Skip
         let root_status = bp.status.get("root").unwrap();
-        assert_eq!(root_status.status, VerificationStatus::Pass);
+        assert_eq!(root_status.status, VerificationStatus::Skip);
     }
 
     #[test]
@@ -619,9 +615,9 @@ mod tests {
         ];
         bp.decompose("root", children, true).unwrap();
         bp.verify().unwrap();
-        // AND: auto passes, manual → Warn, so overall Warn
+        // AND: both leaves Skip → overall Skip
         let root_status = bp.status.get("root").unwrap();
-        assert_eq!(root_status.status, VerificationStatus::Warn);
+        assert_eq!(root_status.status, VerificationStatus::Skip);
     }
 
     #[test]
