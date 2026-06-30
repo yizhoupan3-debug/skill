@@ -295,12 +295,19 @@ fn bash_segment_mentions_path(segment: &str, hint: &str) -> bool {
 
 #[allow(clippy::unwrap_used)]
 fn bash_segment_redirects_to_hint(segment: &str, hint: &str) -> bool {
+    // Per-thread cache for compiled regex triples, bounded at 64 entries
+    // to prevent unbounded growth across distinct hint values.
+    const HINT_RE_CACHE_CAP: usize = 64;
     std::thread_local! {
         static HINT_RE_CACHE: std::cell::RefCell<HashMap<String, [Regex; 3]>> =
             std::cell::RefCell::new(HashMap::new());
     }
     HINT_RE_CACHE.with(|cache| {
         let mut map = cache.borrow_mut();
+        // Evict when at capacity and the hint is not already cached
+        if map.len() >= HINT_RE_CACHE_CAP && !map.contains_key(hint) {
+            map.clear();
+        }
         let regexes = map.entry(hint.to_string()).or_insert_with(|| {
             let escaped = regex::escape(hint);
             let p1 = format!(r#"(>>?|>\|)\s*['\"]?[^'\"\n;&|]*{escaped}[^'\"\n;&|]*['\"]?"#);

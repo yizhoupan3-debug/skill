@@ -580,6 +580,12 @@ pub fn perform_live_execute(
 
 /// Returns a shared blocking HTTP client for live execute requests.
 ///
+/// The client is created once with the proxy URL resolved from environment
+/// at construction time. If proxy configuration changes after the first call,
+/// the cached client still holds the old proxy. This is a known limitation:
+/// a bounded OnceLock cache cannot be refreshed without an invalidation
+/// mechanism. For proxy changes, restart the process.
+///
 /// NOTE: This uses `reqwest::blocking::Client` which occupies a thread during I/O.
 /// If this path is reached from a concurrent stdio loop, the blocking call will tie
 /// up a tokio worker thread for up to 30 seconds. A future improvement would be to

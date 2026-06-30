@@ -69,9 +69,16 @@ pub fn xml_text_between(raw: &str, tag: &str) -> Option<String> {
         None => {
             let pattern = Regex::new(&format!(r"(?s)<{tag}(?:\s[^>]*)?>(.*?)</{tag}>")).ok()?;
             if let Ok(mut cache) = XML_TAG_RE_CACHE.lock() {
-                // Evict oldest entries when over capacity to prevent unbounded growth
+                // Evict entries when over capacity: drain oldest half to
+                // preserve recent entries while preventing unbounded growth.
                 if cache.len() >= MAX_XML_TAG_CACHE_ENTRIES {
-                    cache.clear();
+                    let target = MAX_XML_TAG_CACHE_ENTRIES / 2;
+                    let excess = cache.len() - target;
+                    let mut count = 0;
+                    cache.retain(|_, _| {
+                        count += 1;
+                        count > excess // keep entries past the first `excess`
+                    });
                 }
                 cache.insert(tag.to_string(), pattern.clone());
             }
