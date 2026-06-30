@@ -49,7 +49,7 @@ trigger_hints:
 - 文稿语言质量检查（→ `$prose-verification`）
 - 文献引用验证（→ `$literature-verification`）
 - 统计结果审计（→ `$statistical-verification`）
-- 实验设计（→ `$research-execution`）
+- 实验设计（→ `$research` execution lane）
 
 ## Hard constraints
 
@@ -84,10 +84,12 @@ math_backend_available()                                     # 后端可用状�
 | 2 | 渐近关系链传递性 | 纯链自动 PASS，混合链 WARN | `math_asymptotic_chain` |
 | 3 | Proof DAG 验证 | 递归遍历，每轮标记 stale | `math_proof_dag_verify` |
 | 4 | 后端可用性 | 后端返回 available=true | `math_backend_available` |
-| 5 | CAS identity 化简 | SymPy simplify(expr) == 0 | `math_prove_inequality`（parse via SymPy） |
-| 6 | Witness 一致性 | 代入特例值后左右两边一致 | 内链数值代入 |
-| 7 | 量纲检查 | 每步方程左右两侧量纲相同 | 内链量纲分析 |
-| 8 | 步骤依赖图完整性 | 无悬空引用（每步的前置步骤已定义） | 内联图检查 |
+| 5 | CAS identity 化简 | SymPy simplify(expr) == 0 | `math_prove_inequality`（parse via SymPy）或 `math_sympy_verify` |
+| 6 | 符号恒等式检查 | 纯 Rust 符号引擎：代数展开/分配律/常量折叠 → 随机数值测试 | 内链符号引擎（`verification::symbolic`） |
+| 7 | SymPy 桥接验证 | SymPy 后端化简/验证 | `math_sympy_verify` / `math_sympy_simplify` |
+| 8 | Witness 一致性 | 代入特例值后左右两边一致 | 内链数值代入 |
+| 9 | 量纲检查 | 每步方程左右两侧量纲相同 | 内链量纲分析（`verification::formal`） |
+| 10 | 步骤依赖图完整性 | 无悬空引用（每步的前置步骤已定义） | 内联图检查 |
 
 ## References
 
@@ -100,7 +102,7 @@ math_backend_available()                                     # 后端可用状�
 
 | Caller | When | Blocking | Call mode |
 |--------|------|----------|-----------|
-| `research-execution` | math_verification / math_modeling lane completes, before conclusion | Yes (FAIL blocks math conclusion) | Inline + MCP tool |
+| `$research` (execution lane) | math_verification / math_modeling lane completes, before conclusion | Yes (FAIL blocks math conclusion) | Inline + MCP tool |
 
 ### Input
 

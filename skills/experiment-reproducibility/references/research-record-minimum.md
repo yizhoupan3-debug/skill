@@ -21,5 +21,5 @@
 
 ## 与手稿栈的衔接
 
-- 主张—证据与 R&R 关停件：`paper-workbench` → [`claim-evidence-ladder.md`](../../paper-workbench/references/claim-evidence-ladder.md)。
+- 主张—证据与 R&R 关停件：`paper-workbench` → [`claim-evidence-ladder.md`](../../research/paper-workbench/references/claim-evidence-ladder.md)。
 - 仓库连续性：[`docs/README.md`](../../../docs/README.md)（见 **仓库与执行架构**）、`artifacts/current/` 下 `SESSION_SUMMARY` / `NEXT_ACTIONS` / `EVIDENCE_INDEX`。

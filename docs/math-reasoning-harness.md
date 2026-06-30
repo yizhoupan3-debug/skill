@@ -208,9 +208,9 @@ math_backend_status()
 
 ## §F: 数学建模集成
 
-与 `research-discovery` skill 的 `math_modeling`/`math_background_inquiry` lane 配合使用：
+与 `$research`（discovery lane）的 `math_modeling`/`math_background_inquiry` lane 配合使用：
 
-1. **建模阶段**（research-discovery）：提出问题 → 搜索文献 → 建立数学模型
+1. **建模阶段**（$research discovery lane）：提出问题 → 搜索文献 → 建立数学模型
 2. **推导阶段**（math-derivation）：在模型基础上执行推导
 3. **验证阶段**（formal-verification）：使用本工具链进行形式化验证
 4. **审查阶段**（framework_quality_gate）：多轮对抗审查 → 收敛判定

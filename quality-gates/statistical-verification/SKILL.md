@@ -99,7 +99,7 @@ research_harness::verification::statistical::check_multiple_comparison_correctio
 
 | Caller | When | Blocking | Call mode |
 |--------|------|----------|-----------|
-| `research-execution` | experiment results analysis complete, before conclusion | Yes (FAIL blocks research conclusion) | Inline |
+| `$research` (execution lane) | experiment results analysis complete, before conclusion | Yes (FAIL blocks research conclusion) | Inline |
 | `paper-workbench` | results section written, before submission gate | Yes (FAIL blocks submission readiness) | Inline |
 
 ### Input

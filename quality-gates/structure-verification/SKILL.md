@@ -95,8 +95,8 @@ research_harness::verification::structure::check_figure_references(tex_path)
 
 - citation-management skill：[`../../skills/citation-management/SKILL.md`](../../skills/citation-management/SKILL.md)（引用一致性检查）
 - tikz-paper-figure skill：[`../../skills/tikz-paper-figure/SKILL.md`](../../skills/tikz-paper-figure/SKILL.md)（图表规范）
-- claim-evidence-ladder：[`../../skills/paper-workbench/references/claim-evidence-ladder.md`](../../skills/paper-workbench/references/claim-evidence-ladder.md)
-- claim-spine-and-section-contract：[`../../skills/paper-workbench/references/claim-spine-and-section-contract.md`](../../skills/paper-workbench/references/claim-spine-and-section-contract.md)
+- claim-evidence-ladder：[`../../skills/research/paper-workbench/references/claim-evidence-ladder.md`](../../skills/research/paper-workbench/references/claim-evidence-ladder.md)
+- claim-spine-and-section-contract：[`../../skills/research/paper-workbench/references/claim-spine-and-section-contract.md`](../../skills/research/paper-workbench/references/claim-spine-and-section-contract.md)
 
 ## Integration Contract
 

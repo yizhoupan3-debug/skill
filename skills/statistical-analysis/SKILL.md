@@ -42,7 +42,7 @@ trigger_hints:
 # Statistical Analysis
 
 - **Two-stage rigor check (test selection -> result interpretation)** for high-stakes analyses
-- Manuscript stack when co-invoked with paper work: [`../paper-workbench/references/RESEARCH_PAPER_STACK.md`](../paper-workbench/references/RESEARCH_PAPER_STACK.md)
+- Manuscript stack when co-invoked with paper work: [`../research/paper-workbench/references/RESEARCH_PAPER_STACK.md`](../research/paper-workbench/references/RESEARCH_PAPER_STACK.md)
 
 This skill owns **statistical method selection, execution, and interpretation** for research.
 
@@ -65,7 +65,7 @@ This skill owns **statistical method selection, execution, and interpretation** 
 
 ## Do not use
 
-- The user wants one front door for a research-project task rather than statistics only -> use `$research-execution` and keep this skill only for statistical questions
+- The user wants one front door for a research-project task rather than statistics only -> use `$research` (execution lane) and keep this skill only for statistical questions
 - The task is ML model training or evaluation -> answer in the current implementation context when Apple Silicon memory/runtime constraints dominate; otherwise answer in the current implementation context
 - The task is data wrangling or cleaning -> answer in the current data/implementation context
 - The task is paper writing -> use `@lane:writer` (but may co-invoke for results sections)
@@ -251,7 +251,7 @@ Use `统计分析报告`:
 - limitations and assumptions
 
 For research-project orchestration, return the statistical blocker and hand the
-workflow back to `$research-execution` after the test choice,
+workflow back to `$research` (execution lane) after the test choice,
 assumption check, or interpretation is settled.
 
 ## Hard Constraints
@@ -262,20 +262,20 @@ assumption check, or interpretation is settled.
 - Do not apply multiple tests without correction; **当假设有结构化关系时，优先使用 hierarchical/graphical 方法**
 - Do not confuse statistical significance with practical importance
 - Always state assumptions and check them before running tests
-- For high-stakes statistical results, run a dedicated rigor verification pass against the claim/evidence bar in [`../paper-workbench/references/claim-evidence-ladder.md`](../paper-workbench/references/claim-evidence-ladder.md).
+- For high-stakes statistical results, run a dedicated rigor verification pass against the claim/evidence bar in [`../research/paper-workbench/references/claim-evidence-ladder.md`](../research/paper-workbench/references/claim-evidence-ladder.md).
 - Report exact p-values (p = 0.037) not just threshold labels (p < 0.05)
 - **Always report confidence/credible intervals alongside point estimates**
 - **For preprint- or template-based papers (registered reports, results-blind review), explicitly state the preregistration details (OSF/AsPredicted ID, deviations from plan)**
 
 ## Cross-references
 
-- `$research-execution` and current project owners may use this skill as the statistics / uncertainty lane
+- `$research` (execution lane) and current project owners may use this skill as the statistics / uncertainty lane
 - `@lane:reviewer` logic mode routes deep statistical method questions (effect size, power analysis, significance testing) to this skill
 - `@lane:reviewer` Tier-1 statistical rigor checks may route here
 - `$experiment-reproducibility` routes result validation statistics here
 - When invoked as a **gate-chain lane owner** (G2 / G3 / G5 statistical rigor
   checks under the manuscript protocol), follow the lane contract in
-  [`../paper-workbench/references/paper-gate-protocol.md`](../paper-workbench/references/paper-gate-protocol.md); produce only the
+  [`../research/paper-workbench/references/paper-gate-protocol.md`](../research/paper-workbench/references/paper-gate-protocol.md); produce only the
   gate-required evidence and hand back to the protocol main chain.
 
 ## Trigger examples

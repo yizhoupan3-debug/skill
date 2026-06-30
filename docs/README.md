@@ -280,4 +280,4 @@ pub trait GateChecker: Send + Sync {
 | **仓库快速入门** | [../README.md](../README.md) | 能力概览 |
 | **Skill 框架协议** | [../skills/SKILL_FRAMEWORK_PROTOCOLS.md](../skills/SKILL_FRAMEWORK_PROTOCOLS.md) | 共享最小协议层（运行时、停止规则、自审计） |
 | **Skill 分层路由** | [../skills/SKILL_ROUTING_LAYERS.md](../skills/SKILL_ROUTING_LAYERS.md) | 分层路由详解（L0-L4 各层边界、Special Gates、重路由信号） |
-| **External Skill 重叠路由** | [routing/good-skill-overlap-resolution.md](routing/good-skill-overlap-resolution.md) | good-story/good-question 与 paper-workbench/research-discovery 的重叠边界与路由决策 |
+| **External Skill 重叠路由** | [routing/good-skill-overlap-resolution.md](routing/good-skill-overlap-resolution.md) | good-story/good-question 与 research (paper-workbench lane) / research (discovery lane) 的重叠边界与路由决策 |

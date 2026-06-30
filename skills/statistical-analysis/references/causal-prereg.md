@@ -30,5 +30,5 @@
 
 ## 与手稿栈对齐
 
-- 主张—证据：`paper-workbench` → [`claim-evidence-ladder.md`](../../paper-workbench/references/claim-evidence-ladder.md)。
+- 主张—证据：`paper-workbench` → [`claim-evidence-ladder.md`](../../research/paper-workbench/references/claim-evidence-ladder.md)。
 - 统计执行面：`PAPER_GATE_PROTOCOL` 统计 gate 若启用，只产出 gate 要求的证据并交回主链。

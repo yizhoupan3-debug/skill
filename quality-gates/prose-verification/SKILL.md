@@ -96,10 +96,10 @@ research_harness::verification::prose_qc::count_hedging_words(text)
 
 ## References
 
-- prose-chain-contract：[`../../skills/paper-workbench/references/prose-chain-contract.md`](../../skills/paper-workbench/references/prose-chain-contract.md)
-- prose-quality-gate：[`../../skills/paper-workbench/references/prose-quality-gate.md`](../../skills/paper-workbench/references/prose-quality-gate.md)
-- prose-exemplars：[`../../skills/paper-workbench/references/prose-exemplars.md`](../../skills/paper-workbench/references/prose-exemplars.md)
-- research-language-norms：[`../../skills/paper-workbench/references/research-language-norms.md`](../../skills/paper-workbench/references/research-language-norms.md)
+- prose-chain-contract：[`../../skills/research/paper-workbench/references/prose-chain-contract.md`](../../skills/research/paper-workbench/references/prose-chain-contract.md)
+- prose-quality-gate：[`../../skills/research/paper-workbench/references/prose-quality-gate.md`](../../skills/research/paper-workbench/references/prose-quality-gate.md)
+- prose-exemplars：[`../../skills/research/paper-workbench/references/prose-exemplars.md`](../../skills/research/paper-workbench/references/prose-exemplars.md)
+- research-language-norms：[`../../skills/research/paper-workbench/references/research-language-norms.md`](../../skills/research/paper-workbench/references/research-language-norms.md)
 
 ## Integration Contract
 
@@ -108,7 +108,7 @@ research_harness::verification::prose_qc::count_hedging_words(text)
 | Caller | When | Blocking | Call mode |
 |--------|------|----------|-----------|
 | `paper-workbench` | draft complete, before submission gate | Yes (FAIL blocks submission readiness) | Inline |
-| `research-execution` | experiment narrative / research prose produced | No (advisory — WARN/FAIL annotates but does not block) | Inline |
+| `$research` (execution lane) | experiment narrative / research prose produced | No (advisory — WARN/FAIL annotates but does not block) | Inline |
 
 ### Input
 
@@ -139,4 +139,4 @@ research_harness::verification::prose_qc::count_hedging_words(text)
 
 - **PASS**: caller continues normally.
 - **WARN**: caller continues with annotation in evidence map / prose report.
-- **FAIL** (blocking caller for paper-workbench, advisory for research-execution): paper-workbench MUST NOT advance; research-execution continues with blocker noted.
+- **FAIL** (blocking caller for `$research` paper-workbench lane, advisory for `$research` execution lane): paper-workbench MUST NOT advance; execution lane continues with blocker noted.

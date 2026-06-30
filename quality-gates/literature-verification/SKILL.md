@@ -88,7 +88,7 @@ research_harness::verification::literature::verify_claim_coverage(claims, refere
 
 - citation-management skill：[`../../skills/citation-management/SKILL.md`](../../skills/citation-management/SKILL.md)（引用元数据验证与格式化）
 - paperplain MCP：`mcp__paperplain__fetch_paper` / `mcp__paperplain__find_paper_by_title` / `mcp__paperplain__search_research`
-- claim-evidence 阶梯：[`../../skills/paper-workbench/references/claim-evidence-ladder.md`](../../skills/paper-workbench/references/claim-evidence-ladder.md)
+- claim-evidence 阶梯：[`../../skills/research/paper-workbench/references/claim-evidence-ladder.md`](../../skills/research/paper-workbench/references/claim-evidence-ladder.md)
 
 ## Integration Contract
 
@@ -96,7 +96,7 @@ research_harness::verification::literature::verify_claim_coverage(claims, refere
 
 | Caller | When | Blocking | Call mode |
 |--------|------|----------|-----------|
-| `research-discovery` | literature survey lane completes, before synthesis | No (advisory — coverage gap warns but does not block) | Inline |
+| `$research` (discovery lane) | literature survey lane completes, before synthesis | No (advisory — coverage gap warns but does not block) | Inline |
 | `paper-workbench` | submission gate: reference integrity check | Yes (FAIL blocks submission readiness) | Inline |
 
 ### Input

@@ -44,7 +44,7 @@ trigger_hints:
 
 ## Do not use
 
-- 实验设计与执行（→ `$research-execution`）
+- 实验设计与执行（→ `$research` (execution lane)）
 - 统计结果审计（→ `$statistical-verification`）
 - 环境管理（→ `$experiment-reproducibility` 为执行层，本 skill 为审计层）
 
@@ -110,7 +110,7 @@ research_harness::verification::reproducibility::run_reproducibility_audit(exper
 
 | Caller | When | Blocking | Call mode |
 |--------|------|----------|-----------|
-| `research-execution` | experiment run completes, at reproducibility lane handoff | Yes (FAIL blocks experiment record finalization) | Inline |
+| `$research` (execution lane) | experiment run completes, at reproducibility lane handoff | Yes (FAIL blocks experiment record finalization) | Inline |
 | `paper-workbench` | submission gate: reproducibility section review | Yes (FAIL blocks submission readiness) | Inline |
 
 ### Input
