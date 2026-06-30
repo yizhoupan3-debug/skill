@@ -114,9 +114,9 @@ writing_handoff: surgical | refactor  # 若需多段/全节骨架重组
 
 触发单真源：`has_paper_prose_edit_context`（hook 与 NL 共用）。受 `ROUTER_RS_OPERATOR_INJECT` 总闸约束；出站截断保留 `PAPER_*` 前缀行。实现：`core/runtime-core/src/paper_prose_hook.rs`、`core/core-policy/src/hook_common.rs`。
 
-## 与 `$research-discovery` 边界
+## 与 `$research`（discovery lane）边界
 
-非手稿科研 → `$research-discovery`。若产出需落笔（讨论稿/开题叙述），handoff：
+非手稿科研 → `$research`（discovery lane）。若产出需落笔（讨论稿/开题叙述），handoff：
 
 ```text
 handoff: paper-workbench

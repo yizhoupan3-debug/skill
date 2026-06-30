@@ -27,9 +27,9 @@ name: paper-workbench
 scene: research
 risk: medium
 routing_gate: none
-routing_layer: L2
+routing_layer: L3
 routing_owner: owner
-routing_priority: P1
+routing_priority: P2
 session_start: preferred
 source: project
 trigger_hints:
@@ -74,6 +74,7 @@ trigger_hints:
 ---
 ## Quick Ref
 - **Purpose**: 论文全流程前门——自动路由 reviewer/writer lane，一站式审稿、返修、投稿。支持 loop mode（自动多轮对抗审稿直到收敛）
+- **Entry**: 由 `$research` 统一科研前门路由到此，也可直接调用
 - **Key Rules**: 默认 hostile-but-fair 审稿立场；edit_scope 门控（surgical/refactor）；审稿意见逐条关停；prose chain 自动触发；禁降 claim 逃避；**loop mode 收敛硬约束**（min_rounds=5, consecutive_stable=2）
 - **Trigger**: "帮我审这篇 paper"、"改到能投"、"R&R"、"顶刊"、"先审再改"、"整体推进这篇论文"、"改稿周期"、"revision loop"
 <!-- full content below; load on demand -->
@@ -127,7 +128,7 @@ It exists so the user does not need to decide first whether the job is
 
 ## Do not use
 
-- The user wants to advance a non-manuscript research project, topic, or experiment plan -> use `$research-execution`; this front door is manuscript-only
+- The user wants to advance a non-manuscript research project, topic, or experiment plan -> use `$research` (execution lane); this front door is manuscript-only
 - The user explicitly wants only one narrow lane and names it clearly:
   * local text polish only -> stay on **`$paper-workbench`** prose intake (inline `@lane:writer` after Claim card / `edit_scope`; do not treat `@lane:writer` as a parallel user entry)
   * literature corpus / related work only -> keep the work here as source-backed paper context until it narrows to writing or citation hygiene
@@ -305,10 +306,10 @@ In filesystem-backed work, the stable artifacts are:
 ## Verification skill integration
 
 When lanes require structured verification, load the corresponding skill:
-- `@lane:reviewer` prose quality checks → [`../../quality-gates/prose-verification/SKILL.md`](../../quality-gates/prose-verification/SKILL.md)
-- `@lane:reviewer` structure/logic checks → [`../../quality-gates/structure-verification/SKILL.md`](../../quality-gates/structure-verification/SKILL.md)
-- Literature/citation integrity checks → [`../../quality-gates/literature-verification/SKILL.md`](../../quality-gates/literature-verification/SKILL.md)
-- Statistical methodology checks → [`../../quality-gates/statistical-verification/SKILL.md`](../../quality-gates/statistical-verification/SKILL.md)
+- `@lane:reviewer` prose quality checks → [`../../../quality-gates/prose-verification/SKILL.md`](../../../quality-gates/prose-verification/SKILL.md)
+- `@lane:reviewer` structure/logic checks → [`../../../quality-gates/structure-verification/SKILL.md`](../../../quality-gates/structure-verification/SKILL.md)
+- Literature/citation integrity checks → [`../../../quality-gates/literature-verification/SKILL.md`](../../../quality-gates/literature-verification/SKILL.md)
+- Statistical methodology checks → [`../../../quality-gates/statistical-verification/SKILL.md`](../../../quality-gates/statistical-verification/SKILL.md)
 
 ## Upstream skill integration: good-story
 

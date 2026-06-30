@@ -12,15 +12,15 @@ metadata:
   - logs
   - barrier
   version: '1.0.0'
-name: autoresearch
+name: research-workspace
 scene: research
 risk: low
 routing_gate: none
-routing_layer: L2
+routing_layer: L3
 routing_owner: owner
 routing_priority: P2
 session_start: optional
-short_description: Research workspace CLI — claims, hypotheses, runs, logs, barrier escalation
+short_description: 科研工作区 CLI — claim/假设/实验记录/smoke test/barrier 升级
 source: local
 trigger_hints:
 - 研究工作区
@@ -48,14 +48,23 @@ trigger_hints:
 - 自动突破
 - autoresearch
 ---
-# Autoresearch
+# Research Workspace — Skill Entry
+
+## 命名注意
+
+本 skill 位于 `skills/research/research-harness/` 目录但路由 slug 为 `research-workspace`，与 Rust crate (`core/research-harness/`) 区分：
+- **本 skill** → 文档层，描述 CLI 用法和工作区协议；路由名 `$research（research-workspace lane）`
+- **Rust crate** → `core/research-harness/`，包含 CLI 二进制和库代码
+- **CLI 二进制** → `cargo run -p research-harness --bin autoresearch -- <subcommand>`
+
 
 This skill wraps the `autoresearch` CLI binary — a Rust CLI for research workspace
-lifecycle management backed by `core/research-harness` — and exposes it through
-the routing system. It also serves as the **bridge between loop engineering and
+lifecycle management backed by `core/research-harness`. It serves as the **bridge between loop engineering and
 systematic research**: when a loop-auto cycle hits a hard barrier
 (`consecutive_failures ≥ threshold`), the `barrier_escalation` lane runs
 systematic research and returns candidates.
+
+由 `$research`（统一科研前门）`execution` lane 调用，也可直接调用。
 
 ## When to use
 
@@ -70,9 +79,9 @@ systematic research and returns candidates.
 
 ## Do not use
 
-- The user needs a **literature survey, theory landscape, or math-background inquiry** (discovery phase) → use `$research-discovery`.
-- The user wants to **design experiments, ablations, benchmarks, or math modeling** (execution phase) → use `$research-execution`.
-- The object is a **manuscript, submission, reviewer response** → use `$paper-workbench`.
+- The user needs a **literature survey, theory landscape, or math-background inquiry** (discovery phase) → use `$research` (discovery lane).
+- The user wants to **design experiments, ablations, benchmarks, or math modeling** (execution phase) → use `$research` (execution lane).
+- The object is a **manuscript, submission, reviewer response** → use `$research` (paper-workbench lane).
 - The user only asks which **statistical test** to use → use `$statistical-analysis`.
 - The user only asks for a **formal proof, derivation, or pure-math task** → use `$math-derivation`.
 - The user only asks for **citation metadata cleanup** → use `$citation-management`.
@@ -110,10 +119,10 @@ Workspace data:
 ### Cross-skill handoff
 
 ```
-autoresearch → $research-discovery    Deep literature / barrier escalation
-autoresearch → $research-execution    Experiment design / verification
-autoresearch → $paper-workbench       Manuscript-level output
-autoresearch → loop runner            BARRIER_REPORT.json → resume loop
+research-workspace → $research (discovery lane)    Deep literature / barrier escalation
+research-workspace → $research (execution lane)    Experiment design / verification
+research-workspace → $research (paper-workbench)   Manuscript-level output
+research-workspace → loop runner                   BARRIER_REPORT.json → resume loop
 ```
 
 ### Barrier escalation lane (loop bridge)
@@ -123,7 +132,7 @@ When a loop-auto cycle hits `consecutive_failures ≥ threshold`:
 1. Construct barrier description (loop_id + run_id + action_id + failure context)
 2. Call `cargo run -p research-harness --bin autoresearch -- barrier <description>`
 3. Research workspace init with barrier problem as question
-4. Literature review via `$research-discovery`
+4. Literature review via `$research` (discovery lane)
 5. Hypothesis generation (draft-claims)
 6. Feasibility scan per hypothesis
 7. Output BARRIER_REPORT.json → `artifacts/research-barrier/<barrier-id>/`
@@ -157,7 +166,7 @@ General-purpose experiment smoke engine:
 
 ## Hard constraints
 
-- Do not start manuscript work; hand it to `$paper-workbench`.
+- Do not start manuscript work; hand it to `$research` (paper-workbench lane).
 - Do not turn "research" into unsourced speculation.
 - Barrier escalation must write BARRIER_REPORT.json — human judgment is not a substitute.
 - All external_research results must carry freshness metadata.
@@ -167,7 +176,8 @@ General-purpose experiment smoke engine:
 
 - **Barrier escalation**: `core/research-harness/src/bin/autoresearch.rs` (barrier subcommand)
 - **Loop architecture**: loop-auto profile, barrier escalation via `autoresearch barrier`
-- **Discovery front door**: `skills/research-discovery/SKILL.md`
-- **Execution back door**: `skills/research-execution/SKILL.md`
-- **Paper manuscript**: `skills/paper-workbench/SKILL.md`
-- **Academic sources (raw HTTP fallback)**: `skills/research-discovery/references/academic-sources.md`
+- **统一科研前门**: `../SKILL.md`
+- **Discovery lane**: `../lanes/discovery.md`
+- **Execution lane**: `../lanes/execution.md`
+- **Paper manuscript**: `../paper-workbench/SKILL.md`
+- **Academic sources (raw HTTP fallback)**: `../references/academic-sources.md`
