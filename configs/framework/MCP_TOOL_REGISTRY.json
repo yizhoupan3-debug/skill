@@ -1,9 +1,9 @@
 {
   "schema_version": "mcp-tool-registry-v2",
   "scope": {
-    "total_count": 72,
+    "total_count": 76,
     "builtin_count": 22,
-    "research_count": 16,
+    "research_count": 20,
     "independent_count": 15,
     "external_count": 19,
     "_comment": "auto-generated — update via tools when adding/removing tools. This is the SOLE source of truth for all tool routing."
@@ -149,7 +149,20 @@
         "访问网站",
         "页面内容",
         "SSRF",
-        "打开链接"
+        "打开链接",
+        "联网",
+        "网上找",
+        "查一下",
+        "http",
+        "https",
+        "get请求",
+        "查资料",
+        "在线",
+        "网络",
+        "网址",
+        "链接",
+        "爬取",
+        "爬虫"
       ],
       "mcp_server": "router-rs-cli",
       "tool_flags": [
@@ -499,7 +512,7 @@
         "AIGC",
         "检测"
       ],
-      "mcp_server": "mcp-research-harness",
+      "mcp_server": "research-harness",
       "tool_flags": [
         "readonly"
       ],
@@ -976,7 +989,7 @@
         "维度",
         "dimensions"
       ],
-      "mcp_server": "mcp-research-harness",
+      "mcp_server": "research-harness",
       "tool_flags": [
         "readonly"
       ]
@@ -994,7 +1007,7 @@
         "声明",
         "漂移"
       ],
-      "mcp_server": "mcp-research-harness",
+      "mcp_server": "research-harness",
       "tool_flags": [
         "readonly"
       ]
@@ -1011,7 +1024,7 @@
         "审稿循环",
         "对抗"
       ],
-      "mcp_server": "mcp-research-harness",
+      "mcp_server": "research-harness",
       "tool_flags": []
     },
     {
@@ -1027,7 +1040,7 @@
         "复杂度",
         "O量级"
       ],
-      "mcp_server": "mcp-research-harness",
+      "mcp_server": "research-harness",
       "tool_flags": [
         "readonly"
       ]
@@ -1044,7 +1057,7 @@
         "DAG",
         "证明"
       ],
-      "mcp_server": "mcp-research-harness",
+      "mcp_server": "research-harness",
       "tool_flags": []
     },
     {
@@ -1059,7 +1072,7 @@
         "分解",
         "子目标"
       ],
-      "mcp_server": "mcp-research-harness",
+      "mcp_server": "research-harness",
       "tool_flags": []
     },
     {
@@ -1074,7 +1087,7 @@
         "验证",
         "DAG完备"
       ],
-      "mcp_server": "mcp-research-harness",
+      "mcp_server": "research-harness",
       "tool_flags": [
         "readonly"
       ]
@@ -1091,7 +1104,7 @@
         "status",
         "进度"
       ],
-      "mcp_server": "mcp-research-harness",
+      "mcp_server": "research-harness",
       "tool_flags": [
         "readonly"
       ]
@@ -1108,7 +1121,7 @@
         "验证等式",
         "identity"
       ],
-      "mcp_server": "mcp-research-harness",
+      "mcp_server": "research-harness",
       "tool_flags": [
         "readonly"
       ]
@@ -1125,7 +1138,7 @@
         "化简",
         "simplify"
       ],
-      "mcp_server": "mcp-research-harness",
+      "mcp_server": "research-harness",
       "tool_flags": [
         "readonly"
       ]
@@ -1318,7 +1331,7 @@
         "证明不等式",
         "Z3"
       ],
-      "mcp_server": "mcp-research-harness",
+      "mcp_server": "research-harness",
       "tool_flags": [
         "readonly"
       ]
@@ -1335,7 +1348,7 @@
         "渐近链",
         "渐近关系"
       ],
-      "mcp_server": "mcp-research-harness",
+      "mcp_server": "research-harness",
       "tool_flags": [
         "readonly"
       ]
@@ -1354,7 +1367,7 @@
         "SymPy",
         "Lean"
       ],
-      "mcp_server": "mcp-research-harness",
+      "mcp_server": "research-harness",
       "tool_flags": [
         "readonly"
       ]
@@ -1372,7 +1385,7 @@
         "形式化",
         "定理验证"
       ],
-      "mcp_server": "mcp-research-harness",
+      "mcp_server": "research-harness",
       "tool_flags": [
         "readonly"
       ]
@@ -1389,7 +1402,7 @@
         "烟雾",
         "数据源测试"
       ],
-      "mcp_server": "mcp-research-harness",
+      "mcp_server": "research-harness",
       "tool_flags": [
         "readonly"
       ]
@@ -1480,6 +1493,120 @@
           "new_goal": {
             "type": "string",
             "description": "新目标描述"
+          }
+        }
+      }
+    },
+    {
+      "slug": "research_verification_literature",
+      "display_name": "文献验证",
+      "description": "验证文献引用准确性：DOI 可达性检查、声明覆盖率计算",
+      "layer": "research",
+      "dispatch_domain": "domain:research",
+      "owner": "research",
+      "trigger_hints": ["DOI", "文献", "引用", "claim覆盖"],
+      "mcp_server": "research-harness",
+      "tool_flags": ["readonly"],
+      "input_schema": {
+        "type": "object",
+        "required": ["check"],
+        "properties": {
+          "check": {
+            "type": "string",
+            "enum": ["doi", "claim_coverage"],
+            "description": "验证类型：doi=DOI可达性检查, claim_coverage=声明覆盖率"
+          },
+          "doi": {
+            "type": "string",
+            "description": "DOI 标识符（check=doi 时必须）"
+          },
+          "claims": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "声明列表（check=claim_coverage 时必须）"
+          },
+          "references": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "引用列表（check=claim_coverage 时必须）"
+          }
+        }
+      }
+    },
+    {
+      "slug": "research_verification_structure",
+      "display_name": "结构验证",
+      "description": "验证文档结构完整性：LaTeX 编译检查、图表引用一致性",
+      "layer": "research",
+      "dispatch_domain": "domain:research",
+      "owner": "research",
+      "trigger_hints": ["结构", "LaTeX", "编译", "图表引用"],
+      "mcp_server": "research-harness",
+      "tool_flags": ["readonly"],
+      "input_schema": {
+        "type": "object",
+        "required": ["check", "path"],
+        "properties": {
+          "check": {
+            "type": "string",
+            "enum": ["latex", "figures"],
+            "description": "验证类型：latex=LaTeX编译检查, figures=图表引用检查"
+          },
+          "path": {
+            "type": "string",
+            "description": "TeX 文件路径"
+          }
+        }
+      }
+    },
+    {
+      "slug": "research_verification_reproducibility",
+      "display_name": "重复性验证",
+      "description": "验证实验可重复性：种子设置、确定性重跑、环境可复制、数据版本、checkpoint恢复、全审计",
+      "layer": "research",
+      "dispatch_domain": "domain:research",
+      "owner": "research",
+      "trigger_hints": ["重复性", "reproducibility", "可复现", "种子", "确定性"],
+      "mcp_server": "research-harness",
+      "tool_flags": ["readonly"],
+      "input_schema": {
+        "type": "object",
+        "required": ["check"],
+        "properties": {
+          "check": {
+            "type": "string",
+            "enum": ["seed", "deterministic", "environment", "data_versioned", "checkpoint", "full_audit"],
+            "description": "验证类型"
+          },
+          "path": {
+            "type": "string",
+            "description": "实验目录路径"
+          }
+        }
+      }
+    },
+    {
+      "slug": "research_verification_formal",
+      "display_name": "形式验证",
+      "description": "形式验证：量纲一致性检查",
+      "layer": "research",
+      "dispatch_domain": "domain:research",
+      "owner": "research",
+      "trigger_hints": ["形式验证", "量纲", "formal", "dimensional"],
+      "mcp_server": "research-harness",
+      "tool_flags": ["readonly"],
+      "input_schema": {
+        "type": "object",
+        "required": ["check", "equation"],
+        "properties": {
+          "check": {
+            "type": "string",
+            "enum": ["dimensional"],
+            "description": "验证类型：dimensional=量纲一致性"
+          },
+          "equation": {
+            "type": "string",
+            "description": "数学表达式字符串"
           }
         }
       }

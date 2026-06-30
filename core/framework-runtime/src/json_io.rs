@@ -5,6 +5,7 @@
 
 use core_errors::FrameworkError;
 use serde::Serialize;
+use std::io::Write;
 
 // ── Canonical re-exports from B0 ──
 pub use core_state_utils::json_io::{
@@ -15,7 +16,10 @@ pub use core_state_utils::json_io::{
 // ── CLI-specific helpers (not B0 — depend on stdout) ──
 
 pub fn print_json_value<T: Serialize>(payload: &T) -> Result<(), FrameworkError> {
-    println!("{}", serde_json::to_string(payload)?);
+    let stdout = std::io::stdout();
+    let mut out = stdout.lock();
+    serde_json::to_writer(&mut out, payload)?;
+    writeln!(out)?;
     Ok(())
 }
 

@@ -311,16 +311,16 @@
       null
     ],
     [
-      "deep-research",
+      "deep-search",
       "L2",
       "owner",
-      "approve",
+      "none",
       "P2",
-      "Deep research harness — fan-out web searches, fetch sources, verify claims, synthesize cited report.",
+      "Deep web search harness — fan-out web searches, fetch sources, verify claims, synthesize cited report.",
       "preferred",
       [
         "deep research",
-        "deep-research",
+        "deep-search",
         "web research",
         "fact check",
         "网络调研",
@@ -334,7 +334,7 @@
         "verify claims"
       ],
       "local",
-      "skills/deep-research/SKILL.md",
+      "skills/deep-search/SKILL.md",
       null,
       "skill",
       [],

@@ -923,6 +923,163 @@
       "record": {
         "slug": "research-discovery"
       }
+    },
+    {
+      "when": {
+        "query_contains": "调研"
+      },
+      "action": {
+        "type": "boost",
+        "delta": 35.0,
+        "reason": "Deep-search boost: general investigation/research wording (调研) detected."
+      },
+      "record": {
+        "slug": "deep-search"
+      }
+    },
+    {
+      "when": {
+        "query_contains": "网络调研"
+      },
+      "action": {
+        "type": "boost",
+        "delta": 40.0,
+        "reason": "Deep-search boost: web research wording matched (trigger_hint)."
+      },
+      "record": {
+        "slug": "deep-search"
+      }
+    },
+    {
+      "when": {
+        "query_contains": "查一下"
+      },
+      "action": {
+        "type": "boost",
+        "delta": 30.0,
+        "reason": "Deep-search boost: lookup/search wording (查一下) detected."
+      },
+      "record": {
+        "slug": "deep-search"
+      }
+    },
+    {
+      "when": {
+        "any": [
+          {
+            "query_contains": "搜一下"
+          },
+          {
+            "query_contains": "搜索并汇总"
+          }
+        ]
+      },
+      "action": {
+        "type": "boost",
+        "delta": 30.0,
+        "reason": "Deep-search boost: search-and-summarize wording detected."
+      },
+      "record": {
+        "slug": "deep-search"
+      }
+    },
+    {
+      "when": {
+        "query_contains": "信息收集"
+      },
+      "action": {
+        "type": "boost",
+        "delta": 35.0,
+        "reason": "Deep-search boost: information-gathering wording (trigger_hint)."
+      },
+      "record": {
+        "slug": "deep-search"
+      }
+    },
+    {
+      "when": {
+        "query_contains": "网络信息验证"
+      },
+      "action": {
+        "type": "boost",
+        "delta": 40.0,
+        "reason": "Deep-search boost: web fact-check wording (trigger_hint)."
+      },
+      "record": {
+        "slug": "deep-search"
+      }
+    },
+    {
+      "when": {
+        "all": [
+          {
+            "query_contains": "fact"
+          },
+          {
+            "query_contains": "check"
+          }
+        ]
+      },
+      "action": {
+        "type": "boost",
+        "delta": 40.0,
+        "reason": "Deep-search boost: fact-check wording (trigger_hint)."
+      },
+      "record": {
+        "slug": "deep-search"
+      }
+    },
+    {
+      "when": {
+        "query_contains": "联网查"
+      },
+      "action": {
+        "type": "boost",
+        "delta": 35.0,
+        "reason": "Web-fetch boost: explicit web fetch wording detected."
+      },
+      "record": {
+        "slug": "deep-search"
+      }
+    },
+    {
+      "when": {
+        "query_contains": "网上找"
+      },
+      "action": {
+        "type": "boost",
+        "delta": 30.0,
+        "reason": "Web-fetch boost: online search wording detected."
+      },
+      "record": {
+        "slug": "deep-search"
+      }
+    },
+    {
+      "when": {
+        "query_contains": "在线查"
+      },
+      "action": {
+        "type": "boost",
+        "delta": 35.0,
+        "reason": "Web-fetch boost: online lookup wording detected."
+      },
+      "record": {
+        "slug": "deep-search"
+      }
+    },
+    {
+      "when": {
+        "query_contains": "网页抓取"
+      },
+      "action": {
+        "type": "boost",
+        "delta": 35.0,
+        "reason": "Web-fetch boost: web scraping wording detected."
+      },
+      "record": {
+        "slug": "deep-search"
+      }
     }
   ],
   "visual_evidence_markers": [

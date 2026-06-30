@@ -101,6 +101,28 @@ impl StopHostOps for RegistryDispatcher {
 
 impl HostHookDispatcher for RegistryDispatcher {
     fn handle_pre_tool_use(&self, event: &HookEvent) -> Option<HookOutput> {
+        // Intercept native WebFetch → redirect to framework web_fetch MCP tool
+        let tool_name = event
+            .payload
+            .get("tool_name")
+            .and_then(Value::as_str)
+            .unwrap_or("");
+        if tool_name == "WebFetch" {
+            let url = event
+                .payload
+                .get("tool_input")
+                .and_then(|ti| ti.get("url"))
+                .and_then(Value::as_str)
+                .unwrap_or("<unknown>");
+            return Some(HookOutput::Deny {
+                reason: format!(
+                    "请使用框架的 web_fetch MCP 工具替代原生 WebFetch。\
+                     用 web_fetch url=\"{url}\" — 它有 SSRF 防护和 DNS 引脚保护。\
+                     Please use the framework `web_fetch` MCP tool instead of native WebFetch. \
+                     Use web_fetch(url=\"{url}\") — it has SSRF protection and DNS pinning."
+                ),
+            });
+        }
         if !self.config.pretool_path_protection {
             return None;
         }

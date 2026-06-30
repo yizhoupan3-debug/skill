@@ -104,7 +104,10 @@ mod tests {
 
     #[test]
     fn verify_doi_reachable_rejects_invalid_doi() {
-        let rt = tokio::runtime::Runtime::new().unwrap();
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
         // A clearly invalid DOI should fail URL validation before making a request.
         let result = rt.block_on(verify_doi_reachable(""));
         assert!(result.is_err(), "empty DOI should be rejected: {:?}", result);

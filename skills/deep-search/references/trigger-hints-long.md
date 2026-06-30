@@ -1,20 +1,26 @@
-# deep-research 中长尾 trigger hints
+# deep-search 中长尾 trigger hints
 
 > Front matter (`SKILL.md` frontmatter `trigger_hints`) 只保留高信号词；
 > 下列 hints 供路由扩展层使用。
+>
+> **核心信号：** 用户要的是「查信息/找资料/做汇总」，不是学术调研或手稿。
 
-## 主题研究类
+## 网络检索类
 
-- 深度研究一下这个话题
-- 帮我全面调查一下
-- 关于 XX 的详细报告
-- 做一个关于 XX 的调研
-- 网络调研一下
-- 全面分析一下这个问题
-- 帮我查一下这方面的资料
-- 这方面的最新进展是什么
-- 有没有可靠的信息来源
--帮我做一个事实核查
+- 帮我查一下
+- 网上搜一下
+- 查资料
+- 搜索信息
+- 找资料
+- 在线查询
+- 查查这个
+- 有没有这个相关的信息
+- 帮我搜索一下
+- 搜索结果
+- 网页搜索
+- 搜一下
+- 上网查
+- 查查
 
 ## 事实核查类
 
@@ -25,33 +31,33 @@
 - 交叉验证一下
 - claim verification
 - fact check this
-- is this true that
+- is this true
 - source verification
 
-## 报告生成类
+## 信息汇总类
 
-- 写一份研究报告
-- 生成调研报告
-- 做一个信息汇总
-- 整理一下相关资料
-- 综合分析报告
+- 做个信息汇总
+- 整理一下相关内容
+- 汇总报告
+- 信息整理
+- 搜索并汇总
 - research report
 - investigation report
 - information synthesis
 
-## 行业/市场调研
+## 行业/产品调研
 
-- 这个行业的情况怎么样
-- 市场调研
 - 竞品分析
-- 技术趋势
-- 行业报告
 - market research
 - competitive analysis
 - technology trends
+- 这个行业的前景
+- 哪个产品好
+- 产品对比
+- 优缺点对比
 
 ## 维护说明
 
 - frontmatter `trigger_hints` 是**主入口**（高信号、易误触发的反向避免过严）。
-- `trigger_hints_long: references/trigger-hints-long.md` 是**长尾扩展**（按场景二次分发）。
+- `trigger_hints_long` 是**长尾扩展**（按场景二次分发）。
 - 路由层实现面参考 `skills/SKILL_ROUTING_RUNTIME.json` + `configs/framework/RUNTIME_REGISTRY.json`。

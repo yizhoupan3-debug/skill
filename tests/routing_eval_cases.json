@@ -28,7 +28,7 @@
       "expected_owner": "skill-framework-developer",
       "expected_overlay": null,
       "forbidden_owners": [
-        "deep-research",
+        "deep-search",
         "plan-mode"
       ],
       "first_turn": true
@@ -41,7 +41,7 @@
       "expected_owner": "skill-framework-developer",
       "expected_overlay": null,
       "forbidden_owners": [
-        "deep-research",
+        "deep-search",
         "plan-mode"
       ],
       "first_turn": true
@@ -102,7 +102,7 @@
       "expected_owner": "agent-swarm-orchestration",
       "expected_overlay": null,
       "forbidden_owners": [
-        "deep-research"
+        "deep-search"
       ],
       "first_turn": true,
       "route_context": {
@@ -152,7 +152,7 @@
       "expected_overlay": null,
       "forbidden_owners": [
         "plan-mode",
-        "deep-research"
+        "deep-search"
       ],
       "first_turn": true
     },
@@ -632,14 +632,14 @@
       "notes": "新覆盖 citation-management 冷表技能"
     },
     {
-      "id": "eval-deep-research-rag-report",
+      "id": "eval-deep-search-rag-report",
       "category": "should-trigger",
       "task": "帮我查一下RAG技术的最新进展，做多源验证和网络信息收集后给一份有引用的报告",
-      "focus_skill": "deep-research",
-      "expected_owner": "deep-research",
+      "focus_skill": "deep-search",
+      "expected_owner": "deep-search",
       "expected_overlay": null,
       "first_turn": true,
-      "notes": "新覆盖 deep-research 技能"
+      "notes": "新覆盖 deep-search 技能"
     },
     {
       "id": "eval-deepinterview-clarify",
@@ -841,14 +841,14 @@
       "notes": "code-review-deep 作为 owner 的直接触发覆盖"
     },
     {
-      "id": "eval-deep-research-fact-check",
+      "id": "eval-deep-search-fact-check",
       "category": "should-trigger",
       "task": "帮我查一下这个科学声称是否有可靠的多源证据支持",
-      "focus_skill": "deep-research",
-      "expected_owner": "deep-research",
+      "focus_skill": "deep-search",
+      "expected_owner": "deep-search",
       "expected_overlay": null,
       "first_turn": true,
-      "notes": "deep-research 附加 case：多源事实核验场景"
+      "notes": "deep-search 附加 case：多源事实核验场景"
     },
     {
       "id": "eval-systematic-debugging-root-cause-first",

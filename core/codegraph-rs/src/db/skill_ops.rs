@@ -155,7 +155,7 @@ mod tests {
             "skills": [
                 ["gitx", "Git workflow commands", ["git", "branch", "merge"], "P0", "skills/gitx/SKILL.md"],
                 ["simplify", "Review for simplification", ["simplify", "cleanup", "refactor"], "P0", "skills/simplify/SKILL.md"],
-                ["deep-research", "Deep research", ["research", "investigate", "analyze"], "P1", "skills/deep-research/SKILL.md"]
+                ["deep-search", "Deep search", ["search", "investigate", "web"], "P1", "skills/deep-search/SKILL.md"]
             ]
         })
     }

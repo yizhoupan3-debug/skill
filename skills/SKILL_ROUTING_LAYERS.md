@@ -49,7 +49,7 @@
 L0  agent-swarm-orchestration, gh-address-comments, gh-fix-ci, sentry,
     skill-framework-developer, systematic-debugging, update
 L1  deepinterview, plan-mode, goalx
-L2  code-review-deep, citation-management, deep-research, gitx,
+L2  code-review-deep, citation-management, deep-search, gitx,
     good-question, good-story, paper-workbench, research-discovery,
     research-execution
 L3  design-md, doc, experiment-reproducibility, mcp-server-management, pdf,

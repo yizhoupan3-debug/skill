@@ -1299,7 +1299,8 @@ fn dispatch_web_fetch(args: WebFetchCommand) -> Result<(), FrameworkError> {
     loop {
         let resp = client
             .get(current_url.as_str())
-            .header("User-Agent", "router-rs-cli/0.1")
+            .header("User-Agent", "Mozilla/5.0 (compatible; RouterRsCli/1.0; +https://github.com/anthropics/claude-code)")
+            .header("Connection", "close")
             .send()
             .map_err(|e| {
                 FrameworkError::Io(std::io::Error::new(
@@ -1352,9 +1353,12 @@ fn dispatch_web_fetch(args: WebFetchCommand) -> Result<(), FrameworkError> {
                 })?
                 .to_string();
 
-            // Always rebuild pinned client with fresh DNS resolution to prevent
-            // TOCTOU between validation and connection, even for same-host redirects.
-            client = build_pinned_client(&redirect_host, &redirect_addrs)?;
+            // Same-host redirects: skip client rebuild (DNS pins are identical).
+            // Different-host redirects: rebuild with fresh DNS resolution.
+            let current_host = current_url.host_str().unwrap_or("");
+            if redirect_host != current_host {
+                client = build_pinned_client(&redirect_host, &redirect_addrs)?;
+            }
 
             current_url = resolved_url;
             continue;
@@ -1380,20 +1384,23 @@ fn dispatch_web_fetch(args: WebFetchCommand) -> Result<(), FrameworkError> {
         // truncated=true even though no data was lost — this is conservative.
         let truncated = max_bytes > 0 && n >= max_bytes;
 
-        // No manual UTF-8 back-off: from_utf8_lossy handles partial multi-byte
-        // sequences at the end of the buffer by emitting U+FFFD, which is the
-        // expected signal that truncation occurred mid-character.
-        let body = String::from_utf8_lossy(&body_buf).to_string();
-
-        return print_json_value(&serde_json::json!({
-            "url": current_url.to_string(),
+        // Build JSON output directly to stdout — avoid creating an intermediate
+        // `serde_json::Value` (which would copy the body) and skip the manual
+        // `to_string()` on `from_utf8_lossy` — the Cow borrows for valid UTF-8.
+        use std::io::Write;
+        let stdout_obj = std::io::stdout();
+        let mut out = stdout_obj.lock();
+        serde_json::to_writer(&mut out, &serde_json::json!({
+            "url": current_url.as_str(),
             "status": status_code,
             "headers": {
                 "content_type": content_type,
                 "content_length": content_length,
             },
-            "body": body,
+            "body": String::from_utf8_lossy(&body_buf),
             "truncated": truncated,
-        }));
+        }))?;
+        writeln!(out)?;
+        return Ok(());
     }
 }

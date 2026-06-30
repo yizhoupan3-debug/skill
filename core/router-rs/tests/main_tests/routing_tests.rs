@@ -549,7 +549,7 @@ fn framework_command_aliases_require_literal_entrypoints() {
         &records,
         None,
         "请做深度调研这个系统",
-        "deep-research-neutral-phrases",
+        "deep-search-neutral-phrases",
         false,
         true,
     )
