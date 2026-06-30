@@ -872,7 +872,7 @@ fn cmd_barrier(
     if let Some(parent) = report_path.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    std::fs::write(&report_path, serde_json::to_string_pretty(&report)?)?;
+    core_state_utils::atomic_write::write_atomic_json(&report_path, &report)?;
     println!("Barrier report written to: {}", report_path.display());
     // Save companion handoff artifact for cross-session resumption
     match research_harness::claims::handoff::save_handoff(&report, &ws) {

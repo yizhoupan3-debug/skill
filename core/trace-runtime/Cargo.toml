@@ -7,6 +7,7 @@ description = "L1 trace recording and compaction"
 workspace = true
 
 [dependencies]
+core-state-utils = { path = "../core-state-utils" }
 framework-core = { path = "../framework-core" }
 runtime-storage = { path = "../runtime-storage" }
 hex.workspace = true

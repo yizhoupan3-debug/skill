@@ -3,6 +3,7 @@ use super::types::BackgroundStateStore;
 use super::types::*;
 use crate::{SQLITE_TABLE_NAME, acquire_runtime_path_lock};
 use core_errors::FrameworkError;
+use core_state_utils::atomic_write::write_atomic_text;
 use rusqlite::{OptionalExtension, params};
 use serde_json::{Value, json};
 use std::fs;
@@ -91,26 +92,7 @@ pub(super) fn write_persisted_state(
 ) -> Result<(), FrameworkError> {
     match normalized_backend_family(backend_family).as_str() {
         "filesystem" | "file" => {
-            if let Some(parent) = state_path.parent() {
-                fs::create_dir_all(parent).map_err(FrameworkError::Io)?;
-            }
-            let tmp_path = state_path.with_extension(
-                state_path
-                    .extension()
-                    .map(|value| format!("{}.tmp", value.to_string_lossy()))
-                    .unwrap_or_else(|| "tmp".to_string()),
-            );
-            let mut file = std::fs::OpenOptions::new()
-                .create(true)
-                .write(true)
-                .truncate(true)
-                .open(&tmp_path)
-                .map_err(FrameworkError::Io)?;
-            use std::io::Write;
-            file.write_all(payload.as_bytes())
-                .map_err(FrameworkError::Io)?;
-            file.sync_all().map_err(FrameworkError::Io)?;
-            fs::rename(&tmp_path, state_path).map_err(FrameworkError::Io)?;
+            write_atomic_text(state_path, payload)?;
             Ok(())
         }
         "sqlite" | "sqlite3" => {

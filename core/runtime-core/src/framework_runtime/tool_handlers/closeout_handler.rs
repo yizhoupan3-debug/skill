@@ -133,6 +133,30 @@ pub(crate) fn closeout_record_write_dispatch(
                 .map_err(FrameworkError::Io)?;
         }
         core_state_utils::atomic_write::write_atomic_json(&record_path, &record_value)?;
+
+        // Sync TASK_OUTPUT.json with closeout data so aggregators (chain_aggregate,
+        // task_output_read) see the completed status (adversarial audit fix F).
+        if let Ok(closeout_record) = serde_json::from_value::<core_state::closeout_validation::CloseoutRecord>(
+            record_value.clone(),
+        ) {
+            let mut task_output = core_state::task_output::TaskOutput::new(task_id);
+            task_output.mark_completed(
+                core_state::task_output::OutputData::from_closeout_record(&closeout_record),
+            );
+            task_output.metadata.ended_at = Some(host_projection::hooks::current_local_timestamp());
+            if let Err(e) = core_state::task_output::write_task_output(repo_root, &task_output) {
+                tracing::warn!(
+                    task_id = %task_id,
+                    error = %e,
+                    "closeout_record_write: failed to sync TASK_OUTPUT.json",
+                );
+            }
+        } else {
+            tracing::warn!(
+                task_id = %task_id,
+                "closeout_record_write: could not deserialize CloseoutRecord for TASK_OUTPUT sync",
+            );
+        }
     }
 
     Ok(serde_json::to_string_pretty(&result)

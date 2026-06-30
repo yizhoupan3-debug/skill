@@ -4,8 +4,7 @@ use crate::utils::task_write_lock::acquire_task_ledger_repo_lock;
 use core_errors::FrameworkError;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::fs::{self, OpenOptions};
-use std::io::Write;
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -145,9 +144,18 @@ pub fn write_state_checkpoint(
     let mut final_tx = tx;
     final_tx.chain_hash = Some(compute_chain_hash(&prev_hash, &content_for_hash));
     let serialized = serde_json::to_string(&final_tx)?;
-    let mut file = OpenOptions::new().create(true).append(true).open(&path)?;
-    writeln!(file, "{}", serialized)?;
-    file.sync_all()?;
+
+    // Atomic append: read existing content, append checkpoint line, rewrite atomically.
+    // Don't use OpenOptions::append + writeln — that creates a crash window between
+    // writeln and sync_all where data could be lost (adversarial audit fix A).
+    let existing = fs::read_to_string(&path).unwrap_or_default();
+    let new_content = if existing.is_empty() {
+        format!("{}\n", serialized)
+    } else {
+        let base = existing.trim_end_matches('\n');
+        format!("{}\n{}\n", base, serialized)
+    };
+    crate::utils::atomic_write::write_atomic_text(&path, &new_content)?;
     Ok(())
 }
 
@@ -237,11 +245,16 @@ pub fn append_transaction_assuming_l1_held(
 
             let serialized = serde_json::to_string(&final_tx)?;
 
-            let mut file = OpenOptions::new().create(true).append(true).open(&path)?;
-
-            writeln!(file, "{}", serialized)?;
-            file.sync_all()?;
-            drop(file);
+            // Atomic write: build full content in memory, then atomically rewrite.
+            // This ensures a crash mid-write leaves the file in a consistent state
+            // (adversarial audit fix A). Post-append content is reused for compaction.
+            content = if content.is_empty() {
+                format!("{}\n", serialized)
+            } else {
+                let base = content.trim_end_matches('\n');
+                format!("{}\n{}\n", base, serialized)
+            };
+            crate::utils::atomic_write::write_atomic_text(&path, &content)?;
 
             // ── periodic state checkpoint ──────────────────────────────────
             // Every CHECKPOINT_INTERVAL transactions, capture the current
@@ -259,17 +272,20 @@ pub fn append_transaction_assuming_l1_held(
             }
 
             // ── compact using in-memory content (avoids re-read) ─────────────
-            // Append the serialized new line to the pre-append content so the
-            // compaction function sees the full post-append file state.
-            content.push_str(&serialized);
-            content.push('\n');
+            // `content` already includes the serialized line after the atomic rewrite
+            // above — no need to append it again.
 
             match crate::utils::jsonl_maintenance::compact_jsonl_with_content(&path, &content, 300)
             {
                 Ok(true) => {
-                    // Compaction renumbers seq to 0,1,2,…N-1.
-                    // TASK_STATE.json aggregate was removed in Wave 2b so there
-                    // is nothing to sync here any longer.
+                    // Compaction renumbered seq — chain_hash values are now stale.
+                    // Recompute them sequentially from scratch (P1.2 fix).
+                    if let Err(e) = patch_ledger_chain_hashes(&path) {
+                        tracing::warn!(
+                            error = %e,
+                            "patch_ledger_chain_hashes failed after compaction",
+                        );
+                    }
                 }
                 Ok(false) => {}
                 Err(e) => {
@@ -293,19 +309,23 @@ pub fn append_transaction_assuming_l1_held(
 
             let serialized = serde_json::to_string(&final_tx)?;
 
-            let mut file = OpenOptions::new().create(true).append(true).open(&path)?;
-
-            writeln!(file, "{}", serialized)?;
-            file.sync_all()?;
+            // First entry — atomic write creates the file.
+            crate::utils::atomic_write::write_atomic_text(&path, &format!("{}\n", serialized))?;
         }
         Err(e) => return Err(FrameworkError::Io(e)),
     }
 
     // Fallback compaction for the NotFound branch (first entry, 1 line — won't trigger).
     if !compacted_inline
-        && let Err(e) = crate::utils::jsonl_maintenance::compact_jsonl_if_needed(&path, 300)
+        && let Ok(true) = crate::utils::jsonl_maintenance::compact_jsonl_if_needed(&path, 300)
     {
-        tracing::warn!(error = %e, "compact_jsonl_if_needed failed for TASK_LEDGER");
+        // P1.2: Recompute chain_hash after compaction.
+        if let Err(e) = patch_ledger_chain_hashes(&path) {
+            tracing::warn!(
+                error = %e,
+                "patch_ledger_chain_hashes failed after fallback compaction",
+            );
+        }
     }
 
     Ok(())
@@ -319,6 +339,71 @@ pub fn append_transaction(
     let _guard: TaskLedgerRepoLockGuard =
         acquire_task_ledger_repo_lock(repo_root, Duration::from_millis(500))?;
     append_transaction_assuming_l1_held(repo_root, task_id, tx)
+}
+
+/// Recompute all chain_hash values in a compacted ledger file.
+///
+/// Compaction renumbers `seq` fields, which invalidates the original `chain_hash`
+/// values (they were computed from pre-compaction content). This function reads
+/// each valid JSON line, recomputes chain_hash sequentially from "genesis", and
+/// rewrites the file atomically.
+///
+/// Call this AFTER compaction to restore hash chain integrity (EV-F013).
+pub fn patch_ledger_chain_hashes(path: &Path) -> Result<(), FrameworkError> {
+    let content = std::fs::read_to_string(path)
+        .map_err(|e| FrameworkError::Io(e))?;
+    let patched = recompute_chain_hashes(&content)?;
+    if patched == content {
+        return Ok(());
+    }
+    // Write atomically so a crash mid-write leaves the original intact.
+    crate::utils::atomic_write::write_atomic_text(path, &patched)?;
+    Ok(())
+}
+
+/// Recompute chain_hash for each valid JSON line, chaining from "genesis".
+/// Returns the full patched content string.
+fn recompute_chain_hashes(content: &str) -> Result<String, FrameworkError> {
+    let mut output = String::with_capacity(content.len());
+    let mut prev_hash = "genesis".to_string();
+    let mut has_any = false;
+
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+
+        let mut tx: LedgerTransaction = serde_json::from_str(trimmed)
+            .map_err(|e| FrameworkError::validation(
+                format!("recompute_chain_hashes: parse error: {e}")
+            ))?;
+
+        // Compute hash from content without chain_hash (None = skip serde).
+        tx.chain_hash = None;
+        let content_for_hash = serde_json::to_string(&tx)
+            .map_err(|e| FrameworkError::validation(
+                format!("recompute_chain_hashes: serialize (no-hash) error: {e}")
+            ))?;
+
+        let hash = compute_chain_hash(&prev_hash, &content_for_hash);
+        tx.chain_hash = Some(hash.clone());
+
+        let output_line = serde_json::to_string(&tx)
+            .map_err(|e| FrameworkError::validation(
+                format!("recompute_chain_hashes: output serialize error: {e}")
+            ))?;
+
+        output.push_str(&output_line);
+        output.push('\n');
+        prev_hash = hash;
+        has_any = true;
+    }
+
+    if !has_any {
+        return Ok(content.to_string());
+    }
+    Ok(output)
 }
 
 #[cfg(test)]

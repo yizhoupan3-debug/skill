@@ -1,8 +1,6 @@
 use chrono::{DateTime, Duration, Utc};
 use serde_json::{Value, json};
 use std::fs;
-use std::fs::OpenOptions;
-use std::io::Write;
 use std::path::{Path, PathBuf};
 
 pub use framework_core::json_value::{
@@ -53,33 +51,7 @@ pub fn save_store(path: &Path, store: &SessionSupervisorStore) -> Result<(), Fra
         fs::create_dir_all(parent)?;
     }
     let payload = serde_json::to_string_pretty(store)? + "\n";
-    let parent = path.parent().ok_or_else(|| FrameworkError::path(path))?;
-    let file_name = path
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or("supervisor_state");
-    let tmp_path = parent.join(format!(".router-rs.{file_name}.{}.tmp", std::process::id()));
-    {
-        let mut tmp_file = OpenOptions::new()
-            .create(true)
-            .truncate(true)
-            .write(true)
-            .open(&tmp_path)?;
-        tmp_file
-            .write_all(payload.as_bytes())
-            .and_then(|_| tmp_file.sync_all())
-            .map_err(|err| {
-                let _ = fs::remove_file(&tmp_path);
-                FrameworkError::Io(err)
-            })?;
-    }
-    fs::rename(&tmp_path, path).map_err(|err| {
-        let _ = fs::remove_file(&tmp_path);
-        FrameworkError::Io(err)
-    })?;
-    core_state_utils::atomic_write::fsync_parent_dir(path)
-        .unwrap_or_else(|e| tracing::warn!("fsync supervisor state parent dir failed: {e}"));
-    Ok(())
+    core_state_utils::atomic_write::write_atomic_text(path, &payload)
 }
 
 /// Insert or update a worker record in the supervisor store.

@@ -6,6 +6,7 @@ use std::thread;
 use std::time::Duration;
 
 use core_errors::FrameworkError;
+use core_state_utils::atomic_write::write_atomic_text;
 use framework_runtime::process_utils;
 
 use crate::types::{AgentHealthEntry, AgentHealthStore, DriverCommandSpec, WorkerSessionRecord};
@@ -256,8 +257,7 @@ fn save_agent_health_raw(path: &Path, store: &AgentHealthStore) -> Result<(), Fr
         std::fs::create_dir_all(parent)?;
     }
     let payload = serde_json::to_string_pretty(store)?;
-    std::fs::write(path, &payload)?;
-    Ok(())
+    write_atomic_text(path, &payload)
 }
 
 /// Acquire a cross-process lock on the agent health registry, then call `f`

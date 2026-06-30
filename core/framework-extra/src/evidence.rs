@@ -212,7 +212,7 @@ pub fn append_evidence_index_merged_row(
         fs::create_dir_all(parent)?;
     }
 
-    let tx_payload = {
+    let _tx_payload = {
         let _evidence_lock = rt_storage::acquire_runtime_path_lock(&evidence_path)?;
 
         let existing = read_json_strict(&evidence_path)?;
@@ -270,17 +270,22 @@ pub fn append_evidence_index_merged_row(
             "schema_version": EVIDENCE_INDEX_SCHEMA_VERSION,
             "artifacts": rows.into_iter().map(Value::Object).collect::<Vec<Value>>(),
         });
+
+        // Write TASK_LEDGER first (transactional record). If this fails, propagate
+        // the error — the EVIDENCE_INDEX write is skipped so the caller can retry
+        // with a clean state (adversarial audit fix C).
+        if let Some(tid) = resolved_task_id.as_ref() {
+            let tx = core_state::task_ledger::LedgerTransaction::new("evidence", tx_payload.clone())
+                .with_schema_version(1);
+            core_state::task_ledger::append_transaction(repo_root, tid, tx)?;
+        }
+
+        // Now write EVIDENCE_INDEX.json (if this fails, the ledger has the
+        // transaction and the index is recoverable on the next append).
         write_json_if_changed_unlocked(&evidence_path, &payload)?;
         tx_payload
     };
-    if let Some(tid) = resolved_task_id {
-        let tx = core_state::task_ledger::LedgerTransaction::new("evidence", tx_payload)
-            .with_schema_version(1);
-        if let Err(e) = core_state::task_ledger::append_transaction(repo_root, &tid, tx) {
-            tracing::error!(task_id = %tid, error = %e, "failed to append evidence transaction to TASK_LEDGER");
-        }
-        // TASK_STATE.json aggregate was removed in Wave 2b.
-    }
+    // TASK_STATE.json aggregate was removed in Wave 2b.
     Ok(())
 }
 
@@ -364,6 +369,12 @@ pub fn framework_hook_evidence_append(payload: Value) -> Result<Value> {
     let cursor_hook = source.trim().to_ascii_lowercase().starts_with("cursor_");
     let preview_lower = preview_trim.to_ascii_lowercase();
     if !cursor_hook && !shell_command_looks_like_verification(&preview_lower) {
+        tracing::info!(
+            command_preview = %preview_trim,
+            source = %source,
+            "framework_hook_evidence_append skipped — command_preview did not match \
+             verification heuristics (adversarial audit fix E)",
+        );
         return Ok(json!({
             "ok": true,
             "skipped": true,

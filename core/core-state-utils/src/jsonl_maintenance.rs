@@ -8,7 +8,6 @@
 
 use core_errors::FrameworkError;
 use std::fs;
-use std::io::Write;
 use std::path::Path;
 
 use serde_json::{Map, Value};
@@ -93,7 +92,7 @@ pub fn compact_jsonl_with_content(
         return Ok(true);
     }
 
-    atomic_write_jsonl(path, &compacted)?;
+    super::atomic_write::write_atomic_text(path, &compacted)?;
     Ok(true)
 }
 
@@ -241,7 +240,7 @@ pub fn truncate_and_compact(path: &Path, max_lines: usize) -> Result<bool, Frame
                 ))
             })?;
     } else {
-        atomic_write_jsonl(path, output)?;
+        super::atomic_write::write_atomic_text(path, output)?;
     }
 
     Ok(true)
@@ -372,68 +371,6 @@ fn extract_snapshot_type_from_map(obj: &Map<String, Value>) -> Option<String> {
     }
 }
 
-/// Atomic write: temp file + fsync + rename.
-fn atomic_write_jsonl(path: &Path, payload: &str) -> Result<(), FrameworkError> {
-    let tmp_path = derive_compact_tmp_path(path);
-    let parent = path.parent().ok_or_else(|| {
-        FrameworkError::validation(format!("compact_jsonl: no parent for {}", path.display()))
-    })?;
-    fs::create_dir_all(parent).map_err(|err| {
-        FrameworkError::validation(format!("compact_jsonl: mkdir {}: {err}", parent.display()))
-    })?;
-
-    {
-        let mut tmp_file = fs::OpenOptions::new()
-            .create(true)
-            .truncate(true)
-            .write(true)
-            .open(&tmp_path)
-            .map_err(|err| {
-                FrameworkError::validation(format!(
-                    "compact_jsonl: open tmp {}: {err}",
-                    tmp_path.display()
-                ))
-            })?;
-        tmp_file.write_all(payload.as_bytes()).map_err(|err| {
-            FrameworkError::validation(format!(
-                "compact_jsonl: write tmp {}: {err}",
-                tmp_path.display()
-            ))
-        })?;
-        tmp_file.sync_all().map_err(|err| {
-            FrameworkError::validation(format!(
-                "compact_jsonl: fsync tmp {}: {err}",
-                tmp_path.display()
-            ))
-        })?;
-    }
-    fs::rename(&tmp_path, path).map_err(|err| {
-        let _ = fs::remove_file(&tmp_path);
-        FrameworkError::validation(format!(
-            "compact_jsonl: rename {} -> {}: {err}",
-            tmp_path.display(),
-            path.display()
-        ))
-    })?;
-
-    // Best-effort fsync parent dir.
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        if let Some(parent_dir) = path.parent()
-            && let Ok(dir) = fs::OpenOptions::new()
-                .read(true)
-                .custom_flags(libc::O_RDONLY)
-                .open(parent_dir)
-            && let Err(e) = dir.sync_all()
-        {
-            tracing::warn!(error = %e, "failed to sync parent directory after compaction");
-        }
-    }
-
-    Ok(())
-}
-
 /// Remove stale `.compact.tmp-{pid}-*` temp files left by a prior crash of this
 /// process in the same directory as `path`.  Only files matching the current PID
 /// are cleaned — files from other processes (still running) are left alone.
@@ -453,23 +390,6 @@ fn cleanup_stale_compact_tmp_files(path: &Path) {
             }
         }
     }
-}
-
-/// Derive a deterministic-ish temp path next to `path` for the compaction atomic write.
-fn derive_compact_tmp_path(path: &Path) -> std::path::PathBuf {
-    use std::sync::atomic::{AtomicU64, Ordering};
-    static NONCE: AtomicU64 = AtomicU64::new(0);
-
-    let pid = std::process::id();
-    let micros = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_micros())
-        .unwrap_or(0);
-    let nonce = NONCE.fetch_add(1, Ordering::Relaxed);
-
-    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("jsonl");
-    let new_ext = format!("{ext}.compact.tmp-{pid}-{micros}-{nonce}");
-    path.with_extension(new_ext)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

@@ -389,11 +389,7 @@ fn write_review_state(
 ) -> Result<(), FrameworkError> {
     let text = serde_json::to_string_pretty(state)
         .map_err(|e| FrameworkError::config(format!("serialize review state: {e}")))?;
-    if let Some(parent) = path.parent() {
-        let _ = std::fs::create_dir_all(parent);
-    }
-    std::fs::write(path, text)
-        .map_err(|e| FrameworkError::config(format!("write review state: {e}")))
+    core_state_utils::atomic_write::write_atomic_text(path, &text)
 }
 
 fn clear_file(path: &Path) {

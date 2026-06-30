@@ -129,13 +129,8 @@ fn save_team_registry_raw(path: &Path, registry: &TeamRegistry) -> Result<(), Fr
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }
-    let tmp_path = path.with_extension("json.tmp");
-    let payload = serde_json::to_string_pretty(registry)?;
-    fs::write(&tmp_path, &payload)?;
-    fs::rename(&tmp_path, path)?;
-    core_state_utils::atomic_write::fsync_parent_dir(path)
-        .unwrap_or_else(|e| tracing::warn!("fsync team registry parent dir failed: {e}"));
-    Ok(())
+    let value = serde_json::to_value(registry)?;
+    core_state_utils::atomic_write::write_atomic_json(path, &value)
 }
 
 /// Execute `f` with an exclusive lock on the team registry.
@@ -206,7 +201,7 @@ pub fn create_team(
         // Save team.json metadata (outside the main registry but under lock)
         let meta_path = team_dir_safe(repo_root, &safe_team).join("team.json");
         let raw = serde_json::to_string_pretty(&team)?;
-        fs::write(&meta_path, &raw)?;
+        core_state_utils::atomic_write::write_atomic_text(&meta_path, &raw)?;
 
         registry.teams.push(team.clone());
         Ok(team)
@@ -266,7 +261,7 @@ pub fn add_team_member(
             .join("members")
             .join(format!("{safe_agent}.json"));
         let raw = serde_json::to_string_pretty(&member)?;
-        fs::write(&member_path, &raw)?;
+        core_state_utils::atomic_write::write_atomic_text(&member_path, &raw)?;
 
         team.members.push(member.clone());
         team.updated_at = now.to_string();
@@ -340,7 +335,7 @@ pub fn complete_team(
         // Update team.json metadata
         let meta_path = team_dir_safe(repo_root, &safe_team).join("team.json");
         let raw = serde_json::to_string_pretty(&team)?;
-        fs::write(&meta_path, &raw)?;
+        core_state_utils::atomic_write::write_atomic_text(&meta_path, &raw)?;
 
         Ok(team.clone())
     })
@@ -408,7 +403,7 @@ pub fn send_message(
         }
 
         let raw = serde_json::to_string_pretty(&msg)?;
-        fs::write(&msg_path, &raw)?;
+        core_state_utils::atomic_write::write_atomic_text(&msg_path, &raw)?;
 
         Ok(msg)
     })
@@ -450,11 +445,20 @@ pub fn read_my_messages(
         for entry in &entries {
             let raw = fs::read_to_string(entry.path())?;
             if let Ok(mut msg) = serde_json::from_str::<InterAgentMessage>(&raw) {
-                // Mark as read
+                // Mark as read (best-effort — log on failure)
                 if !msg.read {
                     msg.read = true;
                     if let Ok(updated) = serde_json::to_string_pretty(&msg) {
-                        let _ = fs::write(entry.path(), &updated);
+                        if let Err(e) = core_state_utils::atomic_write::write_atomic_text(
+                            &entry.path(),
+                            &updated,
+                        ) {
+                            tracing::warn!(
+                                path = %entry.path().display(),
+                                error = %e,
+                                "failed to mark message as read",
+                            );
+                        }
                     }
                 }
                 messages.push(msg);
@@ -474,11 +478,20 @@ pub fn read_my_messages(
             if let Ok(mut msg) = serde_json::from_str::<InterAgentMessage>(&raw)
                 && !messages.iter().any(|m| m.message_id == msg.message_id)
             {
-                // Mark broadcast as read too
+                // Mark broadcast as read too (best-effort — log on failure)
                 if !msg.read {
                     msg.read = true;
                     if let Ok(updated) = serde_json::to_string_pretty(&msg) {
-                        let _ = fs::write(entry.path(), &updated);
+                        if let Err(e) = core_state_utils::atomic_write::write_atomic_text(
+                            &entry.path(),
+                            &updated,
+                        ) {
+                            tracing::warn!(
+                                path = %entry.path().display(),
+                                error = %e,
+                                "failed to mark broadcast as read",
+                            );
+                        }
                     }
                 }
                 messages.push(msg);

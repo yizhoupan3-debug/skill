@@ -6,6 +6,7 @@ use super::*;
 use core_errors::FrameworkError;
 use core_state::task_ledger::{LedgerTransaction, append_transaction_assuming_l1_held};
 use core_state::transition_validation::{TaskTransition, validate_transition};
+use core_state_utils::atomic_write::write_atomic_text;
 use core_state_utils::task_write_lock::apply_task_ledger_mutation;
 use serde_json::{Value, json};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -663,8 +664,7 @@ fn write_loop_signal(repo_root: &Path, loop_id: &str, payload: &serde_json::Valu
     let file_path = kill_dir.join(loop_id);
     let content = serde_json::to_string(payload)
         .map_err(|e| FrameworkError::validation(format!("serialize signal: {e}")))?;
-    std::fs::write(&file_path, content)
-        .map_err(|e| FrameworkError::Io(e))?;
+    write_atomic_text(&file_path, &content)?;
     Ok(json!({
         "ok": true,
         "loop_id": loop_id,

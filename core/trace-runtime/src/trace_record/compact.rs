@@ -2,7 +2,6 @@ use crate::TraceError;
 use serde_json::{Map, Value, json};
 use std::collections::HashSet;
 use std::fs;
-use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
@@ -563,59 +562,6 @@ fn pretty_json_line(value: &Value) -> Result<String, TraceError> {
 }
 
 fn atomic_write_text(path: &Path, payload: &str) -> Result<(), TraceError> {
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).map_err(|err| {
-            TraceError::validation(format!(
-                "create parent failed for {}: {err}",
-                parent.display()
-            ))
-        })?;
-    }
-
-    // Atomic write via temp file + fsync + rename.  Without this, a crash
-    // between the fs::write and the manifest update could leave compaction
-    // artifacts in an inconsistent state.
-    let tmp_path = {
-        let base = path
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("trace-payload");
-        path.with_extension(format!("{}.compact.tmp-{}", base, std::process::id(),))
-    };
-    // Create + write + fsync the temp file.
-    {
-        let mut f = fs::OpenOptions::new()
-            .create(true)
-            .truncate(true)
-            .write(true)
-            .open(&tmp_path)
-            .map_err(|err| {
-                TraceError::validation(format!("create tmp {} failed: {err}", tmp_path.display()))
-            })?;
-        f.write_all(payload.as_bytes()).map_err(|err| {
-            TraceError::validation(format!("write tmp {} failed: {err}", tmp_path.display()))
-        })?;
-        f.sync_all().map_err(|err| {
-            TraceError::validation(format!("fsync tmp {} failed: {err}", tmp_path.display()))
-        })?;
-    }
-    // Atomic rename to target path.
-    fs::rename(&tmp_path, path).map_err(|err| {
-        let _ = fs::remove_file(&tmp_path);
-        TraceError::validation(format!(
-            "rename {} -> {} failed: {err}",
-            tmp_path.display(),
-            path.display()
-        ))
-    })?;
-
-    // Best-effort parent directory fsync so the rename survives a power loss.
-    if let Some(parent) = path.parent() {
-        // Opening a directory as a file works on Linux/macOS for fsync.
-        if let Ok(dir) = fs::File::open(parent) {
-            let _ = dir.sync_all();
-        }
-    }
-
-    Ok(())
+    core_state_utils::atomic_write::write_atomic_text(path, payload)
+        .map_err(|e| TraceError::validation(e.to_string()))
 }

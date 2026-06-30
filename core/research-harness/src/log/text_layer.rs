@@ -100,7 +100,7 @@ pub fn write_entry_md(
 
     let path = dir.join(format!("{}_{}.md", date, safe_name));
     let content = render_entry(entry, findings, tags);
-    std::fs::write(&path, content)?;
+    core_state_utils::atomic_write::write_atomic_text(&path, &content)?;
     Ok(path)
 }
 
