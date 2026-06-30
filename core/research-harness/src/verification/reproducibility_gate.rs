@@ -3,7 +3,7 @@
 //! In-place adapter (Wave 5b): wraps the reproducibility module's audit
 //! functions into a `GateChecker` for the RESEARCH scene.
 //!
-//! Registered by `research_harness::register_qg_checkers()`.
+//! Registered via `RUNTIME_REGISTRY.json` → `quality_gate_checkers.registrations`.
 
 use quality_gate::checker::GateChecker;
 use quality_gate::types::{CheckContext, CheckResult, Finding, Severity};

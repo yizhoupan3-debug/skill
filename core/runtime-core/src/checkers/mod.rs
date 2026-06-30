@@ -17,8 +17,9 @@
 //! 与 Stage 1 反欺诈门形成双重验证（Stage 1 检查证据存在性，Stage 2 做更深层评估）。
 //!
 //! ## RESEARCH scene checkers
-//! Research verification checkers are registered via the extern mechanism
-//! in `router-rs-cli.rs` through `research_harness::register_qg_checkers`.
+//! Research verification checkers are registered via the JSON registry mechanism
+//! in `configs/framework/RUNTIME_REGISTRY.json` → `quality_gate_checkers.registrations`
+//! and wired through `router-rs-cli.rs` via `set_extern_checkers`.
 //! The Wave 5b alias checkers that lived here were removed in favor of the
 //! extern registration to avoid double registration.
 //!
@@ -71,32 +72,10 @@ fn find_rust_files_recursive(dir: &Path, files: &mut Vec<std::path::PathBuf>) {
     }
 }
 
-/// Register all in-place checkers into the registry.
-/// Called once at startup from `runtime_core::init_quality_gate()`.
-pub(crate) fn register_checkers(registry: &mut quality_gate::CheckerRegistry) {
-    registry.register(scene::GENERAL, Box::new(evidence_checker::EvidenceChecker));
-    registry.register(
-        scene::GENERAL,
-        Box::new(adversarial_checker::AdversarialChecker),
-    );
-    registry.register(
-        scene::RESEARCH,
-        Box::new(adversarial_checker::AdversarialChecker),
-    );
-    registry.register(
-        scene::CODE_REVIEW,
-        Box::new(correctness_checker::CorrectnessChecker),
-    );
-    registry.register(
-        scene::CODE_REVIEW,
-        Box::new(security_checker::SecurityChecker),
-    );
-    registry.register(
-        scene::VISUAL,
-        Box::new(screenshot_layout_checker::ScreenshotLayoutChecker),
-    );
-    registry.register(scene::SLIDES, Box::new(overflow_checker::OverflowChecker));
-}
+// Register all in-place checkers into the registry.
+// Generated from `RUNTIME_REGISTRY.json` → `quality_gate_checkers.registrations`.
+// Called once at startup from `runtime_core::init_quality_gate()`.
+include!(concat!(env!("OUT_DIR"), "/generated_checkers.rs"));
 
 #[cfg(test)]
 mod tests {
@@ -298,7 +277,7 @@ mod tests {
     #[test]
     fn all_checkers_register_correctly() {
         let mut registry = quality_gate::CheckerRegistry::new();
-        register_checkers(&mut registry);
+        register_checkers_from_registry(&mut registry);
         // Evaluate each scene to verify no panics
         for scene_str in [scene::GENERAL, scene::CODE_REVIEW, scene::RESEARCH, scene::VISUAL, scene::SLIDES] {
             let tmp = tempfile::tempdir().unwrap();

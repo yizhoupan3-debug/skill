@@ -39,6 +39,9 @@ minilp.workspace = true
 # CLI (optional)
 clap = { workspace = true, optional = true }
 
+[build-dependencies]
+serde_json.workspace = true
+
 [dev-dependencies]
 tempfile.workspace = true
 

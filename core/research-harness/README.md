@@ -44,7 +44,7 @@ Exposed through `host-projection`'s `mcp_stdio_harness`:
 
 ### QG Route Checkers (Wave 4b/5b)
 
-Registered via `research_harness::register_qg_checkers()` into the shared `CheckerRegistry`
+Registered via `RUNTIME_REGISTRY.json` → `quality_gate_checkers.registrations` into the shared `CheckerRegistry`
 at startup. All checkers are in-place adapter modules in `src/verification/`:
 
 | Checker | Scene | Description |

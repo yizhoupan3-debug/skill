@@ -6,7 +6,7 @@
 //! Searches paper files for DOI references and verifies reachability
 //! when an async runtime handle is available.
 //!
-//! Registered by `research_harness::register_qg_checkers()`.
+//! Registered via `RUNTIME_REGISTRY.json` → `quality_gate_checkers.registrations`.
 
 use std::path::Path;
 

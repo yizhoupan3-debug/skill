@@ -6,7 +6,7 @@
 //! Searches the task's repo_root for paper files (.tex, .md, .txt) and
 //! runs slop detection, hedging analysis, and terminology checks.
 //!
-//! Registered by `research_harness::register_qg_checkers()`.
+//! Registered via `RUNTIME_REGISTRY.json` → `quality_gate_checkers.registrations`.
 
 use std::path::Path;
 

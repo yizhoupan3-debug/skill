@@ -38,7 +38,7 @@ fn init_browser_mcp_dispatch() {
 fn main() -> Result<(), FrameworkError> {
     // Wire research-harness gate checkers into the QG Route bridge (before init_hooks).
     #[cfg(feature = "research")]
-    runtime_core::qg_route::set_extern_checkers(research_harness::register_qg_checkers);
+    runtime_core::qg_route::set_extern_checkers(research_harness::register_checkers_from_registry);
 
     // Explicit hook initialization (deterministic ordering, testable).
     // runtime_core::init_hooks() uses OnceLock internally for safety.

@@ -41,8 +41,8 @@ pub fn set_extern_checkers(f: ExternCheckersFn) {
 pub fn init_qg_route() {
     QG_ROUTE.get_or_init(|| {
         let mut registry = quality_gate::CheckerRegistry::new();
-        // In-place checkers from runtime-core
-        crate::checkers::register_checkers(&mut registry);
+        // In-place checkers from runtime-core (generated from RUNTIME_REGISTRY.json)
+        crate::checkers::register_checkers_from_registry(&mut registry);
         // External checkers from research-harness (if registered)
         if let Some(f) = EXTERN_CHECKERS.get() {
             f(&mut registry);

@@ -551,7 +551,7 @@ fn verify_evidence_chain(scaffold: &TaskScaffold) -> bool {
 |---|---|
 | `core/quality-gate/` crate | ✅ GateChecker trait + CheckerRegistry + 5 scene 常量 + types |
 | QGEntry.trigger() → QG Route evaluate() 集成 | ✅ runtime-core/src/qg_entry.rs + qg_route.rs |
-| 启动时注册 checkers | ✅ `runtime_core::init()` 含 `register_checkers()` |
+| 启动时注册 checkers | ✅ `RUNTIME_REGISTRY.json` → `build.rs` → `register_checkers_from_registry()` |
 
 #### Wave 4a-ii（✅ 已完成）— QG 状态机删除
 
