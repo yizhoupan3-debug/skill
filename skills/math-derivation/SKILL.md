@@ -88,7 +88,7 @@ linear algebra proofs, and probability/measure-theoretic arguments.
 - The task is reviewing paper-level scientific logic -> use `@lane:reviewer` logic mode
 - The task is LaTeX compilation or rendering → answer in the current context（（latex-compile-acceleration 已归档，内联处理） 已归档）
 - The user wants **multi-round** exploration of new structures, conjectures, or lemmas with parallel falsification lanes → use **`framework_quality_gate`** and [architecture.md](../../docs/routing/architecture.md) §D（**not** this skill as the orchestrator); single-round derive/prove stays here.
-- The user wants **mathematical modeling** (formulate ODE/PDE/closure, scaling, regimes) or **deep math background** for unknown properties → use [`$research-discovery`](../../skills/research-discovery/SKILL.md) (`math_modeling` / `math_background_inquiry`) → RFV §F–G; use this skill only for deriving a specific equation or proof step once the model is fixed.
+- The user wants **mathematical modeling** (formulate ODE/PDE/closure, scaling, regimes) or **deep math background** for unknown properties → use [`$research`](../../skills/research/SKILL.md) (discovery lane, `math_background_inquiry`) → RFV §F–G; use this skill only for deriving a specific equation or proof step once the model is fixed.
 
 ## Derivation workflow
 
@@ -119,10 +119,10 @@ linear algebra proofs, and probability/measure-theoretic arguments.
 10. **No circular reasoning**: The conclusion must never appear (even in disguised form) in its own proof chain.
 11. **Limit interchange justification**: Swapping $\lim$, $\int$, $\sum$, or $\frac{d}{dx}$ requires explicit invocation of the justifying theorem (DCT, MCT, Fubini, Leibniz, etc.) with verification of its hypotheses.
 12. **Theorem hypothesis verification**: Before applying any named theorem, explicitly verify that all its hypotheses are satisfied in the current context.
-13. **Verified means checker-backed**: Do not call a derivation "verified", "严审通过", or "深度验证" based only on prose. Use `math_sympy_verify` / `math_sympy_simplify` for algebraic identity and inequality checking; use `math_asymptotic_estimate` for asymptotic magnitude analysis. (注：`math_prove_inequality` 和 `math_asymptotic_chain` 已弃用 — 用上述工具替代。) When no backend is available, mark as `[CHECKER_UNAVAILABLE]`.
+13. **Verified means checker-backed**: Do not call a derivation "verified", "严审通过", or "深度验证" based only on prose. Use `math_sympy_verify` / `math_sympy_simplify` for algebraic identity checking; use `math_prove_inequality` for Z3 inequality solving (<=10 variables); use `math_asymptotic_estimate` for single-expression asymptotic magnitude analysis; use `math_asymptotic_chain` for multi-relation chain transitivity. When no backend is available, mark as `[CHECKER_UNAVAILABLE]`.
 14. **Counterexample probe**: For research-grade critique, attempt at least one counterexample or boundary probe before accepting the claim.
 15. **Completion gates (harness integration)**: When operating under automated review, set gate requirements `require_successful_evidence_row: true, min_depth_score: 1` to enforce the checker-backed standard. Without these, the harness cannot distinguish verified output from prose. See `docs/routing/architecture.md`.
-16. **Asymptotic chain discipline**: All asymptotic relation chains (≲/≪/≍) must be verified for transitivity — use `math_asymptotic_estimate` for verification (注：`math_asymptotic_chain` 已弃用，由 `math_asymptotic_estimate` 替代). Mixed chains (containing more than one relation type) automatically WARN and require human review. Pure chains (single relation type) auto-PASS on transitive closure.
+16. **Asymptotic chain discipline**: All asymptotic relation chains (≲/≪/≍) must be verified for transitivity — use `math_asymptotic_chain` for multi-relation chain transitivity or `math_asymptotic_estimate` for single-expression magnitude estimation. Mixed chains (containing more than one relation type) automatically WARN and require human review. Pure chains (single relation type) auto-PASS on transitive closure.
 17. **Proof DAG monotonicity**: Blueprint-DAG decomposition is monotonic (structure only grows by refinement). Verification results are per-round valid — a new round marks all previous results as stale. DAG monotonicity constrains topological invariance only, not verification result persistence.
 
 ## Output template
