@@ -1,3 +1,16 @@
+//! Review Gate Engine — code review workflow gate.
+//!
+//! **This module controls code review workflow logic** (whether a review is required,
+//! whether an independent reviewer has been seen, whether Stop should be blocked).
+//!
+//! **This is NOT the same as `quality-gate/`** (the QG Route crate).
+//! - `review_gate_engine` = "does this code review session satisfy the review requirement?"
+//! - `quality-gate` crate = "does this task's completion pass quality checkers?"
+//!
+//! The two systems are independent and serve different purposes:
+//! - Review gate: gates the **Stop action** in code review flows (Cursor/Claude hosts)
+//! - Quality gate: gates **task completion** in the goal engine (QG Route checker chain)
+
 use crate::hook_common::{has_override, is_review_prompt};
 use serde_json::Value;
 use tracing::debug;

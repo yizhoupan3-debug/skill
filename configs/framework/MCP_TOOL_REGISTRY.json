@@ -126,14 +126,29 @@
     {
       "slug": "web_fetch",
       "display_name": "网页抓取",
-      "description": "只读 HTTP GET 抓取 URL",
+      "description": "只读 HTTP GET 联网抓取：URL 内容获取、网页读取、API 调用、DOI 可达性检查、SSRF 安全防护。当用户需要访问任何 URL 或网页内容时使用此工具",
       "layer": "builtin",
       "dispatch_domain": "domain:framework",
       "owner": "framework",
       "trigger_hints": [
         "fetch",
         "网页",
-        "HTTP"
+        "HTTP",
+        "抓取",
+        "URL",
+        "访问链接",
+        "查看页面",
+        "读取网页",
+        "联网",
+        "url内容",
+        "打开链接",
+        "网页内容",
+        "网站内容",
+        "web fetch",
+        "curl",
+        "request",
+        "访问网站",
+        "页面内容"
       ],
       "mcp_server": "router-rs-cli",
       "tool_flags": [

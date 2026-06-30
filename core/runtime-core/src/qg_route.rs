@@ -73,6 +73,7 @@ pub fn evaluate_qg_route(scene: &str, ctx: &CheckContext) -> GateVerdict {
             );
             quality_gate::types::GateVerdict {
                 passed: false,
+                scene: scene.to_string(),
                 checkers_ran: 0,
                 blockers: vec![],
                 advisories: vec![],

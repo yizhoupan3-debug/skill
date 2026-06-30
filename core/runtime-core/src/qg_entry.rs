@@ -62,6 +62,7 @@ pub fn trigger(
         // Evidence exists but none indicates success → block.
         return GateVerdict {
             passed: false,
+            scene: scene.to_string(),
             checkers_ran: 0,
             blockers: vec![Finding {
                 id: "fraud_gate_evidence_incomplete".to_string(),
@@ -122,12 +123,6 @@ pub fn trigger(
         round,
         repo_root: repo_root.to_path_buf(),
         task_id: task_id.to_string(),
-        // Evidence path consistent with Stage 1 internal resolution
-        // (task_evidence_artifacts_summary_for_task uses the same base:
-        //  repo_root / "artifacts/current" / task_id).
-        // NOTE: Keep this path in sync with core-state's
-        //       EVIDENCE_INDEX path resolution (core-state uses the same
-        //       repo_root.join("artifacts/current").join(task_id) base).
         evidence_path: Some(
             repo_root
                 .join("artifacts/current")
@@ -136,6 +131,7 @@ pub fn trigger(
         ),
         runtime_handle,
         output_data,
+        evaluated_at: framework_core::time::current_local_timestamp(),
     };
 
     let mut verdict = evaluate_qg_route(scene, &ctx);

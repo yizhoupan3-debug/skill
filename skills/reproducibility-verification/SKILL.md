@@ -27,6 +27,7 @@ trigger_hints:
 - 可复现性验证
 - 环境复现
 - 种子检查
+- reproducibility-verification
 ---
 # Reproducibility Verification
 
@@ -43,9 +44,9 @@ trigger_hints:
 
 ## Do not use
 
-- 实验设计、数据收集规划 → 使用 `$research-execution`
-- 统计结果审计 → 使用 `$statistical-verification`
-- 纯代码实现 without 实验语境 → 在当前 coding context 直接回答
+- 实验设计与执行（→ `$research-execution`）
+- 统计结果审计（→ `$statistical-verification`）
+- 环境管理（→ `$experiment-reproducibility` 为执行层，本 skill 为审计层）
 
 ## Hard constraints
 

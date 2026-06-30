@@ -43,6 +43,7 @@ trigger_hints:
 - 收敛性证明
 - 数学推导
 - 线性代数证明
+- math-derivation
 ---
 # Math Derivation
 

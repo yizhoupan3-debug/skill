@@ -782,9 +782,50 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
                         }
                     }
                     Err(e) => {
-                        return Err(FrameworkError::hook(format!(
-                            "quality gate evaluation failed: {e}"
-                        )));
+                        // P1-007 / F9: QG hook error → degrade to review_pending
+                        // (consistent with runner behavior). QG failure means
+                        // "needs review", not "system error".
+                        tracing::error!(
+                            "QG auto-trigger hook error: {e} — degrading to review_pending (fail-closed)"
+                        );
+                        let goal_path = goal_state_path_for_task(&repo_root, &task_id)?;
+                        let mut degraded_state = state;
+                        if let Some(obj) = degraded_state.as_object_mut() {
+                            obj.insert("status".to_string(), json!("review_pending"));
+                            obj.insert(
+                                "blockers".to_string(),
+                                json!([{"id": "qg_hook_error", "description": format!("{e}")}]),
+                            );
+                            obj.insert(
+                                "updated_at".to_string(),
+                                json!(framework_core::time::now_iso()),
+                            );
+                        }
+                        strip_stale_annotations(&mut degraded_state);
+                        write_atomic_json(&goal_path, &degraded_state)?;
+                        let tx = crate::task_ledger::LedgerTransaction {
+                            ts: framework_core::time::now_iso(),
+                            tx_type: "goal_iteration_blocked".to_string(),
+                            payload: degraded_state,
+                            idempotency_key: None,
+                            seq: None,
+                            schema_version: Some(1),
+                        };
+                        crate::task_ledger::append_transaction_assuming_l1_held(
+                            &repo_root, &task_id, tx,
+                        )
+                        .map_err(|e| {
+                            FrameworkError::validation(format!(
+                                "TASK_LEDGER append failed: {e}"
+                            ))
+                        })?;
+                        return Ok(json!({
+                            "ok": true,
+                            "operation": "quality_gate_blocked",
+                            "task_id": task_id,
+                            "status": "review_pending",
+                            "reason": format!("quality gate hook error: {e}"),
+                        }));
                     }
                 }
             } else {

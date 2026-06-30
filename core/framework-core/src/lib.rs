@@ -43,7 +43,6 @@ pub mod tokenizer;
 pub mod formal_toolchain;
 
 // ── re-exports from core-policy ──
-pub use dev_exempt::{EXEMPT_PATH_PREFIXES, should_dev_exempt};
 pub use env_flags::{
     env_enabled_default_false, env_enabled_default_true, router_rs_cargo_check_sync_enabled,
     router_rs_hook_legacy_subtracted_events_enabled, router_rs_hook_outbound_context_max_bytes,
@@ -58,13 +57,9 @@ pub use env_flags::{
     router_rs_subagent_model_inherit_nudge_enabled, router_rs_task_ledger_flock_enabled,
 };
 pub use hook_common::{
-    COMPLETION_DETECT_EN, COMPLETION_DETECT_ZH_PHRASES, GOAL_CHAT_VERIFY_ZH_PHRASES,
-    HOOK_SIGNAL_ASSISTANT_TAIL_CHARS, ToolOrigin, classify_tool_origin,
-    completion_claim_keywords_export, contains_completion_claim_token, has_override,
-    has_review_override, hook_assistant_tail_window, is_narrow_review_prompt, is_review_prompt,
-    is_reviewer_lane_normalized, normalize_subagent_type, normalize_tool_name,
+    HOOK_SIGNAL_ASSISTANT_TAIL_CHARS, contains_completion_claim_token, has_override,
+    hook_assistant_tail_window, is_review_prompt, normalize_tool_name,
     review_gate_hard_block_disabled, saw_reject_reason, should_inject_spawn_first_review_nudge,
-    strip_quoted_or_codeblock_or_url, tool_input_value_from_map,
 };
 pub use hook_policy::{
     HOOK_POLICY_AUTHORITY, HOOK_POLICY_SCHEMA_VERSION, HookPolicyEvaluateRequest,

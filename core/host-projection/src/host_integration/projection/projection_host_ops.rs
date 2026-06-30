@@ -668,7 +668,10 @@ pub fn remove_projection(
         "codex" => {
             let any_changed = changed || manifest_removed;
             let toml_removed = if !dry_run && any_changed {
-                remove_research_mcp_toml_entries(roots, host_id).unwrap_or(false)
+                remove_research_mcp_toml_entries(roots, host_id).unwrap_or_else(|e| {
+                    tracing::warn!("remove_research_mcp_toml_entries failed: {e}");
+                    false
+                })
             } else {
                 false
             };
@@ -709,7 +712,10 @@ pub fn remove_projection(
             let settings_removal = remove_settings_hooks(&settings_path, dry_run, host_id)?;
             // Clean up .mcp.json MCP entries (shared file, gitignored runtime artifact)
             let mcp_cleaned = if !dry_run {
-                remove_project_mcp_json_entries(roots).unwrap_or(false)
+                remove_project_mcp_json_entries(roots).unwrap_or_else(|e| {
+                    tracing::warn!("remove_project_mcp_json_entries failed: {e}");
+                    false
+                })
             } else {
                 roots.project_root.join(".mcp.json").is_file()
             };

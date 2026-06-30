@@ -25,10 +25,6 @@ impl GateChecker for StatisticalChecker {
         "statistical"
     }
 
-    fn scenes(&self) -> Vec<&'static str> {
-        vec![quality_gate::scene::RESEARCH]
-    }
-
     fn description(&self) -> &'static str {
         "statistical verification: GRIM, p-value, multiple comparisons, effect size"
     }

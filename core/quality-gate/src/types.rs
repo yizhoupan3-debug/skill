@@ -2,18 +2,21 @@
 
 use serde::{Deserialize, Serialize};
 
-/// Finding severity, following research-harness conventions.
+/// Finding severity level, ordered by gate impact.
+///
+/// Gate rule: any finding at P0, A, or B blocks the gate (verdict.passed = false).
+/// Warning and C findings are advisory only (advisories in GateVerdict).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Severity {
-    /// Blocking: unconditional gate failure.
+    /// Blocking — unconditional gate failure. Anti-fraud / data integrity violations.
     P0,
-    /// Blocking: gate failure.
+    /// Blocking — high-priority issue. Must be fixed before gate passes.
     A,
-    /// Blocking: gate failure.
+    /// Blocking — medium-priority issue. Must be fixed before gate passes.
     B,
-    /// Non-blocking advisory.
+    /// Non-blocking — advisory finding. Recorded but does not block the gate.
     Warning,
-    /// Informational only.
+    /// Informational — logged for awareness only. Never blocks the gate.
     C,
 }
 
@@ -51,6 +54,8 @@ pub struct CheckResult {
 pub struct GateVerdict {
     /// True iff all checkers passed (no P0/A/B findings).
     pub passed: bool,
+    /// The normalized scene that was evaluated.
+    pub scene: String,
     /// Number of checkers that ran.
     pub checkers_ran: usize,
     /// Findings that block the gate (severity P0/A/B).
@@ -83,4 +88,6 @@ pub struct CheckContext {
     /// Optional structured task output data (from MCP tool payload), enabling
     /// checkers to access task results without scanning repo files.
     pub output_data: Option<serde_json::Value>,
+    /// ISO 8601 timestamp of when this evaluation was initiated.
+    pub evaluated_at: String,
 }

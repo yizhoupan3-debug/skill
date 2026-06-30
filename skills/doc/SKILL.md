@@ -40,6 +40,7 @@ trigger_hints:
 - word document
 - 模板化文档生成
 - 表格或版式修复
+- doc
 ---
 # doc
 

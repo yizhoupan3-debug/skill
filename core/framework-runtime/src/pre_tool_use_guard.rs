@@ -23,6 +23,19 @@ use std::path::{Component, Path};
 
 type Result<T> = std::result::Result<T, FrameworkError>;
 
+/// Check if the pre-tool-use guard should be skipped.
+/// `ROUTER_RS_SKIP_PRE_TOOL_USE_GUARD` (default OFF; `1`|`true`|`on`|`yes` enables).
+fn router_rs_skip_pre_tool_use_guard() -> bool {
+    matches!(
+        std::env::var("ROUTER_RS_SKIP_PRE_TOOL_USE_GUARD")
+            .unwrap_or_default()
+            .trim()
+            .to_ascii_lowercase()
+            .as_str(),
+        "1" | "true" | "on" | "yes"
+    )
+}
+
 /// Schema version string for the pre-tool-use guard protocol.
 /// Use to validate response schema compatibility in callers.
 pub const PRE_TOOL_USE_GUARD_SCHEMA_VERSION: &str = "router-rs-pre-tool-use-guard-v1";
@@ -261,7 +274,7 @@ pub fn evaluate_pre_tool_use_guard(
         ));
     }
 
-    if crate::env_flags::router_rs_skip_pre_tool_use_guard() {
+    if router_rs_skip_pre_tool_use_guard() {
         return Ok(build_response(
             &host_id,
             &tool_name,

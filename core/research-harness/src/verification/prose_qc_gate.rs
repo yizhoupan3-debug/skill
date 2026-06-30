@@ -31,10 +31,6 @@ impl GateChecker for ProseQCChecker {
         "prose_qc"
     }
 
-    fn scenes(&self) -> Vec<&'static str> {
-        vec![quality_gate::scene::RESEARCH]
-    }
-
     fn description(&self) -> &'static str {
         "prose quality checks: AI slop detection, hedging, style consistency"
     }

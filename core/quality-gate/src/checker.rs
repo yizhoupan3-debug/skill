@@ -12,6 +12,10 @@ use crate::types::{CheckContext, CheckResult};
 /// in the module where its logic naturally belongs, then wraps itself
 /// with `impl GateChecker` for registration.
 ///
+/// Scene dispatch is handled by `CheckerRegistry` via `register(scene, checker)`.
+/// The checker itself does not declare its scene — the registration call determines
+/// which scene(s) the checker runs under.
+///
 /// # Sub-scene filtering (Wave 6)
 ///
 /// Override [`sub_scene_affinity`](Self::sub_scene_affinity) to limit this
@@ -20,8 +24,6 @@ use crate::types::{CheckContext, CheckResult};
 pub trait GateChecker: Send + Sync {
     /// Unique, stable identifier for this checker (e.g. "adversarial").
     fn id(&self) -> &'static str;
-    /// Scene(s) this checker applies to (match `scene::*` constants).
-    fn scenes(&self) -> Vec<&'static str>;
     /// Human-readable description of what this checker validates.
     fn description(&self) -> &'static str;
     /// Run the check against the given context.

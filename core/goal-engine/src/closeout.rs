@@ -184,6 +184,7 @@ pub fn build_aggregate(
         actions: Vec::new(),
         escalated: false,
         partial: false,
+        qg_blockers: Vec::new(),
     };
 
     let mut any_fail = false;

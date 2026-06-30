@@ -37,6 +37,7 @@ trigger_hints:
 - 置信区间怎么报
 - 贝叶斯
 - 需要多少样本量
+- statistical-analysis
 ---
 # Statistical Analysis
 

@@ -27,6 +27,7 @@ trigger_hints:
 - stats audit
 - 假设检验审查
 - 统计审查
+- statistical-verification
 ---
 # Statistical Verification
 
@@ -42,9 +43,9 @@ trigger_hints:
 
 ## Do not use
 
-- 选择统计检验方法或设计实验 → 使用 `$statistical-analysis`
-- 数学推导验证 → 使用 `$formal-verification`
-- 纯代码实现 without 统计语境 → 在当前 coding context 直接回答
+- 统计检验方法选择（→ `$statistical-analysis`）
+- 数学推导验证（→ `$formal-verification`）
+- 文献引用验证（→ `$literature-verification`）
 
 ## Hard constraints
 

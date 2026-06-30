@@ -44,6 +44,7 @@ trigger_hints:
 - 该用什么理论
 - 调研方向
 - 非手稿科研
+- research-discovery
 ---
 # Research Discovery
 

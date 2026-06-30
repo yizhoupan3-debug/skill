@@ -29,6 +29,7 @@ trigger_hints:
 - witness验证
 - 形式验证
 - 量纲检查
+- formal-verification
 ---
 # Formal Verification
 
@@ -45,10 +46,10 @@ trigger_hints:
 
 ## Do not use
 
-- 推导新公式或做数学证明 → 使用 `$math-derivation`
-- 选择统计检验方法 → 使用 `$statistical-analysis`
-- 纯符号化简无需验证 → 在当前 coding context 直接回答
-- 需要文献调研或理论背景 → 使用 `$research-discovery`
+- 文稿语言质量检查（→ `$prose-verification`）
+- 文献引用验证（→ `$literature-verification`）
+- 统计结果审计（→ `$statistical-verification`）
+- 实验设计（→ `$research-execution`）
 
 ## Hard constraints
 

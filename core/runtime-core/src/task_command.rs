@@ -85,6 +85,7 @@ pub fn dispatch_task_ledger_command(cmd: TaskLedgerCommand) -> Result<Value, Fra
                 if !transition_v.passed {
                     return Ok(serde_json::to_value(&quality_gate::types::GateVerdict {
                         passed: false,
+                        scene: quality_gate::scene::GENERAL.to_string(),
                         checkers_ran: 0,
                         blockers: vec![quality_gate::types::Finding {
                             id: "transition_validation_blocked".to_string(),

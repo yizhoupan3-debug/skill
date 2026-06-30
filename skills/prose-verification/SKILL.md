@@ -28,6 +28,7 @@ trigger_hints:
 - 文体验证
 - 术语一致性
 - 风格检查
+- prose-verification
 ---
 # Prose Verification
 
@@ -43,9 +44,10 @@ trigger_hints:
 
 ## Do not use
 
-- 论文结构、LaTeX 编译、格式检查 → 使用 `$structure-verification`
-- 文献引用可靠性验证 → 使用 `$literature-verification`
-- 统计结果审计 → 使用 `$statistical-verification`
+- 论文结构调整（→ `$structure-verification`）
+- 统计结果审计（→ `$statistical-verification`）
+- 文献引用验证（→ `$literature-verification`）
+- 数学推导验证（→ `$formal-verification`）
 
 ## Hard constraints
 

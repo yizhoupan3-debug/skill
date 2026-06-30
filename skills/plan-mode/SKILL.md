@@ -25,6 +25,7 @@ trigger_hints:
 - 纯调研
 - 调研计划
 - plan-mode
+- research-only plan
 ---
 # plan-mode
 

@@ -17,9 +17,6 @@ impl GateChecker for OverflowChecker {
     fn id(&self) -> &'static str {
         "overflow"
     }
-    fn scenes(&self) -> Vec<&'static str> {
-        vec![quality_gate::scene::SLIDES]
-    }
     fn description(&self) -> &'static str {
         "detect overflow conditions (empty output, excessive size) in slide generation tasks"
     }

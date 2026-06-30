@@ -24,10 +24,6 @@ impl GateChecker for SympyBridge {
         "sympy_bridge"
     }
 
-    fn scenes(&self) -> Vec<&'static str> {
-        vec![quality_gate::scene::RESEARCH]
-    }
-
     fn description(&self) -> &'static str {
         "SymPy symbolic verification: identity check, expression simplification"
     }

@@ -40,6 +40,8 @@ trigger_hints:
 - 设计规范
 - 设计验收
 - 风格漂移
+- DESIGN.md
+- design-md
 ---
 # design-md
 

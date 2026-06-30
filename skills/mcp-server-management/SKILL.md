@@ -32,6 +32,7 @@ trigger_hints:
 - model context protocol
 - tool server
 - 创建 MCP
+- mcp-server-management
 ---
 ## 概述
 

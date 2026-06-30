@@ -2,10 +2,22 @@
 
 use anyhow::Result;
 use std::collections::HashSet;
+use std::sync::LazyLock;
+
+/// 进程级共享 HTTP 客户端，避免每次 DOI 检查都新建 Client（TLS 握手 + 连接池初始化开销）。
+static DOI_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
+    reqwest::Client::builder()
+        .user_agent("research-harness/0.1")
+        .timeout(std::time::Duration::from_secs(10))
+        .redirect(reqwest::redirect::Policy::limited(5))
+        .build()
+        .expect("failed to build DOI client")
+});
 
 /// 验证 DOI 是否可解析（网络可达）。
 ///
 /// 通过向 https://doi.org/<doi> 发送 HEAD 请求，检查 3xx/2xx 响应。
+/// 使用进程级共享 Client 复用 TCP/TLS 连接。
 pub async fn verify_doi_reachable(doi: &str) -> Result<bool> {
     let url = if doi.starts_with("http") {
         doi.to_string()
@@ -13,13 +25,7 @@ pub async fn verify_doi_reachable(doi: &str) -> Result<bool> {
         format!("https://doi.org/{doi}")
     };
 
-    let client = reqwest::Client::builder()
-        .user_agent("research-harness/0.1")
-        .timeout(std::time::Duration::from_secs(10))
-        .redirect(reqwest::redirect::Policy::limited(5))
-        .build()?;
-
-    let resp = client.head(&url).send().await?;
+    let resp = DOI_CLIENT.head(&url).send().await?;
     Ok(resp.status().is_success() || resp.status().is_redirection())
 }
 

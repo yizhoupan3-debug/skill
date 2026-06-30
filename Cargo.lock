@@ -3151,6 +3151,7 @@ dependencies = [
  "core-state-utils",
  "framework-core",
  "framework-runtime",
+ "futures",
  "host-projection",
  "mcp-stdio-common",
  "minilp",

@@ -334,6 +334,7 @@ fn run_loop_inner(
                                 blockers.join("; ")
                             );
                             aggregate.overall_status = "fail".to_string();
+                            aggregate.qg_blockers = blockers;
                         }
                     }
                     Err(e) => {

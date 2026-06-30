@@ -40,16 +40,16 @@ pub fn validate_and_resolve_web_fetch_url(
     Ok((parsed, addrs))
 }
 
-pub fn resolve_web_fetch_redirect(base: &reqwest::Url, location: &str) -> Result<String> {
+pub fn resolve_web_fetch_redirect(
+    base: &reqwest::Url,
+    location: &str,
+) -> Result<(reqwest::Url, Vec<std::net::SocketAddr>)> {
     let next = base.join(location.trim()).map_err(|e| {
         FrameworkError::validation(format!("web_fetch invalid redirect location: {e}"))
     })?;
-    let next_str = next.to_string();
-    // Use validate_and_resolve to close DNS-rebind TOCTOU — single pass DNS resolve + IP check.
-    // This prevents the redirect target from re-resolving to a private IP between validation
-    // and the HTTP request. Callers that need DNS pinning should request a pinned variant.
-    validate_and_resolve_web_fetch_url(&next_str)?;
-    Ok(next_str)
+    // Validate + DNS resolve in one pass — returns addresses for DNS pinning.
+    let (parsed, addrs) = validate_and_resolve_web_fetch_url(next.as_str())?;
+    Ok((parsed, addrs))
 }
 
 fn validate_web_fetch_port(port: u16) -> Result<()> {

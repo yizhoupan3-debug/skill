@@ -31,6 +31,15 @@ source: runtime
 trigger_hints:
 - /gitx
 - gitx
+- 提交代码
+- 代码提交
+- commit
+- git commit
+- 代码推送
+- push
+- 合并
+- merge
+- 提交
 ---
 # gitx
 

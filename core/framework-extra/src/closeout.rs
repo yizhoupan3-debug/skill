@@ -207,3 +207,100 @@ pub fn evaluate_closeout_record_file_for_task(
         FrameworkError::validation(format!("closeout record evaluation failed: {err}"))
     })
 }
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
+    use super::*;
+    use std::fs;
+
+    #[test]
+    fn closeout_record_path_valid_task_id() {
+        let root = std::path::Path::new("/tmp/test-repo");
+        let path = closeout_record_path_for_task(root, "task-123").unwrap();
+        assert_eq!(
+            path,
+            root.join("artifacts/closeout/task-123.json")
+        );
+    }
+
+    #[test]
+    fn closeout_record_path_empty_task_id_errors() {
+        let root = std::path::Path::new("/tmp/test-repo");
+        let result = closeout_record_path_for_task(root, "");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn closeout_record_path_traversal_task_id_errors() {
+        let root = std::path::Path::new("/tmp/test-repo");
+        let result = closeout_record_path_for_task(root, "../etc/passwd");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn closeout_record_path_special_chars_errors() {
+        let root = std::path::Path::new("/tmp/test-repo");
+        let result = closeout_record_path_for_task(root, "task; rm -rf /");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn first_task_id_from_registry_no_file() {
+        let tmp = tempfile::tempdir().unwrap();
+        let result = first_task_id_from_registry(tmp.path());
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn first_task_id_from_registry_with_focus() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().join("artifacts/current");
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(
+            dir.join("task_registry.json"),
+            r#"{"focus_task_id": "focused-task", "tasks": []}"#,
+        )
+        .unwrap();
+        let result = first_task_id_from_registry(tmp.path());
+        assert_eq!(result.as_deref(), Some("focused-task"));
+    }
+
+    #[test]
+    fn first_task_id_from_registry_from_tasks_array() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().join("artifacts/current");
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(
+            dir.join("task_registry.json"),
+            r#"{"tasks": [{"task_id": "array-task"}, {"task_id": "second"}]}"#,
+        )
+        .unwrap();
+        let result = first_task_id_from_registry(tmp.path());
+        assert_eq!(result.as_deref(), Some("array-task"));
+    }
+
+    #[test]
+    fn first_task_id_from_registry_invalid_json() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().join("artifacts/current");
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("task_registry.json"), "not json").unwrap();
+        let result = first_task_id_from_registry(tmp.path());
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn closeout_stop_followup_empty_text() {
+        let tmp = tempfile::tempdir().unwrap();
+        let result = closeout_stop_followup_for_completion_text(tmp.path(), "");
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn closeout_stop_followup_no_claim_token() {
+        let tmp = tempfile::tempdir().unwrap();
+        let result = closeout_stop_followup_for_completion_text(tmp.path(), "hello world");
+        assert!(result.is_none());
+    }
+}

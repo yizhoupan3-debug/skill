@@ -29,6 +29,7 @@ trigger_hints:
 - structure verification
 - 图表引用检查
 - 结构验证
+- structure-verification
 ---
 # Structure Verification
 
@@ -45,9 +46,10 @@ trigger_hints:
 
 ## Do not use
 
-- 文稿语言质量、术语一致性 → 使用 `$prose-verification`
-- 文献引用验证 → 使用 `$literature-verification`
-- 数学推导验证 → 使用 `$formal-verification`
+- 文稿语言质量（→ `$prose-verification`）
+- 文献引用验证（→ `$literature-verification`）
+- 数学推导验证（→ `$formal-verification`）
+- 统计结果审计（→ `$statistical-verification`）
 
 ## Hard constraints
 

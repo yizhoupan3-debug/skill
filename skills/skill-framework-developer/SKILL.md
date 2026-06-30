@@ -46,6 +46,7 @@ trigger_hints:
 - 路由表
 - 路由诊断
 - 边界重叠
+- skill-framework-developer
 ---
 **Dual-Dimension Audit (Pre: Framework-Policy/Logic, Post: Sync-Health/Registry Results) → runtime verification gate**
 

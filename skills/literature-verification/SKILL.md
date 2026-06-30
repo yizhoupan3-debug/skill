@@ -27,6 +27,7 @@ trigger_hints:
 - literature check
 - 引用审查
 - 文献验证
+- literature-verification
 ---
 # Literature Verification
 
@@ -41,9 +42,10 @@ trigger_hints:
 
 ## Do not use
 
-- 文献检索、理论背景调研 → 使用 `$research-discovery`
-- 引用格式化、BibTeX 清理 → 使用 `$citation-management`
-- 论文写作、文稿审查 → 使用 `$paper-workbench`
+- 数学推导验证（→ `$formal-verification`）
+- 文稿语言质量（→ `$prose-verification`）
+- 统计结果审计（→ `$statistical-verification`）
+- 文献综述撰写（→ `$paper-workbench`）
 
 ## Hard constraints
 

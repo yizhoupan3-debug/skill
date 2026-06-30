@@ -6,7 +6,6 @@
 
 // ── fr-utils modules ──
 pub mod constants;
-pub mod env_flags;
 pub mod io_utils;
 pub mod json_io;
 pub mod json_value;

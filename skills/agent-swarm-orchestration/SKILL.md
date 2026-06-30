@@ -30,6 +30,7 @@ trigger_hints:
 - task routing system
 - 多 agent 协作
 - 多 agent 执行
+- agent-swarm-orchestration
 ---
 ## Quick Ref
 - **Purpose**: 多 agent 编排选择——local / sidecar / team 模式，判定 spawn admission 与团队执行面

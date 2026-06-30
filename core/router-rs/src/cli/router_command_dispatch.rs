@@ -1020,15 +1020,15 @@ fn dispatch_research_verify_literature(
                 .doi
                 .as_deref()
                 .ok_or_else(|| FrameworkError::validation("doi is required for check=doi"))?;
-            let client = reqwest::blocking::Client::builder()
-                .timeout(std::time::Duration::from_secs(15))
-                .build()
-                .map_err(|e| {
-                    FrameworkError::Io(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        e.to_string(),
-                    ))
-                })?;
+            // 复用进程级共享 Client，避免每次新建 TLS 连接。
+            use std::sync::OnceLock;
+            static DOI_CLIENT: OnceLock<reqwest::blocking::Client> = OnceLock::new();
+            let client = DOI_CLIENT.get_or_init(|| {
+                reqwest::blocking::Client::builder()
+                    .timeout(std::time::Duration::from_secs(15))
+                    .build()
+                    .expect("failed to build DOI client")
+            });
             let url = format!("https://doi.org/{}", doi);
             let resp = client.head(&url).send().map_err(|e| {
                 FrameworkError::Io(std::io::Error::new(
@@ -1366,17 +1366,11 @@ fn dispatch_web_fetch(args: WebFetchCommand) -> Result<(), FrameworkError> {
                 )));
             }
 
-            // SSRF check on the redirect target.
-            // resolve_web_fetch_redirect joins location against current_url, then
-            // validates through the same SSRF guard (DNS resolve + IP check).
-            let resolved = web_fetch_guard::resolve_web_fetch_redirect(&current_url, &location)?;
-
-            // Parse the resolved URL for scheme comparison and DNS pinning.
-            let resolved_url = reqwest::Url::parse(&resolved).map_err(|e| {
-                FrameworkError::validation(format!(
-                    "web_fetch invalid redirect target URL: {resolved}: {e}"
-                ))
-            })?;
+            // SSRF check on the redirect target + DNS resolve in one pass.
+            // resolve_web_fetch_redirect joins location, validates, and resolves DNS
+            // returning both the URL and resolved addresses for DNS pinning.
+            let (resolved_url, redirect_addrs) =
+                web_fetch_guard::resolve_web_fetch_redirect(&current_url, &location)?;
 
             // HTTPS → HTTP scheme downgrade check (uses Url::scheme()).
             check_scheme_downgrade(&current_url, &resolved_url)?;
@@ -1387,14 +1381,12 @@ fn dispatch_web_fetch(args: WebFetchCommand) -> Result<(), FrameworkError> {
                 .host_str()
                 .ok_or_else(|| {
                     FrameworkError::validation(format!(
-                        "web_fetch redirect target missing host: {resolved}"
+                        "web_fetch redirect target missing host: {resolved_url}"
                     ))
                 })?
                 .to_string();
 
             if redirect_host != origin_host {
-                let (_url, redirect_addrs) =
-                    web_fetch_guard::validate_and_resolve_web_fetch_url(&resolved)?;
                 client = build_pinned_client(&redirect_host, &redirect_addrs)?;
             }
 

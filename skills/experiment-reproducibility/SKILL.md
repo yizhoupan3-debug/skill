@@ -37,6 +37,7 @@ trigger_hints:
 - 实验环境管理
 - 随机种子
 - 预注册
+- experiment-reproducibility
 ---
 # Experiment Reproducibility
 

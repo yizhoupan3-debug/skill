@@ -34,6 +34,11 @@ trigger_hints:
 - production errors
 - sentry
 - triage
+- 生产错误
+- 线上异常
+- 错误监控
+- 异常排查
+- 线上问题
 ---
 # sentry
 

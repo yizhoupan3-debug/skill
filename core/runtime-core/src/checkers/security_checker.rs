@@ -20,10 +20,6 @@ impl GateChecker for SecurityChecker {
         "security"
     }
 
-    fn scenes(&self) -> Vec<&'static str> {
-        vec![quality_gate::scene::CODE_REVIEW]
-    }
-
     fn description(&self) -> &'static str {
         "review code changes for security vulnerabilities and unsafe patterns"
     }
@@ -53,7 +49,8 @@ impl GateChecker for SecurityChecker {
         }
 
         // Accumulate counts
-        let mut unsafe_blocks = 0usize;
+        let mut unsafe_unsafe_blocks = 0usize; // unsafe without SAFETY comment
+        let mut unsafe_total_blocks = 0usize;
         let mut transmute_calls = 0usize;
         let mut command_new_var = 0usize;
         let mut shell_cmds = 0usize;
@@ -64,32 +61,48 @@ impl GateChecker for SecurityChecker {
                 Err(_) => continue,
             };
 
-            unsafe_blocks += content.matches("unsafe {").count();
             transmute_calls += content.matches("std::mem::transmute").count()
                 + content.matches("mem::transmute").count();
 
-            // Command::new with a variable (not a string literal) — potential injection
-            // Heuristic: look for Command::new( followed by something that starts with a
-            // variable reference (&, name character) and not a quote.
             let lines: Vec<&str> = content.lines().collect();
-            for line in &lines {
+            for (i, line) in lines.iter().enumerate() {
                 let trimmed = line.trim();
                 // Skip comments
                 if trimmed.starts_with("//") || trimmed.starts_with('#') {
                     continue;
                 }
-                // Command::new(var) — var is not a string literal
+
+                // ── unsafe blocks: count with/without SAFETY comment ──
+                if trimmed.contains("unsafe {") || trimmed.contains("unsafe{") {
+                    unsafe_total_blocks += 1;
+                    // Check the 2 preceding lines for a // SAFETY: comment
+                    let has_safety = (1..=2).any(|offset| {
+                        i >= offset
+                            && lines[i - offset]
+                                .trim()
+                                .to_ascii_lowercase()
+                                .contains("// safety:")
+                    });
+                    if !has_safety {
+                        unsafe_unsafe_blocks += 1;
+                    }
+                }
+
+                // ── Command::new(var) — variable command injection ──
                 if trimmed.contains("Command::new(") {
-                    let after = trimmed.split("Command::new(").nth(1).unwrap_or("");
-                    // Trim whitespace before checking if argument is quoted
-                    let first_char = after.trim().chars().next();
-                    if let Some(c) = first_char {
-                        if c != '"' && c != '\'' {
-                            command_new_var += 1;
+                    if let Some(after) = trimmed.split("Command::new(").nth(1) {
+                        let arg = after.trim();
+                        // Only flag if argument is NOT a string literal (starts with " or ')
+                        let first_char = arg.chars().next();
+                        if let Some(c) = first_char {
+                            if c != '"' && c != '\'' {
+                                command_new_var += 1;
+                            }
                         }
                     }
                 }
-                // Shell command execution
+
+                // ── Shell command execution ──
                 if trimmed.contains("sh -c")
                     || trimmed.contains("bash -c")
                     || trimmed.contains("std::process::Command::new(\"sh\"")
@@ -99,19 +112,18 @@ impl GateChecker for SecurityChecker {
             }
         }
 
-        // ── unsafe blocks ──
-        if unsafe_blocks > 0 {
-            let sev = if unsafe_blocks > 10 {
-                Severity::Warning
-            } else {
-                Severity::C
-            };
+        // ── unsafe blocks without SAFETY comment ──
+        if unsafe_unsafe_blocks > 0 {
             findings.push(Finding {
-                id: "security_unsafe".to_string(),
-                severity: sev,
+                id: "security_unsafe_no_safety".to_string(),
+                severity: if unsafe_unsafe_blocks > 5 {
+                    Severity::Warning
+                } else {
+                    Severity::C
+                },
                 description: format!(
-                    "{} unsafe {{ }} blocks found — each should be justified with a SAFETY comment",
-                    unsafe_blocks,
+                    "{} unsafe {{ }} block(s) without // SAFETY: comment (out of {} total)",
+                    unsafe_unsafe_blocks, unsafe_total_blocks,
                 ),
                 location: None,
                 suggestion: Some(

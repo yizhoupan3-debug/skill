@@ -55,13 +55,9 @@ impl LockConfig {
         }
     }
 
-    /// Config for hook hosts: 5s timeout, 60s stale lock cleanup.
+    /// Alias for cli_default (hook hosts).
     pub const fn short_timeout() -> Self {
-        Self {
-            max_wait_ms: 5000,
-            retry_interval_ms: 50,
-            stale_lock_age_secs: 60,
-        }
+        Self::cli_default()
     }
 
     /// Config for hook hosts: longer timeout, inode-based stale detection.
@@ -282,14 +278,13 @@ pub fn acquire_file_lock_with_config(
         fs::create_dir_all(parent)?;
     }
 
-    const STALE_LOCK_AGE_SECS: u64 = 10; // age-gated stale recovery
     if let Ok(meta) = fs::metadata(lock_path) {
         if let Ok(modified) = meta.modified() {
             if let Ok(age) = modified.elapsed() {
-                if age > std::time::Duration::from_secs(STALE_LOCK_AGE_SECS) {
+                if age > std::time::Duration::from_secs(config.stale_lock_age_secs) {
                     // TOCTOU: non-Unix lock has inherent race; age-gated stale recovery
                     // reduces the window. On Unix, flock provides atomic lock semantics.
-                    tracing::warn!("non-unix stale lock (>={STALE_LOCK_AGE_SECS}s), removing");
+                    tracing::warn!("non-unix stale lock (>={}s), removing", config.stale_lock_age_secs);
                     let _ = fs::remove_file(lock_path);
                 }
             }
@@ -331,5 +326,36 @@ pub fn acquire_file_lock_with_config(
 impl Drop for FileStateLockGuard {
     fn drop(&mut self) {
         let _ = fs::remove_file(&self._lock_path);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
+    use super::*;
+
+    #[test]
+    fn lock_config_defaults() {
+        let cfg = LockConfig::cli_default();
+        assert_eq!(cfg.max_wait_ms, 5000);
+        assert_eq!(cfg.retry_interval_ms, 50);
+        assert_eq!(cfg.stale_lock_age_secs, 60);
+    }
+
+    #[test]
+    fn short_timeout_matches_cli_default() {
+        let a = LockConfig::cli_default();
+        let b = LockConfig::short_timeout();
+        assert_eq!(a.max_wait_ms, b.max_wait_ms);
+        assert_eq!(a.retry_interval_ms, b.retry_interval_ms);
+        assert_eq!(a.stale_lock_age_secs, b.stale_lock_age_secs);
+    }
+
+    #[test]
+    fn long_timeout_has_higher_values() {
+        let short = LockConfig::short_timeout();
+        let long = LockConfig::long_timeout();
+        assert!(long.max_wait_ms > short.max_wait_ms);
+        assert!(long.stale_lock_age_secs > short.stale_lock_age_secs);
     }
 }

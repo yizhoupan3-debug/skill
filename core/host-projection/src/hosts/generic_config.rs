@@ -39,21 +39,6 @@ impl GenericHostConfig {
             scan_tool_input: false,
         }
     }
-
-    /// Derive state_dir from host_id: ".{host_id}"
-    pub fn derived_state_dir(&self) -> String {
-        format!(".{}", self.id)
-    }
-
-    /// Derive session namespace env from host_id: "ROUTER_RS_{HOST_UPPER}_SESSION_NAMESPACE"
-    pub fn derived_namespace_env(&self) -> String {
-        format!("ROUTER_RS_{}_SESSION_NAMESPACE", self.id.to_uppercase())
-    }
-
-    /// Derive unreadable tag from host_id: "ROUTER_RS_{HOST_UPPER}_HOOK_STATE_UNREADABLE"
-    pub fn derived_unreadable_tag(&self) -> String {
-        format!("ROUTER_RS_{}_HOOK_STATE_UNREADABLE", self.id.to_uppercase())
-    }
 }
 
 impl HostHookConfig for GenericHostConfig {

@@ -160,6 +160,7 @@ mod tests {
             ],
             escalated: false,
             partial: false,
+            qg_blockers: vec![],
         }
     }
 

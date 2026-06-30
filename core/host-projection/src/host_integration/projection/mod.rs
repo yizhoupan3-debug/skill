@@ -202,7 +202,7 @@ pub fn install_native_integration(
     let home_config_path = normalize_path(home_config_path)?;
     let bootstrap_output_dir = bootstrap_output_dir.map(normalize_path).transpose()?;
 
-    let created_config = ensure_config_file(&home_config_path)?;
+    let created_config = ensure_config_file(&home_config_path, host_id)?;
     let hooks_disabled_changed = ensure_hooks_feature_disabled(&home_config_path)?;
     let tui_changed = ensure_tui_status_line(&home_config_path)?;
     let home_config_dir = home_config_path

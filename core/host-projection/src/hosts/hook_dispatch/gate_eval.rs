@@ -124,9 +124,6 @@ pub const REVIEW_GATE_FOLLOWUP_NEED_SEGMENT: &str =
 /// Stable hint suffix for REVIEW_GATE incomplete lines.
 pub const REVIEW_GATE_FOLLOWUP_HINT_SEGMENT: &str = "hint=fork_context_json_false_not_omitted";
 
-/// `merge_hook_nudge_paragraph` dedup prefix for REVIEW_GATE detail.
-pub const REVIEW_GATE_DETAIL_PARAGRAPH_PREFIX: &str = "router-rs REVIEW_GATE detail";
-
 /// Check if goal tracking is active for this state.
 /// Shared: tracks whether `goal_required` or `goal_drive_entry_active` is set.
 pub fn shared_tracks_goal(goal_required: bool, goal_drive_entry_active: bool) -> bool {
@@ -487,4 +484,123 @@ pub fn build_user_prompt_context_injection(
     }
 
     contexts
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
+    use super::*;
+
+    // ── shared_tracks_goal ──
+
+    #[test]
+    fn tracks_goal_when_goal_required() {
+        assert!(shared_tracks_goal(true, false));
+    }
+
+    #[test]
+    fn tracks_goal_when_drive_entry_active() {
+        assert!(shared_tracks_goal(false, true));
+    }
+
+    #[test]
+    fn tracks_goal_when_both() {
+        assert!(shared_tracks_goal(true, true));
+    }
+
+    #[test]
+    fn no_tracking_when_neither() {
+        assert!(!shared_tracks_goal(false, false));
+    }
+
+    // ── shared_goal_is_satisfied ──
+
+    #[test]
+    fn satisfied_when_tracking_off() {
+        assert!(shared_goal_is_satisfied(false, false, false, false, false, false, false));
+    }
+
+    #[test]
+    fn satisfied_when_review_override() {
+        assert!(shared_goal_is_satisfied(true, true, false, false, false, true, false));
+    }
+
+    #[test]
+    fn satisfied_when_delegation_override() {
+        assert!(shared_goal_is_satisfied(true, true, false, false, false, false, true));
+    }
+
+    #[test]
+    fn satisfied_when_all_signals_seen() {
+        assert!(shared_goal_is_satisfied(true, true, true, true, true, false, false));
+    }
+
+    #[test]
+    fn unsatisfied_when_missing_progress() {
+        assert!(!shared_goal_is_satisfied(true, true, true, false, true, false, false));
+    }
+
+    #[test]
+    fn unsatisfied_when_missing_verify() {
+        assert!(!shared_goal_is_satisfied(true, true, true, true, false, false, false));
+    }
+
+    #[test]
+    fn unsatisfied_when_no_signals() {
+        assert!(!shared_goal_is_satisfied(true, true, false, false, false, false, false));
+    }
+
+    // ── update_goal_gate ──
+
+    #[test]
+    fn update_goal_gate_sets_drive_entry() {
+        let mut core = framework_core::HookReviewDiskCore::default();
+        update_goal_gate(&mut core, "goal: build feature X", "", true);
+        assert!(core.goal.goal_drive_entry_active);
+    }
+
+    #[test]
+    fn update_goal_gate_skips_when_tracking_off() {
+        let mut core = framework_core::HookReviewDiskCore::default();
+        update_goal_gate(&mut core, "", "", false);
+        assert!(!core.goal.goal_drive_entry_active);
+        assert!(!core.goal.goal_contract_seen);
+    }
+
+    #[test]
+    fn update_goal_gate_detects_progress_signal() {
+        let mut core = framework_core::HookReviewDiskCore::default();
+        core.goal.goal_drive_entry_active = true;
+        update_goal_gate(&mut core, "", "完成了第一个 milestone", false);
+        assert!(core.goal.goal_progress_seen);
+    }
+
+    // ── apply_override_and_reject ──
+
+    #[test]
+    fn apply_override_sets_review_override() {
+        let mut core = framework_core::HookReviewDiskCore::default();
+        apply_override_and_reject(&mut core, "do not use subagent", "");
+        assert!(core.gate.review_override);
+        assert!(core.goal.delegation_override);
+    }
+
+    #[test]
+    fn apply_reject_resets_followup_counts() {
+        let mut core = framework_core::HookReviewDiskCore::default();
+        core.goal.followup_count = 5;
+        core.goal.review_followup_count = 3;
+        apply_override_and_reject(&mut core, "small_task", "");
+        assert!(core.gate.reject_reason_seen);
+        assert_eq!(core.goal.followup_count, 0);
+        assert_eq!(core.goal.review_followup_count, 0);
+    }
+
+    #[test]
+    fn no_override_without_keyword() {
+        let mut core = framework_core::HookReviewDiskCore::default();
+        apply_override_and_reject(&mut core, "just a normal prompt", "");
+        assert!(!core.gate.review_override);
+        assert!(!core.gate.reject_reason_seen);
+    }
 }

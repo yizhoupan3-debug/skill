@@ -60,10 +60,6 @@ impl GateChecker for Asymptotic {
         "asymptotic"
     }
 
-    fn scenes(&self) -> Vec<&'static str> {
-        vec![quality_gate::scene::RESEARCH]
-    }
-
     fn description(&self) -> &'static str {
         "asymptotic analysis: chain composition, magnitude estimation, claim verification"
     }

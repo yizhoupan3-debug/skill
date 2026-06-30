@@ -35,6 +35,8 @@ trigger_hints:
 - uv.lock
 - 不用 pip
 - 全局 python 包
+- .python-version
+- python-env-management
 ---
 # python-env-management
 

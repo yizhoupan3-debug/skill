@@ -32,10 +32,6 @@ impl GateChecker for Literature {
         "literature"
     }
 
-    fn scenes(&self) -> Vec<&'static str> {
-        vec![quality_gate::scene::RESEARCH]
-    }
-
     fn description(&self) -> &'static str {
         "literature verification checks: DOI extraction and reachability, claim coverage analysis"
     }
@@ -120,10 +116,18 @@ impl GateChecker for Literature {
             });
 
             // Verify reachability when a tokio runtime handle is available.
+            // 使用 join_all 并发验证所有 DOI，相比串行 block_on 大幅提速。
             if let Some(ref handle) = ctx.runtime_handle {
+                let results = handle.block_on(async {
+                    let futures: Vec<_> = all_dois
+                        .iter()
+                        .map(|doi| literature::verify_doi_reachable(doi))
+                        .collect();
+                    futures::future::join_all(futures).await
+                });
                 let mut unreachable = Vec::new();
-                for doi in &all_dois {
-                    match handle.block_on(literature::verify_doi_reachable(doi)) {
+                for (doi, result) in all_dois.iter().zip(results) {
+                    match result {
                         Ok(true) => {}
                         Ok(false) => {
                             unreachable.push(doi.clone());

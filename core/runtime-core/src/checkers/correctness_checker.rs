@@ -10,16 +10,26 @@ use quality_gate::types::{CheckContext, CheckResult, Finding, Severity};
 
 use crate::checkers::find_rust_files;
 
+/// Returns true if the file path looks like a test file.
+///
+/// Test files are excluded from correctness checks because unwrap/todo/unimplemented
+/// are idiomatic and expected in tests.
+fn is_test_file(path: &std::path::Path) -> bool {
+    let s = path.to_string_lossy();
+    // Match common test file patterns: tests/, test_*, *_test.rs, *_tests.rs
+    s.contains("/tests/")
+        || s.contains("/test/")
+        || s.ends_with("_test.rs")
+        || s.ends_with("_tests.rs")
+        || s.contains("/test_")
+}
+
 /// Checker that validates code correctness in review contexts.
 pub struct CorrectnessChecker;
 
 impl GateChecker for CorrectnessChecker {
     fn id(&self) -> &'static str {
         "correctness"
-    }
-
-    fn scenes(&self) -> Vec<&'static str> {
-        vec![quality_gate::scene::CODE_REVIEW]
     }
 
     fn description(&self) -> &'static str {
@@ -55,6 +65,11 @@ impl GateChecker for CorrectnessChecker {
         let mut total_unimplemented = 0usize;
 
         for file_path in &rs_files {
+            // Skip test files — unwrap/todo/unimplemented are expected in tests.
+            if is_test_file(file_path) {
+                continue;
+            }
+
             let content = match std::fs::read_to_string(file_path) {
                 Ok(c) => c,
                 Err(_) => continue,

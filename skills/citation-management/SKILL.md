@@ -33,6 +33,7 @@ trigger_hints:
 - Zotero-style cleanup
 - 文中引用与参考文献表一致性检查
 - 文献引用管理
+- citation-management
 ---
 # citation-management
 

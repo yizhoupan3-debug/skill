@@ -26,6 +26,7 @@ tokio.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]
+framework-core = { path = "../framework-core", features = ["test-sync"] }
 criterion = { workspace = true }
 ctor = "0.2"
 tempfile.workspace = true

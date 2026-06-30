@@ -62,6 +62,15 @@ trigger_hints:
 - 顶会标准改稿
 - 顶刊标准
 - 顶刊标准改稿
+- paper-workbench
+- $paper-writing
+- paper writing
+- prose ladder
+- section rewrite
+- story card
+- 润色落笔
+- 论文改稿
+- $paper-workbench
 ---
 ## Quick Ref
 - **Purpose**: 论文全流程前门——自动路由 reviewer/writer lane，一站式审稿、返修、投稿。支持 loop mode（自动多轮对抗审稿直到收敛）

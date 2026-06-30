@@ -28,6 +28,11 @@ trigger_hints:
 - 先问清楚
 - 深度采访
 - 澄清需求
+- 需求分析
+- 需求澄清
+- clarify requirements
+- 访谈
+- 深入理解
 ---
 # deepinterview
 

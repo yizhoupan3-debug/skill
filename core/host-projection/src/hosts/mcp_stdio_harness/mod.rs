@@ -290,9 +290,12 @@ pub(super) fn dispatch_tool(
         });
         return match rx.recv_timeout(Duration::from_secs(60)) {
             Ok(r) => r,
-            Err(_) => Err(FrameworkError::validation(format!(
-                "builtin tool {tool_name} timed out after 60s"
-            ))),
+            Err(_) => {
+                tracing::warn!("builtin tool {tool_name} timed out after 60s");
+                Err(FrameworkError::validation(format!(
+                    "builtin tool {tool_name} timed out after 60s"
+                )))
+            }
         };
     }
 
@@ -570,8 +573,8 @@ pub fn handle_tools_list(id: Option<Value>) -> Value {
 }
 
 /// Build tool schema entries for framework dispatch-domain and research tools
-/// from MCP_TOOL_REGISTRY.json. Includes tools with dispatch_domain starting
-/// with `domain:` or equal to `research`, excluding deprecated tools.
+/// from MCP_TOOL_REGISTRY.json. Includes tools with `mcp_server` field matching
+/// a registered MCP server, excluding deprecated tools.
 fn build_tools_from_registry() -> Vec<Value> {
     let registry_path = mcp_tool_registry::resolve_tool_registry_path().unwrap_or_else(|| {
         std::path::PathBuf::from(framework_core::constants::MCP_TOOL_REGISTRY_RELATIVE_PATH)

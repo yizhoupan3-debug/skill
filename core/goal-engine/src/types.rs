@@ -371,6 +371,10 @@ pub struct LoopCloseoutAggregate {
     pub actions: Vec<AggregateActionEntry>,
     pub escalated: bool,
     pub partial: bool,
+    /// Quality gate blockers when the gate blocked (overall_status = "fail").
+    /// Empty when the gate passed or was not evaluated.
+    #[serde(default)]
+    pub qg_blockers: Vec<String>,
 }
 
 /// A single action entry within a LoopCloseoutAggregate.

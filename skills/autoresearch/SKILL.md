@@ -46,6 +46,7 @@ trigger_hints:
 - 瓶颈研究
 - 突破方向
 - 自动突破
+- autoresearch
 ---
 # Autoresearch
 

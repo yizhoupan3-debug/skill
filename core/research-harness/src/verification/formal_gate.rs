@@ -20,10 +20,6 @@ impl GateChecker for DimensionalConsistency {
         "dimensional_consistency"
     }
 
-    fn scenes(&self) -> Vec<&'static str> {
-        vec![quality_gate::scene::RESEARCH]
-    }
-
     fn description(&self) -> &'static str {
         "dimensional consistency: SI unit matching, equation chain validation"
     }

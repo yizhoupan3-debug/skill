@@ -188,14 +188,8 @@ pub trait HostHookDispatcher: HostHookConfig {
                         .as_nanos()
                 )
             });
-            let now = framework_core::time::now_iso();
-            let _payload = serde_json::json!({
-                "operation": "agent_register",
-                "agent_id": agent_id,
-                "host_id": self.host_id(),
-                "tool_type": format!("post_tool_use:{normalized}"),
-                "now": now,
-            });
+            // TODO: agent_register payload construction — session-supervisor integration pending
+            let _ = agent_id; // suppress unused warning until integration is implemented
         }
 
         // Auto-checkpoint: if there's an active goal and the tool call succeeded,
@@ -276,7 +270,7 @@ pub trait HostHookDispatcher: HostHookConfig {
 
     /// SubagentStart: register agent in session-supervisor health registry.
     fn handle_subagent_start(&self, event: &HookEvent) -> Option<HookOutput> {
-        let agent_id = extract_subagent_id_from_payload(event.payload).unwrap_or_else(|| {
+        let _agent_id = extract_subagent_id_from_payload(event.payload).unwrap_or_else(|| {
             format!(
                 "agent-{}",
                 std::time::SystemTime::now()
@@ -285,38 +279,24 @@ pub trait HostHookDispatcher: HostHookConfig {
                     .as_nanos()
             )
         });
-        let host_id = self.host_id();
-        let now = framework_core::time::now_iso();
-        let _payload = serde_json::json!({
-            "operation": "agent_register",
-            "agent_id": agent_id,
-            "host_id": host_id,
-            "tool_type": "subagent_start_hook",
-            "now": now,
-        });
+        // TODO: agent_register payload construction — session-supervisor integration pending
         None
     }
 
     /// SubagentStop: unregister agent in session-supervisor health registry.
     fn handle_subagent_stop(&self, event: &HookEvent) -> Option<HookOutput> {
-        let Some(agent_id) = extract_subagent_id_from_payload(event.payload) else {
+        let Some(_agent_id) = extract_subagent_id_from_payload(event.payload) else {
             debug!("SubagentStop: no agent_id in payload, skipping unregister");
             return None;
         };
-        let now = framework_core::time::now_iso();
         let terminal_status = if payload_signal_contains_failure(event.payload) {
             "failed"
         } else {
             "completed"
         };
-        let error = extract_subagent_error_from_payload(event.payload);
-        let _payload = serde_json::json!({
-            "operation": "agent_unregister",
-            "agent_id": agent_id,
-            "terminal_status": terminal_status,
-            "error": error,
-            "now": now,
-        });
+        let _error = extract_subagent_error_from_payload(event.payload);
+        // TODO: agent_unregister payload construction — session-supervisor integration pending
+        let _ = terminal_status;
         None
     }
 

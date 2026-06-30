@@ -1,0 +1,2 @@
+- [Next Evolution 2026-06](next-evolution-2026-06.md) — 2026-06-30 全框架深度核查：9 个未覆盖领域 + 演化优先级 + 三轮执行记录
+- [Goalx Registration](goalx-registration-2026-06.md) — 2026-06-25 /goalx 命令注册 + set_goal 协议 + 对抗审核修复

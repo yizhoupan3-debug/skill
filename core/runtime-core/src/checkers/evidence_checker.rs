@@ -7,7 +7,6 @@
 //! core-state evidence APIs into a `GateChecker`.
 
 use quality_gate::checker::GateChecker;
-use quality_gate::scene;
 use quality_gate::types::{CheckContext, CheckResult, Finding, Severity};
 
 /// Checker that verifies task evidence exists and is valid.
@@ -16,10 +15,6 @@ pub struct EvidenceChecker;
 impl GateChecker for EvidenceChecker {
     fn id(&self) -> &'static str {
         "evidence"
-    }
-
-    fn scenes(&self) -> Vec<&'static str> {
-        vec![scene::GENERAL, scene::CODE_REVIEW, scene::RESEARCH]
     }
 
     fn description(&self) -> &'static str {

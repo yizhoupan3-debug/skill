@@ -419,14 +419,14 @@ pub fn validate_default_bootstrap(bootstrap_path: &Path, repo_root: &Path) -> Re
     Ok(bootstrap_payload_matches_contract(&payload, &repo_root))
 }
 
-pub fn ensure_config_file(config_path: &Path) -> Result<bool> {
+pub fn ensure_config_file(config_path: &Path, host_id: &str) -> Result<bool> {
     if let Some(parent) = config_path.parent() {
         fs::create_dir_all(parent)?;
     }
     if config_path.exists() {
         return Ok(false);
     }
-    let header = framework_core::runtime_registry::host_config_schema_url("codex");
+    let header = framework_core::runtime_registry::host_config_schema_url(host_id);
     let header = if header.is_empty() {
         String::new()
     } else {

@@ -42,6 +42,7 @@ trigger_hints:
 - 模型搭建
 - 研究路线设计
 - 量纲分析
+- research-execution
 ---
 # Research Execution
 

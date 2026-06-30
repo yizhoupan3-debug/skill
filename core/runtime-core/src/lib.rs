@@ -201,7 +201,7 @@ pub fn init_hooks() {
                     let base_url = reqwest::Url::parse(base)
                         .map_err(|e| format!("web_fetch redirect base URL parse error: {e}"))?;
                     web_fetch_guard::resolve_web_fetch_redirect(&base_url, location)
-                        .map(|u| u.to_string())
+                        .map(|(u, addrs)| (u.to_string(), addrs.iter().map(|a| a.to_string()).collect()))
                 },
                 resolve_web_fetch_addresses: |host, port| {
                     web_fetch_guard::resolve_web_fetch_addresses(host, port)

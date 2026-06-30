@@ -270,14 +270,14 @@ runtime_hook_proxy! { fn closeout_record_schema_version() -> &'static str = "clo
 /// Validate and resolve web fetch URL: (url) -> Result<(resolved_url, addresses)>
 type ValidateWebFetchUrlFn = fn(&str) -> Result<(String, Vec<String>)>;
 
-/// Resolve web fetch redirect: (base_url, location) -> Result<resolved_url>
-type ResolveWebFetchRedirectFn = fn(&str, &str) -> Result<String>;
+/// Resolve web fetch redirect: (base_url, location) -> Result<(resolved_url, addresses)>
+type ResolveWebFetchRedirectFn = fn(&str, &str) -> Result<(String, Vec<String>)>;
 
 /// Resolve web fetch addresses: (host, port) -> Result<addresses>
 type ResolveWebFetchAddressesFn = fn(&str, u16) -> Result<Vec<String>>;
 
 runtime_hook_proxy! { fn validate_and_resolve_web_fetch_url(url: &str) -> Result<(String, Vec<String>)> = err("VALIDATE_AND_RESOLVE_WEB_FETCH_URL not registered — runtime-core boot required"); }
-runtime_hook_proxy! { fn resolve_web_fetch_redirect(base: &str, location: &str) -> Result<String> = err("RESOLVE_WEB_FETCH_REDIRECT not registered — runtime-core boot required"); }
+runtime_hook_proxy! { fn resolve_web_fetch_redirect(base: &str, location: &str) -> Result<(String, Vec<String>)> = err("RESOLVE_WEB_FETCH_REDIRECT not registered — runtime-core boot required"); }
 runtime_hook_proxy! { fn resolve_web_fetch_addresses(host: &str, port: u16) -> Result<Vec<String>> = err("RESOLVE_WEB_FETCH_ADDRESSES not registered — runtime-core boot required"); }
 
 // ── mcp_pre_guard ──
@@ -418,7 +418,14 @@ static RUNTIME_HOOKS: Mutex<Option<RuntimeHooks>> = Mutex::new(None);
 
 /// Get the consolidated RuntimeHooks struct. Returns `None` if not yet set (bootstrap not complete).
 pub(crate) fn get_runtime_hooks() -> Option<RuntimeHooks> {
-    RUNTIME_HOOKS.lock().ok().and_then(|g| g.clone())
+    let guard = match RUNTIME_HOOKS.lock() {
+        Ok(g) => g,
+        Err(e) => {
+            tracing::error!("RUNTIME_HOOKS mutex poisoned — bootstrap thread panicked: {e}");
+            e.into_inner()
+        }
+    };
+    guard.clone()
 }
 
 /// Set the consolidated RuntimeHooks struct during bootstrap.

@@ -23,10 +23,6 @@ impl GateChecker for Inequality {
         "inequality"
     }
 
-    fn scenes(&self) -> Vec<&'static str> {
-        vec![quality_gate::scene::RESEARCH]
-    }
-
     fn description(&self) -> &'static str {
         "inequality verification: LaTeX parsing, LP feasibility, system solving"
     }

@@ -152,7 +152,9 @@ pub fn find_numeric_key(value: &Value, keys: &[&str]) -> Option<i64> {
             return Some(n);
         }
         if let Some(n) = value.get(key).and_then(Value::as_u64) {
-            return Some(n as i64);
+            if let Ok(n) = i64::try_from(n) {
+                return Some(n);
+            }
         }
         if let Some(s) = value.get(key).and_then(Value::as_str)
             && let Ok(n) = s.trim().parse::<i64>()

@@ -26,8 +26,7 @@ impl CheckerRegistry {
     /// Register a checker for a specific scene.
     ///
     /// Panics if `scene` is not a valid constant (see `scene::ALL`).
-    /// The same checker instance can be registered under multiple scenes
-    /// by calling `register` once per scene with the same (cloned) checker.
+    /// Scene dispatch is determined by the registration call, not by the checker.
     pub fn register(&mut self, scene: &'static str, checker: Box<dyn GateChecker>) {
         assert!(
             scene::is_valid(scene),
@@ -44,17 +43,58 @@ impl CheckerRegistry {
     /// passed verdict with reason "no registered checkers".
     pub fn evaluate(&self, scene_str: &str, ctx: &CheckContext) -> GateVerdict {
         let norm_scene = scene::normalize(scene_str);
+
+        // Detect scene normalization: if the input differs from the normalized
+        // result, the caller passed an invalid scene. This is a routing bug.
+        let scene_normalized = scene_str != norm_scene;
+
         let Some(checkers) = self.checkers.get(norm_scene) else {
+            let mut advisories = Vec::new();
+            if scene_normalized {
+                advisories.push(Finding {
+                    id: "scene_normalized".to_string(),
+                    severity: Severity::Warning,
+                    description: format!(
+                        "scene '{scene_str}' is not a valid scene constant — normalized to '{norm_scene}'"
+                    ),
+                    location: None,
+                    suggestion: Some(
+                        "fix the scene string at the call site to use a valid scene constant".to_string(),
+                    ),
+                });
+            }
             return GateVerdict {
                 passed: true,
+                scene: norm_scene.to_string(),
                 checkers_ran: 0,
                 blockers: vec![],
-                advisories: vec![],
+                advisories,
                 reason: Some(format!("scene '{norm_scene}' has no registered checkers")),
             };
         };
 
         let mut results: Vec<CheckResult> = Vec::with_capacity(checkers.len());
+
+        // Inject a synthetic finding if scene was normalized, so downstream
+        // consumers can detect the routing anomaly.
+        if scene_normalized {
+            results.push(CheckResult {
+                checker_id: "scene_routing".to_string(),
+                passed: true,
+                findings: vec![Finding {
+                    id: "scene_normalized".to_string(),
+                    severity: Severity::Warning,
+                    description: format!(
+                        "scene '{scene_str}' is not a valid scene constant — normalized to '{norm_scene}'"
+                    ),
+                    location: None,
+                    suggestion: Some(
+                        "fix the scene string at the call site to use a valid scene constant".to_string(),
+                    ),
+                }],
+            });
+        }
+
         for checker in checkers {
             // Sub-scene filtering (Wave 6): skip checkers with a mismatched affinity.
             if let Some(ref sub) = ctx.sub_scene
@@ -76,7 +116,7 @@ impl CheckerRegistry {
             results.push(result);
         }
 
-        aggregate(&results)
+        aggregate(&results, norm_scene)
     }
 }
 
@@ -93,14 +133,30 @@ impl Default for CheckerRegistry {
 /// Rules (§2.5):
 ///   - Any finding severity = P0   → gate fails (unconditional)
 ///   - Any finding severity = A/B → gate fails
+///   - Checker self-judged `passed=false` with no findings → synthetic B blocker
 ///   - All findings ≤ Warning (or empty) → gate passes
 ///   - Anti-fraud gate (Stage 1) is separate — not handled here.
-fn aggregate(results: &[CheckResult]) -> GateVerdict {
+fn aggregate(results: &[CheckResult], scene: &str) -> GateVerdict {
     let checkers_ran = results.len();
     let mut blockers: Vec<Finding> = Vec::new();
     let mut advisories: Vec<Finding> = Vec::new();
 
     for r in results {
+        // If checker self-judged failed but produced no findings,
+        // synthesize a generic blocker so its verdict is not silently ignored.
+        if !r.passed && r.findings.is_empty() {
+            blockers.push(Finding {
+                id: format!("{}_self_blocked", r.checker_id),
+                severity: Severity::B,
+                description: format!(
+                    "checker '{}' judged the gate as failed but produced no specific findings",
+                    r.checker_id,
+                ),
+                location: None,
+                suggestion: None,
+            });
+        }
+
         for f in &r.findings {
             match f.severity {
                 Severity::P0 | Severity::A | Severity::B => blockers.push(f.clone()),
@@ -126,6 +182,7 @@ fn aggregate(results: &[CheckResult]) -> GateVerdict {
 
     GateVerdict {
         passed,
+        scene: scene.to_string(),
         checkers_ran,
         blockers,
         advisories,
@@ -149,9 +206,6 @@ mod tests {
         fn id(&self) -> &'static str {
             self.id
         }
-        fn scenes(&self) -> Vec<&'static str> {
-            vec![scene::GENERAL]
-        }
         fn description(&self) -> &'static str {
             "dummy checker for tests"
         }
@@ -171,6 +225,7 @@ mod tests {
             evidence_path: None,
             runtime_handle: None,
             output_data: None,
+            evaluated_at: "2026-06-30T00:00:00Z".to_string(),
         }
     }
 
@@ -197,8 +252,10 @@ mod tests {
             }),
         );
         let v = registry.evaluate("nonexistent", &make_ctx("t1"));
-        // Falls back to "general" which has the gen checker
-        assert_eq!(v.checkers_ran, 1);
+        // Falls back to "general" which has the gen checker + scene_routing synthetic result
+        assert_eq!(v.checkers_ran, 2);
+        // Verify the scene normalization advisory is present
+        assert!(v.advisories.iter().any(|f| f.id == "scene_normalized"));
     }
 
     #[test]
@@ -306,5 +363,26 @@ mod tests {
         assert!(!v.passed);
         assert_eq!(v.blockers.len(), 1);
         assert_eq!(v.advisories.len(), 1);
+    }
+
+    #[test]
+    fn test_self_blocked_without_findings() {
+        let mut registry = CheckerRegistry::new();
+        registry.register(
+            scene::GENERAL,
+            Box::new(DummyChecker {
+                id: "self-block",
+                result: CheckResult {
+                    checker_id: "self-block".to_string(),
+                    passed: false,
+                    findings: vec![], // no findings, but passed=false
+                },
+            }),
+        );
+        let v = registry.evaluate(scene::GENERAL, &make_ctx("t1"));
+        assert!(!v.passed);
+        assert_eq!(v.blockers.len(), 1);
+        assert_eq!(v.blockers[0].id, "self-block_self_blocked");
+        assert_eq!(v.blockers[0].severity, Severity::B);
     }
 }

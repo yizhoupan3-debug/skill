@@ -22,10 +22,6 @@ impl GateChecker for Structure {
         "structure"
     }
 
-    fn scenes(&self) -> Vec<&'static str> {
-        vec![quality_gate::scene::RESEARCH]
-    }
-
     fn sub_scene_affinity(&self) -> Option<&'static str> {
         Some("structure")
     }

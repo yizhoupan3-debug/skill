@@ -40,6 +40,8 @@ trigger_hints:
 - 图表导出
 - 图表截图
 - 看图
+- visual-review
+- /visual-review
 ---
 # Visual Review
 

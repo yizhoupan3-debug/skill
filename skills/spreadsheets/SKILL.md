@@ -16,6 +16,12 @@ trigger_hints:
   - sheet review
   - xls
   - tsv
+  - spreadsheets
+  - /spreadsheets
+  - 表格
+  - 电子表格
+  - excel 表格
+  - 工作簿
 metadata:
   version: "2.0.0"
   platforms: [supported]
