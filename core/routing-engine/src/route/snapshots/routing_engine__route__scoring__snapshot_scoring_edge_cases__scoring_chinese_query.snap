@@ -19,7 +19,7 @@ expression: "scores.into_iter().take(3).collect::<Vec<_>>()"
     ]
   ],
   [
-    "deep-research",
+    "deep-search",
     3.2132942670437514,
     [
       "ngram_similarity:0.2",

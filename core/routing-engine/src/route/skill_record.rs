@@ -40,7 +40,7 @@ pub fn skill_record_from_raw(raw: RawSkillRecord) -> SkillRecord {
         .into_iter()
         .collect::<HashSet<_>>();
     let keyword_tokens = tokenize_query(&format!(
-        "{summary} {short_description} {when_to_use} {} {}",
+        "{summary} {short_description} {when_to_use} {do_not_use} {} {}",
         trigger_hints.join(" "),
         tags.join(" ")
     ))

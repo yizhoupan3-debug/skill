@@ -449,10 +449,10 @@
       "action": {
         "type": "boost",
         "delta": 60.0,
-        "reason": "Research-execution boost applied: experiment ablation design wording detected."
+        "reason": "Research boost applied: experiment ablation design wording detected."
       },
       "record": {
-        "slug": "research-execution"
+        "slug": "research"
       }
     },
     {
@@ -775,10 +775,10 @@
       "action": {
         "type": "boost",
         "delta": 40.0,
-        "reason": "Research-discovery barrier boost: hard barrier wording. [signal-derived: ROUTING_SIGNAL_MARKERS.json#barrier_escalation_signals]"
+        "reason": "Research front-door barrier boost: hard barrier wording. [signal-derived: ROUTING_SIGNAL_MARKERS.json#barrier_escalation_signals]"
       },
       "record": {
-        "slug": "research-discovery"
+        "slug": "research"
       }
     },
     {
@@ -788,10 +788,10 @@
       "action": {
         "type": "boost",
         "delta": 35.0,
-        "reason": "Research-discovery boost: general research wording (broad front-door entry)."
+        "reason": "Research front-door boost: general research wording (broad front-door entry)."
       },
       "record": {
-        "slug": "research-discovery"
+        "slug": "research"
       }
     },
     {
@@ -801,10 +801,10 @@
       "action": {
         "type": "boost",
         "delta": 40.0,
-        "reason": "Research-discovery barrier boost: stuck wording. [signal-derived: ROUTING_SIGNAL_MARKERS.json#barrier_escalation_signals]"
+        "reason": "Research front-door barrier boost: stuck wording. [signal-derived: ROUTING_SIGNAL_MARKERS.json#barrier_escalation_signals]"
       },
       "record": {
-        "slug": "research-discovery"
+        "slug": "research"
       }
     },
     {
@@ -814,10 +814,10 @@
       "action": {
         "type": "boost",
         "delta": 50.0,
-        "reason": "Research-discovery barrier boost: cannot-break-through wording. [signal-derived: ROUTING_SIGNAL_MARKERS.json#barrier_escalation_signals]"
+        "reason": "Research front-door barrier boost: cannot-break-through wording. [signal-derived: ROUTING_SIGNAL_MARKERS.json#barrier_escalation_signals]"
       },
       "record": {
-        "slug": "research-discovery"
+        "slug": "research"
       }
     },
     {
@@ -827,10 +827,10 @@
       "action": {
         "type": "boost",
         "delta": 30.0,
-        "reason": "Research-discovery literature boost: literature survey wording detected."
+        "reason": "Research front-door literature boost: literature survey wording detected."
       },
       "record": {
-        "slug": "research-discovery"
+        "slug": "research"
       }
     },
     {
@@ -840,10 +840,10 @@
       "action": {
         "type": "boost",
         "delta": 30.0,
-        "reason": "Research-discovery literature boost: paper search wording detected."
+        "reason": "Research front-door literature boost: paper search wording detected."
       },
       "record": {
-        "slug": "research-discovery"
+        "slug": "research"
       }
     },
     {
@@ -853,10 +853,23 @@
       "action": {
         "type": "boost",
         "delta": 25.0,
-        "reason": "Research-discovery scope boost: research direction wording detected."
+        "reason": "Research front-door scope boost: research direction wording detected."
       },
       "record": {
-        "slug": "research-discovery"
+        "slug": "research"
+      }
+    },
+    {
+      "when": {
+        "query_contains": "调研"
+      },
+      "action": {
+        "type": "boost",
+        "delta": 25.0,
+        "reason": "Research front-door boost: general investigation wording (调研) detected for research entry."
+      },
+      "record": {
+        "slug": "research"
       }
     },
     {
@@ -866,10 +879,10 @@
       "action": {
         "type": "boost",
         "delta": 50.0,
-        "reason": "Autoresearch boost: auto-research wording detected."
+        "reason": "Research-workspace boost: auto-research wording detected."
       },
       "record": {
-        "slug": "autoresearch"
+        "slug": "research-workspace"
       }
     },
     {
@@ -879,10 +892,10 @@
       "action": {
         "type": "boost",
         "delta": 50.0,
-        "reason": "Autoresearch boost: research workspace wording detected."
+        "reason": "Research-workspace boost: research workspace wording detected."
       },
       "record": {
-        "slug": "autoresearch"
+        "slug": "research-workspace"
       }
     },
     {
@@ -892,10 +905,10 @@
       "action": {
         "type": "boost",
         "delta": 50.0,
-        "reason": "Autoresearch boost: barrier research wording. [signal-derived: ROUTING_SIGNAL_MARKERS.json#barrier_escalation_signals]"
+        "reason": "Research-workspace boost: barrier research wording. [signal-derived: ROUTING_SIGNAL_MARKERS.json#barrier_escalation_signals]"
       },
       "record": {
-        "slug": "autoresearch"
+        "slug": "research-workspace"
       }
     },
     {
@@ -905,10 +918,10 @@
       "action": {
         "type": "boost",
         "delta": 50.0,
-        "reason": "Research-mode boost: research workspace directory or research-log wording detected."
+        "reason": "Research-workspace mode boost: research workspace directory or research-log wording detected."
       },
       "record": {
-        "slug": "autoresearch"
+        "slug": "research-workspace"
       }
     },
     {
@@ -918,10 +931,10 @@
       "action": {
         "type": "boost",
         "delta": 15,
-        "reason": "Research-mode boost: research context detected (light discovery door, avoid double-boost overlap with query_contains 科研)."
+        "reason": "Research front-door mode boost: research context detected (light front-door, avoid double-boost overlap with query_contains 科研)."
       },
       "record": {
-        "slug": "research-discovery"
+        "slug": "research"
       }
     },
     {
