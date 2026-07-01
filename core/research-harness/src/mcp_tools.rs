@@ -38,7 +38,18 @@ fn math_tool_dispatch(name: &str, arguments: &Value) -> Result<String, Framework
         "math_proof_dag_status" => tool_math_proof_dag_status(arguments),
         "math_sympy_verify" => tool_math_sympy_verify(arguments),
         "math_sympy_simplify" => tool_math_sympy_simplify(arguments),
+        "math_sympy_trig_simplify" => tool_math_sympy_trig_simplify(arguments),
+        "math_sympy_subs" => tool_math_sympy_subs(arguments),
+        "math_sympy_limit" => tool_math_sympy_limit(arguments),
+        "math_sympy_lambdify" => tool_math_sympy_lambdify(arguments),
         "math_prove_inequality" => tool_math_prove_inequality(arguments),
+        "math_z3_prove" => tool_math_z3_prove(arguments),
+        "math_z3_solver_push" => tool_math_z3_solver_push(arguments),
+        "math_z3_solver_pop" => tool_math_z3_solver_pop(arguments),
+        "math_z3_solver_add" => tool_math_z3_solver_add(arguments),
+        "math_z3_solver_check" => tool_math_z3_solver_check(arguments),
+        "math_z3_solver_reset" => tool_math_z3_solver_reset(arguments),
+        "math_z3_solver_batch" => tool_math_z3_solver_batch(arguments),
         "math_asymptotic_chain" => tool_math_asymptotic_chain(arguments),
         "math_backend_available" => tool_math_backend_available(arguments),
         "math_lean_verify" => tool_math_lean_verify(arguments),
@@ -457,12 +468,6 @@ fn tool_math_sympy_verify(arguments: &Value) -> Result<String, FrameworkError> {
         .ok_or(FrameworkError::validation(
             "math_sympy_verify requires 'rhs' (string)",
         ))?;
-    // assumptions are accepted for backward compat but ignored (pure Rust)
-    let _assumptions: Vec<&str> = arguments
-        .get("assumptions")
-        .and_then(Value::as_array)
-        .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect())
-        .unwrap_or_default();
     let vr = crate::verification::sympy_bridge::verify_identity(lhs, rhs);
     serde_json::to_string_pretty(&json!({
         "check_name": vr.check_name, "status": format!("{:?}", vr.status),
@@ -479,10 +484,119 @@ fn tool_math_sympy_simplify(arguments: &Value) -> Result<String, FrameworkError>
             .ok_or(FrameworkError::validation(
                 "math_sympy_simplify requires 'expression' (string)",
             ))?;
-    let vr = crate::verification::sympy_bridge::simplify_expression(expr);
+    let assumptions: Vec<String> = arguments
+        .get("assumptions")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect()
+        })
+        .unwrap_or_default();
+    let vr =
+        crate::verification::sympy_bridge::simplify_expression_with_assumptions(expr, &assumptions);
+    serde_json::to_string_pretty(&json!({
+        "check_name": vr.check_name, "status": format!("{:?}", vr.status),
+        "details": vr.details, "expression": expr, "assumptions": assumptions,
+    }))
+    .map_err(FrameworkError::Json)
+}
+
+fn tool_math_sympy_trig_simplify(arguments: &Value) -> Result<String, FrameworkError> {
+    let expr =
+        arguments
+            .get("expression")
+            .and_then(Value::as_str)
+            .ok_or(FrameworkError::validation(
+                "math_sympy_trig_simplify requires 'expression' (string)",
+            ))?;
+    let vr = crate::verification::sympy_bridge::trig_simplify_expression(expr);
     serde_json::to_string_pretty(&json!({
         "check_name": vr.check_name, "status": format!("{:?}", vr.status),
         "details": vr.details, "expression": expr,
+    }))
+    .map_err(FrameworkError::Json)
+}
+
+fn tool_math_sympy_subs(arguments: &Value) -> Result<String, FrameworkError> {
+    let expr = arguments
+        .get("expression")
+        .and_then(Value::as_str)
+        .ok_or(FrameworkError::validation(
+            "math_sympy_subs requires 'expression' (string)",
+        ))?;
+    let substitutions = arguments
+        .get("substitutions")
+        .ok_or(FrameworkError::validation(
+            "math_sympy_subs requires 'substitutions' (object)",
+        ))?;
+    let vr = crate::verification::sympy_bridge::subs_expression(expr, substitutions);
+    serde_json::to_string_pretty(&json!({
+        "check_name": vr.check_name, "status": format!("{:?}", vr.status),
+        "details": vr.details, "expression": expr, "substitutions": substitutions,
+    }))
+    .map_err(FrameworkError::Json)
+}
+
+fn tool_math_sympy_limit(arguments: &Value) -> Result<String, FrameworkError> {
+    let expr = arguments
+        .get("expression")
+        .and_then(Value::as_str)
+        .ok_or(FrameworkError::validation(
+            "math_sympy_limit requires 'expression' (string)",
+        ))?;
+    let variable = arguments
+        .get("variable")
+        .and_then(Value::as_str)
+        .unwrap_or("x");
+    let point = arguments
+        .get("point")
+        .and_then(Value::as_str)
+        .ok_or(FrameworkError::validation(
+            "math_sympy_limit requires 'point' (string) — e.g. '0', 'oo', '-oo'",
+        ))?;
+    let direction = arguments.get("direction").and_then(Value::as_str);
+    let vr = crate::verification::sympy_bridge::limit_expression(expr, variable, point, direction);
+    serde_json::to_string_pretty(&json!({
+        "check_name": vr.check_name, "status": format!("{:?}", vr.status),
+        "details": vr.details, "expression": expr,
+        "variable": variable, "point": point, "direction": direction,
+    }))
+    .map_err(FrameworkError::Json)
+}
+
+fn tool_math_sympy_lambdify(arguments: &Value) -> Result<String, FrameworkError> {
+    let expr = arguments
+        .get("expression")
+        .and_then(Value::as_str)
+        .ok_or(FrameworkError::validation(
+            "math_sympy_lambdify requires 'expression' (string)",
+        ))?;
+    let variables: Vec<String> = arguments
+        .get("variables")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect()
+        })
+        .unwrap_or_else(|| vec!["x".to_string()]);
+    let values: Option<Vec<f64>> = arguments.get("values").and_then(|v| {
+        v.as_array().map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_f64())
+                .collect()
+        })
+    });
+    let vr = crate::verification::sympy_bridge::lambdify_expression(
+        expr,
+        &variables,
+        values.as_deref(),
+    );
+    serde_json::to_string_pretty(&json!({
+        "check_name": vr.check_name, "status": format!("{:?}", vr.status),
+        "details": vr.details, "expression": expr,
+        "variables": variables, "values": values,
     }))
     .map_err(FrameworkError::Json)
 }
@@ -805,6 +919,139 @@ fn tool_math_prove_inequality(arguments: &Value) -> Result<String, FrameworkErro
     .map_err(FrameworkError::Json)
 }
 
+// ── Z3 prove tool ──
+
+fn tool_math_z3_prove(arguments: &Value) -> Result<String, FrameworkError> {
+    let expr = arguments
+        .get("expression")
+        .and_then(Value::as_str)
+        .ok_or(FrameworkError::validation(
+            "math_z3_prove requires 'expression' (string)",
+        ))?;
+    let vr = crate::verification::z3_bridge::prove_formula(expr);
+    serde_json::to_string_pretty(&json!({
+        "check_name": vr.check_name, "status": format!("{:?}", vr.status),
+        "details": vr.details, "expression": expr,
+    }))
+    .map_err(FrameworkError::Json)
+}
+
+// ── Z3 solver push/pop tools ──
+
+fn tool_math_z3_solver_push(arguments: &Value) -> Result<String, FrameworkError> {
+    let n = arguments
+        .get("n")
+        .and_then(Value::as_u64)
+        .unwrap_or(1) as usize;
+    let vr = crate::verification::z3_bridge::solver_push(n);
+    serde_json::to_string_pretty(&json!({
+        "check_name": vr.check_name, "status": format!("{:?}", vr.status),
+        "details": vr.details, "n": n,
+    }))
+    .map_err(FrameworkError::Json)
+}
+
+fn tool_math_z3_solver_pop(arguments: &Value) -> Result<String, FrameworkError> {
+    let n = arguments
+        .get("n")
+        .and_then(Value::as_u64)
+        .unwrap_or(1) as usize;
+    let vr = crate::verification::z3_bridge::solver_pop(n);
+    serde_json::to_string_pretty(&json!({
+        "check_name": vr.check_name, "status": format!("{:?}", vr.status),
+        "details": vr.details, "n": n,
+    }))
+    .map_err(FrameworkError::Json)
+}
+
+fn tool_math_z3_solver_add(arguments: &Value) -> Result<String, FrameworkError> {
+    let expr = arguments
+        .get("expression")
+        .and_then(Value::as_str)
+        .ok_or(FrameworkError::validation(
+            "math_z3_solver_add requires 'expression' (string)",
+        ))?;
+    let vr = crate::verification::z3_bridge::solver_add(expr);
+    serde_json::to_string_pretty(&json!({
+        "check_name": vr.check_name, "status": format!("{:?}", vr.status),
+        "details": vr.details, "expression": expr,
+    }))
+    .map_err(FrameworkError::Json)
+}
+
+fn tool_math_z3_solver_check(arguments: &Value) -> Result<String, FrameworkError> {
+    let timeout_ms = arguments.get("timeout_ms").and_then(Value::as_u64);
+    let vr = crate::verification::z3_bridge::solver_check(timeout_ms);
+    serde_json::to_string_pretty(&json!({
+        "check_name": vr.check_name, "status": format!("{:?}", vr.status),
+        "details": vr.details, "timeout_ms": timeout_ms,
+    }))
+    .map_err(FrameworkError::Json)
+}
+
+fn tool_math_z3_solver_reset(_arguments: &Value) -> Result<String, FrameworkError> {
+    let vr = crate::verification::z3_bridge::solver_reset();
+    serde_json::to_string_pretty(&json!({
+        "check_name": vr.check_name, "status": format!("{:?}", vr.status),
+        "details": vr.details,
+    }))
+    .map_err(FrameworkError::Json)
+}
+
+fn tool_math_z3_solver_batch(arguments: &Value) -> Result<String, FrameworkError> {
+    use crate::verification::z3_bridge::SolverBatchStep;
+
+    let steps_val = arguments
+        .get("steps")
+        .and_then(Value::as_array)
+        .ok_or(FrameworkError::validation(
+            "math_z3_solver_batch requires 'steps' array",
+        ))?;
+
+    let steps: Vec<SolverBatchStep> = steps_val
+        .iter()
+        .map(|v| {
+            let action = v
+                .get("action")
+                .and_then(Value::as_str)
+                .ok_or(FrameworkError::validation(
+                    "each batch step requires 'action' (string: push/pop/add/check/reset)",
+                ))?;
+            // Validate action
+            match action {
+                "push" | "pop" | "add" | "check" | "reset" => {}
+                _ => {
+                    return Err(FrameworkError::validation(format!(
+                        "unknown batch action: '{action}', expected push/pop/add/check/reset"
+                    )));
+                }
+            }
+            Ok(SolverBatchStep {
+                action: action.to_string(),
+                n: v.get("n").and_then(Value::as_u64).map(|x| x as usize),
+                expression: v.get("expression").and_then(Value::as_str).map(String::from),
+                timeout_ms: v.get("timeout_ms").and_then(Value::as_u64),
+            })
+        })
+        .collect::<Result<Vec<_>, FrameworkError>>()?;
+
+    match crate::verification::z3_bridge::solver_batch(&steps) {
+        Ok(result) => serde_json::to_string_pretty(&json!({
+            "check_name": "math_z3_solver_batch",
+            "status": "Pass",
+            "steps": result.get("steps"),
+            "num_steps": result.get("num_steps"),
+        }))
+        .map_err(FrameworkError::Json),
+        Err(e) => serde_json::to_string_pretty(&json!({
+            "check_name": "math_z3_solver_batch",
+            "status": "Fail",
+            "details": e,
+        }))
+        .map_err(FrameworkError::Json),
+    }
+}
+
 // ── Asymptotic chain tool ──
 
 fn tool_math_asymptotic_chain(arguments: &Value) -> Result<String, FrameworkError> {
@@ -823,9 +1070,7 @@ fn tool_math_asymptotic_chain(arguments: &Value) -> Result<String, FrameworkErro
     let regime = arguments
         .get("regime")
         .and_then(Value::as_str)
-        .ok_or(FrameworkError::validation(
-            "math_asymptotic_chain requires 'regime' (string)",
-        ))?;
+        .unwrap_or("oo");
 
     let steps: Vec<crate::verification::asymptotic::AsymptoticStep> = steps_val
         .iter()
@@ -870,14 +1115,47 @@ fn tool_math_asymptotic_chain(arguments: &Value) -> Result<String, FrameworkErro
 // ── Backend availability tool ──
 
 fn tool_math_backend_available(arguments: &Value) -> Result<String, FrameworkError> {
-    let backend = arguments.get("backend").and_then(Value::as_str);
-    let status = crate::verification::lean_bridge::check_lean_status();
-    let available = status.is_available();
-    serde_json::to_string_pretty(&json!({
-        "backend": backend.unwrap_or("lean"),
-        "available": available,
-        "status": format!("{:?}", status),
-    }))
+    let backend = arguments.get("backend").and_then(Value::as_str).unwrap_or("all");
+
+    match backend {
+        "z3" => {
+            let available = crate::verification::lean_bridge::check_z3_available();
+            let version = if available { "via Python z3-solver" } else { "" };
+            serde_json::to_string_pretty(&json!({
+                "backend": "z3", "available": available,
+                "version": version,
+                "description": "Z3 SMT solver (Microsoft Research)",
+                "install_hint": "uv pip install z3-solver",
+            }))
+        }
+        "sympy" => {
+            let available = crate::verification::lean_bridge::check_sympy_available();
+            let version = if available { "via Python sympy" } else { "" };
+            serde_json::to_string_pretty(&json!({
+                "backend": "sympy", "available": available,
+                "version": version,
+                "description": "SymPy CAS (symbolic mathematics)",
+                "install_hint": "uv pip install sympy",
+            }))
+        }
+        "lean" => {
+            let status = crate::verification::lean_bridge::check_lean_status();
+            let available = status.is_available();
+            serde_json::to_string_pretty(&json!({
+                "backend": "lean", "available": available,
+                "status": format!("{:?}", status),
+                "description": "Lean theorem prover",
+            }))
+        }
+        _ => {
+            // "all" or any other value: return comprehensive report
+            let report = crate::verification::lean_bridge::check_all_backends();
+            serde_json::to_string_pretty(&json!({
+                "backends": report,
+                "summary": crate::verification::lean_bridge::format_all_backends_status(),
+            }))
+        }
+    }
     .map_err(FrameworkError::Json)
 }
 
@@ -1152,7 +1430,7 @@ fn tool_verification_formal(arguments: &Value) -> Result<String, FrameworkError>
         .get("check")
         .and_then(Value::as_str)
         .ok_or(FrameworkError::validation(
-            "formal verification requires 'check' (dimensional)",
+            "formal verification requires 'check' (dimensional|witness|step_dependency)",
         ))?;
     match check {
         "dimensional" => {
@@ -1171,8 +1449,62 @@ fn tool_verification_formal(arguments: &Value) -> Result<String, FrameworkError>
             }))
             .map_err(FrameworkError::Json)
         }
+        "witness" => {
+            let expression = arguments
+                .get("expression")
+                .and_then(Value::as_str)
+                .ok_or(FrameworkError::validation(
+                    "witness check requires 'expression' (string, e.g. 'x + y = 2*x')",
+                ))?;
+            let witnesses_val = arguments
+                .get("witnesses")
+                .and_then(Value::as_array)
+                .ok_or(FrameworkError::validation(
+                    "witness check requires 'witnesses' array of objects, e.g. [{\"x\": 1, \"y\": 2}, {\"x\": 3, \"y\": 5}]",
+                ))?;
+            let witnesses: Vec<HashMap<String, f64>> = witnesses_val
+                .iter()
+                .map(|w| {
+                    let mut map = HashMap::new();
+                    if let Some(obj) = w.as_object() {
+                        for (k, v) in obj {
+                            if let Some(n) = v.as_f64() {
+                                map.insert(k.clone(), n);
+                            }
+                        }
+                    }
+                    map
+                })
+                .collect();
+            let result =
+                crate::verification::formal::check_witness_consistency(expression, &witnesses)
+                    .map_err(|e| {
+                        FrameworkError::validation(format!("witness check failed: {e}"))
+                    })?;
+            serde_json::to_string_pretty(&json!({
+                "check": "witness",
+                "expression": expression,
+                "result": result,
+            }))
+            .map_err(FrameworkError::Json)
+        }
+        "step_dependency" => {
+            let steps_val = arguments
+                .get("steps")
+                .and_then(Value::as_array)
+                .ok_or(FrameworkError::validation(
+                    "step_dependency check requires 'steps' array, \
+                     e.g. [{\"id\": \"step-1\", \"depends_on\": [\"step-0\"]}]",
+                ))?;
+            let result = crate::verification::formal::check_step_dependency(steps_val);
+            serde_json::to_string_pretty(&json!({
+                "check": "step_dependency",
+                "result": result,
+            }))
+            .map_err(FrameworkError::Json)
+        }
         _ => Err(FrameworkError::validation(format!(
-            "unknown formal check: {check}"
+            "unknown formal check: {check} — expected dimensional|witness|step_dependency"
         ))),
     }
 }
@@ -1745,5 +2077,219 @@ mod tests {
             err.contains("unknown") || err.contains("requires"),
             "wrong routing: {err}"
         );
+    }
+
+    // ── Math happy-path integration tests ──
+
+    #[test]
+    fn test_math_asymptotic_estimate_valid() {
+        let result = handle_research_tool(
+            "math_asymptotic_estimate",
+            &json!({"expression": "n^2+n", "variable": "n", "regime": "oo"}),
+        );
+        assert!(result.is_ok(), "expected ok, got: {:?}", result.err());
+        let parsed: Value = serde_json::from_str(&result.unwrap()).unwrap();
+        assert_eq!(
+            parsed.get("check_name").and_then(Value::as_str),
+            Some("math_asymptotic_estimate")
+        );
+        assert!(parsed.get("status").and_then(Value::as_str).is_some());
+        assert!(parsed.get("details").and_then(Value::as_str).is_some());
+        let status = parsed.get("status").and_then(Value::as_str).unwrap();
+        assert!(
+            status == "Pass" || status == "Warn",
+            "expected Pass or Warn, got {status}"
+        );
+        assert_eq!(
+            parsed.get("expression").and_then(Value::as_str),
+            Some("n^2+n")
+        );
+    }
+
+    #[test]
+    fn test_math_sympy_verify_valid() {
+        let result = handle_research_tool(
+            "math_sympy_verify",
+            &json!({"lhs": "x", "rhs": "x"}),
+        );
+        assert!(result.is_ok(), "expected ok, got: {:?}", result.err());
+        let parsed: Value = serde_json::from_str(&result.unwrap()).unwrap();
+        assert_eq!(
+            parsed.get("check_name").and_then(Value::as_str),
+            Some("math_sympy_verify")
+        );
+        assert!(parsed.get("status").and_then(Value::as_str).is_some());
+        assert!(parsed.get("details").and_then(Value::as_str).is_some());
+        assert_eq!(parsed.get("lhs").and_then(Value::as_str), Some("x"));
+        assert_eq!(parsed.get("rhs").and_then(Value::as_str), Some("x"));
+    }
+
+    #[test]
+    fn test_math_proof_dag_init_decompose_verify_full_lifecycle() {
+        // Step 1: Init — create a new proof DAG
+        let result = handle_research_tool(
+            "math_proof_dag_init",
+            &json!({"goal": "Prove x > 0", "name": "happy-test"}),
+        );
+        assert!(result.is_ok(), "init failed: {:?}", result.err());
+        let parsed: Value = serde_json::from_str(&result.unwrap()).unwrap();
+        // init returns serialized wrapper: {schema_version, blueprint: {name, goal, ...}}
+        assert_eq!(
+            parsed.get("schema_version").and_then(Value::as_str),
+            Some("proof-dag-v1")
+        );
+        assert_eq!(
+            parsed.pointer("/blueprint/name").and_then(Value::as_str),
+            Some("happy-test")
+        );
+        assert_eq!(
+            parsed.pointer("/blueprint/goal").and_then(Value::as_str),
+            Some("Prove x > 0")
+        );
+
+        // Step 2: Decompose — add an OrNode child to the root
+        let result = handle_research_tool(
+            "math_proof_dag_decompose",
+            &json!({
+                "parent_id": "root",
+                "name": "happy-test",
+                "and": false,
+                "children": [
+                    {"OrNode": {"id": "approach-a", "label": "Via inequality engine", "children": []}},
+                ],
+            }),
+        );
+        assert!(result.is_ok(), "decompose failed: {:?}", result.err());
+        let parsed: Value = serde_json::from_str(&result.unwrap()).unwrap();
+        assert_eq!(
+            parsed.pointer("/blueprint/name").and_then(Value::as_str),
+            Some("happy-test")
+        );
+        assert_eq!(
+            parsed.pointer("/blueprint/goal").and_then(Value::as_str),
+            Some("Prove x > 0")
+        );
+
+        // Step 3: Decompose again — add a Leaf node under approach-a
+        let result = handle_research_tool(
+            "math_proof_dag_decompose",
+            &json!({
+                "parent_id": "approach-a",
+                "name": "happy-test",
+                "and": true,
+                "children": [
+                    {"Leaf": {"id": "leaf-x", "claim": "x > 0", "backend": "InequalityEngine"}},
+                ],
+            }),
+        );
+        assert!(result.is_ok(), "second decompose failed: {:?}", result.err());
+
+        // Step 4: Verify — run verification traversal
+        let result = handle_research_tool(
+            "math_proof_dag_verify",
+            &json!({"name": "happy-test"}),
+        );
+        assert!(result.is_ok(), "verify failed: {:?}", result.err());
+        let parsed: Value = serde_json::from_str(&result.unwrap()).unwrap();
+        // verify either returns serialized blueprint or manual_prose_warning wrapper
+        if parsed.get("schema_version").is_some() {
+            assert_eq!(
+                parsed.pointer("/blueprint/name").and_then(Value::as_str),
+                Some("happy-test")
+            );
+            assert!(parsed.pointer("/blueprint/round").and_then(Value::as_u64).unwrap_or(0) >= 1);
+        } else if parsed.get("manual_prose_warning").is_some() {
+            let result = parsed.get("result").unwrap();
+            assert_eq!(
+                result.get("name").and_then(Value::as_str),
+                Some("happy-test")
+            );
+        } else {
+            panic!("unexpected verify output format: {parsed}");
+        }
+
+        // Step 5: Status — get summary
+        let result = handle_research_tool(
+            "math_proof_dag_status",
+            &json!({"name": "happy-test"}),
+        );
+        assert!(result.is_ok(), "status failed: {:?}", result.err());
+        let parsed: Value = serde_json::from_str(&result.unwrap()).unwrap();
+        assert_eq!(
+            parsed.get("name").and_then(Value::as_str),
+            Some("happy-test")
+        );
+        assert!(parsed.get("node_count").and_then(Value::as_u64).unwrap_or(0) >= 3);
+    }
+
+    #[test]
+    fn test_math_prove_inequality_valid() {
+        let result = handle_research_tool(
+            "math_prove_inequality",
+            &json!({"expression": "x > 0"}),
+        );
+        assert!(result.is_ok(), "expected ok, got: {:?}", result.err());
+        let parsed: Value = serde_json::from_str(&result.unwrap()).unwrap();
+        assert_eq!(
+            parsed.get("check_name").and_then(Value::as_str),
+            Some("math_prove_inequality")
+        );
+        assert!(parsed.get("status").and_then(Value::as_str).is_some());
+        assert!(parsed.get("details").and_then(Value::as_str).is_some());
+        assert_eq!(
+            parsed.get("expression").and_then(Value::as_str),
+            Some("x > 0")
+        );
+    }
+
+    // ── Z3 prove tool tests ──
+
+    #[test]
+    fn test_math_z3_prove_missing_expression() {
+        let result = handle_research_tool("math_z3_prove", &json!({}));
+        assert!(result.is_err(), "missing expression should error");
+    }
+
+    #[test]
+    fn test_math_z3_solver_push_default_n() {
+        let result = handle_research_tool("math_z3_solver_push", &json!({}));
+        // Should succeed (or be WARN if Z3 not available)
+        assert!(result.is_ok(), "push default should not error");
+    }
+
+    #[test]
+    fn test_math_z3_solver_pop_missing_no_default_fallthrough() {
+        let result = handle_research_tool("math_z3_solver_pop", &json!({}));
+        assert!(result.is_ok(), "pop default should not error");
+    }
+
+    #[test]
+    fn test_math_z3_solver_add_missing_expression() {
+        let result = handle_research_tool("math_z3_solver_add", &json!({}));
+        assert!(result.is_err(), "missing expression should error");
+    }
+
+    #[test]
+    fn test_math_z3_solver_check_ok() {
+        let result = handle_research_tool("math_z3_solver_check", &json!({}));
+        assert!(result.is_ok(), "check should not error");
+    }
+
+    #[test]
+    fn test_math_z3_solver_reset_ok() {
+        let result = handle_research_tool("math_z3_solver_reset", &json!({}));
+        assert!(result.is_ok(), "reset should not error");
+    }
+
+    #[test]
+    fn test_math_z3_solver_batch_missing_steps() {
+        let result = handle_research_tool("math_z3_solver_batch", &json!({}));
+        assert!(result.is_err(), "missing steps should error");
+    }
+
+    #[test]
+    fn test_math_z3_solver_batch_empty_steps() {
+        let result = handle_research_tool("math_z3_solver_batch", &json!({"steps": []}));
+        assert!(result.is_ok(), "empty steps should not error");
     }
 }

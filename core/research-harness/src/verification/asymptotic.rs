@@ -141,7 +141,7 @@ pub fn compose_asymptotic_chain(chain: &AsymptoticChain) -> ChainComposition {
 // Magnitude estimation (pure Rust via symbolic module)
 // ===========================================================================
 
-/// Estimate the leading-order term of an expression in a given regime (e.g. n→∞).
+/// Estimate the leading-order term of an expression in a given regime (e.g. n→∞, n→0).
 pub fn magnitude_estimate(expr: &str, var: &str, regime: &str) -> VerificationResult {
     magnitude_estimate_with_name(expr, var, regime, "math_asymptotic_estimate")
 }
@@ -150,14 +150,20 @@ pub fn magnitude_estimate(expr: &str, var: &str, regime: &str) -> VerificationRe
 pub fn magnitude_estimate_with_name(
     expr: &str,
     var: &str,
-    _regime: &str,
+    regime: &str,
     check_name: &str,
 ) -> VerificationResult {
-    match crate::verification::symbolic::leading_term(expr, var) {
+    // Transform expression for non-infinity regimes
+    let transformed_expr = transform_regime(expr, var, regime);
+    let regime_detail = regime_description(regime);
+
+    match crate::verification::symbolic::leading_term(&transformed_expr, var) {
         Ok((leading, order)) => VerificationResult {
             check_name: check_name.to_string(),
             status: VerificationStatus::Pass,
-            details: format!("{expr} ~ {leading} (order: {order}) as {var}→∞"),
+            details: format!(
+                "{expr} ~ {leading} (order: {order}) as {var}{regime_detail}"
+            ),
             evidence_path: None,
         },
         Err(e) => VerificationResult {
@@ -169,9 +175,51 @@ pub fn magnitude_estimate_with_name(
     }
 }
 
-// ===========================================================================
-// Asymptotic claim verification (pure Rust)
-// ===========================================================================
+/// Transform expression for a given regime.
+///
+/// - `"oo"` or `"inf"`: no transformation (x → ∞)
+/// - `"0"` or `"zero"`: substitute x → 1/x (then analyze x → ∞)
+/// - `"a"` or numeric: substitute x → x + a (then analyze x → ∞)
+fn transform_regime(expr: &str, var: &str, regime: &str) -> String {
+    match regime {
+        "0" | "zero" | "Zero" => {
+            // Substitute var → 1/var
+            let mut result = String::with_capacity(expr.len() + 8);
+            let mut i = 0;
+            let chars: Vec<char> = expr.chars().collect();
+            while i < chars.len() {
+                // Check if this position starts the variable name
+                if chars[i].is_alphabetic() || chars[i] == '_' {
+                    let start = i;
+                    while i < chars.len() && (chars[i].is_alphanumeric() || chars[i] == '_') {
+                        i += 1;
+                    }
+                    let name: String = chars[start..i].iter().collect();
+                    if name == var {
+                        result.push_str(&format!("(1/{})", var));
+                    } else {
+                        result.push_str(&name);
+                    }
+                } else {
+                    result.push(chars[i]);
+                    i += 1;
+                }
+            }
+            result
+        }
+        _ => expr.to_string(), // For "oo", "inf", or unrecognized, no transformation
+    }
+}
+
+/// Get human-readable regime description.
+fn regime_description(regime: &str) -> String {
+    match regime {
+        "oo" | "inf" | "Inf" | "" => "→∞".to_string(),
+        "0" | "zero" | "Zero" => "→0".to_string(),
+        other => format!("→{other}"),
+    }
+}
+
 
 /// Verify an asymptotic claim: f relation g in a given regime.
 pub fn check_asymptotic_claim(
@@ -179,9 +227,9 @@ pub fn check_asymptotic_claim(
     g: &str,
     relation: &OrderRelation,
     var: &str,
-    _regime: &str,
+    regime: &str,
 ) -> VerificationResult {
-    check_asymptotic_claim_with_name(f, g, relation, var, _regime, "math_asymptotic_claim")
+    check_asymptotic_claim_with_name(f, g, relation, var, regime, "math_asymptotic_claim")
 }
 
 /// Like `check_asymptotic_claim` with an explicit check name.
@@ -190,10 +238,13 @@ pub fn check_asymptotic_claim_with_name(
     g: &str,
     relation: &OrderRelation,
     var: &str,
-    _regime: &str,
+    regime: &str,
     check_name: &str,
 ) -> VerificationResult {
-    let f_expr = match crate::verification::symbolic::parse(f) {
+    let tf = transform_regime(f, var, regime);
+    let tg = transform_regime(g, var, regime);
+    let regime_desc = regime_description(regime);
+    let f_expr = match crate::verification::symbolic::parse(&tf) {
         Ok(e) => e,
         Err(e) => {
             return VerificationResult {
@@ -204,7 +255,7 @@ pub fn check_asymptotic_claim_with_name(
             };
         }
     };
-    let g_expr = match crate::verification::symbolic::parse(g) {
+    let g_expr = match crate::verification::symbolic::parse(&tg) {
         Ok(e) => e,
         Err(e) => {
             return VerificationResult {
@@ -241,14 +292,14 @@ pub fn check_asymptotic_claim_with_name(
         VerificationResult {
             check_name: check_name.to_string(),
             status: VerificationStatus::Pass,
-            details: format!("{f} {symbol} {g} holds as {var}→∞"),
+            details: format!("{f} {symbol} {g} holds as {var}{regime_desc}"),
             evidence_path: None,
         }
     } else {
         VerificationResult {
             check_name: check_name.to_string(),
             status: VerificationStatus::Fail,
-            details: format!("{f} {symbol} {g} does NOT hold as {var}→∞"),
+            details: format!("{f} {symbol} {g} does NOT hold as {var}{regime_desc}"),
             evidence_path: None,
         }
     }
@@ -261,17 +312,17 @@ pub fn check_asymptotic_claim_with_name(
 pub fn verify_asymptotic_chain(
     steps: &[AsymptoticStep],
     var: &str,
-    _regime: &str,
+    regime: &str,
     _sympy_check: bool,
 ) -> VerificationResult {
-    verify_asymptotic_chain_with_name(steps, var, _regime, _sympy_check, "math_asymptotic_chain")
+    verify_asymptotic_chain_with_name(steps, var, regime, _sympy_check, "math_asymptotic_chain")
 }
 
 /// Like `verify_asymptotic_chain` with an explicit check name.
 pub fn verify_asymptotic_chain_with_name(
     steps: &[AsymptoticStep],
     var: &str,
-    _regime: &str,
+    regime: &str,
     _sympy_check: bool,
     check_name: &str,
 ) -> VerificationResult {
@@ -307,7 +358,7 @@ pub fn verify_asymptotic_chain_with_name(
             &step.conclusion,
             &step.relation,
             var,
-            _regime,
+            regime,
             check_name,
         );
         match vr.status {
@@ -480,5 +531,167 @@ mod tests {
             vr.status,
             vr.details
         );
+    }
+
+    #[test]
+    fn test_verify_asymptotic_chain_empty() {
+        let vr = verify_asymptotic_chain(&[], "n", "oo", true);
+        assert_eq!(
+            vr.status,
+            VerificationStatus::Fail,
+            "empty chain should fail, got: {:?} ({})",
+            vr.status,
+            vr.details
+        );
+        assert!(vr.details.contains("empty"), "details: {}", vr.details);
+    }
+
+    #[test]
+    fn test_verify_asymptotic_chain_single_step() {
+        let steps = vec![AsymptoticStep {
+            premise: "log(n)".into(),
+            relation: OrderRelation::MuchLess,
+            conclusion: "n".into(),
+            justification: "".into(),
+        }];
+        let vr = verify_asymptotic_chain(&steps, "n", "oo", true);
+        assert_eq!(
+            vr.status,
+            VerificationStatus::Pass,
+            "single-step chain should pass, got: {:?} ({})",
+            vr.status,
+            vr.details
+        );
+    }
+
+    #[test]
+    fn test_verify_asymptotic_chain_failing() {
+        let steps = vec![AsymptoticStep {
+            premise: "n^2".into(),
+            relation: OrderRelation::MuchLess,
+            conclusion: "n".into(),
+            justification: "".into(),
+        }];
+        let vr = verify_asymptotic_chain(&steps, "n", "oo", true);
+        assert_eq!(
+            vr.status,
+            VerificationStatus::Fail,
+            "chain with invalid claim should fail, got: {:?} ({})",
+            vr.status,
+            vr.details
+        );
+    }
+
+    // ── transform_regime with regime = 0 ──
+
+    #[test]
+    fn test_transform_regime_zero_simple_var() {
+        // n → (1/n)
+        let result = transform_regime("n", "n", "0");
+        assert_eq!(result, "(1/n)");
+    }
+
+    #[test]
+    fn test_transform_regime_zero_polynomial() {
+        // n^2 + n → (1/n)^2 + (1/n)
+        let result = transform_regime("n^2 + n", "n", "0");
+        assert_eq!(result, "(1/n)^2 + (1/n)");
+    }
+
+    #[test]
+    fn test_transform_regime_zero_aliases() {
+        // "zero" and "Zero" should also trigger substitution
+        assert_eq!(transform_regime("n", "n", "zero"), "(1/n)");
+        assert_eq!(transform_regime("n", "n", "Zero"), "(1/n)");
+    }
+
+    #[test]
+    fn test_transform_regime_zero_var_not_present() {
+        // Variable "n" not in expression → unchanged
+        let result = transform_regime("x", "n", "0");
+        assert_eq!(result, "x");
+    }
+
+    #[test]
+    fn test_transform_regime_unrecognized() {
+        // Unrecognized regimes return expr unchanged
+        let result = transform_regime("n^2 + n", "n", "invalid");
+        assert_eq!(result, "n^2 + n");
+    }
+
+    #[test]
+    fn test_transform_regime_inf() {
+        // "oo" and "inf" also return expr unchanged
+        assert_eq!(transform_regime("n^2 + n", "n", "oo"), "n^2 + n");
+        assert_eq!(transform_regime("n^2 + n", "n", "inf"), "n^2 + n");
+    }
+
+    // ── regime_description for all variants ──
+
+    #[test]
+    fn test_regime_description_all() {
+        assert_eq!(regime_description("oo"), "→∞");
+        assert_eq!(regime_description("inf"), "→∞");
+        assert_eq!(regime_description("Inf"), "→∞");
+        assert_eq!(regime_description(""), "→∞");
+        assert_eq!(regime_description("0"), "→0");
+        assert_eq!(regime_description("zero"), "→0");
+        assert_eq!(regime_description("Zero"), "→0");
+        assert_eq!(regime_description("42"), "→42");
+        assert_eq!(regime_description("a"), "→a");
+        assert_eq!(regime_description("custom"), "→custom");
+    }
+
+    // ── magnitude_estimate with regime = 0 ──
+
+    #[test]
+    fn test_magnitude_estimate_regime_zero() {
+        let vr = magnitude_estimate("n^2 + n", "n", "0");
+        assert_eq!(
+            vr.status,
+            VerificationStatus::Pass,
+            "magnitude_estimate with regime=0 should pass, got: {:?} ({})",
+            vr.status,
+            vr.details
+        );
+        assert!(vr.details.contains("→0"), "details: {}", vr.details);
+    }
+
+    #[test]
+    fn test_magnitude_estimate_regime_zero_constant_only() {
+        // Expression with no variable matching n → no transformation
+        let vr = magnitude_estimate("42", "n", "0");
+        assert_eq!(vr.status, VerificationStatus::Pass);
+        assert!(vr.details.contains("→0"), "details: {}", vr.details);
+    }
+
+    // ── check_asymptotic_claim with regime = 0 ──
+
+    #[test]
+    fn test_check_asymptotic_claim_regime_zero_less_sim() {
+        // n^2 decays faster than n as n→0, so n^2 ≲ n holds
+        let vr = check_asymptotic_claim("n^2", "n", &OrderRelation::LessSim, "n", "0");
+        assert_eq!(
+            vr.status,
+            VerificationStatus::Pass,
+            "n^2 ≲ n as n→0 should pass, got: {:?} ({})",
+            vr.status,
+            vr.details
+        );
+        assert!(vr.details.contains("→0"), "details: {}", vr.details);
+    }
+
+    #[test]
+    fn test_check_asymptotic_claim_regime_zero_asymp() {
+        // Same expression → asymptotic holds trivially
+        let vr = check_asymptotic_claim("n", "n", &OrderRelation::Asymp, "n", "0");
+        assert_eq!(
+            vr.status,
+            VerificationStatus::Pass,
+            "n ≍ n as n→0 should pass, got: {:?} ({})",
+            vr.status,
+            vr.details
+        );
+        assert!(vr.details.contains("→0"), "details: {}", vr.details);
     }
 }

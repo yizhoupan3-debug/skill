@@ -5,6 +5,7 @@
 use crate::types::{VerificationResult, VerificationStatus};
 use core_errors::FrameworkError;
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 
 /// Status of the Lean toolchain availability.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -22,6 +23,66 @@ impl LeanStatus {
     pub fn is_available(&self) -> bool {
         matches!(self, LeanStatus::Available)
     }
+}
+
+// ===========================================================================
+// Z3 status checks (via Python bridge)
+// ===========================================================================
+
+/// Check if Z3 is available via the Python math backend.
+pub fn check_z3_available() -> bool {
+    crate::verification::python_bridge::z3_available()
+}
+
+/// Check if SymPy is available via the Python math backend.
+pub fn check_sympy_available() -> bool {
+    crate::verification::python_bridge::sympy_available()
+}
+
+/// Get a comprehensive backend status report.
+pub fn check_all_backends() -> serde_json::Value {
+    // Get Python backend status
+    let python_status = crate::verification::python_bridge::get_full_status_report();
+
+    // Get Lean status separately (not via Python)
+    let lean_status = check_lean_status();
+    let (lean_available, lean_detail) = match &lean_status {
+        LeanStatus::Available => (true, "Lean 4 installed".to_string()),
+        LeanStatus::NotFound { reason, install_guide } => (false, format!("{reason}. {install_guide}")),
+    };
+
+    json!({
+        "lean": {
+            "available": lean_available,
+            "detail": lean_detail,
+            "probe_type": "which lean",
+        },
+        "sympy": python_status.get("sympy"),
+        "z3": python_status.get("z3"),
+        "python_backend": python_status.get("python_backend"),
+    })
+}
+
+/// Return a unified string describing all backends' status.
+pub fn format_all_backends_status() -> String {
+    let status = check_all_backends();
+
+    let sympy = status.pointer("/sympy/available").and_then(|v| v.as_bool()).unwrap_or(false);
+    let sympy_ver = status.pointer("/sympy/version").and_then(|v| v.as_str()).unwrap_or("?");
+    let z3 = status.pointer("/z3/available").and_then(|v| v.as_bool()).unwrap_or(false);
+    let z3_ver = status.pointer("/z3/version").and_then(|v| v.as_str()).unwrap_or("?");
+    let lean = status.pointer("/lean/available").and_then(|v| v.as_bool()).unwrap_or(false);
+    let py_backend = status.pointer("/python_backend").and_then(|v| v.as_bool()).unwrap_or(false);
+
+    format!(
+        "SymPy: {} (v{}), Z3: {} (v{}), Lean: {}, Python backend: {}",
+        if sympy { "✅" } else { "❌" },
+        sympy_ver,
+        if z3 { "✅" } else { "❌" },
+        z3_ver,
+        if lean { "✅" } else { "❌" },
+        if py_backend { "✅" } else { "❌" },
+    )
 }
 
 /// Check if Lean 4 is available on the system PATH.
@@ -160,6 +221,11 @@ pub fn find_lean_repo() -> Option<std::path::PathBuf> {
 mod tests {
     use super::*;
 
+    /// Helper: true when Lean 4 is on the system PATH.
+    fn lean_is_available() -> bool {
+        check_lean_status().is_available()
+    }
+
     #[test]
     fn test_lean_probe_no_panic() {
         let _ = check_lean_status();
@@ -168,5 +234,74 @@ mod tests {
     #[test]
     fn test_lean_repo_no_panic() {
         let _ = find_lean_repo();
+    }
+
+    #[test]
+    fn test_verify_lean_theorem_available() {
+        if !lean_is_available() {
+            eprintln!("Skipping: Lean 4 not available on PATH");
+            return;
+        }
+        // A valid Lean theorem that relies only on the built-in Prelude.
+        let script = "theorem reflexive (a : Nat) : a = a := rfl";
+        let result = verify_lean_theorem(script);
+        assert_eq!(
+            result.status,
+            VerificationStatus::Pass,
+            "expected Pass for a valid theorem, got {:?}: {}",
+            result.status,
+            result.details,
+        );
+        assert_eq!(result.check_name, "math_lean_verify");
+    }
+
+    #[test]
+    fn test_verify_lean_theorem_failure() {
+        if !lean_is_available() {
+            eprintln!("Skipping: Lean 4 not available on PATH");
+            return;
+        }
+        // A theorem that type-checks but is not true by rfl -- Lean fails.
+        let script = "theorem broken : 1 = 2 := rfl";
+        let result = verify_lean_theorem(script);
+        assert_eq!(
+            result.status,
+            VerificationStatus::Fail,
+            "expected Fail for an invalid theorem, got {:?}: {}",
+            result.status,
+            result.details,
+        );
+        assert_eq!(result.check_name, "math_lean_verify");
+        assert!(
+            result.details.contains("Lean verification failed"),
+            "details should indicate failure, got: {}",
+            result.details,
+        );
+    }
+
+    #[test]
+    fn test_verify_lean_theorem_unavailable() {
+        if lean_is_available() {
+            eprintln!(
+                "Skipping: Lean is available on PATH \
+                 (cannot exercise the unavailable code path)"
+            );
+            return;
+        }
+        let result = verify_lean_theorem("(any content)");
+        assert_eq!(
+            result.status,
+            VerificationStatus::Warn,
+            "expected Warn when Lean is unavailable, got {:?}: {}",
+            result.status,
+            result.details,
+        );
+        assert_eq!(result.check_name, "math_lean_verify");
+        assert!(
+            result.details.contains("not available")
+                || result.details.contains("install"),
+            "details should mention Lean unavailability, got: {}",
+            result.details,
+        );
     }
 }

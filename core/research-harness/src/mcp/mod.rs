@@ -66,7 +66,7 @@ pub fn tool_definitions() -> Vec<Value> {
                 "properties": {
                     "expression": {"type": "string", "description": "数学表达式"},
                     "variable": {"type": "string", "description": "变量名（默认 x）"},
-                    "regime": {"type": "string", "description": "极限 regime: oo=无穷大, 0=趋于零（默认 oo）"}
+                    "regime": {"type": "string", "enum": ["oo", "inf", "0", "zero"], "description": "极限 regime: oo/inf=无穷大, 0/zero=趋于零（默认 oo）"}
                 },
                 "required": ["expression"]
             }),
@@ -98,68 +98,166 @@ pub fn tool_definitions() -> Vec<Value> {
         ),
         tool_def(
             "math_proof_dag_verify",
-            "验证证明 DAG 结构完备性",
-            json!({ "type": "object", "properties": {} }),
+            "验证证明 DAG 结构完备性（调用后端验证叶子节点）",
+            json!({
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "DAG 名称（可选，默认 default）"}
+                }
+            }),
         ),
         tool_def(
             "math_proof_dag_status",
             "查看证明 DAG 进度摘要",
-            json!({ "type": "object", "properties": {} }),
+            json!({
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "DAG 名称（可选，默认 default）"}
+                }
+            }),
         ),
         tool_def(
             "math_sympy_verify",
-            "SymPy 验证代数等式",
+            "代数恒等式验证：SymPy CAS (后端可用时) + 纯 Rust 符号引擎(降级)。注意：assumptions 参数已不再支持，如需上下文相关的条件化简请使用 math_sympy_simplify。",
             json!({
                 "type": "object",
                 "properties": {
                     "lhs": {"type": "string", "description": "等式左侧表达式"},
-                    "rhs": {"type": "string", "description": "等式右侧表达式"},
-                    "assumptions": {"type": "array", "items": {"type": "string"}, "description": "前提条件（可选）"}
+                    "rhs": {"type": "string", "description": "等式右侧表达式"}
                 },
                 "required": ["lhs", "rhs"]
             }),
         ),
         tool_def(
             "math_sympy_simplify",
-            "SymPy 化简表达式",
+            "表达式化简：SymPy CAS (后端可用时) + 纯 Rust 符号引擎(降级)",
             json!({
                 "type": "object",
                 "properties": {
-                    "expression": {"type": "string", "description": "待化简的数学表达式"}
+                    "expression": {"type": "string", "description": "待化简的数学表达式"},
+                    "assumptions": {"type": "array", "items": {"type": "string"}, "description": "前提条件列表（可选，例如 [\"x > 0\"]），会传给 SymPy refine 做上下文敏感的化简"}
+                },
+                "required": ["expression"]
+            }),
+        ),
+        tool_def(
+            "math_sympy_trig_simplify",
+            "三角函数表达式化简：使用 SymPy trigsimp()，适用于 sin/cos/tan 等的恒等式化简",
+            json!({
+                "type": "object",
+                "properties": {
+                    "expression": {"type": "string", "description": "待化简的三角函数表达式"}
+                },
+                "required": ["expression"]
+            }),
+        ),
+        tool_def(
+            "math_sympy_subs",
+            "符号表达式变量替换：将符号表达式中的变量替换为数值或其他表达式",
+            json!({
+                "type": "object",
+                "properties": {
+                    "expression": {"type": "string", "description": "包含待替换变量的符号表达式"},
+                    "substitutions": {
+                        "type": "object",
+                        "description": "替换映射表 {变量/表达式: 新值}，例如 {\"x\": 2, \"y\": \"a + b\"}",
+                        "additionalProperties": true
+                    },
+                    "simultaneous": {
+                        "type": "boolean",
+                        "description": "是否同时替换（避免中间干扰），默认 false"
+                    }
+                },
+                "required": ["expression", "substitutions"]
+            }),
+        ),
+        tool_def(
+            "math_sympy_limit",
+            "计算符号表达式极限：支持有限点、正无穷(oo)、负无穷(-oo)及左右方向",
+            json!({
+                "type": "object",
+                "properties": {
+                    "expression": {"type": "string", "description": "待求极限的表达式"},
+                    "variable": {"type": "string", "description": "极限变量（默认 x）"},
+                    "point": {"type": "string", "description": "极限点：\"0\", \"oo\", \"-oo\", 或其他数值"},
+                    "direction": {"type": "string", "enum": ["+", "-"], "description": "方向：\"+\" 右极限, \"-\" 左极限（可选，默认双侧极限）"}
+                },
+                "required": ["expression", "point"]
+            }),
+        ),
+        tool_def(
+            "math_sympy_lambdify",
+            "符号转数值函数：将符号表达式转为可调用函数并求值",
+            json!({
+                "type": "object",
+                "properties": {
+                    "expression": {"type": "string", "description": "符号表达式"},
+                    "variables": {"type": "array", "items": {"type": "string"}, "description": "变量名列表（默认 [\"x\"]）"},
+                    "values": {"type": "array", "items": {"type": "number"}, "description": "求值数值列表，顺序与 variables 对应（可选）"}
                 },
                 "required": ["expression"]
             }),
         ),
         tool_def(
             "math_prove_inequality",
-            "用 SMT solver (Z3) 证明数学不等式",
+            "证明数学不等式：Z3 (非线性/SMT) + minilp (线性), 自动降级",
             json!({
                 "type": "object",
                 "properties": {
                     "expression": {"type": "string", "description": "不等式表达式"},
-                    "variables": {"type": "array", "items": {"type": "string"}, "description": "变量名列表"}
+                    "timeout_ms": {"type": "integer", "description": "Z3 超时时间(毫秒), 默认 5000", "default": 5000}
                 },
                 "required": ["expression"]
             }),
         ),
         tool_def(
             "math_asymptotic_chain",
-            "验证渐近关系链的正确性",
-            json!({ "type": "object", "properties": {} }),
+            "验证渐近关系链的正确性（纯 Rust 增长分类）",
+            json!({
+                "type": "object",
+                "properties": {
+                    "steps": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "premise": {"type": "string", "description": "前提表达式"},
+                                "conclusion": {"type": "string", "description": "结论表达式"},
+                                "relation": {"type": "string", "enum": ["LessSim", "MuchLess", "Asymp"], "description": "渐近关系"},
+                                "justification": {"type": "string", "description": "证明理由（可选）"}
+                            },
+                            "required": ["premise", "conclusion", "relation"]
+                        },
+                        "description": "渐近步列表"
+                    },
+                    "variable": {"type": "string", "description": "变量名"},
+                    "regime": {"type": "string", "enum": ["oo", "inf", "0", "zero"], "description": "极限 regime: oo/inf=无穷大, 0/zero=趋于零（默认 oo）"}
+                },
+                "required": ["steps", "variable"]
+            }),
         ),
         tool_def(
             "math_backend_available",
-            "检查 Z3/SymPy/Lean 验证后端是否可用",
-            json!({ "type": "object", "properties": {} }),
+            "检查验证后端可用状态：Z3 / SymPy / Lean / all",
+            json!({
+                "type": "object",
+                "properties": {
+                    "backend": {
+                        "type": "string",
+                        "enum": ["z3", "sympy", "lean", "all"],
+                        "description": "要检查的后端（默认 all）"
+                    }
+                }
+            }),
         ),
         tool_def(
             "math_lean_verify",
             "用 Lean 做定理形式化验证",
             json!({
                 "type": "object",
-                "required": ["expression"],
+                "required": ["script"],
                 "properties": {
-                    "expression": {"type": "string", "description": "Lean 定理表达式"}
+                    "script": {"type": "string", "description": "Lean 定理表达式"}
                 }
             }),
         ),
@@ -199,7 +297,21 @@ pub fn tool_definitions() -> Vec<Value> {
         tool_def(
             "research_smoke",
             "通用实验烟雾测试引擎 — 运行可执行实验模板，支持 LRU+TTL 缓存、并行子进程执行、参数注入为环境变量",
-            json!({ "type": "object", "properties": {} }),
+            json!({
+                "type": "object",
+                "properties": {
+                    "template": {"type": "string", "description": "模板文件名（位于 templates/ 目录下的可执行文件）"},
+                    "params": {
+                        "type": "array",
+                        "items": {"type": "object", "description": "参数键值对，如 {\"lr\": \"0.01\", \"bs\": \"32\"}"},
+                        "description": "参数组合列表 — 每个元素启动一次独立的实验运行"
+                    },
+                    "concurrency": {"type": "integer", "description": "最大并行子进程数（1–32，默认 4）", "default": 4},
+                    "timeout_ms": {"type": "integer", "description": "单次实验超时时间（毫秒，默认 60000）", "default": 60000},
+                    "no_cache": {"type": "boolean", "description": "绕过 LRU+TTL 缓存（默认 false）", "default": false}
+                },
+                "required": ["template", "params"]
+            }),
         ),
         tool_def(
             "research_verification_literature",
@@ -235,20 +347,38 @@ pub fn tool_definitions() -> Vec<Value> {
                 "required": ["check"],
                 "properties": {
                     "check": {"type": "string", "enum": ["seed", "deterministic", "environment", "data_versioned", "checkpoint", "full_audit"], "description": "验证类型"},
-                    "path": {"type": "string", "description": "实验目录路径"}
+                    "path": {"type": "string", "description": "实验目录路径（seed/environment/data_versioned/checkpoint/full_audit 检查时必须）"},
+                    "run_paths": {"type": "array", "items": {"type": "string"}, "description": "多次运行输出目录路径列表（deterministic 检查时必须至少2个；full_audit 可选）"}
                 }
             }),
         ),
         tool_def(
             "research_verification_formal",
-            "形式验证：量纲一致性检查",
+            "形式验证：量纲一致性检查、witness一致性检查、步骤依赖图完整性检查",
             json!({
                 "type": "object",
-                "required": ["check", "equation"],
                 "properties": {
-                    "check": {"type": "string", "enum": ["dimensional"], "description": "验证类型"},
-                    "equation": {"type": "string", "description": "数学表达式字符串"}
-                }
+                    "check": {"type": "string", "enum": ["dimensional", "witness", "step_dependency"], "description": "验证类型：dimensional=量纲一致性, witness=特例值代入验证, step_dependency=步骤依赖图检查"},
+                    "equation": {"type": "string", "description": "数学表达式字符串（dimensional/witness 检查时使用）"},
+                    "witnesses": {
+                        "type": "array",
+                        "items": {"type": "object"},
+                        "description": "特例值列表（witness 检查时必须），每个元素是变量名→数值的映射，如 {\"x\": 1, \"y\": 2}"
+                    },
+                    "steps": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "id": {"type": "string", "description": "步骤 ID"},
+                                "depends_on": {"type": "array", "items": {"type": "string"}, "description": "依赖的步骤 ID 列表"},
+                                "description": {"type": "string", "description": "步骤描述（可选）"}
+                            }
+                        },
+                        "description": "步骤依赖列表（step_dependency 检查时必须），每个元素需含 id 和 depends_on"
+                    }
+                },
+                "required": ["check"]
             }),
         ),
         tool_literature_search(),

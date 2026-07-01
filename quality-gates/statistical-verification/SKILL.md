@@ -112,17 +112,41 @@ research_harness::verification::statistical::check_multiple_comparison_correctio
 
 ### Output
 
+返回结果根据 `check` 参数决定结构。一次调用执行一种检查。
+
+Note: `effect_size_reporting` and `assumption_checks` (checks #3, #5) are only available via the QG `StatisticalChecker` gate, not through the MCP tool.
+
+**check: "grim"**:
 ```json
 {
-  "status": "PASS" | "FAIL" | "WARN",
-  "checks": [
-    { "name": "p_value_recomputation", "status": "PASS" | "SKIP" | "FAIL" | "WARN", "detail": "...", "recomputed_p": 0.023 },
-    { "name": "grim_test", "status": "PASS" | "FAIL", "detail": "..." },
-    { "name": "effect_size_reporting", "status": "PASS" | "WARN", "detail": "..." },
-    { "name": "multiple_comparison_correction", "status": "PASS" | "FAIL" | "SKIP", "detail": "..." },
-    { "name": "assumption_checks", "status": "PASS" | "SKIP" | "FAIL", "detail": "..." }
-  ],
-  "blockers": ["GRIM test failed: mean=4.3, N=42 → last-digit incompatibility"]
+  "check": "grim_test",
+  "mean": 3.47,
+  "sample_size": 20,
+  "decimals": 2,
+  "passed": true | false,
+  "detail": "Mean is reconstructible from integer responses | SUSPICIOUS: Mean 3.47 with n=20 ..."
+}
+```
+
+**check: "p_value"**:
+```json
+{
+  "check": "p_value",
+  "observed": 0.03,
+  "expected": 0.05,
+  "tolerance": 0.01,
+  "passed": true | false
+}
+```
+
+**check: "multiple_comparison"**:
+```json
+{
+  "check": "multiple_comparison",
+  "num_tests": 5,
+  "correction_applied": true | false,
+  "passed": true | false,
+  "detail": "OK | WARNING: 5 tests performed without multiple comparison correction"
 }
 ```
 

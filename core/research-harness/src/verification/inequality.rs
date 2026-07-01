@@ -9,6 +9,7 @@
 //! formatting, and MCP tool dispatch belong in `mcp_tools.rs`.
 
 use crate::types::{VerificationResult, VerificationStatus};
+use crate::verification::python_bridge;
 use core_errors::FrameworkError;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -402,6 +403,115 @@ fn solve_via_minilp(system: &InequalitySystem) -> Result<HashMap<String, f64>, F
 // Verification pipeline integration
 // ===========================================================================
 
+/// Check if an expression is potentially nonlinear.
+fn is_nonlinear(expr: &str) -> bool {
+    // Heuristic: look for power operators, function calls (sin, cos, sqrt),
+    // or polynomial terms with exponent > 1
+    let lower = expr.to_lowercase();
+    lower.contains('^')
+        || lower.contains("**")
+        || lower.contains("sin(")
+        || lower.contains("cos(")
+        || lower.contains("tan(")
+        || lower.contains("sqrt(")
+        || lower.contains("abs(")
+        || lower.contains("exp(")
+        || lower.contains("log(")
+        || lower.contains("ln(") // ln is a nonlinear function, same as log
+        || lower.contains("pi")
+        || lower.contains('*') // Potential product of variables
+}
+
+/// Route to Z3 backend for nonlinear inequalities.
+fn check_inequality_z3(expr: &str) -> VerificationResult {
+    use crate::verification::python_bridge;
+    use serde_json::json;
+
+    if !python_bridge::z3_available() {
+        return VerificationResult {
+            check_name: "math_prove_inequality".to_string(),
+            status: VerificationStatus::Warn,
+            details: format!(
+                "Z3 not available for nonlinear inequality: {expr} — \
+                 install z3-solver: uv pip install z3-solver"
+            ),
+            evidence_path: None,
+        };
+    }
+
+    // Extract variable names from the expression
+    let re_vars = regex::Regex::new(r"[a-zA-Z_][a-zA-Z0-9_]*")
+        .expect("valid regex");
+    let known_keywords = [
+        "sin", "cos", "tan", "sqrt", "abs", "exp", "log", "ln",
+        "And", "Or", "Not", "Implies", "True", "False",
+        "pi", "e",
+    ];
+    let mut vars: Vec<String> = re_vars
+        .find_iter(expr)
+        .map(|m| m.as_str().to_string())
+        .filter(|v| !known_keywords.contains(&v.as_str()))
+        .collect::<std::collections::HashSet<_>>()
+        .into_iter()
+        .collect();
+    vars.sort();
+
+    let params = json!({
+        "expression": expr,
+        "variables": vars,
+        "timeout_ms": 10000,
+    });
+
+    match python_bridge::call_math_backend("z3_check", params) {
+        Ok(result) => {
+            let status_str = result
+                .get("result")
+                .and_then(|v| v.as_str())
+                .unwrap_or("unknown");
+
+            match status_str {
+                "sat" => {
+                    let model = result
+                        .get("model")
+                        .and_then(|v| v.as_object())
+                        .map(|obj| {
+                            obj.iter()
+                                .map(|(k, v)| format!("{k}={v}"))
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        })
+                        .unwrap_or_default();
+
+                    VerificationResult {
+                        check_name: "math_prove_inequality".to_string(),
+                        status: VerificationStatus::Pass,
+                        details: format!("Consistent (Z3 sat). Model: {model}"),
+                        evidence_path: None,
+                    }
+                }
+                "unsat" => VerificationResult {
+                    check_name: "math_prove_inequality".to_string(),
+                    status: VerificationStatus::Fail,
+                    details: format!("Inconsistent (Z3 unsat): {expr}"),
+                    evidence_path: None,
+                },
+                _ => VerificationResult {
+                    check_name: "math_prove_inequality".to_string(),
+                    status: VerificationStatus::Warn,
+                    details: format!("Z3 result: {status_str}"),
+                    evidence_path: None,
+                },
+            }
+        }
+        Err(e) => VerificationResult {
+            check_name: "math_prove_inequality".to_string(),
+            status: VerificationStatus::Warn,
+            details: format!("Z3 error: {e}"),
+            evidence_path: None,
+        },
+    }
+}
+
 pub fn check_inequality(expr: &str, timeout_ms: Option<u64>) -> VerificationResult {
     check_inequality_with_name(expr, timeout_ms, "math_prove_inequality")
 }
@@ -412,6 +522,13 @@ pub fn check_inequality_with_name(
     timeout_ms: Option<u64>,
     check_name: &str,
 ) -> VerificationResult {
+    // Route to Z3 for nonlinear expressions
+    if is_nonlinear(expr) {
+        tracing::debug!("[inequality] nonlinear expression, routing to Z3: {expr}");
+        return check_inequality_z3(expr);
+    }
+
+    // Linear case: use existing minilp solver
     let ineq = match parse_inequality_latex(expr) {
         Ok(i) => i,
         Err(e) => {
@@ -549,5 +666,257 @@ mod tests {
     #[test]
     fn test_probe_always_true() {
         assert!(solver_available());
+    }
+
+    #[test]
+    fn test_solve_system_timeout() {
+        // timeout_ms=0 should trigger instant timeout since recv_timeout(0ms)
+        // returns immediately if the channel is empty. The spawned thread
+        // cannot have sent a result before recv_timeout checks.
+        let ineq = Inequality::new(vec![1.0], vec!["x".into()], InequalitySense::Gt, 0.0);
+        let system = InequalitySystem::new(vec![ineq]);
+        let result = solve_system(&system, Some(0));
+        match result {
+            FeasibilityResult::Timeout { timeout_ms } => {
+                assert_eq!(timeout_ms, 0);
+            }
+            other => panic!("expected Timeout, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_solve_via_minilp_strict_lt() {
+        // x < 10 — strict less-than with epsilon margin.
+        // minilp with zero objective may return any feasible value, so we
+        // check approximately: the solver's epsilon-adjusted constraint is
+        // x <= 10 - eps, so x(solver) should be close to or less than 10.
+        let ineq = Inequality::new(vec![1.0], vec!["x".into()], InequalitySense::Lt, 10.0);
+        let system = InequalitySystem::new(vec![ineq]);
+        let result = solve_system(&system, Some(1000));
+        match &result {
+            FeasibilityResult::Feasible { model } => {
+                let x = model.get("x").copied().unwrap_or(f64::NAN);
+                assert!(
+                    x <= 10.0 + 1e-9,
+                    "expected x approximately <= 10, got x={x}"
+                );
+            }
+            other => panic!("expected Feasible, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_solve_via_minilp_strict_gt() {
+        // x > 5 — strict greater-than with epsilon margin.
+        // minilp with zero objective may return any feasible value, so we
+        // check approximately: the solver's epsilon-adjusted constraint is
+        // x >= 5 + eps, so x(solver) should be close to or above 5.
+        let ineq = Inequality::new(vec![1.0], vec!["x".into()], InequalitySense::Gt, 5.0);
+        let system = InequalitySystem::new(vec![ineq]);
+        let result = solve_system(&system, Some(1000));
+        match &result {
+            FeasibilityResult::Feasible { model } => {
+                let x = model.get("x").copied().unwrap_or(f64::NAN);
+                assert!(
+                    x >= 5.0 - 1e-9,
+                    "expected x approximately >= 5, got x={x}"
+                );
+            }
+            other => panic!("expected Feasible, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_solve_via_minilp_constant_only() {
+        // Constants only — no variables. This exercises the all_vars.is_empty() path.
+        // (1) 0 < 5 (satisfied, constant-only Lt)
+        let sys1 = InequalitySystem::new(vec![Inequality::new(
+            vec![],
+            vec![],
+            InequalitySense::Lt,
+            5.0,
+        )]);
+        let r1 = solve_system(&sys1, Some(1000));
+        assert!(r1.is_feasible(), "0 < 5 should be feasible");
+
+        // (2) 0 > 5 (violated, constant-only Gt)
+        let sys2 = InequalitySystem::new(vec![Inequality::new(
+            vec![],
+            vec![],
+            InequalitySense::Gt,
+            5.0,
+        )]);
+        let r2 = solve_system(&sys2, Some(1000));
+        assert!(r2.is_infeasible(), "0 > 5 should be infeasible");
+
+        // (3) 0 <= 0 (satisfied, constant-only Le)
+        let sys3 = InequalitySystem::new(vec![Inequality::new(
+            vec![],
+            vec![],
+            InequalitySense::Le,
+            0.0,
+        )]);
+        let r3 = solve_system(&sys3, Some(1000));
+        assert!(r3.is_feasible(), "0 <= 0 should be feasible");
+
+        // (4) 0 == 1 (violated, constant-only Eq)
+        let sys4 = InequalitySystem::new(vec![Inequality::new(
+            vec![],
+            vec![],
+            InequalitySense::Eq,
+            1.0,
+        )]);
+        let r4 = solve_system(&sys4, Some(1000));
+        assert!(r4.is_infeasible(), "0 == 1 should be infeasible");
+    }
+
+    #[test]
+    fn test_solve_via_minilp_constant_violation() {
+        // Unsatisfiable constant constraints (no variables).
+        // (1) 0 < 0 (violated Lt)
+        let sys1 = InequalitySystem::new(vec![Inequality::new(
+            vec![], vec![], InequalitySense::Lt, 0.0,
+        )]);
+        let r1 = solve_system(&sys1, Some(1000));
+        assert!(r1.is_infeasible(), "0 < 0 should be infeasible");
+
+        // (2) 0 <= -1 (violated Le)
+        let sys2 = InequalitySystem::new(vec![Inequality::new(
+            vec![], vec![], InequalitySense::Le, -1.0,
+        )]);
+        let r2 = solve_system(&sys2, Some(1000));
+        assert!(r2.is_infeasible(), "0 <= -1 should be infeasible");
+
+        // (3) 0 >= 5 (violated Ge)
+        let sys3 = InequalitySystem::new(vec![Inequality::new(
+            vec![], vec![], InequalitySense::Ge, 5.0,
+        )]);
+        let r3 = solve_system(&sys3, Some(1000));
+        assert!(r3.is_infeasible(), "0 >= 5 should be infeasible");
+
+        // (4) 0 == 0 (satisfied Eq)
+        let sys4 = InequalitySystem::new(vec![Inequality::new(
+            vec![], vec![], InequalitySense::Eq, 0.0,
+        )]);
+        let r4 = solve_system(&sys4, Some(1000));
+        assert!(r4.is_feasible(), "0 == 0 should be feasible");
+
+        // (5) 0 >= -1 (satisfied Ge)
+        let sys5 = InequalitySystem::new(vec![Inequality::new(
+            vec![], vec![], InequalitySense::Ge, -1.0,
+        )]);
+        let r5 = solve_system(&sys5, Some(1000));
+        assert!(r5.is_feasible(), "0 >= -1 should be feasible");
+    }
+
+    // ── is_nonlinear heuristic tests ──
+
+    #[test]
+    fn test_is_nonlinear_positive() {
+        // Expressions that SHOULD be detected as nonlinear
+        assert!(is_nonlinear("x^2 >= 0"), "x^2 should be nonlinear");
+        assert!(is_nonlinear("sin(x) > 0"), "sin( should be nonlinear");
+        assert!(is_nonlinear("cos(x) >= -1"), "cos( should be nonlinear");
+        assert!(is_nonlinear("sqrt(x) < 5"), "sqrt( should be nonlinear");
+        assert!(is_nonlinear("abs(x) <= 10"), "abs( should be nonlinear");
+        assert!(is_nonlinear("exp(x) > 0"), "exp( should be nonlinear");
+        assert!(is_nonlinear("log(x) <= 1"), "log( should be nonlinear");
+        assert!(is_nonlinear("ln(x) > 0"), "ln( should be nonlinear");
+        assert!(is_nonlinear("tan(x) <= 2"), "tan( should be nonlinear");
+        assert!(is_nonlinear("x + pi >= 3"), "pi should be nonlinear");
+        assert!(is_nonlinear("x*y <= 0"), "product via * should be nonlinear");
+        assert!(is_nonlinear("x ** 2 > 1"), "** should be nonlinear");
+    }
+
+    #[test]
+    fn test_is_nonlinear_negative() {
+        // Linear expressions that should NOT be detected as nonlinear.
+        // Note: the heuristic treats `*` as a nonlinear marker (potential
+        // product of variables), so scalar multiplication like `2*y` or `3*x`
+        // produces a false positive. We avoid such expressions here.
+
+        // Simple variable inequalities
+        assert!(!is_nonlinear("x > 0"), "x > 0 should be linear");
+        assert!(!is_nonlinear("x < 0"), "x < 0 should be linear");
+        assert!(!is_nonlinear("x == 10"), "x == 10 should be linear");
+        assert!(!is_nonlinear("x >= 0"), "x >= 0 should be linear");
+        assert!(!is_nonlinear("x <= 0"), "x <= 0 should be linear");
+
+        // Sums of variables (no explicit coefficient multiplier)
+        assert!(!is_nonlinear("x + y <= 5"), "x + y <= 5 should be linear");
+        assert!(!is_nonlinear("a + b + c <= 3"), "a + b + c <= 3 should be linear");
+        assert!(!is_nonlinear("x - y >= 1"), "x - y >= 1 should be linear");
+
+        // Multiple variables, no *
+        assert!(!is_nonlinear("x + y + z == 0"), "x + y + z == 0 should be linear");
+    }
+
+    #[test]
+    fn test_is_nonlinear_heuristic_asterisk_false_positive() {
+        // The `*` heuristic flags scalar multiplication as nonlinear even
+        // though it is linear (e.g. `2*x` vs `x*y`). This is a known
+        // limitation of the simple heuristic. Document it here.
+        assert!(is_nonlinear("2*x <= 5"), "scalar mult 2*x is a false-positive nonlinear");
+        assert!(is_nonlinear("x + 2*y <= 5"), "scalar mult 2*y is a false-positive nonlinear");
+        assert!(is_nonlinear("3*x - y >= 1"), "scalar mult 3*x is a false-positive nonlinear");
+    }
+
+    #[test]
+    fn test_is_nonlinear_pi_substring_false_positive() {
+        // The `pi` keyword check is a substring match, so any variable
+        // containing "pi" (e.g., "pivot") triggers a false positive.
+        // This is a known limitation of the simple heuristic.
+        assert!(
+            is_nonlinear("pivot > 0"),
+            "variable 'pivot' contains 'pi' substring -> false positive nonlinear"
+        );
+    }
+
+    // ── Z3 nonlinear inequality path tests ──
+
+    #[test]
+    fn test_check_inequality_nonlinear_z3_path() {
+        // x^2 >= 0 is a nonlinear inequality that should route to the Z3 backend.
+        // When Z3 is available, it should return Pass (x^2 >= 0 is always true).
+        if !python_bridge::z3_available() {
+            tracing::info!("Z3 not available — skipping nonlinear Z3 path test");
+            return;
+        }
+        let result = check_inequality("x^2 >= 0", Some(10000));
+        assert_eq!(
+            result.status,
+            VerificationStatus::Pass,
+            "x^2 >= 0 should be Pass when Z3 available, got: {}",
+            result.details
+        );
+        assert_eq!(result.check_name, "math_prove_inequality");
+    }
+
+    #[test]
+    fn test_check_inequality_nonlinear_z3_unavailable() {
+        // When Z3 is not available, a nonlinear inequality should return Warn
+        // with a helpful installation message.
+        if python_bridge::z3_available() {
+            tracing::info!("Z3 is available — skipping unavailable-path test");
+            return;
+        }
+        let result = check_inequality("x^2 >= 0", Some(5000));
+        assert_eq!(
+            result.status,
+            VerificationStatus::Warn,
+            "expected Warn when Z3 unavailable, got: {:?}",
+            result.status
+        );
+        assert!(
+            result.details.contains("Z3 not available"),
+            "details should mention Z3 unavailability, got: {}",
+            result.details
+        );
+        assert!(
+            result.details.contains("z3-solver"),
+            "details should mention installing z3-solver, got: {}",
+            result.details
+        );
+        assert_eq!(result.check_name, "math_prove_inequality");
     }
 }

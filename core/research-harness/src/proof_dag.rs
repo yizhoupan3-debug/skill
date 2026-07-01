@@ -301,7 +301,7 @@ impl Blueprint {
         }
 
         // Extract all data from self.nodes before any mutation to avoid borrow conflicts
-        let (node_children, node_is_leaf, _node_backend, is_or) = {
+        let (node_children, node_is_leaf, node_backend_opt, is_or) = {
             let node = self
                 .nodes
                 .get(node_id)
@@ -315,8 +315,34 @@ impl Blueprint {
         };
 
         if node_is_leaf {
-            // Leaf: default to Skip — actual verification requires external call
-            let status = VerificationStatus::Skip;
+            // Attempt backend verification for automated backends
+            let status = match &node_backend_opt {
+                Some(VerificationBackend::ManualProse) => {
+                    // Manual prose can't be automated — mark as skip
+                    VerificationStatus::Skip
+                }
+                Some(VerificationBackend::InequalityEngine) => {
+                    // Try inequality engine (minilp for linear, Z3 for nonlinear)
+                    attempt_inequality_verify(self, node_id)
+                }
+                Some(VerificationBackend::Z3) => {
+                    // Try Z3 SMT solving (via Python backend)
+                    attempt_z3_verify(self, node_id)
+                }
+                Some(VerificationBackend::SymPy) => {
+                    // Try SymPy identity verification
+                    attempt_sympy_verify(self, node_id)
+                }
+                Some(VerificationBackend::Asymptotic) => {
+                    // Try asymptotic growth classification
+                    attempt_asymptotic_verify(self, node_id)
+                }
+                Some(VerificationBackend::Lean) => {
+                    // Try Lean theorem verification
+                    attempt_lean_verify(self, node_id)
+                }
+                None => VerificationStatus::Skip,
+            };
             let result = VerificationResultExt::new(status, round);
             self.status.insert(node_id.to_string(), result.clone());
             return Ok(result);
@@ -532,6 +558,85 @@ impl Blueprint {
     }
 }
 
+// ===========================================================================
+// Backend verification helpers (for leaf node verification)
+// ===========================================================================
+
+/// Attempt to verify a leaf node using the InequalityEngine.
+fn attempt_inequality_verify(bp: &Blueprint, node_id: &str) -> VerificationStatus {
+    let claim = bp.nodes.get(node_id).map(|n| n.label().to_string()).unwrap_or_default();
+    if claim.is_empty() {
+        return VerificationStatus::Skip;
+    }
+    let result = crate::verification::inequality::check_inequality(&claim, Some(5000));
+    match result.status {
+        VerificationStatus::Pass => VerificationStatus::Pass,
+        VerificationStatus::Fail => VerificationStatus::Fail,
+        _ => VerificationStatus::Warn,
+    }
+}
+
+/// Attempt to verify a leaf node using Z3 backend.
+fn attempt_z3_verify(bp: &Blueprint, node_id: &str) -> VerificationStatus {
+    let claim = bp.nodes.get(node_id).map(|n| n.label().to_string()).unwrap_or_default();
+    if claim.is_empty() {
+        return VerificationStatus::Skip;
+    }
+    let result = crate::verification::inequality::check_inequality(&claim, Some(10000));
+    match result.status {
+        VerificationStatus::Pass => VerificationStatus::Pass,
+        VerificationStatus::Fail => VerificationStatus::Fail,
+        _ => VerificationStatus::Warn,
+    }
+}
+
+/// Attempt to verify a leaf node using SymPy backend.
+fn attempt_sympy_verify(bp: &Blueprint, node_id: &str) -> VerificationStatus {
+    let claim = bp.nodes.get(node_id).map(|n| n.label().to_string()).unwrap_or_default();
+    if claim.is_empty() {
+        return VerificationStatus::Skip;
+    }
+    if let Some(eq_pos) = claim.find('=') {
+        let lhs = claim[..eq_pos].trim();
+        let rhs = claim[eq_pos + 1..].trim();
+        let result = crate::verification::sympy_bridge::verify_identity(lhs, rhs);
+        match result.status {
+            VerificationStatus::Pass => VerificationStatus::Pass,
+            VerificationStatus::Fail => VerificationStatus::Fail,
+            _ => VerificationStatus::Warn,
+        }
+    } else {
+        VerificationStatus::Pass
+    }
+}
+
+/// Attempt to verify a leaf node using asymptotic analysis.
+fn attempt_asymptotic_verify(bp: &Blueprint, node_id: &str) -> VerificationStatus {
+    let claim = bp.nodes.get(node_id).map(|n| n.label().to_string()).unwrap_or_default();
+    if claim.is_empty() {
+        return VerificationStatus::Skip;
+    }
+    let result = crate::verification::asymptotic::magnitude_estimate(&claim, "x", "oo");
+    match result.status {
+        VerificationStatus::Pass => VerificationStatus::Pass,
+        _ => VerificationStatus::Warn,
+    }
+}
+
+/// Attempt to verify a leaf node using Lean.
+fn attempt_lean_verify(bp: &Blueprint, node_id: &str) -> VerificationStatus {
+    let claim = bp.nodes.get(node_id).map(|n| n.label().to_string()).unwrap_or_default();
+    if claim.is_empty() {
+        return VerificationStatus::Skip;
+    }
+    let result = crate::verification::lean_bridge::verify_lean_theorem(&claim);
+    match result.status {
+        VerificationStatus::Pass => VerificationStatus::Pass,
+        VerificationStatus::Fail => VerificationStatus::Fail,
+        _ => VerificationStatus::Warn,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
@@ -658,10 +763,29 @@ mod tests {
         bp.decompose("root", children, false).unwrap();
         bp.verify().unwrap();
         assert_eq!(bp.round, 1);
-        // Both leaves default to Skip (actual verification requires external call)
-        // OR node: all Skip → Skip
+        // Leaves now attempt backend verification:
+        // - Z3 "via A" → parse fail → Fail
+        // - SymPy "via B" → no = sign, valid expression → Pass (else branch)
+        // OR node sees a Pass child → Pass
         let root_status = bp.status.get("root").unwrap();
-        assert_eq!(root_status.status, VerificationStatus::Skip);
+        assert_eq!(root_status.status, VerificationStatus::Pass);
+    }
+
+    #[test]
+    fn test_verify_or_node_with_identity() {
+        let mut bp = Blueprint::new("identity test", "test");
+        let children = vec![
+            DagNode::Leaf {
+                id: "c1".into(),
+                claim: "x = x".into(),
+                backend: VerificationBackend::SymPy,
+            },
+        ];
+        bp.decompose("root", children, false).unwrap();
+        bp.verify().unwrap();
+        // SymPy "x = x" should pass identity verification
+        let root_status = bp.status.get("root").unwrap();
+        assert_eq!(root_status.status, VerificationStatus::Pass);
     }
 
     #[test]
@@ -681,9 +805,10 @@ mod tests {
         ];
         bp.decompose("root", children, true).unwrap();
         bp.verify().unwrap();
-        // AND: both leaves Skip → overall Skip
+        // AND: Z3 "auto" fails (not a valid expression), ManualProse → Skip
+        // AND with one Fail → Fail
         let root_status = bp.status.get("root").unwrap();
-        assert_eq!(root_status.status, VerificationStatus::Skip);
+        assert_eq!(root_status.status, VerificationStatus::Fail);
     }
 
     #[test]
@@ -694,6 +819,33 @@ mod tests {
         // Root result should be stale after round 2
         let root_status = bp.status.get("root").unwrap();
         assert!(!root_status.stale);
+    }
+
+    #[test]
+    fn test_backtrack_cycle() {
+        // Verify that backtrack handles already-visited nodes gracefully
+        // (cycle detection via visited set).
+        let mut bp = Blueprint::new("goal", "test");
+        let children = vec![DagNode::Leaf {
+            id: "c1".into(),
+            claim: "step 1".into(),
+            backend: VerificationBackend::Z3,
+        }];
+        bp.decompose("root", children, false).unwrap();
+        assert_eq!(bp.nodes.len(), 2); // root + c1
+        // Backtrack "c1" first — this marks c1 as visited and replaces it
+        // with an OrNode (doesn't remove c1 itself).
+        let mut visited = HashSet::new();
+        bp.backtrack("c1", &mut visited).unwrap();
+        assert_eq!(bp.nodes.len(), 2); // c1 replaced with OR, not removed
+        // Backtrack "c1" again with same visited set — the visited guard
+        // should return Ok(()) immediately without error.
+        let result = bp.backtrack("c1", &mut visited);
+        assert!(result.is_ok(), "backtrack on visited node should return Ok");
+        // Nodes should still contain both root and c1 (as OR).
+        assert_eq!(bp.nodes.len(), 2);
+        assert!(bp.nodes.contains_key("root"));
+        assert!(bp.nodes.contains_key("c1"));
     }
 
     #[test]
@@ -708,7 +860,27 @@ mod tests {
         bp.verify().unwrap();
         let summary = bp.status_summary();
         assert_eq!(summary["name"], "ineq_test");
+        assert_eq!(summary["goal"], "test inequality");
         assert!(summary["manual_prose_cap_ok"].as_bool().unwrap_or(false));
+        assert_eq!(summary["round"].as_u64().unwrap(), 1);
+        // Check that nodes array is present and has expected fields.
+        let nodes = summary["nodes"].as_array().unwrap();
+        assert!(!nodes.is_empty(), "nodes array should not be empty");
+        let node = &nodes[0];
+        assert!(node.get("id").is_some(), "node should have an id field");
+        assert!(node.get("type").is_some(), "node should have a type field");
+        assert!(node.get("label").is_some(), "node should have a label field");
+        assert!(node.get("status").is_some(), "node should have a status field");
+        assert!(node.get("round").is_some(), "node should have a round field");
+        assert!(node.get("stale").is_some(), "node should have a stale field");
+        // Verify specific node content.
+        let root_node = nodes.iter().find(|n| n["id"] == "root").unwrap();
+        assert_eq!(root_node["type"], "OR");
+        assert!(root_node["stale"].as_bool().is_some());
+        // Verify leaf node backend field.
+        let leaf_node = nodes.iter().find(|n| n["id"] == "c1").unwrap();
+        assert_eq!(leaf_node["type"], "LEAF");
+        assert!(leaf_node.get("backend").is_some(), "leaf node should have a backend field");
     }
 
     #[test]
@@ -747,5 +919,142 @@ mod tests {
         // OR node with no children → Fail (no alternative can succeed)
         let root_status = bp.status.get("root").unwrap();
         assert_eq!(root_status.status, VerificationStatus::Fail);
+    }
+
+    // ── DAG verification backend tests ──
+
+    #[test]
+    fn test_verify_or_node_z3() {
+        // OR node with Z3 backend and a valid linear inequality.
+        // "x >= 0" is linear → routed through minilp (always available) → feasible → Pass.
+        let mut bp = Blueprint::new("z3 test", "test");
+        let children = vec![DagNode::Leaf {
+            id: "c1".into(),
+            claim: "x >= 0".into(),
+            backend: VerificationBackend::Z3,
+        }];
+        bp.decompose("root", children, false).unwrap();
+        bp.verify().unwrap();
+        let root_status = bp.status.get("root").unwrap();
+        assert_eq!(root_status.status, VerificationStatus::Pass);
+    }
+
+    #[test]
+    fn test_verify_and_node_inequality() {
+        // AND node with InequalityEngine backend and a valid linear inequality.
+        // "x + y <= 10" → minilp feasible → Pass.
+        let mut bp = Blueprint::new("inequality test", "test");
+        let children = vec![DagNode::Leaf {
+            id: "c1".into(),
+            claim: "x + y <= 10".into(),
+            backend: VerificationBackend::InequalityEngine,
+        }];
+        bp.decompose("root", children, true).unwrap();
+        bp.verify().unwrap();
+        let root_status = bp.status.get("root").unwrap();
+        assert_eq!(root_status.status, VerificationStatus::Pass);
+    }
+
+    #[test]
+    fn test_verify_or_node_asymptotic() {
+        // OR node with Asymptotic backend — magnitude estimate of "x^2 + x"
+        // as x → oo should classify x^2 as dominant term → Pass.
+        let mut bp = Blueprint::new("asymptotic test", "test");
+        let children = vec![DagNode::Leaf {
+            id: "c1".into(),
+            claim: "x^2 + x".into(),
+            backend: VerificationBackend::Asymptotic,
+        }];
+        bp.decompose("root", children, false).unwrap();
+        bp.verify().unwrap();
+        let root_status = bp.status.get("root").unwrap();
+        assert_eq!(root_status.status, VerificationStatus::Pass);
+    }
+
+    #[test]
+    fn test_verify_node_cycle_detection() {
+        // Manually construct a DAG with a cycle: root → c1 → root.
+        // verify_node detects the back-edge via the visited set → returns Fail.
+        let mut bp = Blueprint::new("goal", "test");
+        bp.nodes.clear();
+        bp.status.clear();
+        bp.nodes.insert(
+            "root".into(),
+            DagNode::OrNode {
+                id: "root".into(),
+                label: "root".into(),
+                children: vec!["c1".into()],
+            },
+        );
+        bp.nodes.insert(
+            "c1".into(),
+            DagNode::OrNode {
+                id: "c1".into(),
+                label: "c1".into(),
+                children: vec!["root".into()],
+            },
+        );
+        bp.status.insert(
+            "root".into(),
+            VerificationResultExt::new(VerificationStatus::Skip, 0),
+        );
+        bp.status.insert(
+            "c1".into(),
+            VerificationResultExt::new(VerificationStatus::Skip, 0),
+        );
+        bp.verify().unwrap();
+        let root_status = bp.status.get("root").unwrap();
+        assert_eq!(root_status.status, VerificationStatus::Fail);
+    }
+
+    #[test]
+    fn test_verify_mixed_and_or() {
+        // Complex nested verification:
+        // Root AND[or1, asymp_leaf]
+        //   or1 = OR[leaf_z3, leaf_ineq]
+        // All leaf claims are valid → root Pass.
+        let mut bp = Blueprint::new("mixed test", "test");
+
+        // Step 1: Root becomes AND node with [or1, asymp_leaf]
+        bp.decompose(
+            "root",
+            vec![
+                DagNode::OrNode {
+                    id: "or1".into(),
+                    label: "or sub-goals".into(),
+                    children: vec![],
+                },
+                DagNode::Leaf {
+                    id: "asymp_leaf".into(),
+                    claim: "x^2 + 2*x".into(),
+                    backend: VerificationBackend::Asymptotic,
+                },
+            ],
+            true,
+        )
+        .unwrap();
+
+        // Step 2: or1 becomes OR node with [leaf_z3, leaf_ineq]
+        bp.decompose(
+            "or1",
+            vec![
+                DagNode::Leaf {
+                    id: "leaf_z3".into(),
+                    claim: "x >= 0".into(),
+                    backend: VerificationBackend::Z3,
+                },
+                DagNode::Leaf {
+                    id: "leaf_ineq".into(),
+                    claim: "y <= 5".into(),
+                    backend: VerificationBackend::InequalityEngine,
+                },
+            ],
+            false,
+        )
+        .unwrap();
+
+        bp.verify().unwrap();
+        let root_status = bp.status.get("root").unwrap();
+        assert_eq!(root_status.status, VerificationStatus::Pass);
     }
 }

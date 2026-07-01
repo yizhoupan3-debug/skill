@@ -733,6 +733,17 @@ fn distribute_add(add_expr: &Expr, other: &Expr) -> Expr {
 /// 1. Parse both, expand to polynomial normal form, simplify, compare.
 /// 2. For non-polynomial expressions, use random numerical testing.
 pub fn equivalent(lhs: &str, rhs: &str) -> bool {
+    // Use a seed derived from process-level entropy to avoid fixed-sequence bias.
+    // Falls back to wall-clock microseconds when AtomicU64 is unavailable.
+    let seed = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos() as u64)
+        .unwrap_or(42);
+    equivalent_with_seed(lhs, rhs, seed)
+}
+
+/// Internal helper that accepts an explicit RNG seed for deterministic testing.
+fn equivalent_with_seed(lhs: &str, rhs: &str, seed: u64) -> bool {
     let lhs_expr = match parse(lhs) {
         Ok(e) => e,
         Err(_) => return false,
@@ -765,15 +776,31 @@ pub fn equivalent(lhs: &str, rhs: &str) -> bool {
         };
     }
 
-    let mut rng = SimpleRng::new(42);
-    for _ in 0..10 {
+    let mut rng = SimpleRng::new(seed);
+
+    // Use 100 random samples with adaptive range selection.
+    // The sampling space is partitioned: first 10 use a tight range to detect
+    // near-constant differences, then 90 use an extended range.
+    const SAMPLES: usize = 100;
+    for sample_idx in 0..SAMPLES {
         let mut bindings = HashMap::new();
         for v in &vars {
-            // Generate random values in a range that avoids degenerate cases
-            let val = match v.as_str() {
-                "n" | "x" | "y" | "z" => rng.next_range(0.5, 10.0),
-                _ => rng.next_range(0.5, 10.0),
+            // Adaptive range based on variable convention and sample phase
+            let (lo, hi) = match v.as_str() {
+                // Natural numbers (typical in asymptotic analysis)
+                "n" | "m" | "k" | "i" | "j" | "N" | "M" => {
+                    if sample_idx < 10 { (1.0, 20.0) } else { (0.5, 1_000.0) }
+                }
+                // Real variables — wider range in later samples
+                "x" | "y" | "z" | "t" | "u" | "v" | "w" => {
+                    if sample_idx < 10 { (-5.0, 5.0) } else { (-100.0, 100.0) }
+                }
+                // Coefficients and parameters — small positive
+                _ => {
+                    if sample_idx < 10 { (0.0, 10.0) } else { (-10.0, 10.0) }
+                }
             };
+            let val = rng.next_range(lo, hi);
             bindings.insert(v.clone(), val);
         }
 
@@ -1552,5 +1579,65 @@ mod tests {
         let e = parse("10 / 2").unwrap();
         let s = simplify(&e);
         assert_eq!(display(&s), "5");
+    }
+
+    // ── Numerical fallback path tests ──
+
+    #[test]
+    fn test_equivalent_numerical_fallback_trig() {
+        // sin(x)^2 + cos(x)^2 ≡ 1 cannot be proven by the pure-Rust structural
+        // expand+simplify path (no trig identity rewriting). This exercises the
+        // random numerical sampling fallback (Strategy 2).
+        assert!(
+            equivalent("sin(x)^2 + cos(x)^2", "1"),
+            "trig identity sin^2 + cos^2 = 1 should hold via numerical sampling"
+        );
+    }
+
+    #[test]
+    fn test_equivalent_numerical_fallback_exp_log() {
+        // exp(log(x)) ≡ x also requires the numerical fallback.
+        assert!(equivalent("exp(log(x))", "x"), "exp(log(x)) = x");
+    }
+
+    #[test]
+    fn test_equivalent_numerical_fallback_not_equal() {
+        // A false trig identity — must be rejected even via random sampling.
+        assert!(
+            !equivalent("sin(x)^2 + cos(x)^2", "2"),
+            "sin^2 + cos^2 = 2 should be false"
+        );
+    }
+
+    #[test]
+    fn test_equivalent_numerical_flakiness() {
+        // Run the same trig identity with 10 different deterministic seeds to
+        // confirm the numerical sampling is stable and not spuriously flaky.
+        for seed in [1u64, 42, 12345, 999999, 314159, 271828, 777, 2026, 65535, 987654] {
+            assert!(
+                equivalent_with_seed("sin(x)^2 + cos(x)^2", "1", seed),
+                "trig identity failed with seed {seed}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_equivalent_numerical_flakiness_false_negatives() {
+        // Ensure false identities are consistently rejected across seeds.
+        for seed in [1u64, 42, 12345, 999999, 314159, 271828, 777, 2026, 65535, 987654] {
+            assert!(
+                !equivalent_with_seed("sin(x)^2 + cos(x)^2", "2", seed),
+                "false trig identity should be rejected with seed {seed}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_equivalent_numerical_double_variable() {
+        // Identity with two variables: sin(x)^2 + cos(x)^2 = 1 no matter what y is.
+        assert!(
+            equivalent("sin(x)^2 + cos(x)^2 + y - y", "1"),
+            "multi-variable trig identity"
+        );
     }
 }

@@ -121,17 +121,35 @@ research_harness::verification::prose_qc::count_hedging_words(text)
 
 ### Output
 
+返回结果根据 `check` 参数决定结构。一次调用执行一种检查。
+
+**check: "terminology"**:
 ```json
 {
-  "status": "PASS" | "FAIL" | "WARN",
-  "checks": [
-    { "name": "terminology_consistency", "status": "PASS" | "SKIP" | "FAIL", "detail": "..." },
-    { "name": "style_guide_compliance", "status": "PASS" | "SKIP" | "FAIL", "detail": "..." },
-    { "name": "claim_drift", "status": "PASS" | "SKIP" | "FAIL", "detail": "..." },
-    { "name": "language_register", "status": "PASS" | "WARN" | "FAIL", "detail": "..." },
-    { "name": "hedging_appropriateness", "status": "PASS" | "WARN", "detail": "..." }
-  ],
-  "blockers": ["Claim drift: §3.1 claim 'outperforms SOTA by 5%' != ledger 'outperforms SOTA by 3%'"]
+  "check": "terminology_consistency",
+  "violations": ["术语不一致：使用了 'X' 而非标准 'Y'"],
+  "has_violations": true | false
+}
+```
+
+**check: "slop"** (advisory only — 仅返回命中计数，无 FAIL 状态):
+```json
+{
+  "check": "slop_detection",
+  "language": "en | zh",
+  "hits_found": 3,
+  "hits": [
+    { "word": "Moreover", "replacement": "Additionally / 直接删除", "position": 0 }
+  ]
+}
+```
+
+**check: "hedging"** (advisory only — 仅返回计数和建议，无 FAIL 状态):
+```json
+{
+  "check": "hedging_analysis",
+  "hedging_word_count": 8,
+  "suggestion": "High hedging density — consider firming up language"
 }
 ```
 
