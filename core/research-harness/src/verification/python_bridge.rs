@@ -155,70 +155,83 @@ fn call_math_backend_inner(
         drop(stdin);
     }
 
-    // Wait with timeout
-    let start = Instant::now();
+    // Wait with timeout — use a blocking thread + channel to avoid busy-polling.
     let max_duration = std::time::Duration::from_millis(timeout_ms);
-    let poll_interval = std::time::Duration::from_millis(50);
+    let child = std::sync::Arc::new(std::sync::Mutex::new(child));
+    let (tx, rx) = std::sync::mpsc::channel::<std::io::Result<std::process::ExitStatus>>();
+    let child_for_thread = std::sync::Arc::clone(&child);
 
-    loop {
-        match child.try_wait() {
-            Ok(Some(status)) => {
-                let output = child.wait_with_output().map_err(FrameworkError::Io)?;
-                let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-                let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+    // Spawn a thread that blocks on `child.wait()`, then signals via channel.
+    // On the main thread we use `recv_timeout` — no busy-polling needed.
+    std::thread::spawn(move || {
+        let result = child_for_thread
+            .lock()
+            .expect("python_bridge child lock (reaper)")
+            .wait();
+        let _ = tx.send(result);
+    });
 
-                if !status.success() {
-                    // Check stdout for error JSON
-                    if let Ok(val) = serde_json::from_str::<Value>(&stdout) {
-                        if val.get("status").and_then(|v| v.as_str()) == Some("error") {
-                            return Err(FrameworkError::validation(format!(
-                                "math_backend {} failed: {}",
-                                op,
-                                val.get("error").and_then(|v| v.as_str()).unwrap_or("unknown error")
-                            )));
-                        }
+    match rx.recv_timeout(max_duration) {
+        Ok(Ok(_exit_status)) => {
+            // Child has exited — read stdout and stderr from piped handles.
+            let mut stdout = String::new();
+            let mut stderr = String::new();
+            if let Ok(mut guard) = child.lock() {
+                if let Some(ref mut out) = guard.stdout {
+                    let _ = std::io::Read::read_to_string(out, &mut stdout);
+                }
+                if let Some(ref mut err) = guard.stderr {
+                    let _ = std::io::Read::read_to_string(err, &mut stderr);
+                }
+            }
+
+            if !_exit_status.success() {
+                // Check stdout for error JSON
+                if let Ok(val) = serde_json::from_str::<Value>(&stdout) {
+                    if val.get("status").and_then(|v| v.as_str()) == Some("error") {
+                        return Err(FrameworkError::validation(format!(
+                            "math_backend {op} failed: {}",
+                            val.get("error").and_then(|v| v.as_str()).unwrap_or("unknown error")
+                        )));
                     }
-                    let detail = truncate(&stderr, 500);
-                    return Err(FrameworkError::validation(format!(
-                        "math_backend {} failed (exit={:?}): {}",
-                        op,
-                        output.status.code(),
-                        detail
-                    )));
                 }
-
-                // Parse JSON response
-                let response: Value = serde_json::from_str(&stdout).map_err(|e| {
-                    FrameworkError::validation(format!(
-                        "parse math_backend output: {e}, stdout: {}, stderr: {}",
-                        truncate(&stdout, 200),
-                        truncate(&stderr, 200),
-                    ))
-                })?;
-
-                // Check for error status
-                if response.get("status").and_then(|v| v.as_str()) == Some("error") {
-                    return Err(FrameworkError::validation(format!(
-                        "math_backend {} error: {}",
-                        op,
-                        response.get("error").and_then(|v| v.as_str()).unwrap_or("unknown")
-                    )));
-                }
-
-                // Return result field
-                return Ok(response.get("result").cloned().unwrap_or(response))
+                let detail = truncate(&stderr, 500);
+                return Err(FrameworkError::validation(format!(
+                    "math_backend {op} failed (exit={:?}): {detail}",
+                    _exit_status.code(),
+                )));
             }
-            Ok(None) => {
-                if start.elapsed() > max_duration {
-                    let _ = child.kill();
-                    let _ = child.wait();
-                    return Err(FrameworkError::validation(format!(
-                        "math backend timed out after {timeout_ms}ms (op={op})"
-                    )));
-                }
-                std::thread::sleep(poll_interval);
+
+            // Parse JSON response
+            let response: Value = serde_json::from_str(&stdout).map_err(|e| {
+                FrameworkError::validation(format!(
+                    "parse math_backend output: {e}, stdout: {}, stderr: {}",
+                    truncate(&stdout, 200),
+                    truncate(&stderr, 200),
+                ))
+            })?;
+
+            // Check for error status
+            if response.get("status").and_then(|v| v.as_str()) == Some("error") {
+                return Err(FrameworkError::validation(format!(
+                    "math_backend {op} error: {}",
+                    response.get("error").and_then(|v| v.as_str()).unwrap_or("unknown")
+                )));
             }
-            Err(e) => return Err(FrameworkError::Io(e)),
+
+            // Return result field
+            Ok(response.get("result").cloned().unwrap_or(response))
+        }
+        Ok(Err(e)) => Err(FrameworkError::Io(e)),
+        Err(_) => {
+            // Timeout — kill child process
+            if let Ok(mut guard) = child.lock() {
+                let _ = guard.kill();
+                let _ = guard.wait();
+            }
+            Err(FrameworkError::validation(format!(
+                "math backend timed out after {timeout_ms}ms (op={op})"
+            )))
         }
     }
 }

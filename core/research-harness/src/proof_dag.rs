@@ -688,9 +688,14 @@ impl Blueprint {
 // Backend verification helpers (for leaf node verification)
 // ===========================================================================
 
+/// Extract the label text from a node, returning empty string if missing.
+fn node_claim(bp: &Blueprint, node_id: &str) -> String {
+    bp.nodes.get(node_id).map(|n| n.label().to_string()).unwrap_or_default()
+}
+
 /// Attempt to verify a leaf node using the InequalityEngine.
 fn attempt_inequality_verify(bp: &Blueprint, node_id: &str) -> (VerificationStatus, String) {
-    let claim = bp.nodes.get(node_id).map(|n| n.label().to_string()).unwrap_or_default();
+    let claim = node_claim(bp, node_id);
     if claim.is_empty() {
         return (VerificationStatus::Skip, "inequality: empty claim".into());
     }
@@ -712,7 +717,7 @@ fn attempt_inequality_verify(bp: &Blueprint, node_id: &str) -> (VerificationStat
 /// When the theorem-proving phase finds a counterexample, it is included
 /// in the detail string for diagnostic purposes.
 fn attempt_z3_verify(bp: &Blueprint, node_id: &str) -> (VerificationStatus, String) {
-    let claim = bp.nodes.get(node_id).map(|n| n.label().to_string()).unwrap_or_default();
+    let claim = node_claim(bp, node_id);
     if claim.is_empty() {
         return (VerificationStatus::Skip, "z3: empty claim".into());
     }
@@ -772,7 +777,7 @@ fn attempt_z3_verify(bp: &Blueprint, node_id: &str) -> (VerificationStatus, Stri
 ///   to "0" (identically zero). Otherwise Warn — a single expression
 ///   without an equality claim cannot be strongly verified.
 fn attempt_sympy_verify(bp: &Blueprint, node_id: &str) -> (VerificationStatus, String) {
-    let claim = bp.nodes.get(node_id).map(|n| n.label().to_string()).unwrap_or_default();
+    let claim = node_claim(bp, node_id);
     if claim.is_empty() {
         return (VerificationStatus::Skip, "sympy: empty claim".into());
     }
@@ -820,7 +825,7 @@ fn attempt_sympy_verify(bp: &Blueprint, node_id: &str) -> (VerificationStatus, S
 /// Extracts the primary variable from the claim (instead of hardcoding "x")
 /// so claims like "n^2 + n" correctly use n as the asymptotic variable.
 fn attempt_asymptotic_verify(bp: &Blueprint, node_id: &str) -> (VerificationStatus, String) {
-    let claim = bp.nodes.get(node_id).map(|n| n.label().to_string()).unwrap_or_default();
+    let claim = node_claim(bp, node_id);
     if claim.is_empty() {
         return (VerificationStatus::Skip, "asymptotic: empty claim".into());
     }
@@ -848,7 +853,7 @@ fn attempt_asymptotic_verify(bp: &Blueprint, node_id: &str) -> (VerificationStat
 
 /// Attempt to verify a leaf node using Lean.
 fn attempt_lean_verify(bp: &Blueprint, node_id: &str) -> (VerificationStatus, String) {
-    let claim = bp.nodes.get(node_id).map(|n| n.label().to_string()).unwrap_or_default();
+    let claim = node_claim(bp, node_id);
     if claim.is_empty() {
         return (VerificationStatus::Skip, "lean: empty claim".into());
     }

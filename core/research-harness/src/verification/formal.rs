@@ -9,6 +9,8 @@ use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::sync::LazyLock;
 
+use crate::verification::symbolic::Expr;
+
 /// 常见物理量纲符号及其 SI 基本量纲组合。
 const DIMENSION_TABLE: &[(&str, &str)] = &[
     ("m", "L"),
@@ -148,11 +150,19 @@ fn python_dimension_propagate(equation: &str, dims: &HashMap<String, String>) ->
 
 /// Heuristic dimension propagation without SymPy.
 ///
-/// Builds a simple dimension algebra:
-/// - Known variables inherit their mapped dimensions
-/// - Multiplication of dimensions adds exponents: L * L = L^2
-/// - Division subtracts exponents: L / T = L*T^-1
-/// - Same dimensions check via string normalization
+/// Uses the symbolic engine's recursive-descent parser to build an expression
+/// AST, then traverses it with dimension algebra:
+/// - Variables → look up in dimension map
+/// - Constants → dimensionless
+/// - Addition/Subtraction → operands must share the same dimension
+/// - Multiplication → multiply dimensions (add exponents)
+/// - Division → divide dimensions (subtract exponents)
+/// - Powers → scale dimension exponents (only for constant powers)
+/// - Transcendental functions (sin, cos, etc.) → require dimensionless input,
+///   output dimensionless
+/// - sqrt → half-exponent on the input dimension
+///
+/// Falls back to the original token-based approach when parsing fails.
 fn heuristic_dimension_propagate(equation: &str, dims: &HashMap<String, String>) -> serde_json::Value {
     let parts: Vec<&str> = equation.split('=').collect();
     if parts.len() < 2 {
@@ -164,8 +174,10 @@ fn heuristic_dimension_propagate(equation: &str, dims: &HashMap<String, String>)
         });
     }
 
-    let lhs_dim = compute_dimension(parts[0], dims);
-    let rhs_dim = compute_dimension(parts[1], dims);
+    let lhs_dim = compute_dimension_ast(parts[0], dims)
+        .or_else(|| compute_dimension(parts[0], dims));
+    let rhs_dim = compute_dimension_ast(parts[1], dims)
+        .or_else(|| compute_dimension(parts[1], dims));
 
     let consistent = match (&lhs_dim, &rhs_dim) {
         (Some(a), Some(b)) => normalize_dim_string(a) == normalize_dim_string(b),
@@ -178,6 +190,104 @@ fn heuristic_dimension_propagate(equation: &str, dims: &HashMap<String, String>)
         "consistent": consistent,
         "method": "heuristic",
     })
+}
+
+/// AST-based dimension computation using the symbolic engine parser.
+///
+/// Supports addition, subtraction, multiplication, division, powers,
+/// parentheses, and transcendental functions — far more robust than
+/// the token-based `compute_dimension` fallback.
+fn compute_dimension_ast(expr: &str, dims: &HashMap<String, String>) -> Option<String> {
+    let parsed = crate::verification::symbolic::parse(expr).ok()?;
+    dimension_of_expr(&parsed, dims)
+}
+
+/// Recursively compute the dimension of an expression AST node.
+fn dimension_of_expr(expr: &Expr, dims: &HashMap<String, String>) -> Option<String> {
+    match expr {
+        Expr::Var(name) => dims.get(name.as_str()).cloned(),
+
+        Expr::Const(_) => Some("1".to_string()),
+
+        Expr::Neg(a) => dimension_of_expr(a, dims),
+
+        // Add/Sub: operands must have the same dimension
+        Expr::Add(a, b) | Expr::Sub(a, b) => {
+            let da = dimension_of_expr(a, dims)?;
+            let db = dimension_of_expr(b, dims)?;
+            if normalize_dim_string(&da) == normalize_dim_string(&db) {
+                Some(da)
+            } else {
+                None
+            }
+        }
+
+        // Mul: multiply dimensions
+        Expr::Mul(a, b) => {
+            let da = dimension_of_expr(a, dims)?;
+            let db = dimension_of_expr(b, dims)?;
+            Some(combine_dimensions(&[da, db]))
+        }
+
+        // Div: divide dimensions (negate denominator and multiply)
+        Expr::Div(a, b) => {
+            let da = dimension_of_expr(a, dims)?;
+            let db = dimension_of_expr(b, dims)?;
+            if normalize_dim_string(&db) == "1" {
+                Some(da)
+            } else {
+                Some(combine_dimensions(&[da, negate_dimension(&db)]))
+            }
+        }
+
+        // Pow: scale dimension by exponent (constant only)
+        // For composite dimensions, replication distributes the exponent
+        // correctly: (L*T^-1)^2 → L^2*T^-2
+        Expr::Pow(a, b) => {
+            let da = dimension_of_expr(a, dims)?;
+            match b.as_ref() {
+                Expr::Const(n) => {
+                    let int_exp = *n as i32;
+                    if int_exp == 0 { Some("1".to_string()) }
+                    else if int_exp == 1 { Some(da) }
+                    else if int_exp < 0 {
+                        let negated = negate_dimension(&da);
+                        let repeated = vec![negated; (-int_exp) as usize];
+                        Some(combine_dimensions(&repeated))
+                    } else {
+                        let repeated = vec![da; int_exp as usize];
+                        Some(combine_dimensions(&repeated))
+                    }
+                }
+                _ => None, // Variable exponent → cannot determine dimension
+            }
+        }
+
+        // Functions
+        Expr::Fn(name, args) => match name.as_str() {
+            "sin" | "cos" | "tan" | "exp" | "log" | "ln" => {
+                // Require dimensionless arguments
+                for arg in args {
+                    if let Some(d) = dimension_of_expr(arg, dims) {
+                        if normalize_dim_string(&d) != "1" && normalize_dim_string(&d) != "" {
+                            return None;
+                        }
+                    }
+                }
+                Some("1".to_string())
+            }
+            "sqrt" => {
+                let d = dimension_of_expr(&args[0], dims)?;
+                if normalize_dim_string(&d) == "1" {
+                    Some("1".to_string())
+                } else {
+                    Some(format!("{d}^(1/2)"))
+                }
+            }
+            "abs" => args.first().and_then(|a| dimension_of_expr(a, dims)),
+            _ => dims.get(name.as_str()).cloned(),
+        },
+    }
 }
 
 /// Compute the combined dimension of a expression string using a known dimension map.
@@ -203,7 +313,7 @@ fn compute_dimension(expr: &str, dims: &HashMap<String, String>) -> Option<Strin
             if !current.is_empty() {
                 if let Some(d) = dims.get(&current) {
                     if is_dividing {
-                        result_dims.push(format!("{d}^-1"));
+                        result_dims.push(negate_dimension(d));
                     } else {
                         result_dims.push(d.clone());
                     }
@@ -215,7 +325,7 @@ fn compute_dimension(expr: &str, dims: &HashMap<String, String>) -> Option<Strin
             if !current.is_empty() {
                 if let Some(d) = dims.get(&current) {
                     if is_dividing {
-                        result_dims.push(format!("{d}^-1"));
+                        result_dims.push(negate_dimension(d));
                     } else {
                         result_dims.push(d.clone());
                     }
@@ -231,7 +341,7 @@ fn compute_dimension(expr: &str, dims: &HashMap<String, String>) -> Option<Strin
     if !current.is_empty() {
         if let Some(d) = dims.get(&current) {
             if is_dividing {
-                result_dims.push(format!("{d}^-1"));
+                result_dims.push(negate_dimension(d));
             } else {
                 result_dims.push(d.clone());
             }
@@ -253,6 +363,9 @@ fn compute_dimension(expr: &str, dims: &HashMap<String, String>) -> Option<Strin
 }
 
 /// Combine a list of dimension strings into a single normalized dimension string.
+///
+/// Each input is parsed into base components and their exponents are summed.
+/// e.g., `["L*T^-2", "M"]` → sum exponents: L=1, M=1, T=-2 → `"L*M*T^-2"`
 fn combine_dimensions(dims: &[String]) -> String {
     if dims.len() == 1 {
         return dims[0].clone();
@@ -263,29 +376,20 @@ fn combine_dimensions(dims: &[String]) -> String {
     let mut combined: HashMap<String, i32> = HashMap::new();
 
     for dim in dims {
-        // Handle negation: dim^-1
-        let (base_dim, negate) = if let Some(rest) = dim.strip_suffix("^-1") {
-            (rest.to_string(), true)
-        } else {
-            (dim.clone(), false)
-        };
-
         // Split composite dimensions on *
-        for part in base_dim.split('*') {
+        for part in dim.split('*') {
             let part = part.trim();
             if part.is_empty() {
                 continue;
             }
-            // Parse exponent: "L^2" or just "L"
+            // Parse exponent: "L^2" or just "L" or "L^-1"
             if let Some(caret_pos) = part.find('^') {
                 let base = &part[..caret_pos];
                 let exp_str = &part[caret_pos + 1..];
                 let exp: i32 = exp_str.parse().unwrap_or(1);
-                let entry = combined.entry(base.to_string()).or_insert(0);
-                *entry += if negate { -exp } else { exp };
+                *combined.entry(base.to_string()).or_insert(0) += exp;
             } else {
-                let entry = combined.entry(part.to_string()).or_insert(0);
-                *entry += if negate { -1 } else { 1 };
+                *combined.entry(part.to_string()).or_insert(0) += 1;
             }
         }
     }
@@ -309,6 +413,40 @@ fn combine_dimensions(dims: &[String]) -> String {
 
     parts.sort(); // deterministic order
     parts.join("*")
+}
+
+/// Negate all exponents in a dimension string.
+///
+/// e.g., `"L*M*T^-2"` → `"L^-1*M^-1*T^2"`; `"L^2"` → `"L^-2"`
+fn negate_dimension(dim: &str) -> String {
+    if dim == "1" || dim.is_empty() {
+        return "1".to_string();
+    }
+    let mut parts: Vec<String> = Vec::new();
+    for part in dim.split('*') {
+        let part = part.trim();
+        if part.is_empty() {
+            continue;
+        }
+        if let Some(caret_pos) = part.find('^') {
+            let base = &part[..caret_pos];
+            let exp_str = &part[caret_pos + 1..];
+            let exp: i32 = exp_str.parse().unwrap_or(1);
+            let new_exp = -exp;
+            if new_exp == 1 {
+                parts.push(base.to_string());
+            } else {
+                parts.push(format!("{base}^{new_exp}"));
+            }
+        } else {
+            parts.push(format!("{part}^-1"));
+        }
+    }
+    if parts.is_empty() {
+        "1".to_string()
+    } else {
+        parts.join("*")
+    }
 }
 
 /// Normalize a dimension string for comparison (canonical form).
@@ -870,8 +1008,10 @@ mod tests {
     #[test]
     fn test_combine_dimensions_composite_with_negation() {
         // Simulate dividing by composite: M * (L*T^-2)^-1
-        // The input "L*T^-2^-1" has strip_suffix("^-1") = Some("L*T^-2")
-        let result = combine_dimensions(&["M".into(), "L*T^-2^-1".into()]);
+        // Use negate_dimension to create the negated composite
+        let negated = negate_dimension("L*T^-2");
+        assert_eq!(negated, "L^-1*T^2", "negate_dimension(L*T^-2) should be L^-1*T^2");
+        let result = combine_dimensions(&["M".into(), negated]);
         let parts: Vec<&str> = result.split('*').collect();
         assert!(parts.contains(&"L^-1"), "Should contain L^-1 in {result}");
         assert!(parts.contains(&"M"), "Should contain M in {result}");
@@ -905,5 +1045,168 @@ mod tests {
     #[test]
     fn test_normalize_dim_string_empty() {
         assert_eq!(normalize_dim_string(""), "");
+    }
+
+    // ── AST-based dimension propagation tests ──
+
+    #[test]
+    fn test_dimension_of_expr_single_var() {
+        let dims = HashMap::from([("x".into(), "L".into())]);
+        let expr = crate::verification::symbolic::parse("x").unwrap();
+        let result = dimension_of_expr(&expr, &dims);
+        assert_eq!(result, Some("L".to_string()));
+    }
+
+    #[test]
+    fn test_dimension_of_expr_add_same_dim() {
+        let dims = HashMap::from([
+            ("x".into(), "L".into()),
+            ("y".into(), "L".into()),
+        ]);
+        let expr = crate::verification::symbolic::parse("x + y").unwrap();
+        let result = dimension_of_expr(&expr, &dims);
+        assert_eq!(result, Some("L".to_string()));
+    }
+
+    #[test]
+    fn test_dimension_of_expr_add_mismatch_dims() {
+        let dims = HashMap::from([
+            ("x".into(), "L".into()),
+            ("t".into(), "T".into()),
+        ]);
+        let expr = crate::verification::symbolic::parse("x + t").unwrap();
+        let result = dimension_of_expr(&expr, &dims);
+        assert!(result.is_none(), "L + T should be dimensionally inconsistent");
+    }
+
+    #[test]
+    fn test_dimension_of_expr_mul() {
+        let dims = HashMap::from([
+            ("m".into(), "M".into()),
+            ("v".into(), "L*T^-1".into()),
+        ]);
+        let expr = crate::verification::symbolic::parse("m * v").unwrap();
+        let result = dimension_of_expr(&expr, &dims);
+        // M * (L*T^-1) = L*M*T^-1 (sorted alphabetically)
+        let r = result.unwrap();
+        assert!(r.contains("L"), "should contain L in {r}");
+        assert!(r.contains("M"), "should contain M in {r}");
+        assert!(r.contains("T^-1"), "should contain T^-1 in {r}");
+    }
+
+    #[test]
+    fn test_dimension_of_expr_power() {
+        let dims = HashMap::from([("v".into(), "L*T^-1".into())]);
+        let expr = crate::verification::symbolic::parse("v^2").unwrap();
+        let result = dimension_of_expr(&expr, &dims);
+        let r = result.unwrap();
+        // (L*T^-1)^2 → v^2 replicates: combine([L*T^-1, L*T^-1])
+        // = L^2 * T^-2
+        assert!(r.contains("L^2"), "should contain L^2 in {r}");
+        assert!(r.contains("T^-2"), "should contain T^-2 in {r}");
+    }
+
+    #[test]
+    fn test_dimension_of_expr_div() {
+        let dims = HashMap::from([
+            ("d".into(), "L".into()),
+            ("t".into(), "T".into()),
+        ]);
+        let expr = crate::verification::symbolic::parse("d / t").unwrap();
+        let result = dimension_of_expr(&expr, &dims);
+        let r = result.unwrap();
+        assert!(r.contains("L"), "should contain L in {r}");
+        assert!(r.contains("T^-1"), "should contain T^-1 in {r}");
+    }
+
+    #[test]
+    fn test_dimension_of_expr_sin() {
+        let dims = HashMap::from([("x".into(), "1".into())]);
+        let expr = crate::verification::symbolic::parse("sin(x)").unwrap();
+        let result = dimension_of_expr(&expr, &dims);
+        assert_eq!(result, Some("1".to_string()));
+    }
+
+    #[test]
+    fn test_dimension_of_expr_sin_rejects_dimensioned() {
+        let dims = HashMap::from([("x".into(), "L".into())]);
+        let expr = crate::verification::symbolic::parse("sin(x)").unwrap();
+        let result = dimension_of_expr(&expr, &dims);
+        assert!(result.is_none(), "sin(L) should be rejected");
+    }
+
+    #[test]
+    fn test_propagate_dimensions_heuristic_with_addition() {
+        let dims = HashMap::from([
+            ("F".into(), "L*M*T^-2".into()),
+            ("m".into(), "M".into()),
+            ("a".into(), "L*T^-2".into()),
+            ("g".into(), "L*T^-2".into()),
+        ]);
+        let result = heuristic_dimension_propagate("F = m*a + m*g", &dims);
+        assert!(
+            result["consistent"].as_bool().unwrap(),
+            "F = m*a + m*g should be consistent: {result:?}"
+        );
+        assert_eq!(result["lhs_dim"].as_str().unwrap(), result["rhs_dim"].as_str().unwrap());
+    }
+
+    #[test]
+    fn test_propagate_dimensions_heuristic_with_parens() {
+        let dims = HashMap::from([
+            ("F".into(), "L*M*T^-2".into()),
+            ("m".into(), "M".into()),
+            ("v".into(), "L*T^-1".into()),
+            ("t".into(), "T".into()),
+        ]);
+        let result = heuristic_dimension_propagate("F = (m*v)/t", &dims);
+        assert!(
+            result["consistent"].as_bool().unwrap(),
+            "F = (m*v)/t should be consistent: {result:?}"
+        );
+    }
+
+    #[test]
+    fn test_negate_dimension_simple() {
+        assert_eq!(negate_dimension("L"), "L^-1");
+        assert_eq!(negate_dimension("L^2"), "L^-2");
+        assert_eq!(negate_dimension("M"), "M^-1");
+    }
+
+    #[test]
+    fn test_negate_dimension_composite() {
+        assert_eq!(negate_dimension("L*T^-1"), "L^-1*T");
+        assert_eq!(negate_dimension("L*M*T^-2"), "L^-1*M^-1*T^2");
+    }
+
+    #[test]
+    fn test_negate_dimension_dimensionless() {
+        assert_eq!(negate_dimension("1"), "1");
+    }
+
+    #[test]
+    fn test_compute_dimension_ast_paren_product() {
+        let dims = HashMap::from([
+            ("m".into(), "M".into()),
+            ("v".into(), "L*T^-1".into()),
+            ("t".into(), "T".into()),
+        ]);
+        let result = compute_dimension_ast("(m*v)/t", &dims).unwrap();
+        assert!(result.contains("M"), "should contain M in {result}");
+        assert!(result.contains("L"), "should contain L in {result}");
+        assert!(result.contains("T^-2") || result.contains("T^2"),
+            "should contain T^-2 or T^2 in {result} (negated T or inverted)");
+    }
+
+    #[test]
+    fn test_compute_dimension_ast_fallback_to_token() {
+        // Unknown variable → AST returns None
+        let dims = HashMap::from([("x".into(), "L".into())]);
+        let result = compute_dimension_ast("unknown_var", &dims);
+        assert!(result.is_none(), "AST-based should return None for unknown var");
+
+        // Token-based fallback still works
+        let result2 = compute_dimension("x", &dims);
+        assert_eq!(result2.as_deref(), Some("L"));
     }
 }

@@ -14,6 +14,11 @@ static ARXIV_TAG_TITLE: OnceLock<Regex> = OnceLock::new();
 static ARXIV_TAG_SUMMARY: OnceLock<Regex> = OnceLock::new();
 static ARXIV_TAG_ID: OnceLock<Regex> = OnceLock::new();
 static ARXIV_TAG_PUBLISHED: OnceLock<Regex> = OnceLock::new();
+static ARXIV_TAG_UPDATED: OnceLock<Regex> = OnceLock::new();
+static ARXIV_TAG_AUTHOR: OnceLock<Regex> = OnceLock::new();
+static ARXIV_TAG_LINK: OnceLock<Regex> = OnceLock::new();
+static ARXIV_TAG_CATEGORY: OnceLock<Regex> = OnceLock::new();
+static ARXIV_TAG_ENTRY: OnceLock<Regex> = OnceLock::new();
 
 fn get_static_xml_tag_re(tag: &str) -> Option<&'static Regex> {
     match tag {
@@ -32,6 +37,26 @@ fn get_static_xml_tag_re(tag: &str) -> Option<&'static Regex> {
         "published" => Some(ARXIV_TAG_PUBLISHED.get_or_init(|| {
             #[allow(clippy::expect_used)]
             Regex::new(r"(?s)<published(?:\s[^>]*)?>(.*?)</published>").expect("published regex")
+        })),
+        "updated" => Some(ARXIV_TAG_UPDATED.get_or_init(|| {
+            #[allow(clippy::expect_used)]
+            Regex::new(r"(?s)<updated(?:\s[^>]*)?>(.*?)</updated>").expect("updated regex")
+        })),
+        "author" => Some(ARXIV_TAG_AUTHOR.get_or_init(|| {
+            #[allow(clippy::expect_used)]
+            Regex::new(r"(?s)<author(?:\s[^>]*)?>(.*?)</author>").expect("author regex")
+        })),
+        "link" => Some(ARXIV_TAG_LINK.get_or_init(|| {
+            #[allow(clippy::expect_used)]
+            Regex::new(r"(?s)<link(?:\s[^>]*)?>(.*?)</link>").expect("link regex")
+        })),
+        "category" => Some(ARXIV_TAG_CATEGORY.get_or_init(|| {
+            #[allow(clippy::expect_used)]
+            Regex::new(r"(?s)<category(?:\s[^>]*)?>(.*?)</category>").expect("category regex")
+        })),
+        "entry" => Some(ARXIV_TAG_ENTRY.get_or_init(|| {
+            #[allow(clippy::expect_used)]
+            Regex::new(r"(?s)<entry(?:\s[^>]*)?>(.*?)</entry>").expect("entry regex")
         })),
         _ => None,
     }

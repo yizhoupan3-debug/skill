@@ -425,7 +425,7 @@ fn is_nonlinear(expr: &str) -> bool {
         || lower.contains("exp(")
         || lower.contains("log(")
         || lower.contains("ln(")
-        || lower.contains("pi")
+        || word_boundary_match(&lower, "pi")
     {
         return true;
     }
@@ -458,6 +458,45 @@ fn is_nonlinear(expr: &str) -> bool {
         i += 1;
     }
 
+    false
+}
+
+/// Check if `keyword` appears as a whole word (not substring) in `text`.
+///
+/// Used to avoid false positives like `"pivot"` matching keyword `"pi"`.
+fn word_boundary_match(text: &str, keyword: &str) -> bool {
+    let kw_len = keyword.len();
+    if kw_len > text.len() {
+        return false;
+    }
+    let bytes = text.as_bytes();
+    let mut start = 0;
+    while let Some(pos) = text[start..].find(keyword) {
+        let abs_pos = start + pos;
+        // Check char before keyword
+        let before_ok = if abs_pos == 0 {
+            true
+        } else {
+            let c = bytes[abs_pos - 1] as char;
+            !c.is_ascii_alphanumeric() && c != '_'
+        };
+        // Check char after keyword
+        let after_pos = abs_pos + kw_len;
+        let after_ok = if after_pos >= bytes.len() {
+            true
+        } else {
+            let c = bytes[after_pos] as char;
+            !c.is_ascii_alphanumeric() && c != '_'
+        };
+        if before_ok && after_ok {
+            return true;
+        }
+        // Advance past this match to continue scanning
+        start = abs_pos + kw_len;
+        if start >= bytes.len() {
+            break;
+        }
+    }
     false
 }
 
@@ -892,23 +931,35 @@ mod tests {
     }
 
     #[test]
-    fn test_is_nonlinear_heuristic_asterisk_false_positive() {
-        // The `*` heuristic flags scalar multiplication as nonlinear even
-        // though it is linear (e.g. `2*x` vs `x*y`). This is a known
-        // limitation of the simple heuristic. Document it here.
-        assert!(is_nonlinear("2*x <= 5"), "scalar mult 2*x is a false-positive nonlinear");
-        assert!(is_nonlinear("x + 2*y <= 5"), "scalar mult 2*y is a false-positive nonlinear");
-        assert!(is_nonlinear("3*x - y >= 1"), "scalar mult 3*x is a false-positive nonlinear");
+    fn test_is_nonlinear_constant_times_variable_no_longer_false_positive() {
+        // Fixed: constant × variable (e.g. `2*x`, `3*x - y`) is LINEAR
+        // and is no longer incorrectly flagged as nonlinear.
+        assert!(!is_nonlinear("2*x <= 5"), "2*x is linear (constant × variable)");
+        assert!(!is_nonlinear("x + 2*y <= 5"), "x + 2*y is linear");
+        assert!(!is_nonlinear("3*x - y >= 1"), "3*x - y is linear");
     }
 
     #[test]
-    fn test_is_nonlinear_pi_substring_false_positive() {
-        // The `pi` keyword check is a substring match, so any variable
-        // containing "pi" (e.g., "pivot") triggers a false positive.
-        // This is a known limitation of the simple heuristic.
+    fn test_is_nonlinear_pi_no_longer_false_positive() {
+        // Fixed: `pi` is now recognized as a whole-word boundary check,
+        // so `pivot` (contains "pi" as substring) is correctly linear.
         assert!(
-            is_nonlinear("pivot > 0"),
-            "variable 'pivot' contains 'pi' substring -> false positive nonlinear"
+            !is_nonlinear("pivot > 0"),
+            "'pivot' contains 'pi' substring but should NOT be nonlinear"
+        );
+        assert!(
+            !is_nonlinear("spiral >= 0"),
+            "'spiral' contains 'pi' but should NOT be nonlinear"
+        );
+
+        // Actual uses of `pi` constant ARE nonlinear
+        assert!(
+            is_nonlinear("x + pi <= 10"),
+            "x + pi should be nonlinear"
+        );
+        assert!(
+            is_nonlinear("sin(x) + pi"),
+            "sin(x) + pi should be nonlinear"
         );
     }
 

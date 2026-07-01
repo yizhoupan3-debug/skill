@@ -165,18 +165,7 @@ mod tests {
     use quality_gate::types::CheckContext;
 
     fn ctx(output_data: Option<serde_json::Value>) -> CheckContext {
-        CheckContext {
-            scene: "test".into(),
-            sub_scene: None,
-            goal: "test".into(),
-            round: 1,
-            repo_root: std::path::PathBuf::from("."),
-            task_id: "t1".into(),
-            evidence_path: None,
-            runtime_handle: None,
-            output_data,
-            evaluated_at: "2026-01-01T00:00:00Z".into(),
-        }
+        crate::verification::test_util::test_ctx(output_data)
     }
 
     #[test]
