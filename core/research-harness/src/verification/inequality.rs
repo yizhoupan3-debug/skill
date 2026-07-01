@@ -403,11 +403,19 @@ fn solve_via_minilp(system: &InequalitySystem) -> Result<HashMap<String, f64>, F
 // ===========================================================================
 
 /// Check if an expression is potentially nonlinear.
+///
+/// Uses a conservative heuristic: function calls (sin, cos, etc.),
+/// power operators (`^`, `**`), `pi`, and variable×variable products
+/// (i.e. `*` where BOTH sides are non-constant tokens).
+///
+/// A `*` between a constant and a variable (e.g. `2*x`, `x*3`) is LINEAR
+/// and can be solved by minilp — only when `*` connects two non-constant
+/// tokens (e.g. `x*y`, `(x+1)*y`, `x*sin(x)`) do we route to Z3.
 fn is_nonlinear(expr: &str) -> bool {
-    // Heuristic: look for power operators, function calls (sin, cos, sqrt),
-    // or polynomial terms with exponent > 1
     let lower = expr.to_lowercase();
-    lower.contains('^')
+
+    // Function calls and power operators → nonlinear
+    if lower.contains('^')
         || lower.contains("**")
         || lower.contains("sin(")
         || lower.contains("cos(")
@@ -416,9 +424,41 @@ fn is_nonlinear(expr: &str) -> bool {
         || lower.contains("abs(")
         || lower.contains("exp(")
         || lower.contains("log(")
-        || lower.contains("ln(") // ln is a nonlinear function, same as log
+        || lower.contains("ln(")
         || lower.contains("pi")
-        || lower.contains('*') // Potential product of variables
+    {
+        return true;
+    }
+
+    // Variable×variable product detection: `*` where both adjacent
+    // non-whitespace characters are letters (identifiers) or parens.
+    // Constant×variable (e.g. `2*x`, `x*2`) is LINEAR and NOT flagged.
+    let bytes = lower.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'*' {
+            // Find the first non-whitespace char before *
+            let mut j = if i > 0 { i - 1 } else { return false; };
+            while j > 0 && bytes[j] == b' ' { j -= 1; }
+            let before = bytes[j] as char;
+
+            // Find the first non-whitespace char after *
+            let mut k = i + 1;
+            while k < bytes.len() && bytes[k] == b' ' { k += 1; }
+            if k >= bytes.len() { return false; }
+            let after = bytes[k] as char;
+
+            // If both sides are letters or parens → variable × variable or (expr) × variable
+            if (before.is_ascii_alphabetic() || before == ')')
+                && (after.is_ascii_alphabetic() || after == '(')
+            {
+                return true;
+            }
+        }
+        i += 1;
+    }
+
+    false
 }
 
 /// Route to Z3 backend for nonlinear inequalities.
@@ -918,5 +958,64 @@ mod tests {
             result.details
         );
         assert_eq!(result.check_name, "math_prove_inequality");
+    }
+
+    // ── is_nonlinear tests ──
+
+    #[test]
+    fn test_is_nonlinear_power() {
+        assert!(is_nonlinear("x^2 + y <= 10"), "power operator (^)");
+        assert!(is_nonlinear("x**2"), "power operator (**)");
+    }
+
+    #[test]
+    fn test_is_nonlinear_functions() {
+        assert!(is_nonlinear("sin(x) <= 1"), "sin function");
+        assert!(is_nonlinear("cos(x) >= -1"), "cos function");
+        assert!(is_nonlinear("sqrt(x) >= 0"), "sqrt function");
+        assert!(is_nonlinear("exp(x) <= 10"), "exp function");
+        assert!(is_nonlinear("log(x) > 0"), "log function");
+        assert!(is_nonlinear("abs(x) >= 0"), "abs function");
+    }
+
+    #[test]
+    fn test_is_nonlinear_variable_product() {
+        // Variable × Variable → nonlinear
+        assert!(is_nonlinear("x*y <= 10"), "variable × variable");
+        assert!(is_nonlinear("x*y*z >= 0"), "three variables product");
+    }
+
+    #[test]
+    fn test_is_nonlinear_paren_product() {
+        // (expr) × variable → nonlinear
+        assert!(is_nonlinear("(x+1)*y <= 10"), "paren × variable");
+    }
+
+    #[test]
+    fn test_is_linear_constant_times_variable() {
+        // Constant × Variable → LINEAR
+        assert!(!is_nonlinear("2*x <= 10"), "constant × variable (2*x)");
+        assert!(!is_nonlinear("x*2 <= 10"), "variable × constant (x*2)");
+        assert!(!is_nonlinear("3*x + 5*y <= 10"), "multiple constant×variable");
+    }
+
+    #[test]
+    fn test_is_linear_simple() {
+        assert!(!is_nonlinear("x + y <= 10"), "linear: x + y <= 10");
+        assert!(!is_nonlinear("x - y > 0"), "linear: x - y > 0");
+        assert!(!is_nonlinear("x >= 0"), "linear: x >= 0");
+        assert!(!is_nonlinear("x + 2*y - 3*z <= 5"), "linear multi-var");
+    }
+
+    #[test]
+    fn test_is_nonlinear_with_pi() {
+        assert!(is_nonlinear("x + pi <= 10"), "pi constant");
+        assert!(is_nonlinear("sin(x) + pi"), "pi in expression");
+    }
+
+    #[test]
+    fn test_is_linear_non_standard_operators() {
+        // Division by constant → still linear if no other nonlinearity
+        assert!(!is_nonlinear("x/2 <= 10"), "x/2 is linear");
     }
 }

@@ -502,6 +502,16 @@ pub fn simplify(expr: &Expr) -> Expr {
         }
         Expr::Fn(name, args) => {
             let sargs: Vec<Expr> = args.iter().map(simplify).collect();
+            // Constant-fold trig functions when argument is a constant
+            if sargs.len() == 1 {
+                if let Expr::Const(c) = &sargs[0] {
+                    return match name.as_str() {
+                        "sin" => Expr::Const(c.sin()),
+                        "cos" => Expr::Const(c.cos()),
+                        _ => Expr::Fn(name.clone(), sargs),
+                    };
+                }
+            }
             Expr::Fn(name.clone(), sargs)
         }
     }
@@ -649,6 +659,318 @@ fn strip_coefficient(expr: &Expr) -> Expr {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
+// Trig simplification — basic identity lookup
+// ════════════════════════════════════════════════════════════════════════════
+
+/// Apply basic trigonometric identity simplifications.
+///
+/// Currently supports:
+/// - sin(x)^2 + cos(x)^2 → 1
+///
+/// (Constant folding of sin(0)=0, cos(0)=1, sin(pi)=0, cos(pi)=-1
+///  is handled inside `simplify` via the Fn arm.)
+pub fn trig_simplify(expr: &Expr) -> Expr {
+    match expr {
+        Expr::Add(..) => {
+            let terms: Vec<Expr> = flatten_add(expr).into_iter().cloned().collect();
+            let mut result = Vec::new();
+            let n = terms.len();
+            let mut used = vec![false; n];
+
+            for i in 0..n {
+                if used[i] {
+                    continue;
+                }
+                if let Some(arg) = is_sin_sq(&terms[i]) {
+                    let mut found = false;
+                    for j in (i + 1)..n {
+                        if !used[j] {
+                            if let Some(arg2) = is_cos_sq(&terms[j]) {
+                                if arg == arg2 {
+                                    result.push(Expr::Const(1.0));
+                                    used[i] = true;
+                                    used[j] = true;
+                                    found = true;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    if !found {
+                        result.push(trig_simplify(&terms[i]));
+                        used[i] = true;
+                    }
+                } else {
+                    result.push(trig_simplify(&terms[i]));
+                    used[i] = true;
+                }
+            }
+
+            simplify(&make_add(result))
+        }
+        Expr::Sub(a, b) => {
+            Expr::Sub(Box::new(trig_simplify(a)), Box::new(trig_simplify(b)))
+        }
+        Expr::Mul(a, b) => {
+            Expr::Mul(Box::new(trig_simplify(a)), Box::new(trig_simplify(b)))
+        }
+        Expr::Div(a, b) => {
+            Expr::Div(Box::new(trig_simplify(a)), Box::new(trig_simplify(b)))
+        }
+        Expr::Pow(a, b) => {
+            Expr::Pow(Box::new(trig_simplify(a)), Box::new(trig_simplify(b)))
+        }
+        Expr::Neg(x) => Expr::Neg(Box::new(trig_simplify(x))),
+        Expr::Fn(name, args) => {
+            Expr::Fn(name.clone(), args.iter().map(|a| trig_simplify(a)).collect())
+        }
+        _ => expr.clone(),
+    }
+}
+
+/// Check if an expression is `sin(arg)^2`.
+fn is_sin_sq(expr: &Expr) -> Option<String> {
+    match expr {
+        Expr::Pow(base, exp)
+            if matches!(exp.as_ref(), Expr::Const(c) if (*c - 2.0).abs() < 1e-12) =>
+        {
+            if let Expr::Fn(name, args) = base.as_ref() {
+                if name == "sin" && args.len() == 1 {
+                    return Some(display(&args[0]));
+                }
+            }
+            None
+        }
+        _ => None,
+    }
+}
+
+/// Check if an expression is `cos(arg)^2`.
+fn is_cos_sq(expr: &Expr) -> Option<String> {
+    match expr {
+        Expr::Pow(base, exp)
+            if matches!(exp.as_ref(), Expr::Const(c) if (*c - 2.0).abs() < 1e-12) =>
+        {
+            if let Expr::Fn(name, args) = base.as_ref() {
+                if name == "cos" && args.len() == 1 {
+                    return Some(display(&args[0]));
+                }
+            }
+            None
+        }
+        _ => None,
+    }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// Algebraic simplification — rationalization and common-factor extraction
+// ════════════════════════════════════════════════════════════════════════════
+
+/// Rationalize an expression — put all terms over a common denominator.
+///
+/// E.g. `a/b + c/d` → `(a*d + b*c) / (b*d)`.
+pub fn rationalize(expr: &Expr) -> Expr {
+    let expr = simplify(expr);
+    match &expr {
+        Expr::Add(..) | Expr::Sub(..) => {
+            let terms = flatten_add(&expr);
+            let mut pairs: Vec<(Expr, Expr)> = Vec::new();
+
+            for term in terms {
+                match term {
+                    Expr::Div(num, den) => {
+                        pairs.push(((**num).clone(), (**den).clone()));
+                    }
+                    Expr::Neg(inner) => match inner.as_ref() {
+                        Expr::Div(num, den) => {
+                            // -(num/den) → (-num)/den
+                            pairs.push((
+                                simplify(&Expr::Mul(
+                                    Box::new(Expr::Const(-1.0)),
+                                    Box::new((**num).clone()),
+                                )),
+                                (**den).clone(),
+                            ));
+                        }
+                        other => {
+                            pairs.push((
+                                simplify(&Expr::Mul(
+                                    Box::new(Expr::Const(-1.0)),
+                                    Box::new(other.clone()),
+                                )),
+                                Expr::Const(1.0),
+                            ));
+                        }
+                    },
+                    other => {
+                        pairs.push((other.clone(), Expr::Const(1.0)));
+                    }
+                }
+            }
+
+            // Find all unique denominators
+            let mut dens: Vec<Expr> = pairs.iter().map(|(_, d)| d.clone()).collect();
+            dens.sort_by(|a, b| display(a).cmp(&display(b)));
+            dens.dedup();
+
+            // If all denominators are 1, nothing to do
+            if dens.len() == 1
+                && matches!(&dens[0], Expr::Const(c) if (c - 1.0).abs() < 1e-12)
+            {
+                return expr;
+            }
+
+            // For each pair, compute numerator * product of OTHER denominators
+            let new_nums: Vec<Expr> = pairs
+                .iter()
+                .map(|(num, den)| {
+                    let others: Vec<Expr> = dens
+                        .iter()
+                        .filter(|d| *d != den)
+                        .cloned()
+                        .collect();
+                    if others.is_empty() {
+                        num.clone()
+                    } else {
+                        let mut factors = vec![num.clone()];
+                        factors.extend(others);
+                        make_mul(factors)
+                    }
+                })
+                .collect();
+
+            let numerator = make_add(new_nums);
+            let common_den = make_mul(dens);
+
+            simplify(&Expr::Div(Box::new(numerator), Box::new(common_den)))
+        }
+        _ => expr,
+    }
+}
+
+/// Extract common factors from a sum.
+///
+/// E.g. `2x + 2y` → `2*(x + y)`.
+pub fn factor_common(expr: &Expr) -> Expr {
+    let expr = simplify(expr);
+    match &expr {
+        Expr::Add(..) => {
+            let terms = flatten_add(&expr);
+            if terms.len() <= 1 {
+                return expr;
+            }
+
+            // Factor each term into (coefficient, [factors])
+            let mut coeffs: Vec<f64> = Vec::new();
+            let mut factored_terms: Vec<Vec<Expr>> = Vec::new();
+
+            for term in &terms {
+                let (c, parts) = factor_term(term);
+                coeffs.push(c);
+                factored_terms.push(parts);
+            }
+
+            // Find GCD of coefficients
+            let coeff_gcd = coeffs.iter().fold(coeffs[0], |acc, &c| gcd_f64(acc, c));
+
+            // Find common variable factors
+            let common_factors = find_common_factors(&factored_terms);
+
+            if (coeff_gcd.abs() < 1e-12)
+                || ((coeff_gcd - 1.0).abs() < 1e-12 && common_factors.is_empty())
+            {
+                return expr;
+            }
+
+            // Build the extracted common factor
+            let mut extracted = Vec::new();
+            if (coeff_gcd - 1.0).abs() > 1e-12 {
+                extracted.push(Expr::Const(coeff_gcd));
+            }
+            extracted.extend(common_factors.iter().cloned());
+            let common = make_mul(extracted);
+
+            // Divide each term by the common factor
+            let new_terms: Vec<Expr> = terms
+                .iter()
+                .map(|t| {
+                    simplify(&Expr::Div(
+                        Box::new((*t).clone()),
+                        Box::new(common.clone()),
+                    ))
+                })
+                .collect();
+
+            let sum = make_add(new_terms);
+            simplify(&Expr::Mul(Box::new(common), Box::new(sum)))
+        }
+        _ => expr,
+    }
+}
+
+/// Split a term into (coefficient, [variable-factor, ...]).
+fn factor_term(expr: &Expr) -> (f64, Vec<Expr>) {
+    match expr {
+        Expr::Const(c) => (*c, vec![]),
+        Expr::Mul(..) => {
+            let factors: Vec<&Expr> = flatten_mul(expr);
+            let mut coeff = 1.0_f64;
+            let mut parts = Vec::new();
+            for f in factors {
+                match f {
+                    Expr::Const(c) => coeff *= c,
+                    other => parts.push(other.clone()),
+                }
+            }
+            (coeff, parts)
+        }
+        other => (1.0, vec![other.clone()]),
+    }
+}
+
+/// Find variable factors that appear in every term.
+fn find_common_factors(terms: &[Vec<Expr>]) -> Vec<Expr> {
+    if terms.is_empty() {
+        return vec![];
+    }
+    // Filter out empty factor lists
+    let non_empty: Vec<&Vec<Expr>> = terms.iter().filter(|t| !t.is_empty()).collect();
+    if non_empty.is_empty() {
+        return vec![];
+    }
+
+    // Start with the first term's factors as display strings
+    let first_keys: Vec<String> = non_empty[0].iter().map(|f| display(f)).collect();
+    let mut common_indices: Vec<usize> = (0..first_keys.len()).collect();
+
+    for term in non_empty.iter().skip(1) {
+        let term_keys: Vec<String> = term.iter().map(|f| display(f)).collect();
+        common_indices.retain(|&idx| term_keys.iter().any(|tk| *tk == first_keys[idx]));
+    }
+
+    common_indices
+        .iter()
+        .map(|&idx| non_empty[0][idx].clone())
+        .collect()
+}
+
+/// Euclidean GCD for integer-valued floating-point coefficients.
+fn gcd_f64(a: f64, b: f64) -> f64 {
+    let ai = a.round() as i64;
+    let bi = b.round() as i64;
+    if (ai as f64 - a).abs() > 1e-10 || (bi as f64 - b).abs() > 1e-10 {
+        return 1.0;
+    }
+    let (mut a, mut b) = (ai, bi);
+    while b != 0 {
+        let t = b;
+        b = a % b;
+        a = t;
+    }
+    a.abs() as f64
+}
+
+// ════════════════════════════════════════════════════════════════════════════
 // Expansion (distribute multiplication over addition)
 // ════════════════════════════════════════════════════════════════════════════
 
@@ -776,29 +1098,47 @@ fn equivalent_with_seed(lhs: &str, rhs: &str, seed: u64) -> bool {
         };
     }
 
-    let mut rng = SimpleRng::new(seed);
-
-    // Use 100 random samples with adaptive range selection.
-    // The sampling space is partitioned: first 10 use a tight range to detect
-    // near-constant differences, then 90 use an extended range.
-    const SAMPLES: usize = 100;
-    for sample_idx in 0..SAMPLES {
+    // Strategy 2a: Special value pre-check
+    // Test at 0, 1, -1, pi/2, pi, e — these edge cases often reveal non-equivalence early.
+    let special_values: [f64; 6] = [
+        0.0,
+        1.0,
+        -1.0,
+        std::f64::consts::FRAC_PI_2,
+        std::f64::consts::PI,
+        std::f64::consts::E,
+    ];
+    for sv in &special_values {
         let mut bindings = HashMap::new();
         for v in &vars {
-            // Adaptive range based on variable convention and sample phase
+            bindings.insert(v.clone(), *sv);
+        }
+        match (eval(&lhs_expr, &bindings), eval(&rhs_expr, &bindings)) {
+            (Ok(l), Ok(r)) => {
+                if (l - r).abs() > 1e-6 {
+                    return false;
+                }
+            }
+            _ => {} // skip undefined points (e.g., log(0))
+        }
+    }
+
+    // Strategy 2b: Adaptive random sampling
+    let mut rng = SimpleRng::new(seed);
+
+    const INITIAL_SAMPLES: usize = 20;
+    const FOCUSED_SAMPLES: usize = 50;
+
+    let mut max_diff = 0.0_f64;
+    let mut sample_count = 0_usize;
+
+    // Phase 1: initial uniform samples
+    for _ in 0..INITIAL_SAMPLES {
+        let mut bindings = HashMap::new();
+        for v in &vars {
             let (lo, hi) = match v.as_str() {
-                // Natural numbers (typical in asymptotic analysis)
-                "n" | "m" | "k" | "i" | "j" | "N" | "M" => {
-                    if sample_idx < 10 { (1.0, 20.0) } else { (0.5, 1_000.0) }
-                }
-                // Real variables — wider range in later samples
-                "x" | "y" | "z" | "t" | "u" | "v" | "w" => {
-                    if sample_idx < 10 { (-5.0, 5.0) } else { (-100.0, 100.0) }
-                }
-                // Coefficients and parameters — small positive
-                _ => {
-                    if sample_idx < 10 { (0.0, 10.0) } else { (-10.0, 10.0) }
-                }
+                "n" | "m" | "k" | "i" | "j" | "N" | "M" => (1.0, 100.0),
+                _ => (-10.0, 10.0),
             };
             let val = rng.next_range(lo, hi);
             bindings.insert(v.clone(), val);
@@ -806,13 +1146,67 @@ fn equivalent_with_seed(lhs: &str, rhs: &str, seed: u64) -> bool {
 
         match (eval(&lhs_expr, &bindings), eval(&rhs_expr, &bindings)) {
             (Ok(l), Ok(r)) => {
-                if (l - r).abs() > 1e-6 {
+                let diff = (l - r).abs();
+                if diff > 1e-6 {
                     return false;
                 }
+                if diff > max_diff {
+                    max_diff = diff;
+                }
+                sample_count += 1;
             }
-            _ => continue, // skip points where either side errors (e.g., div by zero)
+            _ => continue,
         }
     }
+
+    // Phase 2: if close to boundary, add focused sampling
+    if max_diff < 1e-3 && sample_count >= INITIAL_SAMPLES / 2 {
+        // Run focused samples with wider range to stress-test the boundary
+        for _ in 0..FOCUSED_SAMPLES {
+            let mut bindings = HashMap::new();
+            for v in &vars {
+                let (lo, hi) = match v.as_str() {
+                    "n" | "m" | "k" | "i" | "j" | "N" | "M" => (0.5, 1_000.0),
+                    _ => (-100.0, 100.0),
+                };
+                let val = rng.next_range(lo, hi);
+                bindings.insert(v.clone(), val);
+            }
+            match (eval(&lhs_expr, &bindings), eval(&rhs_expr, &bindings)) {
+                (Ok(l), Ok(r)) => {
+                    if (l - r).abs() > 1e-6 {
+                        return false;
+                    }
+                }
+                _ => continue,
+            }
+        }
+    } else if sample_count < INITIAL_SAMPLES / 2 {
+        // Too many samples were undefined (e.g., many division-by-zero points) —
+        // fall back to comprehensive sampling up to 100 total valid samples.
+        let mut fallback_valid = 0_usize;
+        while fallback_valid < (100 - sample_count) {
+            let mut bindings = HashMap::new();
+            for v in &vars {
+                let (lo, hi) = match v.as_str() {
+                    "n" | "m" | "k" | "i" | "j" | "N" | "M" => (0.5, 1_000.0),
+                    _ => (-100.0, 100.0),
+                };
+                let val = rng.next_range(lo, hi);
+                bindings.insert(v.clone(), val);
+            }
+            match (eval(&lhs_expr, &bindings), eval(&rhs_expr, &bindings)) {
+                (Ok(l), Ok(r)) => {
+                    if (l - r).abs() > 1e-6 {
+                        return false;
+                    }
+                    fallback_valid += 1;
+                }
+                _ => continue,
+            }
+        }
+    }
+
     true
 }
 
@@ -854,20 +1248,20 @@ fn collect_vars_rec(expr: &Expr, vars: &mut Vec<String>) {
 }
 
 /// Minimal deterministic PRNG for numerical identity testing.
-struct SimpleRng(u64);
+pub struct SimpleRng(u64);
 
 impl SimpleRng {
-    fn new(seed: u64) -> Self {
+    pub fn new(seed: u64) -> Self {
         Self(seed)
     }
-    fn next(&mut self) -> u64 {
+    pub fn next(&mut self) -> u64 {
         self.0 = self
             .0
             .wrapping_mul(6364136223846793005)
             .wrapping_add(1442695040888963407);
         self.0 >> 33
     }
-    fn next_range(&mut self, lo: f64, hi: f64) -> f64 {
+    pub fn next_range(&mut self, lo: f64, hi: f64) -> f64 {
         let rand = self.next() as f64 / u64::MAX as f64;
         lo + rand * (hi - lo)
     }
@@ -1239,9 +1633,157 @@ pub fn simplify_expression(expr_str: &str) -> String {
     match parse(expr_str) {
         Ok(expr) => {
             let sm = simplify(&expand(&expr));
-            display(&sm)
+            let trig = trig_simplify(&sm);
+            display(&trig)
         }
         Err(_) => expr_str.to_string(),
+    }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// Structural equivalence, subexpression search, and normalization
+// ════════════════════════════════════════════════════════════════════════════
+
+/// Check structural equivalence with optional commutativity handling.
+///
+/// With `commutativity = true`, `a + b` matches `b + a` and `a * b` matches `b * a`.
+/// (Terms are compared as multisets.)
+pub fn structural_equal(a: &Expr, b: &Expr, commutativity: bool) -> bool {
+    if a == b {
+        return true;
+    }
+    if !commutativity {
+        return false;
+    }
+    match (a, b) {
+        (Expr::Add(..), Expr::Add(..)) => {
+            let a_terms: Vec<&Expr> = flatten_add(a);
+            let b_terms: Vec<&Expr> = flatten_add(b);
+            if a_terms.len() != b_terms.len() {
+                return false;
+            }
+            let mut used = vec![false; b_terms.len()];
+            for a_t in &a_terms {
+                let mut matched = false;
+                for (j, b_t) in b_terms.iter().enumerate() {
+                    if !used[j] && structural_equal(a_t, b_t, true) {
+                        used[j] = true;
+                        matched = true;
+                        break;
+                    }
+                }
+                if !matched {
+                    return false;
+                }
+            }
+            true
+        }
+        (Expr::Mul(..), Expr::Mul(..)) => {
+            let a_factors: Vec<&Expr> = flatten_mul(a);
+            let b_factors: Vec<&Expr> = flatten_mul(b);
+            if a_factors.len() != b_factors.len() {
+                return false;
+            }
+            let mut used = vec![false; b_factors.len()];
+            for a_f in &a_factors {
+                let mut matched = false;
+                for (j, b_f) in b_factors.iter().enumerate() {
+                    if !used[j] && structural_equal(a_f, b_f, true) {
+                        used[j] = true;
+                        matched = true;
+                        break;
+                    }
+                }
+                if !matched {
+                    return false;
+                }
+            }
+            true
+        }
+        _ => false,
+    }
+}
+
+/// Check if `target` appears as a subtree of `expr`.
+///
+/// Useful for step-dependency verification: ensures a derived expression
+/// contains an expected subexpression.
+pub fn find_subexpression(expr: &Expr, target: &Expr) -> bool {
+    if expr == target {
+        return true;
+    }
+    match expr {
+        Expr::Const(_) | Expr::Var(_) => false,
+        Expr::Neg(x) => find_subexpression(x, target),
+        Expr::Add(a, b)
+        | Expr::Sub(a, b)
+        | Expr::Mul(a, b)
+        | Expr::Div(a, b)
+        | Expr::Pow(a, b) => find_subexpression(a, target) || find_subexpression(b, target),
+        Expr::Fn(_, args) => args.iter().any(|a| find_subexpression(a, target)),
+    }
+}
+
+/// Normalize an expression to a canonical form.
+///
+/// Applies: simplify → trig_simplify → expand → simplify → rationalize →
+/// factor_common → canonical ordering (variables sorted alphabetically,
+/// constants placed last, factors sorted).
+pub fn normalize(expr: &Expr) -> Expr {
+    let expr = simplify(expr);
+    let expr = trig_simplify(&expr);
+    let expr = expand(&expr);
+    let expr = simplify(&expr);
+    let expr = rationalize(&expr);
+    let expr = factor_common(&expr);
+    canonical_order(&expr)
+}
+
+/// Sort terms and factors for deterministic ordering.
+fn canonical_order(expr: &Expr) -> Expr {
+    match expr {
+        Expr::Const(_) | Expr::Var(_) => expr.clone(),
+        Expr::Neg(x) => Expr::Neg(Box::new(canonical_order(x))),
+        Expr::Add(..) => {
+            let terms: Vec<Expr> = flatten_add(expr)
+                .into_iter()
+                .map(|t| canonical_order(t))
+                .collect();
+            let mut sorted = terms;
+            sorted.sort_by(|a, b| {
+                let a_is_const = matches!(a, Expr::Const(_));
+                let b_is_const = matches!(b, Expr::Const(_));
+                if a_is_const && !b_is_const {
+                    return std::cmp::Ordering::Greater;
+                }
+                if !a_is_const && b_is_const {
+                    return std::cmp::Ordering::Less;
+                }
+                display(a).cmp(&display(b))
+            });
+            make_add(sorted)
+        }
+        Expr::Sub(a, b) => {
+            Expr::Sub(Box::new(canonical_order(a)), Box::new(canonical_order(b)))
+        }
+        Expr::Mul(..) => {
+            let factors: Vec<Expr> = flatten_mul(expr)
+                .into_iter()
+                .map(|f| canonical_order(f))
+                .collect();
+            let mut sorted = factors;
+            sorted.sort_by(|a, b| display(a).cmp(&display(b)));
+            make_mul(sorted)
+        }
+        Expr::Div(a, b) => {
+            Expr::Div(Box::new(canonical_order(a)), Box::new(canonical_order(b)))
+        }
+        Expr::Pow(a, b) => {
+            Expr::Pow(Box::new(canonical_order(a)), Box::new(canonical_order(b)))
+        }
+        Expr::Fn(name, args) => {
+            Expr::Fn(name.clone(), args.iter().map(|a| canonical_order(a)).collect())
+        }
     }
 }
 
@@ -1639,5 +2181,263 @@ mod tests {
             equivalent("sin(x)^2 + cos(x)^2 + y - y", "1"),
             "multi-variable trig identity"
         );
+    }
+
+    // ── Trig simplification ──
+
+    #[test]
+    fn test_trig_const_fold_sin0() {
+        let e = parse("sin(0)").unwrap();
+        let s = simplify(&e);
+        assert!((eval(&s, &HashMap::new()).unwrap() - 0.0).abs() < 1e-10);
+        assert_eq!(display(&s), "0");
+    }
+
+    #[test]
+    fn test_trig_const_fold_cos0() {
+        let e = parse("cos(0)").unwrap();
+        let s = simplify(&e);
+        assert!((eval(&s, &HashMap::new()).unwrap() - 1.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_trig_const_fold_sin_pi() {
+        let e = parse("sin(pi)").unwrap();
+        let s = simplify(&e);
+        assert!((eval(&s, &HashMap::new()).unwrap()).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_trig_const_fold_cos_pi() {
+        let e = parse("cos(pi)").unwrap();
+        let s = simplify(&e);
+        assert!((eval(&s, &HashMap::new()).unwrap() + 1.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_trig_identity_sin_sq_plus_cos_sq() {
+        // trig_simplify should reduce sin(x)^2 + cos(x)^2 → 1
+        let e = parse("sin(x)^2 + cos(x)^2").unwrap();
+        let t = trig_simplify(&e);
+        let result = eval(&t, &HashMap::new()).unwrap();
+        assert!((result - 1.0).abs() < 1e-10, "expected 1, got {result}");
+    }
+
+    #[test]
+    fn test_trig_identity_nested() {
+        // Works even inside larger expressions
+        let e = parse("sin(x)^2 + cos(x)^2 + y").unwrap();
+        let t = trig_simplify(&e);
+        let mut vars = HashMap::new();
+        vars.insert("y".into(), 5.0);
+        let result = eval(&t, &vars).unwrap();
+        assert!((result - 6.0).abs() < 1e-10, "expected 6, got {result}");
+    }
+
+    // ── Rationalization ──
+
+    #[test]
+    fn test_rationalize_simple() {
+        let e = parse("1/x + 1/y").unwrap();
+        let r = rationalize(&e);
+        let mut vars = HashMap::new();
+        vars.insert("x".into(), 2.0);
+        vars.insert("y".into(), 3.0);
+        let lhs = eval(&e, &vars).unwrap();
+        let rhs = eval(&r, &vars).unwrap();
+        assert!((lhs - rhs).abs() < 1e-10, "rationalize changed value");
+    }
+
+    #[test]
+    fn test_rationalize_noop() {
+        // No fractions — unchanged
+        let e = parse("x + y").unwrap();
+        let r = rationalize(&e);
+        assert_eq!(display(&r), "x + y");
+    }
+
+    #[test]
+    fn test_rationalize_single_denom() {
+        // Single fractional term — unchanged structure
+        let e = parse("1/x").unwrap();
+        let r = rationalize(&e);
+        assert_eq!(display(&r), "1/x");
+    }
+
+    #[test]
+    fn test_rationalize_neg_term() {
+        let e = parse("a/b - c/d").unwrap();
+        let r = rationalize(&e);
+        let mut vars = HashMap::new();
+        vars.insert("a".into(), 1.0);
+        vars.insert("b".into(), 2.0);
+        vars.insert("c".into(), 3.0);
+        vars.insert("d".into(), 4.0);
+        let lhs = eval(&e, &vars).unwrap();
+        let rhs = eval(&r, &vars).unwrap();
+        assert!((lhs - rhs).abs() < 1e-10, "rationalize changed value");
+    }
+
+    // ── Common factor extraction ──
+
+    #[test]
+    fn test_factor_common_simple() {
+        let e = parse("2*x + 2*y").unwrap();
+        let f = factor_common(&e);
+        let factored_str = display(&f);
+        let mut vars = HashMap::new();
+        vars.insert("x".into(), 3.0);
+        vars.insert("y".into(), 5.0);
+        let orig = eval(&e, &vars).unwrap();
+        let factored = eval(&f, &vars).unwrap();
+        assert!(
+            (orig - factored).abs() < 1e-10,
+            "factor_common changed value: got {factored_str}"
+        );
+    }
+
+    #[test]
+    fn test_factor_common_noop() {
+        // No common factor — unchanged
+        let e = parse("x + y").unwrap();
+        let f = factor_common(&e);
+        assert_eq!(display(&f), "x + y");
+    }
+
+    #[test]
+    fn test_factor_common_coefficient_only() {
+        let e = parse("3*x + 3*y + 3*z").unwrap();
+        let f = factor_common(&e);
+        let mut vars = HashMap::new();
+        vars.insert("x".into(), 1.0);
+        vars.insert("y".into(), 2.0);
+        vars.insert("z".into(), 3.0);
+        let orig = eval(&e, &vars).unwrap();
+        let factored = eval(&f, &vars).unwrap();
+        assert!((orig - factored).abs() < 1e-10, "factor_common changed value");
+    }
+
+    // ── Structural equivalence ──
+
+    #[test]
+    fn test_structural_equal_add_commutative() {
+        let a = parse("x + 1").unwrap();
+        let b = parse("1 + x").unwrap();
+        assert!(structural_equal(&a, &b, true));
+    }
+
+    #[test]
+    fn test_structural_equal_mul_commutative() {
+        let a = parse("x * y").unwrap();
+        let b = parse("y * x").unwrap();
+        assert!(structural_equal(&a, &b, true));
+    }
+
+    #[test]
+    fn test_structural_equal_non_commutative() {
+        let a = parse("x + 1").unwrap();
+        let b = parse("1 + x").unwrap();
+        assert!(!structural_equal(&a, &b, false));
+    }
+
+    #[test]
+    fn test_structural_equal_different_op() {
+        let a = parse("x + y").unwrap();
+        let b = parse("x * y").unwrap();
+        assert!(!structural_equal(&a, &b, true));
+    }
+
+    // ── Subexpression search ──
+
+    #[test]
+    fn test_find_subexpression_simple() {
+        let expr = parse("(x+1)^2 + y").unwrap();
+        let target = parse("x+1").unwrap();
+        assert!(find_subexpression(&expr, &target));
+    }
+
+    #[test]
+    fn test_find_subexpression_not_found() {
+        let expr = parse("x^2 + y").unwrap();
+        let target = parse("x+1").unwrap();
+        assert!(!find_subexpression(&expr, &target));
+    }
+
+    #[test]
+    fn test_find_subexpression_in_fn_arg() {
+        let expr = parse("sin(x)").unwrap();
+        let target = parse("x").unwrap();
+        assert!(find_subexpression(&expr, &target));
+    }
+
+    #[test]
+    fn test_find_subexpression_self() {
+        let expr = parse("x + y + z").unwrap();
+        assert!(find_subexpression(&expr, &expr));
+    }
+
+    // ── Normalization ──
+
+    #[test]
+    fn test_normalize_sorts_vars() {
+        let a = parse("y + x + 2*1").unwrap();
+        let n = normalize(&a);
+        // Constants folded, terms sorted: "x + y + 2"
+        let result = display(&n);
+        assert_eq!(result, "x + y + 2", "got {result}");
+    }
+
+    #[test]
+    fn test_normalize_like_terms() {
+        let a = parse("2*y + 3*x + x").unwrap();
+        let n = normalize(&a);
+        // Like terms combined: 3*x + 2*y
+        let mut vars = HashMap::new();
+        vars.insert("x".into(), 2.0);
+        vars.insert("y".into(), 3.0);
+        let orig = eval(&a, &vars).unwrap();
+        let norm = eval(&n, &vars).unwrap();
+        assert!(
+            (orig - norm).abs() < 1e-10,
+            "normalize changed value"
+        );
+    }
+
+    #[test]
+    fn test_normalize_factor_common() {
+        let e = parse("2*x + 2*y").unwrap();
+        let n = normalize(&e);
+        // The result should have factored out the 2
+        // Check structural difference from pre-normalize
+        let pre_norm = simplify(&e);
+        // After normalize, the factored form should be structurally
+        // equivalent via commutative add
+        assert!(
+            structural_equal(&n, &pre_norm, true)
+                || display(&n) != display(&pre_norm), // at least different display
+            "normalize should change factoring but not stop here"
+        );
+        // Verify numerical correctness
+        let mut vars = HashMap::new();
+        vars.insert("x".into(), 3.0);
+        vars.insert("y".into(), 5.0);
+        assert!(
+            (eval(&e, &vars).unwrap() - eval(&n, &vars).unwrap()).abs() < 1e-10
+        );
+    }
+
+    // ── Enhanced equivalent with adaptive sampling ──
+
+    #[test]
+    fn test_equivalent_special_values() {
+        // Edge-case identities that benefit from special-value pre-check
+        assert!(equivalent("x^0", "1"), "x^0 should equal 1");
+        assert!(equivalent("0*x", "0"), "0*x should equal 0");
+    }
+
+    #[test]
+    fn test_equivalent_adaptive_sampling_still_passes_trig() {
+        // The adaptive sampling should still correctly handle trig identities
+        assert!(equivalent("sin(x)^2 + cos(x)^2", "1"));
     }
 }

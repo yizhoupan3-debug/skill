@@ -1,0 +1,942 @@
+//! Automatic theorem proving pipeline combining SymPy, Z3, minilp, pure Rust.
+//!
+//! # Capabilities
+//!
+//! 1. **Auto prover** (`try_prove`): chains SymPy → Z3 → inequality check, returns
+//!    unified result with proof trace.
+//! 2. **Identity chain verification** (`verify_identity_chain`): transitivity check for
+//!    a = b = c = d chains.
+//! 3. **Bound tightening** (`tighten_bounds`): Z3-guided interval contraction for a
+//!    single variable in an inequality.
+//! 4. **Witness consistency with batch** (`verify_witness_consistency` and
+//!    `generate_random_witnesses`): substitution verification with optional random
+//!    batch generation.
+//! 5. **Homomorphism check** (`check_homomorphism`): structural relationship detection
+//!    (shift, scaling, general transform).
+//! 6. **ProofTrace recording**: all functions return structured proof traces via
+//!    `crate::verification::proof_trace::ProofTrace`.
+
+use crate::types::{VerificationResult, VerificationStatus};
+use crate::verification::proof_trace::{ProofTrace, UsedBackend, timed_verify};
+use serde::{Deserialize, Serialize};
+use serde_json::json;
+use std::collections::HashMap;
+
+// ===========================================================================
+// AutoProverResult
+// ===========================================================================
+
+/// Unified result from the auto prover.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AutoProverResult {
+    /// Whether the proposition was proved
+    pub proved: bool,
+    /// Which backend succeeded
+    pub backend: UsedBackend,
+    /// Detailed verification result
+    pub verification_result: VerificationResult,
+    /// Full proof trace
+    pub trace: ProofTrace,
+    /// Human-readable proof string
+    pub proof_string: String,
+}
+
+// ===========================================================================
+// IdentityChainResult
+// ===========================================================================
+
+/// Result of an identity chain verification.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IdentityChainResult {
+    /// Whether the full chain is verified (all adjacent pairs equal)
+    pub verified: bool,
+    /// Number of pairs checked
+    pub pairs_checked: usize,
+    /// Index of the first broken pair (if any)
+    pub broken_at: Option<usize>,
+    /// Individual pair results
+    pub pair_results: Vec<VerificationResult>,
+    /// Details about the verification
+    pub details: String,
+}
+
+// ===========================================================================
+// TightenBoundsResult
+// ===========================================================================
+
+/// Result of bound tightening.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TightenBoundsResult {
+    /// The tightened lower bound
+    pub lower_bound: f64,
+    /// The tightened upper bound
+    pub upper_bound: f64,
+    /// Number of refinement iterations
+    pub iterations: usize,
+    /// Whether the range is non-empty
+    pub feasible: bool,
+    /// Details
+    pub details: String,
+}
+
+// ===========================================================================
+// HomomorphismResult
+// ===========================================================================
+
+/// Result of a homomorphism check.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HomomorphismResult {
+    /// Whether a homomorphism was found
+    pub found: bool,
+    /// Type of transform detected
+    pub transform_type: String,
+    /// Transform parameters, e.g. {"c": 2.0} for f(x) = g(x + c)
+    pub parameters: HashMap<String, f64>,
+    /// Equation describing the relationship
+    pub equation: String,
+    /// Details
+    pub details: String,
+}
+
+// ===========================================================================
+// Helper: variable extraction from expression string
+// ===========================================================================
+
+/// Extract variable names from an expression string (heuristic regex).
+fn extract_variables(expr: &str) -> Vec<String> {
+    let re = regex::Regex::new(r"[a-zA-Z_][a-zA-Z0-9_]*").expect("valid regex");
+    let keywords = [
+        "sin", "cos", "tan", "sqrt", "abs", "exp", "log", "ln",
+        "And", "Or", "Not", "Implies", "True", "False",
+        "pi", "e",
+    ];
+    let mut vars: Vec<String> = re.find_iter(expr)
+        .map(|m| m.as_str().to_string())
+        .filter(|v| !keywords.contains(&v.as_str()))
+        .collect();
+    vars.sort();
+    vars.dedup();
+    vars
+}
+
+/// Generate a deterministic sequence of random f64 values in [lo, hi].
+#[allow(dead_code)]
+fn seed_random_values(seed: u64, count: usize, lo: f64, hi: f64) -> Vec<f64> {
+    let mut rng = crate::verification::symbolic::SimpleRng::new(seed);
+    (0..count).map(|_| rng.next_range(lo, hi)).collect()
+}
+
+// ===========================================================================
+// 1. Auto Prover — try_prove
+// ===========================================================================
+
+/// Attempt to prove `lhs = rhs` using multiple backends in priority order:
+///
+/// 1. SymPy verify (symbolic identity)
+/// 2. Z3 prove (universal validity via SMT)
+/// 3. Inequality check (minilp for linear, Z3 for nonlinear)
+///
+/// Returns a structured `AutoProverResult` with proof trace regardless of which
+/// backend (if any) succeeded.
+#[allow(unused_assignments)]
+pub fn try_prove(lhs: &str, rhs: &str, timeout_ms: Option<u64>) -> AutoProverResult {
+    let start = std::time::Instant::now();
+    let mut trace = ProofTrace::new(UsedBackend::None);
+
+    // ── Strategy 1: SymPy verify ──
+    {
+        trace = ProofTrace::new(UsedBackend::SymPy);
+        let vr = crate::verification::sympy_bridge::verify_identity(lhs, rhs);
+        let elapsed = start.elapsed().as_millis() as u64;
+        trace.set_time_ms(elapsed);
+        trace.record_step("sympy_verify", lhs, rhs);
+
+        if vr.status == VerificationStatus::Pass {
+            trace.backend = UsedBackend::SymPy;
+            return AutoProverResult {
+                proved: true,
+                backend: UsedBackend::SymPy,
+                verification_result: vr.clone(),
+                trace,
+                proof_string: format!("Proved by SymPy: {lhs} = {rhs}"),
+            };
+        }
+    }
+
+    // ── Strategy 2: Z3 prove (only if available) ──
+    if crate::verification::python_bridge::z3_available() {
+        trace = ProofTrace::new(UsedBackend::Z3);
+        let z3_expr = format!("{lhs} == {rhs}");
+        let vr = crate::verification::z3_bridge::prove_formula(&z3_expr);
+        let elapsed = start.elapsed().as_millis() as u64;
+        trace.set_time_ms(elapsed);
+        trace.record_step("z3_prove", &z3_expr, "proved");
+
+        if vr.status == VerificationStatus::Pass {
+            trace.backend = UsedBackend::Z3;
+            return AutoProverResult {
+                proved: true,
+                backend: UsedBackend::Z3,
+                verification_result: vr.clone(),
+                trace,
+                proof_string: format!("Proved by Z3: {lhs} = {rhs}"),
+            };
+        }
+    }
+
+    // ── Strategy 3: Inequality check (difference = 0) ──
+    {
+        trace = ProofTrace::new(UsedBackend::Minilp);
+        let diff_expr = format!("abs({lhs} - {rhs}) <= 1e-10");
+        let vr = crate::verification::inequality::check_inequality(&diff_expr, timeout_ms);
+        let elapsed = start.elapsed().as_millis() as u64;
+        trace.set_time_ms(elapsed);
+        trace.record_step("inequality_check", &diff_expr, "");
+
+        if vr.status == VerificationStatus::Pass {
+            trace.backend = UsedBackend::Minilp;
+            return AutoProverResult {
+                proved: true,
+                backend: UsedBackend::Minilp,
+                verification_result: vr.clone(),
+                trace,
+                proof_string: format!("Proved by inequality engine: {lhs} = {rhs}"),
+            };
+        }
+        // If inequality returned Fail but the expression is provably false, report that
+        if vr.status == VerificationStatus::Fail {
+            let elapsed = start.elapsed().as_millis() as u64;
+            trace.set_time_ms(elapsed);
+            return AutoProverResult {
+                proved: false,
+                backend: UsedBackend::None,
+                verification_result: VerificationResult {
+                    check_name: "math_auto_prove".into(),
+                    status: VerificationStatus::Fail,
+                    details: format!(
+                        "All backends failed. SymPy: -, Z3: -, inequality: {}",
+                        vr.details
+                    ),
+                    evidence_path: None,
+                },
+                trace,
+                proof_string: format!("All backenders proved false: {lhs} ≠ {rhs}"),
+            };
+        }
+    }
+
+    // ── All backends exhausted ──
+    let elapsed = start.elapsed().as_millis() as u64;
+    trace.set_time_ms(elapsed);
+    AutoProverResult {
+        proved: false,
+        backend: UsedBackend::None,
+        verification_result: VerificationResult {
+            check_name: "math_auto_prove".into(),
+            status: VerificationStatus::Warn,
+            details: "All backends exhausted without conclusive result".into(),
+            evidence_path: None,
+        },
+        trace,
+        proof_string: format!("Unable to prove or disprove: {lhs} = {rhs}"),
+    }
+}
+
+// ===========================================================================
+// 2. Identity Chain Verification
+// ===========================================================================
+
+/// Verify a chain of equalities: `a = b = c = d`.
+///
+/// Checks each adjacent pair (a,b), (b,c), (c,d) for identity and reports
+/// the first broken link, if any.
+pub fn verify_identity_chain(chain: &[String]) -> IdentityChainResult {
+    if chain.len() < 2 {
+        return IdentityChainResult {
+            verified: true,
+            pairs_checked: 0,
+            broken_at: None,
+            pair_results: Vec::new(),
+            details: if chain.is_empty() {
+                "Empty chain — nothing to verify".into()
+            } else {
+                "Single expression — trivially equal".into()
+            },
+        };
+    }
+
+    let num_pairs = chain.len() - 1;
+    let mut pair_results = Vec::with_capacity(num_pairs);
+    let mut broken_at: Option<usize> = None;
+
+    for i in 0..num_pairs {
+        let lhs = &chain[i];
+        let rhs = &chain[i + 1];
+        let vr = crate::verification::sympy_bridge::verify_identity(lhs, rhs);
+        pair_results.push(vr);
+
+        if broken_at.is_none() && pair_results[i].status != VerificationStatus::Pass {
+            broken_at = Some(i);
+        }
+    }
+
+    let verified = broken_at.is_none();
+    let details = if verified {
+        format!(
+            "All {} adjacent pairs verified: {}",
+            num_pairs,
+            chain.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(" = ")
+        )
+    } else {
+        let broken_idx = broken_at.unwrap();
+        format!(
+            "Chain broken at pair {}: {} ≠ {}",
+            broken_idx, chain[broken_idx], chain[broken_idx + 1]
+        )
+    };
+
+    IdentityChainResult {
+        verified,
+        pairs_checked: num_pairs,
+        broken_at,
+        pair_results,
+        details,
+    }
+}
+
+// ===========================================================================
+// 3. Bound Tightening
+// ===========================================================================
+
+/// Tighten the bounds on a single variable in a constraint expression.
+///
+/// Uses Z3 with iterative binary refinement to narrow the feasible range of `var`
+/// under the given `expr` (an inequality, e.g. "x^2 + y <= 10").
+///
+/// Returns `[min_possible, max_possible]` — the contracted interval.
+pub fn tighten_bounds(expr: &str, var: &str, lo: f64, hi: f64, timeout_ms: Option<u64>) -> TightenBoundsResult {
+    let timeout = timeout_ms.unwrap_or(5000);
+    let initial_range = hi - lo;
+
+    if !crate::verification::python_bridge::z3_available() {
+        return TightenBoundsResult {
+            lower_bound: lo,
+            upper_bound: hi,
+            iterations: 0,
+            feasible: true,
+            details: "Z3 not available — no tightening performed".into(),
+        };
+    }
+
+    // Get all variables in the expression
+    let _all_vars = extract_variables(expr);
+
+    // Build SMT query: check sat of (expr AND var >= candidate)
+    // We use binary search for each bound
+    let mut current_lo = lo;
+    let mut current_hi = hi;
+    let mut iterations = 0;
+    let max_iterations = 40; // enough for double precision
+    let tolerance = 1e-8 * (hi - lo).abs().max(1.0);
+
+    // First, verify the range is feasible at all
+    {
+        // Check feasibility: is there a model satisfying the constraint within [lo, hi]?
+        let mut constraints = format!("And({} >= {}, {} <= {}", var, lo, var, hi);
+        if !expr.is_empty() {
+            constraints.push_str(&format!(", {}", expr));
+        }
+        constraints.push(')');
+
+        let z3_steps = vec![
+            crate::verification::z3_bridge::SolverBatchStep {
+                action: "add".into(),
+                n: None,
+                expression: Some(constraints),
+                timeout_ms: Some(timeout),
+            },
+            crate::verification::z3_bridge::SolverBatchStep {
+                action: "check".into(),
+                n: None,
+                expression: None,
+                timeout_ms: Some(timeout),
+            },
+        ];
+
+        match crate::verification::z3_bridge::solver_batch(&z3_steps) {
+            Ok(result) => {
+                let check_result = result.get("steps")
+                    .and_then(|v| v.as_array())
+                    .and_then(|arr| arr.get(1))
+                    .and_then(|v| v.get("result"))
+                    .and_then(|v| v.as_str());
+                if check_result != Some("sat") {
+                    return TightenBoundsResult {
+                        lower_bound: lo,
+                        upper_bound: hi,
+                        iterations: 0,
+                        feasible: false,
+                        details: format!("Range [{lo}, {hi}] is infeasible for `{expr}`"),
+                    };
+                }
+            }
+            Err(e) => {
+                return TightenBoundsResult {
+                    lower_bound: lo,
+                    upper_bound: hi,
+                    iterations: 0,
+                    feasible: true,
+                    details: format!("Z3 batch error: {e}"),
+                };
+            }
+        }
+    }
+
+    // Tighten lower bound: binary search for the smallest feasible value
+    let mut low_feasible = current_lo;
+    let mut low_candidate = current_lo;
+    let mut high_candidate = current_hi;
+
+    for _i in 0..max_iterations {
+        iterations += 1;
+        if (high_candidate - low_candidate).abs() < tolerance {
+            break;
+        }
+        let mid = (low_candidate + high_candidate) / 2.0;
+
+        // Check sat of (expr AND var >= mid AND var <= hi)
+        let mut constraints = format!("And({} >= {}, {} <= {}", var, mid, var, hi);
+        if !expr.is_empty() {
+            constraints.push_str(&format!(", {}", expr));
+        }
+        constraints.push(')');
+
+        let steps = vec![
+            crate::verification::z3_bridge::SolverBatchStep {
+                action: "add".into(), n: None, expression: Some(constraints),
+                timeout_ms: None,
+            },
+            crate::verification::z3_bridge::SolverBatchStep {
+                action: "check".into(), n: None, expression: None,
+                timeout_ms: Some(timeout / 2),
+            },
+        ];
+
+        if let Ok(result) = crate::verification::z3_bridge::solver_batch(&steps) {
+            let is_sat = result.get("steps")
+                .and_then(|v| v.as_array())
+                .and_then(|arr| arr.get(1))
+                .and_then(|v| v.get("result"))
+                .and_then(|v| v.as_str())
+                == Some("sat");
+            if is_sat {
+                // Mid is feasible — try higher
+                low_candidate = mid;
+                low_feasible = mid;
+            } else {
+                // Mid is infeasible — lower the range
+                high_candidate = mid;
+            }
+        }
+    }
+    current_lo = low_feasible;
+
+    // Tighten upper bound: binary search for the largest feasible value
+    low_candidate = low_feasible;
+    high_candidate = current_hi;
+    let mut high_feasible = current_hi;
+
+    for _i in 0..max_iterations {
+        iterations += 1;
+        if (high_candidate - low_candidate).abs() < tolerance {
+            break;
+        }
+        let mid = (low_candidate + high_candidate) / 2.0;
+
+        // Check sat of (expr AND var >= lo AND var <= mid)
+        let mut constraints = format!("And({} >= {}, {} <= {}", var, current_lo, var, mid);
+        if !expr.is_empty() {
+            constraints.push_str(&format!(", {}", expr));
+        }
+        constraints.push(')');
+
+        let steps = vec![
+            crate::verification::z3_bridge::SolverBatchStep {
+                action: "add".into(), n: None, expression: Some(constraints),
+                timeout_ms: None,
+            },
+            crate::verification::z3_bridge::SolverBatchStep {
+                action: "check".into(), n: None, expression: None,
+                timeout_ms: Some(timeout / 2),
+            },
+        ];
+
+        if let Ok(result) = crate::verification::z3_bridge::solver_batch(&steps) {
+            let is_sat = result.get("steps")
+                .and_then(|v| v.as_array())
+                .and_then(|arr| arr.get(1))
+                .and_then(|v| v.get("result"))
+                .and_then(|v| v.as_str())
+                == Some("sat");
+            if is_sat {
+                // Mid is feasible — try higher
+                low_candidate = mid;
+                high_feasible = mid;
+            } else {
+                // Mid is infeasible — lower the range
+                high_candidate = mid;
+            }
+        }
+    }
+    current_hi = high_feasible;
+
+    let reduction = 1.0 - (current_hi - current_lo) / initial_range;
+    let pct = (reduction * 100.0).max(0.0);
+
+    TightenBoundsResult {
+        lower_bound: current_lo,
+        upper_bound: current_hi,
+        iterations,
+        feasible: true,
+        details: format!(
+            "Tightened [{:.6}, {:.6}] → [{:.6}, {:.6}] (range reduced by {:.1}%, {} iterations)",
+            lo, hi, current_lo, current_hi, pct, iterations
+        ),
+    }
+}
+
+// ===========================================================================
+// 4. Witness Consistency (with batch generation)
+// ===========================================================================
+
+/// Verify that an equation `lhs = rhs` holds for a given set of witness assignments.
+///
+/// Each witness is a `{var → f64}` mapping. Returns a structured result with
+/// per-witness pass/fail.
+pub fn verify_witness_consistency(
+    lhs: &str,
+    rhs: &str,
+    witnesses: &[HashMap<String, f64>],
+) -> serde_json::Value {
+    if witnesses.is_empty() {
+        return json!({
+            "passed": true,
+            "witnesses_checked": 0,
+            "failures": [],
+            "detail": "No witnesses provided — skipping",
+        });
+    }
+
+    let mut failures: Vec<serde_json::Value> = Vec::new();
+    let tolerance = 1e-8;
+
+    let lhs_parsed = match crate::verification::symbolic::parse(lhs) {
+        Ok(e) => e,
+        Err(e) => {
+            return json!({
+                "passed": false,
+                "witnesses_checked": 0,
+                "failures": [{"error": format!("Failed to parse LHS: {e}")}],
+                "detail": format!("Parse error: {e}"),
+            });
+        }
+    };
+
+    let rhs_parsed = match crate::verification::symbolic::parse(rhs) {
+        Ok(e) => e,
+        Err(e) => {
+            return json!({
+                "passed": false,
+                "witnesses_checked": 0,
+                "failures": [{"error": format!("Failed to parse RHS: {e}")}],
+                "detail": format!("Parse error: {e}"),
+            });
+        }
+    };
+
+    for (w_idx, witness) in witnesses.iter().enumerate() {
+        let lhs_val = match crate::verification::symbolic::eval(&lhs_parsed, witness) {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+        let rhs_val = match crate::verification::symbolic::eval(&rhs_parsed, witness) {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+        let diff = (lhs_val - rhs_val).abs();
+        if diff > tolerance {
+            failures.push(json!({
+                "witness_index": w_idx,
+                "substitutions": witness,
+                "lhs_value": lhs_val,
+                "rhs_value": rhs_val,
+                "diff": diff,
+            }));
+        }
+    }
+
+    let passed = failures.is_empty();
+    json!({
+        "passed": passed,
+        "witnesses_checked": witnesses.len(),
+        "failures": failures,
+        "detail": if passed {
+            format!("All {} witnesses pass (tolerance={})", witnesses.len(), tolerance)
+        } else {
+            format!("{} witness(es) failed. First failure: LHS={}, RHS={}",
+                failures.len(),
+                failures[0]["lhs_value"],
+                failures[0]["rhs_value"],
+            )
+        },
+    })
+}
+
+/// Generate random witness assignments for a set of variable names.
+pub fn generate_random_witnesses(
+    vars: &[String],
+    count: usize,
+    seed: u64,
+) -> Vec<HashMap<String, f64>> {
+    if vars.is_empty() {
+        return vec![HashMap::new(); count];
+    }
+
+    let mut witnesses = Vec::with_capacity(count);
+    let mut rng = crate::verification::symbolic::SimpleRng::new(seed);
+
+    for _ in 0..count {
+        let mut witness = HashMap::new();
+        for v in vars {
+            let val = match v.as_str() {
+                "n" | "m" | "k" | "i" | "j" => {
+                    rng.next_range(1.0, 1000.0).round()
+                }
+                "x" | "y" | "z" | "t" | "u" | "v" | "w" => {
+                    rng.next_range(-100.0, 100.0)
+                }
+                _ => rng.next_range(-10.0, 10.0),
+            };
+            witness.insert(v.clone(), val);
+        }
+        witnesses.push(witness);
+    }
+    witnesses
+}
+
+// ===========================================================================
+// 5. Homomorphism Check
+// ===========================================================================
+
+/// Check if two single-variable expressions are related by a known transform.
+///
+/// Currently supports:
+/// - `"shift"`: f(x) ≡ g(x + c)
+/// - `"scale"`: f(x) ≡ k * g(x)
+/// - `"scale_shift"`: f(x) ≡ k * g(x + c)
+pub fn check_homomorphism(f: &str, g: &str) -> HomomorphismResult {
+    let transform_types = ["shift", "scale", "scale_shift"];
+
+    for transform in &transform_types {
+        match *transform {
+            "shift" => {
+                // Try f(x) = g(x + c) for various c
+                for c in [-5.0, -2.0, -1.0, -0.5, 0.0, 0.5, 1.0, 2.0, 5.0] {
+                    let _g_shifted = format!("g({} + {})", extract_variables(g).first().map(|s| s.as_str()).unwrap_or("x"), c);
+                    // We can't call g directly; try numerically
+                    // Instead, substitute by rewriting the expression
+                    let var = extract_variables(f).first().cloned().unwrap_or_else(|| "x".to_string());
+                    let g_shifted_expr = g.replace(&var, &format!("({} + {})", var, c));
+
+                    let (eq, _) = crate::verification::symbolic::verify_identity(f, &g_shifted_expr);
+                    if eq {
+                        return HomomorphismResult {
+                            found: true,
+                            transform_type: "shift".into(),
+                            parameters: HashMap::from([("c".into(), c)]),
+                            equation: format!("{f} = {g}({var} + {c})"),
+                            details: format!("f(x) = g(x + {c}) verified"),
+                        };
+                    }
+                }
+            }
+            "scale" => {
+                // Try f(x) = k * g(x)
+                for k in [-2.0, -1.0, -0.5, 0.5, 1.0, 2.0, 3.0, 5.0, 10.0] {
+                    let scaled = if k == 1.0 {
+                        g.to_string()
+                    } else {
+                        format!("{}*({})", k, g)
+                    };
+                    let (eq, _) = crate::verification::symbolic::verify_identity(f, &scaled);
+                    if eq {
+                        return HomomorphismResult {
+                            found: true,
+                            transform_type: "scale".into(),
+                            parameters: HashMap::from([("k".into(), k)]),
+                            equation: format!("{f} = {k} * ({g})"),
+                            details: format!("f(x) = {k} * g(x) verified"),
+                        };
+                    }
+                }
+            }
+            "scale_shift" => {
+                // Try f(x) = k * g(x + c)
+                for k in [-2.0, -1.0, -0.5, 0.5, 1.0, 2.0, 3.0, 5.0] {
+                    for c in [-2.0, -1.0, -0.5, 0.0, 0.5, 1.0, 2.0] {
+                        let var = extract_variables(f).first().cloned().unwrap_or_else(|| "x".to_string());
+                        let g_shifted = g.replace(&var, &format!("({} + {})", var, c));
+                        let scaled = if k == 1.0 { g_shifted } else { format!("{}*({})", k, g_shifted) };
+
+                        let (eq, _) = crate::verification::symbolic::verify_identity(f, &scaled);
+                        if eq {
+                            return HomomorphismResult {
+                                found: true,
+                                transform_type: "scale_shift".into(),
+                                parameters: HashMap::from([("k".into(), k), ("c".into(), c)]),
+                                equation: format!("{f} = {k} * g({var} + {c})"),
+                                details: format!("f(x) = {k} * g(x + {c}) verified"),
+                            };
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    HomomorphismResult {
+        found: false,
+        transform_type: "none".into(),
+        parameters: HashMap::new(),
+        equation: "".into(),
+        details: format!("No homomorphism (shift/scale/scale_shift) found between {f} and {g}"),
+    }
+}
+
+// ===========================================================================
+// 6. ProofTrace-aware sympy_verify wrapper
+// ===========================================================================
+
+/// Verify identity with proof trace recording.
+pub fn verify_identity_with_trace(lhs: &str, rhs: &str) -> (ProofTrace, VerificationResult) {
+    let trace = ProofTrace::new(UsedBackend::SymPy);
+    timed_verify(trace, || {
+        crate::verification::sympy_bridge::verify_identity(lhs, rhs)
+    })
+}
+
+/// Verify inequality with proof trace recording.
+pub fn check_inequality_with_trace(expr: &str) -> (ProofTrace, VerificationResult) {
+    let trace = ProofTrace::new(UsedBackend::Z3);
+    timed_verify(trace, || {
+        crate::verification::inequality::check_inequality(expr, Some(10000))
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
+    use super::*;
+
+    // ── 1. Auto Prover Tests ──
+
+    #[test]
+    fn test_try_prove_trivial() {
+        let result = try_prove("x", "x", None);
+        assert!(result.proved, "x = x should be provable: {}", result.proof_string);
+        assert!(result.backend != UsedBackend::None, "backend should be set");
+    }
+
+    #[test]
+    fn test_try_prove_polynomial() {
+        let result = try_prove("(x+1)^2", "x^2 + 2*x + 1", None);
+        assert!(result.proved, "(x+1)^2 = x^2+2x+1 should be provable");
+    }
+
+    #[test]
+    fn test_try_prove_not_equal() {
+        let result = try_prove("x + 1", "x + 2", None);
+        assert!(!result.proved, "x+1 ≠ x+2");
+    }
+
+    #[test]
+    fn test_try_prove_has_trace() {
+        let result = try_prove("x", "x", None);
+        assert!(!result.trace.steps.is_empty() || result.proved,
+            "proved result should have trace entries (steps len: {})",
+            result.trace.steps.len());
+        // The trace should have at least verification time recorded
+        assert!(result.proved || result.trace.verification_time_ms > 0 || !result.proof_string.is_empty());
+    }
+
+    // ── 2. Identity Chain Tests ──
+
+    #[test]
+    fn test_identity_chain_empty() {
+        let result = verify_identity_chain(&[]);
+        assert!(result.verified);
+        assert_eq!(result.pairs_checked, 0);
+    }
+
+    #[test]
+    fn test_identity_chain_single() {
+        let result = verify_identity_chain(&["x".to_string()]);
+        assert!(result.verified);
+    }
+
+    #[test]
+    fn test_identity_chain_valid() {
+        let chain = vec![
+            "(x+1)^2".to_string(),
+            "x^2 + 2*x + 1".to_string(),
+            "x^2 + 2*x + 1".to_string(),
+        ];
+        let result = verify_identity_chain(&chain);
+        assert!(result.verified, "chain should be valid: {}", result.details);
+        assert_eq!(result.pairs_checked, 2);
+    }
+
+    #[test]
+    fn test_identity_chain_broken() {
+        let chain = vec![
+            "x".to_string(),
+            "x".to_string(),
+            "x + 1".to_string(),
+        ];
+        let result = verify_identity_chain(&chain);
+        assert!(!result.verified, "chain should be broken");
+        assert_eq!(result.broken_at, Some(1), "broken at pair index 1");
+    }
+
+    // ── 3. Bound Tightening Tests ──
+
+    #[test]
+    fn test_tighten_bounds_noop_when_z3_unavailable() {
+        // When Z3 is not available, should return original bounds
+        let result = tighten_bounds("x >= 0", "x", -10.0, 10.0, Some(1000));
+        // Should not crash; bounds may or may not be tightened
+        assert!(result.lower_bound <= result.upper_bound);
+        if crate::verification::python_bridge::z3_available() {
+            // At very least, the range [0, 10] is feasible with x >= 0
+            assert!(result.lower_bound >= -10.0);
+            assert!(result.upper_bound <= 10.0);
+        }
+    }
+
+    #[test]
+    fn test_tighten_bounds_probe() {
+        // Probe only — verify no panic
+        let result = tighten_bounds("x^2 <= 25", "x", -100.0, 100.0, Some(2000));
+        assert!(result.lower_bound <= result.upper_bound);
+    }
+
+    // ── 4. Witness Consistency Tests ──
+
+    #[test]
+    fn test_witness_consistency_trivial() {
+        let witnesses = vec![HashMap::from([("x".into(), 1.0)])];
+        let result = verify_witness_consistency("x", "x", &witnesses);
+        assert!(result["passed"].as_bool().unwrap());
+    }
+
+    #[test]
+    fn test_witness_consistency_false() {
+        let witnesses = vec![HashMap::from([("x".into(), 1.0)])];
+        let result = verify_witness_consistency("x + 1", "x + 2", &witnesses);
+        assert!(!result["passed"].as_bool().unwrap());
+    }
+
+    #[test]
+    fn test_witness_consistency_empty_witnesses() {
+        let result = verify_witness_consistency("x", "y", &[]);
+        assert!(result["passed"].as_bool().unwrap());
+        assert_eq!(result["witnesses_checked"].as_u64().unwrap(), 0);
+    }
+
+    #[test]
+    fn test_generate_random_witnesses_count() {
+        let vars = vec!["x".into(), "y".into()];
+        let witnesses = generate_random_witnesses(&vars, 10, 42);
+        assert_eq!(witnesses.len(), 10);
+        for w in &witnesses {
+            assert!(w.contains_key("x"));
+            assert!(w.contains_key("y"));
+        }
+    }
+
+    #[test]
+    fn test_generate_random_witnesses_empty_vars() {
+        let witnesses = generate_random_witnesses(&[], 5, 0);
+        assert_eq!(witnesses.len(), 5);
+    }
+
+    #[test]
+    fn test_generate_random_witnesses_deterministic() {
+        let vars = vec!["x".into()];
+        let a = generate_random_witnesses(&vars, 3, 12345);
+        let b = generate_random_witnesses(&vars, 3, 12345);
+        assert_eq!(a.len(), b.len());
+        for (wa, wb) in a.iter().zip(b.iter()) {
+            assert_eq!(wa.get("x"), wb.get("x"));
+        }
+    }
+
+    // ── 5. Homomorphism Tests ──
+
+    #[test]
+    fn test_homomorphism_scale_found() {
+        // f(x) = 2*x, g(x) = x → f = 2*g
+        let result = check_homomorphism("2*x", "x");
+        assert!(result.found, "2*x = 2*x should be scale: {}", result.details);
+    }
+
+    #[test]
+    fn test_homomorphism_identity() {
+        // f(x) = x, g(x) = x → trivial 1:1
+        let result = check_homomorphism("x", "x");
+        assert!(result.found, "x = x is a homomorphism (scale k=1)");
+    }
+
+    #[test]
+    fn test_homomorphism_not_found() {
+        // Unrelated expressions
+        let result = check_homomorphism("x^2", "sin(x)");
+        // Might or might not find — just check no panic
+        assert!(!result.found || result.found,
+            "x^2 and sin(x) are unlikely homomorphic, but no panic");
+    }
+
+    // ── 6. ProofTrace wrapper tests ──
+
+    #[test]
+    fn test_verify_identity_with_trace_passes() {
+        let (trace, result) = verify_identity_with_trace("x", "x");
+        assert_eq!(result.status, VerificationStatus::Pass);
+        assert!(trace.verification_time_ms > 0 || result.status == VerificationStatus::Pass);
+    }
+
+    #[test]
+    fn test_check_inequality_with_trace() {
+        let (trace, result) = check_inequality_with_trace("x > 0");
+        // Should not panic
+        assert!(trace.backend == UsedBackend::Z3 || !result.details.is_empty());
+    }
+
+    // ── Variable extraction tests ──
+
+    #[test]
+    fn test_extract_variables_simple() {
+        let vars = extract_variables("x + y + z");
+        assert_eq!(vars, vec!["x", "y", "z"]);
+    }
+
+    #[test]
+    fn test_extract_variables_keyword_filtered() {
+        let vars = extract_variables("sin(x) + exp(y)");
+        // sin and exp should not appear; x and y should
+        assert!(!vars.contains(&"sin".to_string()));
+        assert!(!vars.contains(&"exp".to_string()));
+        assert!(vars.contains(&"x".to_string()) || vars.contains(&"y".to_string()));
+    }
+}

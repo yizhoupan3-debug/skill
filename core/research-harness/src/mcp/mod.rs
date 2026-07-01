@@ -557,6 +557,99 @@ pub fn tool_definitions() -> Vec<Value> {
                 "required": ["check"]
             }),
         ),
+        // ── Auto theorem proving tools (added 2026-07-01) ──
+        tool_def(
+            "math_auto_prove",
+            "自动定理证明：依次尝试 SymPy → Z3 → inequality engine，返回统一的证明结果和证明轨迹",
+            json!({
+                "type": "object",
+                "required": ["lhs", "rhs"],
+                "properties": {
+                    "lhs": {"type": "string", "description": "等式左侧表达式"},
+                    "rhs": {"type": "string", "description": "等式右侧表达式"},
+                    "timeout_ms": {"type": "integer", "description": "超时时间（毫秒，默认 10000）"}
+                }
+            }),
+        ),
+        tool_def(
+            "math_identity_chain",
+            "验证等式链传递性：检查 a = b = c = d 中每一对是否相等，报告断裂位置",
+            json!({
+                "type": "object",
+                "required": ["chain"],
+                "properties": {
+                    "chain": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "等式链表达式列表，如 [\"(x+1)^2\", \"x^2 + 2*x + 1\", \"x^2 + 2*x + 1\"]"
+                    }
+                }
+            }),
+        ),
+        tool_def(
+            "math_tighten_bounds",
+            "Z3 不等式边界细化：对单变量约束逐步收紧变量范围，返回更精确的区间",
+            json!({
+                "type": "object",
+                "required": ["expression", "variable", "lower", "upper"],
+                "properties": {
+                    "expression": {"type": "string", "description": "约束表达式（如 \"x^2 <= 25\"）"},
+                    "variable": {"type": "string", "description": "目标变量名"},
+                    "lower": {"type": "number", "description": "初始下界"},
+                    "upper": {"type": "number", "description": "初始上界"},
+                    "timeout_ms": {"type": "integer", "description": "单次 Z3 查询超时（毫秒，默认 5000）"}
+                }
+            }),
+        ),
+        tool_def(
+            "math_witness_consistency",
+            "代入验证：给定等式和变量赋值列表，验证代入后两侧数值相等。支持随机批量生成",
+            json!({
+                "type": "object",
+                "required": ["lhs", "rhs"],
+                "properties": {
+                    "lhs": {"type": "string", "description": "等式左侧表达式"},
+                    "rhs": {"type": "string", "description": "等式右侧表达式"},
+                    "witnesses": {
+                        "type": "array",
+                        "items": {"type": "object"},
+                        "description": "自定义赋值列表（可选），每个元素是 {变量→数值} 映射"
+                    },
+                    "num_random": {
+                        "type": "integer",
+                        "description": "自动生成的随机测试数量（可选，默认 0；witnesses 未提供时默认 50）"
+                    },
+                    "seed": {
+                        "type": "integer",
+                        "description": "随机种子（可选，默认 42）"
+                    }
+                }
+            }),
+        ),
+        tool_def(
+            "math_check_homomorphism",
+            "检查两个表达式间的同态/同构关系：f(x) = g(x+c), f(x) = k*g(x), f(x) = k*g(x+c)",
+            json!({
+                "type": "object",
+                "required": ["f", "g"],
+                "properties": {
+                    "f": {"type": "string", "description": "第一个表达式"},
+                    "g": {"type": "string", "description": "第二个表达式"}
+                }
+            }),
+        ),
+        tool_def(
+            "math_proof_trace_record",
+            "获取指定验证操作的证明轨迹记录",
+            json!({
+                "type": "object",
+                "required": ["lhs", "rhs"],
+                "properties": {
+                    "lhs": {"type": "string", "description": "等式左侧"},
+                    "rhs": {"type": "string", "description": "等式右侧"}
+                }
+            }),
+        ),
         tool_literature_search(),
     ]
 }

@@ -70,6 +70,13 @@ fn math_tool_dispatch(name: &str, arguments: &Value) -> Result<String, Framework
         "math_sympy_integrate" => tool_math_sympy_integrate(arguments),
         "math_sympy_solve" => tool_math_sympy_solve(arguments),
         "math_sympy_dimension_propagate" => tool_math_sympy_dimension_propagate(arguments),
+        // ── Auto theorem proving tools (added 2026-07-01) ──
+        "math_auto_prove" => tool_math_auto_prove(arguments),
+        "math_identity_chain" => tool_math_identity_chain(arguments),
+        "math_tighten_bounds" => tool_math_tighten_bounds(arguments),
+        "math_witness_consistency" => tool_math_witness_consistency(arguments),
+        "math_check_homomorphism" => tool_math_check_homomorphism(arguments),
+        "math_proof_trace_record" => tool_math_proof_trace_record(arguments),
         _ => Err(FrameworkError::validation(format!(
             "unknown math tool: {name}"
         ))),
@@ -1175,7 +1182,7 @@ fn tool_math_backend_available(arguments: &Value) -> Result<String, FrameworkErr
 
     match backend {
         "z3" => {
-            let available = crate::verification::lean_bridge::check_z3_available();
+            let available = crate::verification::python_bridge::z3_available();
             let version = if available { "via Python z3-solver" } else { "" };
             serde_json::to_string_pretty(&json!({
                 "backend": "z3", "available": available,
@@ -1185,7 +1192,7 @@ fn tool_math_backend_available(arguments: &Value) -> Result<String, FrameworkErr
             }))
         }
         "sympy" => {
-            let available = crate::verification::lean_bridge::check_sympy_available();
+            let available = crate::verification::python_bridge::sympy_available();
             let version = if available { "via Python sympy" } else { "" };
             serde_json::to_string_pretty(&json!({
                 "backend": "sympy", "available": available,
@@ -1375,6 +1382,250 @@ fn tool_math_lean_verify(arguments: &Value) -> Result<String, FrameworkError> {
     serde_json::to_string_pretty(&json!({
         "check_name": vr.check_name, "status": format!("{:?}", vr.status),
         "details": vr.details,
+    }))
+    .map_err(FrameworkError::Json)
+}
+
+// ── Auto theorem proving tools (added 2026-07-01) ──
+
+fn tool_math_auto_prove(arguments: &Value) -> Result<String, FrameworkError> {
+    let lhs = arguments
+        .get("lhs")
+        .and_then(Value::as_str)
+        .ok_or(FrameworkError::validation(
+            "math_auto_prove requires 'lhs' (string)",
+        ))?;
+    let rhs = arguments
+        .get("rhs")
+        .and_then(Value::as_str)
+        .ok_or(FrameworkError::validation(
+            "math_auto_prove requires 'rhs' (string)",
+        ))?;
+    let timeout_ms = arguments.get("timeout_ms").and_then(Value::as_u64);
+
+    let result = crate::verification::auto_prover::try_prove(lhs, rhs, timeout_ms);
+    serde_json::to_string_pretty(&json!({
+        "check_name": "math_auto_prove",
+        "status": if result.proved { "Pass" } else { "Fail" },
+        "proved": result.proved,
+        "backend": format!("{}", result.backend),
+        "details": result.verification_result.details,
+        "proof_string": result.proof_string,
+        "trace_summary": result.trace.summary(),
+        "steps_count": result.trace.steps.len(),
+        "verification_time_ms": result.trace.verification_time_ms,
+        "lhs": lhs,
+        "rhs": rhs,
+    }))
+    .map_err(FrameworkError::Json)
+}
+
+fn tool_math_identity_chain(arguments: &Value) -> Result<String, FrameworkError> {
+    let chain_val = arguments
+        .get("chain")
+        .and_then(Value::as_array)
+        .ok_or(FrameworkError::validation(
+            "math_identity_chain requires 'chain' array of strings",
+        ))?;
+
+    if chain_val.len() > 100 {
+        return Err(FrameworkError::validation(format!(
+            "chain too long: {} elements (max 100)",
+            chain_val.len()
+        )));
+    }
+
+    let chain: Vec<String> = chain_val
+        .iter()
+        .filter_map(|v| v.as_str().map(String::from))
+        .collect();
+
+    let result = crate::verification::auto_prover::verify_identity_chain(&chain);
+    serde_json::to_string_pretty(&json!({
+        "check_name": "math_identity_chain",
+        "verified": result.verified,
+        "pairs_checked": result.pairs_checked,
+        "broken_at": result.broken_at,
+        "details": result.details,
+        "pair_count": result.pair_results.len(),
+    }))
+    .map_err(FrameworkError::Json)
+}
+
+fn tool_math_tighten_bounds(arguments: &Value) -> Result<String, FrameworkError> {
+    let expr = arguments
+        .get("expression")
+        .and_then(Value::as_str)
+        .ok_or(FrameworkError::validation(
+            "math_tighten_bounds requires 'expression' (string)",
+        ))?;
+    let var = arguments
+        .get("variable")
+        .and_then(Value::as_str)
+        .ok_or(FrameworkError::validation(
+            "math_tighten_bounds requires 'variable' (string)",
+        ))?;
+    let lo = arguments
+        .get("lower")
+        .and_then(Value::as_f64)
+        .ok_or(FrameworkError::validation(
+            "math_tighten_bounds requires 'lower' (f64)",
+        ))?;
+    let hi = arguments
+        .get("upper")
+        .and_then(Value::as_f64)
+        .ok_or(FrameworkError::validation(
+            "math_tighten_bounds requires 'upper' (f64)",
+        ))?;
+    let timeout_ms = arguments.get("timeout_ms").and_then(Value::as_u64);
+
+    let result = crate::verification::auto_prover::tighten_bounds(expr, var, lo, hi, timeout_ms);
+    serde_json::to_string_pretty(&json!({
+        "check_name": "math_tighten_bounds",
+        "lower_bound": result.lower_bound,
+        "upper_bound": result.upper_bound,
+        "iterations": result.iterations,
+        "feasible": result.feasible,
+        "details": result.details,
+        "expression": expr,
+        "variable": var,
+    }))
+    .map_err(FrameworkError::Json)
+}
+
+fn tool_math_witness_consistency(arguments: &Value) -> Result<String, FrameworkError> {
+    let lhs = arguments
+        .get("lhs")
+        .and_then(Value::as_str)
+        .ok_or(FrameworkError::validation(
+            "math_witness_consistency requires 'lhs' (string)",
+        ))?;
+    let rhs = arguments
+        .get("rhs")
+        .and_then(Value::as_str)
+        .ok_or(FrameworkError::validation(
+            "math_witness_consistency requires 'rhs' (string)",
+        ))?;
+
+    // Extract variables from both expressions
+    let all_vars: Vec<String> = {
+        let raw = lhs.to_string() + " " + rhs;
+        let re = regex::Regex::new(r"[a-zA-Z_][a-zA-Z0-9_]*").expect("valid regex");
+        let keywords = ["sin", "cos", "tan", "sqrt", "abs", "exp", "log", "ln", "pi", "e"];
+        let mut v: Vec<String> = re.find_iter(&raw)
+            .map(|m| m.as_str().to_string())
+            .filter(|s| !keywords.contains(&s.as_str()))
+            .collect();
+        v.sort();
+        v.dedup();
+        v
+    };
+
+    // Collect provided witnesses
+    let mut witnesses: Vec<HashMap<String, f64>> = arguments
+        .get("witnesses")
+        .and_then(Value::as_array)
+        .map(|arr| {
+            arr.iter()
+                .map(|w| {
+                    let mut map = HashMap::new();
+                    if let Some(obj) = w.as_object() {
+                        for (k, v) in obj {
+                            if let Some(n) = v.as_f64() {
+                                map.insert(k.clone(), n);
+                            }
+                        }
+                    }
+                    map
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
+    // If no witnesses provided, use random batch
+    if witnesses.is_empty() {
+        let num_random = arguments
+            .get("num_random")
+            .and_then(Value::as_u64)
+            .unwrap_or(50) as usize;
+        let seed = arguments
+            .get("seed")
+            .and_then(Value::as_u64)
+            .unwrap_or(42);
+        witnesses = crate::verification::auto_prover::generate_random_witnesses(
+            &all_vars,
+            num_random,
+            seed,
+        );
+    }
+
+    let result = crate::verification::auto_prover::verify_witness_consistency(lhs, rhs, &witnesses);
+    serde_json::to_string_pretty(&json!({
+        "check_name": "math_witness_consistency",
+        "lhs": lhs,
+        "rhs": rhs,
+        "witnesses_checked": result["witnesses_checked"],
+        "passed": result["passed"],
+        "failures": result["failures"],
+        "detail": result["detail"],
+    }))
+    .map_err(FrameworkError::Json)
+}
+
+fn tool_math_check_homomorphism(arguments: &Value) -> Result<String, FrameworkError> {
+    let f = arguments
+        .get("f")
+        .and_then(Value::as_str)
+        .ok_or(FrameworkError::validation(
+            "math_check_homomorphism requires 'f' (string)",
+        ))?;
+    let g = arguments
+        .get("g")
+        .and_then(Value::as_str)
+        .ok_or(FrameworkError::validation(
+            "math_check_homomorphism requires 'g' (string)",
+        ))?;
+
+    let result = crate::verification::auto_prover::check_homomorphism(f, g);
+    serde_json::to_string_pretty(&json!({
+        "check_name": "math_check_homomorphism",
+        "found": result.found,
+        "transform_type": result.transform_type,
+        "parameters": result.parameters,
+        "equation": result.equation,
+        "details": result.details,
+    }))
+    .map_err(FrameworkError::Json)
+}
+
+fn tool_math_proof_trace_record(arguments: &Value) -> Result<String, FrameworkError> {
+    let lhs = arguments
+        .get("lhs")
+        .and_then(Value::as_str)
+        .ok_or(FrameworkError::validation(
+            "math_proof_trace_record requires 'lhs' (string)",
+        ))?;
+    let rhs = arguments
+        .get("rhs")
+        .and_then(Value::as_str)
+        .ok_or(FrameworkError::validation(
+            "math_proof_trace_record requires 'rhs' (string)",
+        ))?;
+
+    let (trace, vr) = crate::verification::auto_prover::verify_identity_with_trace(lhs, rhs);
+    serde_json::to_string_pretty(&json!({
+        "check_name": vr.check_name,
+        "status": format!("{:?}", vr.status),
+        "details": vr.details,
+        "trace": {
+            "backend": format!("{}", trace.backend),
+            "verification_time_ms": trace.verification_time_ms,
+            "steps_count": trace.steps.len(),
+            "steps": trace.steps,
+            "assumptions": trace.assumptions,
+            "summary": trace.summary(),
+            "description": trace.describe(),
+        },
     }))
     .map_err(FrameworkError::Json)
 }
@@ -2514,5 +2765,135 @@ mod tests {
     fn test_math_z3_solver_batch_empty_steps() {
         let result = handle_research_tool("math_z3_solver_batch", &json!({"steps": []}));
         assert!(result.is_ok(), "empty steps should not error");
+    }
+
+    // ── Auto theorem proving dispatch tests (added 2026-07-01) ──
+
+    #[test]
+    fn test_math_auto_prove_missing_lhs() {
+        let result = handle_research_tool("math_auto_prove", &json!({}));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("requires 'lhs'"));
+    }
+
+    #[test]
+    fn test_math_auto_prove_trivial() {
+        let result = handle_research_tool(
+            "math_auto_prove",
+            &json!({"lhs": "x", "rhs": "x"}),
+        );
+        assert!(result.is_ok(), "auto prove should not error: {:?}", result.err());
+        if let Ok(json_str) = result {
+            let parsed: Value = serde_json::from_str(&json_str).unwrap();
+            assert_eq!(parsed.get("proved").and_then(Value::as_bool), Some(true));
+            assert!(parsed.get("backend").and_then(Value::as_str).is_some());
+        }
+    }
+
+    #[test]
+    fn test_math_identity_chain_missing_chain() {
+        let result = handle_research_tool("math_identity_chain", &json!({}));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("requires 'chain'"));
+    }
+
+    #[test]
+    fn test_math_identity_chain_valid() {
+        let result = handle_research_tool(
+            "math_identity_chain",
+            &json!({"chain": ["(x+1)^2", "x^2 + 2*x + 1"]}),
+        );
+        assert!(result.is_ok(), "identity chain should not error");
+        if let Ok(json_str) = result {
+            let parsed: Value = serde_json::from_str(&json_str).unwrap();
+            assert!(parsed.get("verified").and_then(Value::as_bool).unwrap_or(false),
+                "chain should verify");
+        }
+    }
+
+    #[test]
+    fn test_math_tighten_bounds_missing_expression() {
+        let result = handle_research_tool("math_tighten_bounds", &json!({}));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("requires 'expression'"));
+    }
+
+    #[test]
+    fn test_math_tighten_bounds_basic() {
+        let result = handle_research_tool(
+            "math_tighten_bounds",
+            &json!({"expression": "x^2 <= 25", "variable": "x", "lower": -100.0, "upper": 100.0}),
+        );
+        assert!(result.is_ok(), "tighten bounds should not error");
+        if let Ok(json_str) = result {
+            let parsed: Value = serde_json::from_str(&json_str).unwrap();
+            assert!(parsed.get("lower_bound").and_then(Value::as_f64).is_some());
+            assert!(parsed.get("upper_bound").and_then(Value::as_f64).is_some());
+        }
+    }
+
+    #[test]
+    fn test_math_witness_consistency_missing_lhs() {
+        let result = handle_research_tool("math_witness_consistency", &json!({}));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("requires 'lhs'"));
+    }
+
+    #[test]
+    fn test_math_witness_consistency_with_random() {
+        let result = handle_research_tool(
+            "math_witness_consistency",
+            &json!({"lhs": "x + y", "rhs": "y + x", "num_random": 5}),
+        );
+        assert!(result.is_ok(), "witness consistency should not error");
+        if let Ok(json_str) = result {
+            let parsed: Value = serde_json::from_str(&json_str).unwrap();
+            assert!(parsed.get("passed").and_then(Value::as_bool).unwrap_or(false),
+                "x+y = y+x should pass all witnesses");
+        }
+    }
+
+    #[test]
+    fn test_math_check_homomorphism_missing_f() {
+        let result = handle_research_tool("math_check_homomorphism", &json!({}));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("requires 'f'"));
+    }
+
+    #[test]
+    fn test_math_check_homomorphism_scale() {
+        let result = handle_research_tool(
+            "math_check_homomorphism",
+            &json!({"f": "2*x", "g": "x"}),
+        );
+        assert!(result.is_ok(), "homomorphism check should not error");
+        if let Ok(json_str) = result {
+            let parsed: Value = serde_json::from_str(&json_str).unwrap();
+            // 2*x and x have a scaling relationship
+            assert!(parsed.get("found").and_then(Value::as_bool).unwrap_or(false),
+                "2*x and x should be homomorphic (scale)");
+        }
+    }
+
+    #[test]
+    fn test_math_proof_trace_record_missing_lhs() {
+        let result = handle_research_tool("math_proof_trace_record", &json!({}));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("requires 'lhs'"));
+    }
+
+    #[test]
+    fn test_math_proof_trace_record_valid() {
+        let result = handle_research_tool(
+            "math_proof_trace_record",
+            &json!({"lhs": "x", "rhs": "x"}),
+        );
+        assert!(result.is_ok(), "proof trace record should not error");
+        if let Ok(json_str) = result {
+            let parsed: Value = serde_json::from_str(&json_str).unwrap();
+            assert!(parsed.pointer("/trace/steps").is_some(),
+                "proof trace should contain steps");
+            assert!(parsed.pointer("/trace/backend").and_then(Value::as_str).is_some());
+        }
     }
 }

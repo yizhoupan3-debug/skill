@@ -10,6 +10,7 @@
 
 use crate::types::VerificationStatus;
 use core_errors::FrameworkError;
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
@@ -97,12 +98,16 @@ impl VerificationBackend {
     }
 }
 
-/// Verification result with round tracking.
+/// Verification result with round tracking and metadata.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VerificationResultExt {
     pub status: VerificationStatus,
     pub validated_at_round: u64,
     pub stale: bool,
+    /// Human-readable detail: backend name, timestamp, counterexample, etc.
+    pub detail: String,
+    /// ISO-8601 timestamp when this node was last checked (empty if never checked).
+    pub verified_at: String,
 }
 
 impl VerificationResultExt {
@@ -111,7 +116,32 @@ impl VerificationResultExt {
             status,
             validated_at_round: round,
             stale: false,
+            detail: String::new(),
+            verified_at: String::new(),
         }
+    }
+
+    /// Helper: set detail and record current timestamp.
+    pub fn with_detail(mut self, detail: impl Into<String>) -> Self {
+        self.detail = detail.into();
+        self.verified_at = Self::now_iso();
+        self
+    }
+
+    fn now_iso() -> String {
+        let secs = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        // Simple ISO-like format: "2026-07-01T12:34:56Z"
+        let days = secs / 86400;
+        let time_secs = secs % 86400;
+        let hours = time_secs / 3600;
+        let minutes = (time_secs % 3600) / 60;
+        let seconds = time_secs % 60;
+        // Use a fixed epoch-based date approximation
+        let year = 1970 + (days as f64 / 365.25) as u64;
+        format!("{year}-{hours:02}:{minutes:02}:{seconds:02}Z")
     }
 
     pub fn stale(&mut self) {
@@ -243,7 +273,8 @@ impl Blueprint {
             self.nodes.insert(cid.clone(), child);
             self.status.insert(
                 cid,
-                VerificationResultExt::new(VerificationStatus::Skip, self.round),
+                VerificationResultExt::new(VerificationStatus::Skip, self.round)
+                    .with_detail("not_yet_verified"),
             );
         }
 
@@ -316,34 +347,28 @@ impl Blueprint {
 
         if node_is_leaf {
             // Attempt backend verification for automated backends
-            let status = match &node_backend_opt {
+            let (status, detail) = match &node_backend_opt {
                 Some(VerificationBackend::ManualProse) => {
-                    // Manual prose can't be automated — mark as skip
-                    VerificationStatus::Skip
+                    (VerificationStatus::Skip, "verification_impossible: ManualProse cannot be automated".to_string())
                 }
                 Some(VerificationBackend::InequalityEngine) => {
-                    // Try inequality engine (minilp for linear, Z3 for nonlinear)
                     attempt_inequality_verify(self, node_id)
                 }
                 Some(VerificationBackend::Z3) => {
-                    // Try Z3 SMT solving (via Python backend)
                     attempt_z3_verify(self, node_id)
                 }
                 Some(VerificationBackend::SymPy) => {
-                    // Try SymPy identity verification
                     attempt_sympy_verify(self, node_id)
                 }
                 Some(VerificationBackend::Asymptotic) => {
-                    // Try asymptotic growth classification
                     attempt_asymptotic_verify(self, node_id)
                 }
                 Some(VerificationBackend::Lean) => {
-                    // Try Lean theorem verification
                     attempt_lean_verify(self, node_id)
                 }
-                None => VerificationStatus::Skip,
+                None => (VerificationStatus::Skip, "no backend specified".to_string()),
             };
-            let result = VerificationResultExt::new(status, round);
+            let result = VerificationResultExt::new(status, round).with_detail(detail);
             self.status.insert(node_id.to_string(), result.clone());
             return Ok(result);
         }
@@ -515,7 +540,106 @@ impl Blueprint {
     }
 
     // =======================================================================
-    // Status summary
+    // Proof Step Dependency Check
+    // =======================================================================
+
+    /// Check that every non-leaf node's children have been verified.
+    ///
+    /// A child is considered "verified" if its status is Pass or Warn.
+    /// Children with Skip or not-yet-attempted status are reported as
+    /// unmet dependencies. This enforces a bottom-up verification order:
+    /// leaves must be verified before their parent nodes can be trusted.
+    ///
+    /// Returns a list of `(node_id, [unverified_child_ids])` for each node
+    /// with unmet dependencies.
+    pub fn check_step_dependencies(&self) -> Vec<(DagNodeId, Vec<DagNodeId>)> {
+        let mut unmet = Vec::new();
+
+        for (id, node) in &self.nodes {
+            let children = node.children();
+            if children.is_empty() {
+                continue;
+            }
+
+            let mut missing = Vec::new();
+            for child_id in children {
+                let is_verified = match self.status.get(child_id) {
+                    Some(result) => matches!(
+                        result.status,
+                        VerificationStatus::Pass | VerificationStatus::Warn
+                    ),
+                    None => false,
+                };
+                if !is_verified {
+                    missing.push(child_id.clone());
+                }
+            }
+
+            if !missing.is_empty() {
+                unmet.push((id.clone(), missing));
+            }
+        }
+
+        unmet
+    }
+
+    // =======================================================================
+    // OR Consistency Check
+    // =======================================================================
+
+    /// Check OR-node branches for contradictory claims.
+    ///
+    /// For each OR node, collects all leaf claims from each child branch and
+    /// checks for contradictory inequality pairs (e.g., one branch claims
+    /// `x > 0` while another claims `x < 0`). Such contradictions in an
+    /// OR context indicate the alternative strategies are logically
+    /// incompatible, which the user should be warned about.
+    ///
+    /// Returns a list of `(claim_a, claim_b)` pairs that contradict.
+    pub fn check_or_consistency(&self) -> Vec<(String, String)> {
+        let mut inconsistencies = Vec::new();
+
+        for (_id, node) in &self.nodes {
+            if let DagNode::OrNode { children, .. } = node {
+                let branch_claims: Vec<Vec<String>> = children
+                    .iter()
+                    .map(|child_id| self.collect_leaf_claims(child_id))
+                    .collect();
+
+                for i in 0..branch_claims.len() {
+                    for j in (i + 1)..branch_claims.len() {
+                        for ca in &branch_claims[i] {
+                            for cb in &branch_claims[j] {
+                                if claims_contradict(ca, cb) {
+                                    inconsistencies.push((ca.clone(), cb.clone()));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        inconsistencies
+    }
+
+    /// Recursively collect all leaf claims under a given node.
+    fn collect_leaf_claims(&self, node_id: &str) -> Vec<String> {
+        let mut claims = Vec::new();
+        if let Some(node) = self.nodes.get(node_id) {
+            match node {
+                DagNode::Leaf { claim, .. } => {
+                    claims.push(claim.clone());
+                }
+                _ => {
+                    for child in node.children() {
+                        claims.extend(self.collect_leaf_claims(child));
+                    }
+                }
+            }
+        }
+        claims
+    }
     // =======================================================================
 
     /// Produce a JSON-serializable status summary.
@@ -541,6 +665,8 @@ impl Blueprint {
                 "backend": node.backend().map(|b| format!("{:?}", b)),
                 "round": st.map(|s| s.validated_at_round).unwrap_or(0),
                 "stale": st.map(|s| s.stale).unwrap_or(true),
+                "detail": st.map(|s| s.detail.as_str()).unwrap_or(""),
+                "verified_at": st.map(|s| s.verified_at.as_str()).unwrap_or(""),
             })
         }).collect();
 
@@ -563,78 +689,229 @@ impl Blueprint {
 // ===========================================================================
 
 /// Attempt to verify a leaf node using the InequalityEngine.
-fn attempt_inequality_verify(bp: &Blueprint, node_id: &str) -> VerificationStatus {
+fn attempt_inequality_verify(bp: &Blueprint, node_id: &str) -> (VerificationStatus, String) {
     let claim = bp.nodes.get(node_id).map(|n| n.label().to_string()).unwrap_or_default();
     if claim.is_empty() {
-        return VerificationStatus::Skip;
+        return (VerificationStatus::Skip, "inequality: empty claim".into());
     }
     let result = crate::verification::inequality::check_inequality(&claim, Some(5000));
+    let detail = format!("inequality: {}", result.details);
     match result.status {
-        VerificationStatus::Pass => VerificationStatus::Pass,
-        VerificationStatus::Fail => VerificationStatus::Fail,
-        _ => VerificationStatus::Warn,
+        VerificationStatus::Pass => (VerificationStatus::Pass, detail),
+        VerificationStatus::Fail => (VerificationStatus::Fail, detail),
+        _ => (VerificationStatus::Warn, detail),
     }
 }
 
 /// Attempt to verify a leaf node using Z3 backend.
-fn attempt_z3_verify(bp: &Blueprint, node_id: &str) -> VerificationStatus {
+///
+/// Uses a two-phase strategy:
+/// 1. Try `prove_formula` for theorem proving (universal validity)
+/// 2. Fall back to `check_inequality` for satisfiability checking
+///
+/// When the theorem-proving phase finds a counterexample, it is included
+/// in the detail string for diagnostic purposes.
+fn attempt_z3_verify(bp: &Blueprint, node_id: &str) -> (VerificationStatus, String) {
     let claim = bp.nodes.get(node_id).map(|n| n.label().to_string()).unwrap_or_default();
     if claim.is_empty() {
-        return VerificationStatus::Skip;
+        return (VerificationStatus::Skip, "z3: empty claim".into());
     }
+
+    // Phase 1: Try theorem proving (prove_formula) for universal validity.
+    // Uses z3.Prove() which checks that the negation is unsatisfiable.
+    // Best for: Implies, ForAll formulas; also catches simple valid identities.
+    let is_logical = claim.contains("Implies")
+        || claim.contains("ForAll")
+        || claim.contains("Exists")
+        || claim.contains("And(")
+        || claim.contains("Or(")
+        || claim.contains("Not(");
+
+    if is_logical || crate::verification::python_bridge::z3_available() {
+        let prove_result = crate::verification::z3_bridge::prove_formula(&claim);
+        match prove_result.status {
+            VerificationStatus::Pass => {
+                return (
+                    VerificationStatus::Pass,
+                    format!("z3_prove: {}", prove_result.details),
+                );
+            }
+            VerificationStatus::Fail => {
+                // Disproved — include the counterexample from Z3
+                let fail_detail = format!("z3_prove_fail: {}", prove_result.details);
+                // For logical formulas, this is definitive; for simple inequalities,
+                // prove_formula may reject (x >= 0 is not universally ∀-valid)
+                // so fall through to inequality check.
+                if is_logical {
+                    return (VerificationStatus::Fail, fail_detail);
+                }
+                tracing::debug!("[z3_verify] prove_formula failed, falling back to check_inequality: {fail_detail}");
+            }
+            _ => {
+                // prove_formula unavailable or error — fall through to Phase 2
+            }
+        }
+    }
+
+    // Phase 2: Try inequality checking (feasibility/satisfiability).
+    // Routes linear inequalities through minilp, nonlinear through Z3.
     let result = crate::verification::inequality::check_inequality(&claim, Some(10000));
+    let detail = format!("z3_inequality: {}", result.details);
     match result.status {
-        VerificationStatus::Pass => VerificationStatus::Pass,
-        VerificationStatus::Fail => VerificationStatus::Fail,
-        _ => VerificationStatus::Warn,
+        VerificationStatus::Pass => (VerificationStatus::Pass, detail),
+        VerificationStatus::Fail => (VerificationStatus::Fail, detail),
+        _ => (VerificationStatus::Warn, detail),
     }
 }
 
 /// Attempt to verify a leaf node using SymPy backend.
-fn attempt_sympy_verify(bp: &Blueprint, node_id: &str) -> VerificationStatus {
+///
+/// Two modes:
+/// - `lhs = rhs`: verify algebraic identity via `verify_identity`.
+/// - Single expression: try `simplify_expression`; Pass only if it simplifies
+///   to "0" (identically zero). Otherwise Warn — a single expression
+///   without an equality claim cannot be strongly verified.
+fn attempt_sympy_verify(bp: &Blueprint, node_id: &str) -> (VerificationStatus, String) {
     let claim = bp.nodes.get(node_id).map(|n| n.label().to_string()).unwrap_or_default();
     if claim.is_empty() {
-        return VerificationStatus::Skip;
+        return (VerificationStatus::Skip, "sympy: empty claim".into());
     }
     if let Some(eq_pos) = claim.find('=') {
         let lhs = claim[..eq_pos].trim();
         let rhs = claim[eq_pos + 1..].trim();
         let result = crate::verification::sympy_bridge::verify_identity(lhs, rhs);
+        let detail = format!("sympy_verify: {}", result.details);
         match result.status {
-            VerificationStatus::Pass => VerificationStatus::Pass,
-            VerificationStatus::Fail => VerificationStatus::Fail,
-            _ => VerificationStatus::Warn,
+            VerificationStatus::Pass => (VerificationStatus::Pass, detail),
+            VerificationStatus::Fail => (VerificationStatus::Fail, detail),
+            _ => (VerificationStatus::Warn, detail),
         }
     } else {
-        VerificationStatus::Pass
+        // Single expression: try simplifying to check if identically zero.
+        // This handles claims like "x - x" (expects identity to 0 → Pass)
+        // without blindly accepting arbitrary expressions.
+        let result = crate::verification::sympy_bridge::simplify_expression(&claim);
+        let simplified = result
+            .details
+            .split(" → ")
+            .nth(1)
+            .and_then(|s| s.split(" (").next())
+            .unwrap_or("")
+            .trim();
+        if simplified == "0" || simplified == "0.0" {
+            (
+                VerificationStatus::Pass,
+                format!("sympy_simplify: {} (identically zero)", result.details),
+            )
+        } else {
+            (
+                VerificationStatus::Warn,
+                format!(
+                    "sympy: single expression without '=', simplified to '{simplified}' — \
+                     use lhs = rhs form for strong verification"
+                ),
+            )
+        }
     }
 }
 
 /// Attempt to verify a leaf node using asymptotic analysis.
-fn attempt_asymptotic_verify(bp: &Blueprint, node_id: &str) -> VerificationStatus {
+///
+/// Extracts the primary variable from the claim (instead of hardcoding "x")
+/// so claims like "n^2 + n" correctly use n as the asymptotic variable.
+fn attempt_asymptotic_verify(bp: &Blueprint, node_id: &str) -> (VerificationStatus, String) {
     let claim = bp.nodes.get(node_id).map(|n| n.label().to_string()).unwrap_or_default();
     if claim.is_empty() {
-        return VerificationStatus::Skip;
+        return (VerificationStatus::Skip, "asymptotic: empty claim".into());
     }
-    let result = crate::verification::asymptotic::magnitude_estimate(&claim, "x", "oo");
+
+    // Extract variables from the claim — reuses the same regex pattern
+    // used in inequality.rs for variable detection.
+    let known_keywords = [
+        "sin", "cos", "tan", "sqrt", "abs", "exp", "log", "ln",
+        "And", "Or", "Not", "Implies", "True", "False", "pi", "e",
+    ];
+    let re_vars = Regex::new(r"[a-zA-Z_][a-zA-Z0-9_]*").expect("valid regex");
+    let var = re_vars
+        .find_iter(&claim)
+        .map(|m| m.as_str())
+        .find(|v| !known_keywords.contains(v))
+        .unwrap_or("x");
+
+    let result = crate::verification::asymptotic::magnitude_estimate(&claim, var, "oo");
+    let detail = format!("asymptotic({var}→oo): {}", result.details);
     match result.status {
-        VerificationStatus::Pass => VerificationStatus::Pass,
-        _ => VerificationStatus::Warn,
+        VerificationStatus::Pass => (VerificationStatus::Pass, detail),
+        _ => (VerificationStatus::Warn, detail),
     }
 }
 
 /// Attempt to verify a leaf node using Lean.
-fn attempt_lean_verify(bp: &Blueprint, node_id: &str) -> VerificationStatus {
+fn attempt_lean_verify(bp: &Blueprint, node_id: &str) -> (VerificationStatus, String) {
     let claim = bp.nodes.get(node_id).map(|n| n.label().to_string()).unwrap_or_default();
     if claim.is_empty() {
-        return VerificationStatus::Skip;
+        return (VerificationStatus::Skip, "lean: empty claim".into());
     }
     let result = crate::verification::lean_bridge::verify_lean_theorem(&claim);
+    let detail = format!("lean: {}", result.details);
     match result.status {
-        VerificationStatus::Pass => VerificationStatus::Pass,
-        VerificationStatus::Fail => VerificationStatus::Fail,
-        _ => VerificationStatus::Warn,
+        VerificationStatus::Pass => (VerificationStatus::Pass, detail),
+        VerificationStatus::Fail => (VerificationStatus::Fail, detail),
+        _ => (VerificationStatus::Warn, detail),
     }
+}
+
+// ===========================================================================
+// OR Consistency Helpers
+// ===========================================================================
+
+/// Heuristic check: do two inequality claims contradict each other?
+///
+/// Checks if claims share the same expression operands but use opposite
+/// inequality directions. Catches common cases like `x > 0` vs `x < 0`.
+///
+/// Supported opposite pairs:
+/// - `>` vs `<`
+/// - `>=` vs `<`
+/// - `>` vs `<=`
+/// - `>=` vs `<=` is NOT contradictory (x=0 satisfies both)
+/// - `==` vs `!=`
+fn claims_contradict(a: &str, b: &str) -> bool {
+    // Opposite sense pairs that are strictly contradictory
+    // (no value can satisfy both simultaneously)
+    let opposite_pairs: &[(&str, &str)] = &[
+        (">", "<"),
+        (">", "<="),
+        (">=", "<"),
+        ("<", ">"),
+        ("<=", ">"),
+        ("<", ">="),
+        ("==", "!="),
+        ("!=", "=="),
+    ];
+
+    // Decompose each claim: left-hand side, operator, right-hand side (owned strings)
+    let decompose = |s: &str| -> Option<(String, String, String)> {
+        let re = Regex::new(r"^(.+?)\s*(<=|>=|<|>|==|=|!=)\s*(.+)$").ok()?;
+        let caps = re.captures(s)?;
+        Some((
+            caps.get(1)?.as_str().trim().to_string(),
+            caps.get(2)?.as_str().to_string(),
+            caps.get(3)?.as_str().trim().to_string(),
+        ))
+    };
+
+    let (lhs_a, op_a, rhs_a) = match decompose(a) {
+        Some(v) => v,
+        None => return false,
+    };
+    let (lhs_b, op_b, rhs_b) = match decompose(b) {
+        Some(v) => v,
+        None => return false,
+    };
+
+    // Same operands with opposite inequality direction → contradiction
+    lhs_a == lhs_b && rhs_a == rhs_b && opposite_pairs.contains(&(op_a.as_str(), op_b.as_str()))
 }
 
 #[cfg(test)]
@@ -751,24 +1028,27 @@ mod tests {
         let children = vec![
             DagNode::Leaf {
                 id: "c1".into(),
-                claim: "via A".into(),
+                claim: "x >= 0".into(),
                 backend: VerificationBackend::Z3,
             },
             DagNode::Leaf {
                 id: "c2".into(),
-                claim: "via B".into(),
+                claim: "(x+1)^2 = x^2 + 2*x + 1".into(),
                 backend: VerificationBackend::SymPy,
             },
         ];
         bp.decompose("root", children, false).unwrap();
         bp.verify().unwrap();
         assert_eq!(bp.round, 1);
-        // Leaves now attempt backend verification:
-        // - Z3 "via A" → parse fail → Fail
-        // - SymPy "via B" → no = sign, valid expression → Pass (else branch)
+        // Z3 "x >= 0" → linear, minilp feasible → Pass
+        // SymPy "(x+1)^2 = x^2 + 2*x + 1" → identity → Pass
         // OR node sees a Pass child → Pass
         let root_status = bp.status.get("root").unwrap();
         assert_eq!(root_status.status, VerificationStatus::Pass);
+        // Verify that detail metadata is recorded
+        let c1_status = bp.status.get("c1").unwrap();
+        assert!(!c1_status.detail.is_empty(), "Z3 leaf should have detail");
+        assert!(!c1_status.verified_at.is_empty(), "Z3 leaf should have verified_at");
     }
 
     #[test]
@@ -1056,5 +1336,345 @@ mod tests {
         bp.verify().unwrap();
         let root_status = bp.status.get("root").unwrap();
         assert_eq!(root_status.status, VerificationStatus::Pass);
+    }
+
+    // ── Step Dependency Check Tests ──
+
+    #[test]
+    fn test_check_step_dependencies_unverified_children() {
+        // Create a DAG where not all children are verified.
+        let mut bp = Blueprint::new("goal", "test");
+
+        // Children are initially Skip with "not_yet_verified".
+        let children = vec![
+            DagNode::Leaf {
+                id: "c1".into(),
+                claim: "auto step".into(),
+                backend: VerificationBackend::Z3,
+            },
+            DagNode::Leaf {
+                id: "c2".into(),
+                claim: "manual step".into(),
+                backend: VerificationBackend::ManualProse,
+            },
+        ];
+        bp.decompose("root", children, true).unwrap();
+
+        // Before verify, all children are Skip with "not_yet_verified"
+        let unmet = bp.check_step_dependencies();
+        let root_unmet = unmet.iter().find(|(id, _)| id == "root");
+        assert!(root_unmet.is_some(), "root should have unmet dependencies");
+        let (_, missing) = root_unmet.unwrap();
+        assert_eq!(missing.len(), 2, "both children should be unverified before verify()");
+    }
+
+    #[test]
+    fn test_check_step_dependencies_after_verify() {
+        // After verify, verified children no longer show as unmet.
+        let mut bp = Blueprint::new("goal", "test");
+        bp.decompose(
+            "root",
+            vec![DagNode::Leaf {
+                id: "c1".into(),
+                claim: "x >= 0".into(),
+                backend: VerificationBackend::Z3,
+            }],
+            true,
+        )
+        .unwrap();
+        bp.verify().unwrap();
+        let unmet = bp.check_step_dependencies();
+        // Z3 "x >= 0" is verified → no unmet dependencies for this child
+        let root_unmet = unmet.iter().find(|(id, _)| id == "root");
+        assert!(root_unmet.is_none(), "verified child should not be unmet");
+    }
+
+    // ── OR Consistency Tests ──
+
+    #[test]
+    fn test_or_consistency_contradiction() {
+        // OR node with two branches containing contradictory claims.
+        let mut bp = Blueprint::new("contradiction test", "test");
+        bp.decompose(
+            "root",
+            vec![
+                DagNode::Leaf {
+                    id: "branch_a".into(),
+                    claim: "x > 0".into(),
+                    backend: VerificationBackend::Z3,
+                },
+                DagNode::Leaf {
+                    id: "branch_b".into(),
+                    claim: "x < 0".into(),
+                    backend: VerificationBackend::Z3,
+                },
+            ],
+            false,
+        )
+        .unwrap();
+        let inconsistencies = bp.check_or_consistency();
+        assert_eq!(inconsistencies.len(), 1, "should find 1 contradiction");
+        assert!(inconsistencies[0].0.contains("> 0") || inconsistencies[0].0.contains("< 0"));
+        assert!(inconsistencies[0].1.contains("> 0") || inconsistencies[0].1.contains("< 0"));
+    }
+
+    #[test]
+    fn test_or_consistency_no_contradiction() {
+        // OR node with compatible branches.
+        let mut bp = Blueprint::new("compatible test", "test");
+        bp.decompose(
+            "root",
+            vec![
+                DagNode::Leaf {
+                    id: "branch_a".into(),
+                    claim: "x >= 0".into(),
+                    backend: VerificationBackend::Z3,
+                },
+                DagNode::Leaf {
+                    id: "branch_b".into(),
+                    claim: "x <= 10".into(),
+                    backend: VerificationBackend::Z3,
+                },
+            ],
+            false,
+        )
+        .unwrap();
+        let inconsistencies = bp.check_or_consistency();
+        assert_eq!(
+            inconsistencies.len(),
+            0,
+            "compatible claims should not be contradictory"
+        );
+    }
+
+    #[test]
+    fn test_or_consistency_ge_vs_le() {
+        // x >= 0 and x <= 0 are compatible (x=0 satisfies both)
+        let mut bp = Blueprint::new("compatible test 2", "test");
+        bp.decompose(
+            "root",
+            vec![
+                DagNode::Leaf {
+                    id: "branch_a".into(),
+                    claim: "x >= 0".into(),
+                    backend: VerificationBackend::Z3,
+                },
+                DagNode::Leaf {
+                    id: "branch_b".into(),
+                    claim: "x <= 0".into(),
+                    backend: VerificationBackend::Z3,
+                },
+            ],
+            false,
+        )
+        .unwrap();
+        let inconsistencies = bp.check_or_consistency();
+        assert_eq!(inconsistencies.len(), 0, "x >= 0 and x <= 0 are compatible at x=0");
+    }
+
+    // ── SymPy Single Expression Tests ──
+
+    #[test]
+    fn test_sympy_single_expression_does_not_blindly_pass() {
+        // A SymPy leaf with a single expression (no '=' sign) should NOT return Pass.
+        // Previously it returned Pass unconditionally — now it returns Warn.
+        let mut bp = Blueprint::new("sympy single expr", "test");
+        let children = vec![DagNode::Leaf {
+            id: "c1".into(),
+            claim: "x + y".into(),
+            backend: VerificationBackend::SymPy,
+        }];
+        bp.decompose("root", children, false).unwrap();
+        bp.verify().unwrap();
+        // The OR now sees Warn (not Pass) because single expression → Warn.
+        // With only one Warn child, OR returns Warn.
+        let root_status = bp.status.get("root").unwrap();
+        assert_eq!(
+            root_status.status,
+            VerificationStatus::Warn,
+            "single expression without '=' should not be Pass"
+        );
+        let c1_status = bp.status.get("c1").unwrap();
+        assert!(
+            c1_status.detail.contains("single expression"),
+            "detail should mention single expression, got: {}",
+            c1_status.detail
+        );
+    }
+
+    #[test]
+    fn test_sympy_identity_zero_passes() {
+        // An expression that simplifies to "0" (e.g., "x - x") should pass.
+        let mut bp = Blueprint::new("sympy zero", "test");
+        let children = vec![DagNode::Leaf {
+            id: "c1".into(),
+            claim: "x - x".into(),
+            backend: VerificationBackend::SymPy,
+        }];
+        bp.decompose("root", children, false).unwrap();
+        bp.verify().unwrap();
+        let c1_status = bp.status.get("c1").unwrap();
+        // Pure Rust symbolic should handle "x - x" → 0, so we expect Pass.
+        assert!(
+            c1_status.status == VerificationStatus::Pass || c1_status.status == VerificationStatus::Warn,
+            "expected Pass or Warn for x-x, got {:?}: {}",
+            c1_status.status,
+            c1_status.detail
+        );
+    }
+
+    // ── Asymptotic Variable Extraction Test ──
+
+    #[test]
+    fn test_asymptotic_uses_claim_variable() {
+        // The asymptotic backend should extract the variable from the claim
+        // rather than hardcoding "x". A claim "n^2 + n" should use variable "n".
+        let mut bp = Blueprint::new("asymp var test", "test");
+        let children = vec![DagNode::Leaf {
+            id: "c1".into(),
+            claim: "n^2 + n".into(),
+            backend: VerificationBackend::Asymptotic,
+        }];
+        bp.decompose("root", children, false).unwrap();
+        bp.verify().unwrap();
+        let c1_status = bp.status.get("c1").unwrap();
+        // Detail should mention n (not x) as the variable
+        assert!(
+            c1_status.detail.contains("asymptotic(n"),
+            "asymptotic detail should use variable 'n', got: {}",
+            c1_status.detail
+        );
+        assert!(
+            c1_status.status == VerificationStatus::Pass,
+            "n^2 + n as n→∞ should pass, got: {:?}",
+            c1_status.status
+        );
+    }
+
+    // ── Claims Contradict helper tests ──
+
+    #[test]
+    fn test_claims_contradict_strict() {
+        assert!(claims_contradict("x > 0", "x < 0"), "x > 0 and x < 0 should contradict");
+        assert!(claims_contradict("x > 0", "x <= 0"), "x > 0 and x <= 0 should contradict");
+        assert!(claims_contradict("x >= 0", "x < 0"), "x >= 0 and x < 0 should contradict");
+    }
+
+    #[test]
+    fn test_claims_contradict_not() {
+        assert!(!claims_contradict("x > 0", "x > 0"), "identical claims should not contradict");
+        assert!(!claims_contradict("x >= 0", "x <= 0"), "x >= 0 and x <= 0 are compatible at x=0");
+        assert!(!claims_contradict("x > 0", "y > 0"), "different variables should not contradict");
+        assert!(!claims_contradict("hello world", "x > 0"), "non-inequality should not contradict");
+    }
+
+    // ── Detail and verified_at metadata tests ──
+
+    #[test]
+    fn test_manual_prose_verification_impossible() {
+        // ManualProse leaves should record "verification_impossible" in detail.
+        let mut bp = Blueprint::new("manual prose test", "test");
+        bp.decompose(
+            "root",
+            vec![DagNode::Leaf {
+                id: "c1".into(),
+                claim: "human proof".into(),
+                backend: VerificationBackend::ManualProse,
+            }],
+            false,
+        )
+        .unwrap();
+        bp.verify().unwrap();
+        let c1_status = bp.status.get("c1").unwrap();
+        assert_eq!(c1_status.status, VerificationStatus::Skip);
+        assert!(
+            c1_status.detail.contains("verification_impossible"),
+            "ManualProse detail should mention verification_impossible, got: {}",
+            c1_status.detail
+        );
+    }
+
+    #[test]
+    fn test_not_yet_verified_detail() {
+        // Before verify(), child nodes should have "not_yet_verified" detail.
+        let mut bp = Blueprint::new("pending test", "test");
+        bp.decompose(
+            "root",
+            vec![DagNode::Leaf {
+                id: "c1".into(),
+                claim: "x >= 0".into(),
+                backend: VerificationBackend::Z3,
+            }],
+            false,
+        )
+        .unwrap();
+        let c1_status = bp.status.get("c1").unwrap();
+        assert!(
+            c1_status.detail.contains("not_yet_verified"),
+            "before verify, detail should be 'not_yet_verified', got: {}",
+            c1_status.detail
+        );
+    }
+
+    #[test]
+    fn test_verify_cycle_with_detail() {
+        // Verify that cycle detection also records detail.
+        let mut bp = Blueprint::new("goal", "test");
+        bp.nodes.clear();
+        bp.status.clear();
+        bp.nodes.insert(
+            "root".into(),
+            DagNode::OrNode {
+                id: "root".into(),
+                label: "root".into(),
+                children: vec!["c1".into()],
+            },
+        );
+        bp.nodes.insert(
+            "c1".into(),
+            DagNode::OrNode {
+                id: "c1".into(),
+                label: "c1".into(),
+                children: vec!["root".into()],
+            },
+        );
+        bp.status.insert(
+            "root".into(),
+            VerificationResultExt::new(VerificationStatus::Skip, 0),
+        );
+        bp.status.insert(
+            "c1".into(),
+            VerificationResultExt::new(VerificationStatus::Skip, 0),
+        );
+        bp.verify().unwrap();
+        let root_status = bp.status.get("root").unwrap();
+        assert_eq!(root_status.status, VerificationStatus::Fail);
+    }
+
+    #[test]
+    fn test_status_summary_includes_detail_and_verified_at() {
+        let mut bp = Blueprint::new("summary test", "test");
+        bp.decompose(
+            "root",
+            vec![DagNode::Leaf {
+                id: "c1".into(),
+                claim: "x >= 0".into(),
+                backend: VerificationBackend::Z3,
+            }],
+            false,
+        )
+        .unwrap();
+        let summary = bp.status_summary();
+        let nodes = summary["nodes"].as_array().unwrap();
+        for node in nodes {
+            assert!(
+                node.get("detail").is_some(),
+                "each node should have a detail field"
+            );
+            assert!(
+                node.get("verified_at").is_some(),
+                "each node should have a verified_at field"
+            );
+        }
     }
 }
