@@ -346,9 +346,13 @@ The Story Card (output of `$good-story`) provides structured input for paper-wor
 | `research_review_dimensions` | 获取审稿维度 prompt + checklist | `round: u64` | 该轮维度的审稿 prompt 和 checklist |
 | `research_aigc_check` | AIGC 检测 | `text: string` | 0-100 AI 概率评分 + 信号列表 |
 | `research_aigc_humanize (暂未实现)` | AIGC 降重（句法改写/词汇替换） | `text: string` | 重写后的文本 + 策略列表 |
+| `research_review_loop` | 对抗审稿循环管理 | `operation: start/submit_round/status` | 收敛状态、下一轮维度 |
+| `research_claim_drift` | 声明漂移检测 | `original_claims: [], current_claims: []` | drift 分析结果列表 |
 
 **使用时机**：
 - **审稿维度 prompt**：loop mode 每轮 reviewer spawn 时，用 `research_review_dimensions(round)` 获取精确的审稿 prompt 和 checklist，替代手动构建
+- **对抗审稿循环**：用 `research_review_loop` 管理多轮审稿循环（启动、提交审稿轮次、查询收敛状态），避免手动跟踪循环进度
+- **声明漂移检测**：改稿前后用 `research_claim_drift` 检测主张是否悄悄漂移，确保 claim 在 revision 链中保持一致
 - **AIGC 检测**：投稿前检测手稿 AI 概率，或在 prose chain 中作为 QC 步骤
 - **AIGC 降重**：对高 AI 概率段落执行句法改写，降低 AIGC 检测风险
 

@@ -100,16 +100,18 @@ systematic research and returns candidates.
 | `hypothesis_tracking` | `add-hypothesis / list-hypotheses` | Hypothesis CRUD |
 | `run_recording` | `record-run` | Experiment recording (env + git) |
 | `reflection` | `reflect` | Experiment reflection + drift detection |
+| `claim_planning` | `plan-search / brief-first-claim / gate-from-research` | Search planning and novelty gate |
+| `run_annotation` | `annotate-run / audit-reuse` | Run reuse metadata and audit |
 | `sync` | `sync` | Sync to artifact |
-| `smoke_test` | `smoke-test` | Quick directional experiment probes via templates/ |
+| `smoke_test` | 通过 `research_smoke` MCP 工具调用 | Quick directional experiment probes via templates/ |
 | `log` | (library API) | Layered logging — SQLite FTS5 (`research_harness::log`) |
 | `barrier_escalation` | `barrier <problem>` | **Loop bridge**: systematic research on hard barriers |
-| `sync` | `sync` | Sync to artifact |
 
 ### Backend
 
-All lanes call `cargo run -p research-harness --bin autoresearch -- <subcommand>` to
+CLI lanes call `cargo run -p research-harness --bin autoresearch -- <subcommand>` to
 invoke the CLI in `core/research-harness/src/bin/autoresearch.rs`.
+Smoke tests and research verification are accessible via MCP tools (`research_smoke`, `research_verification_*`).
 
 Workspace data:
 - State: `<workspace>/research-state.yaml` (schema v4)

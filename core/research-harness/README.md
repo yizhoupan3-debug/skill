@@ -21,6 +21,13 @@ Unified research harness crate for the skill framework. Integrates paper revisio
 | `provenance` | Git provenance and environment fingerprint capture |
 | `smoke` | General-purpose experiment smoke test engine (quick directional probes via templates/ executables) |
 | `smoke_cache` | LRU+TTL cache with disk persistence for experiment results |
+| `mcp` | MCP tool definitions and dispatch for research tools |
+| `mcp_tools` | Research MCP tool dispatch (delegated from host-projection) |
+| `proof_dag` | Blueprint-DAG proof architecture (AND-OR DAG) |
+| `proof_dag_serialize` | Serialization for Blueprint-DAG |
+| `subprocess` | Subprocess execution helpers (timeout, truncation) |
+| `types` | Core types: review, claims, AIGC, search, verification |
+| `util` | Shared utility functions (novelty gate helpers, arr_mut, str_field) |
 
 ## Dependencies
 
@@ -33,29 +40,54 @@ Unified research harness crate for the skill framework. Integrates paper revisio
 Does **not** depend on `runtime-core` — avoids circular dependency.
 `runtime-core` can call `research-harness` hook interfaces through `host-projection` function pointers.
 
-## MCP Tools & QG Checkers
+## MCP Tools
 
 Exposed through `host-projection`'s `mcp_stdio_harness`:
 
-- `research_review_dimensions` — Get review dimension prompts and checklists
+### Research tools
 - `research_aigc_check` — AIGC detection (0-100 score + signal list)
-- `research_aigc_humanize` — AIGC reduction (syntactic rewriting / lexical substitution)
 - `research_claim_drift` — Claim drift detection (original vs current claims)
+- `research_literature_search` — Cross-source academic literature search (arXiv, Semantic Scholar)
+- `research_review_dimensions` — Get review dimension prompts and checklists
 - `research_review_loop` — Multi-round adversarial review loop
+- `research_smoke` — General-purpose experiment smoke test engine
 
-### QG Route Checkers (Wave 4b/5b)
+### Verification tools
+- `research_verification_prose` — Prose QC: terminology consistency, slop detection, hedging analysis
+- `research_verification_statistical` — Statistical checks: GRIM test, p-value verification, multiple comparison correction
+- `research_verification_literature` — Literature checks: DOI reachability, claim coverage
+- `research_verification_structure` — Structure checks: LaTeX compilation, figure reference consistency
+- `research_verification_reproducibility` — Reproducibility checks: seed, determinism, environment, data versioning
+- `research_verification_formal` — Formal verification: dimensional analysis
+- `research_aigc_humanize` — AIGC reduction (syntactic rewriting / lexical substitution). **Note: not yet implemented as an MCP tool.**
 
-Registered via `RUNTIME_REGISTRY.json` → `quality_gate_checkers.registrations` into the shared `CheckerRegistry`
-at startup. All checkers are in-place adapter modules in `src/verification/`:
+### Math verification tools
+- `math_asymptotic_estimate` — Asymptotic magnitude estimation
+- `math_asymptotic_chain` — Asymptotic chain verification
+- `math_proof_dag_init` — Initialize proof DAG
+- `math_proof_dag_decompose` — Decompose proof node into sub-goals
+- `math_proof_dag_verify` — Verify proof DAG structural completeness
+- `math_proof_dag_status` — View proof DAG progress summary
+- `math_sympy_verify` — Symbolic identity verification
+- `math_sympy_simplify` — Expression simplification
+- `math_prove_inequality` — Inequality proving via SMT solver
+- `math_backend_available` — Check Z3/SymPy/Lean backend availability
+- `math_lean_verify` — Theorem formalization via Lean
+
+### QG Route Checkers (registered via RUNTIME_REGISTRY.json)
 
 | Checker | Scene | Description |
 |---------|-------|-------------|
-| `LiteratureGate` | RESEARCH | Citation-claim alignment, DOI reachability, closest-work identification |
+| `Asymptotic` | RESEARCH | Asymptotic relation verification |
+| `DimensionalConsistency` | RESEARCH | Dimensional analysis |
+| `Inequality` | RESEARCH | Linear inequality feasibility via minilp |
+| `Literature` | RESEARCH | Citation-claim alignment, DOI reachability |
 | `ProseQCChecker` | RESEARCH | AI slop detection, hedging analysis, terminology consistency |
-| `Reproducibility` | RESEARCH | Experiment seed/determinism/environment lock verification |
-| `StatisticalChecker` | RESEARCH | p-value recomputation, GRIM test, effect size reporting |
-| `StructureGate` | RESEARCH | LaTeX compilation, cross-ref consistency, notation/format checks |
-| `FormalGate/DimensionalConsistency` | RESEARCH | CAS identity simplification, dimensional analysis, SMT consistency |
+| `Reproducibility` | RESEARCH | Experiment seed/determinism/environment lock |
+| `StatisticalChecker` | RESEARCH | p-value recomputation, GRIM test, effect size |
+| `Structure` | RESEARCH | LaTeX compilation, cross-ref consistency |
+| `Symbolic` | RESEARCH | Symbolic identity proving, growth classification |
+| `SympyBridge` | RESEARCH | SymPy symbolic verification bridge |
 
 ## Backward Compatibility
 

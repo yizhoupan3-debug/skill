@@ -49,9 +49,8 @@
 | `reflect` | 实验反思 + drift 检测 |
 | `sync` | 同步到 artifact |
 | `barrier <problem>` | **Loop bridge**：瓶颈研究 → BARRIER_REPORT.json |
-| `sync` | 同步到 artifact |
 
-分层日志功能通过 `research_harness::log` 库接口提供（SQLite FTS5 日志存储 + 知识图谱）。快速实验探测通过 `smoke-test` 模板执行。
+分层日志功能通过 `research_harness::log` 库接口提供（SQLite FTS5 日志存储 + 知识图谱）。快速实验探测通过 `research_smoke` MCP 工具调用模板执行。
 
 调用方式：`cargo run -p research-harness --bin autoresearch -- <subcommand>`。
 
@@ -72,7 +71,7 @@
 ## 相关资源
 
 - 链路协议：详见 [`../references/research-lane-routing.md`](../references/research-lane-routing.md)
-- Math reasoning harness：`docs/math-reasoning-harness.md`
+- Math reasoning harness：[docs/math-reasoning-harness.md](../../../docs/math-reasoning-harness.md)
 - 研究工作区 CLI：详见 [`../research-harness/SKILL.md`](../research-harness/SKILL.md)
 - Quality gates（退出门）：
   - `math_verification` / `math_modeling` → `$formal-verification`

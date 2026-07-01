@@ -23,6 +23,22 @@
 - **Review findings-only by default**: review 产出仅为 findings（P0→P1→P2→Caveat），不默认改代码、不执行。参见 `skills/code-review-deep/SKILL.md`。
 - Closeout: 完成时使用 `goal_state_manage(operation=complete)` 记录 closeout evidence。
 - Skill Routing: 使用 `skill_route` / `skill_search` MCP 工具进行路由。
+
+## Skill 目录
+
+| Skill | Layer | 说明 |
+|-------|-------|------|
+| `$research` | L2 | 统一科研前门 — 自动路由到 discovery（文献）、execution（实验）、paper-workbench（手稿）、research-workspace（工作区 CLI）|
+| `$good-question` | L2 | 选题尖锐化：模糊想法 → falsifiable 科研问题 |
+| `$good-story` | L2 | 故事线诊断：结果/数据 → Story Card |
+| `$deep-search` | L3 | 通用深度搜索引擎，多源覆盖+事实核查 |
+| `$paper-workbench` | L3 | 论文全流程：审稿/返修/rebuttal/写作/投稿 |
+| `$citation-management` | L3 | 引用格式核查与 BibTeX 管理 |
+| `$experiment-reproducibility` | L3 | 实验可复现性管理 |
+| `$math-derivation` | L4 | 严格数学推导执行（退出专用）|
+| `$statistical-analysis` | L4 | 统计方法选型与解读 |
+
+各 skill 详情通过 `skill_read` 加载，路由注册见 `skills/SKILL_ROUTING_RUNTIME.json`。
 - Goal state: 通过 `goal_state_read` / `goal_state_manage` 管理目标状态。
 
 ## Structured Task Output（TASK_OUTPUT.json）
