@@ -129,8 +129,6 @@ fn tool_literature_search(arguments: &Value) -> Result<String, FrameworkError> {
     serde_json::to_string_pretty(&result).map_err(FrameworkError::Json)
 }
 
-// ── Literature verification ──
-
 // ── Prose QC ──
 
 fn tool_verification_prose(arguments: &Value) -> Result<String, FrameworkError> {
@@ -214,8 +212,6 @@ fn tool_verification_prose(arguments: &Value) -> Result<String, FrameworkError> 
     }
 }
 
-// ── Reproducibility verification ──
-
 // ── Statistical verification ──
 
 fn tool_verification_statistical(arguments: &Value) -> Result<String, FrameworkError> {
@@ -298,8 +294,6 @@ fn tool_verification_statistical(arguments: &Value) -> Result<String, FrameworkE
         ))),
     }
 }
-
-// ── Structure verification ──
 
 // ── Inequality tool functions ──
 

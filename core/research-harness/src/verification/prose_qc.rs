@@ -20,11 +20,17 @@ pub fn check_terminology_consistency(
         let canonical_lower = canonical.to_ascii_lowercase();
 
         // 如果在文中找到了非标准变体（且不是标准用法本身）
-        if variant_lower != canonical_lower && lower.contains(&variant_lower) {
-            violations.push(format!(
-                "术语不一致：使用了 '{}' 而非标准 '{}'",
-                variant, canonical
-            ));
+        if variant_lower != canonical_lower {
+            // 使用词边界检查，避免子字符串假阳性
+            for (start, _) in lower.match_indices(&variant_lower) {
+                if is_whole_word(&lower, start, variant_lower.len()) {
+                    violations.push(format!(
+                        "术语不一致：使用了 '{}' 而非标准 '{}'",
+                        variant, canonical
+                    ));
+                    break; // 每个变体只报告一次
+                }
+            }
         }
     }
 

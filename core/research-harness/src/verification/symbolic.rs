@@ -804,7 +804,15 @@ fn collect_variables(a: &Expr, b: &Expr) -> Vec<String> {
 fn collect_vars_rec(expr: &Expr, vars: &mut Vec<String>) {
     match expr {
         Expr::Var(v) => vars.push(v.clone()),
-        Expr::Neg(x) | Expr::Pow(x, _) | Expr::Div(x, _) => collect_vars_rec(x, vars),
+        Expr::Neg(x) => collect_vars_rec(x, vars),
+        Expr::Pow(x, y) => {
+            collect_vars_rec(x, vars);
+            collect_vars_rec(y, vars);
+        }
+        Expr::Div(x, y) => {
+            collect_vars_rec(x, vars);
+            collect_vars_rec(y, vars);
+        }
         Expr::Add(a, b) | Expr::Sub(a, b) | Expr::Mul(a, b) => {
             collect_vars_rec(a, vars);
             collect_vars_rec(b, vars);

@@ -285,11 +285,12 @@ fn build_entries(state: &Value) -> Vec<HandoffEntry> {
 }
 
 fn ceiling_rank(ceiling: &str) -> u8 {
+    use crate::types::ClaimCeiling;
     match ceiling {
-        "top-venue" | "TopVenue" => 4,
-        "conference-ready" | "ConferenceReady" => 3,
-        "local-only" | "LocalOnly" => 2,
-        "no-claim" | "NoClaim" => 1,
+        "top-venue" | "TopVenue" => ClaimCeiling::TopVenue.rank(),
+        "conference-ready" | "ConferenceReady" => ClaimCeiling::ConferenceReady.rank(),
+        "local-only" | "LocalOnly" => ClaimCeiling::LocalOnly.rank(),
+        "no-claim" | "NoClaim" => ClaimCeiling::NoClaim.rank(),
         _ => 0,
     }
 }

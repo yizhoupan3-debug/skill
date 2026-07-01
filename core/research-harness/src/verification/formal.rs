@@ -4,6 +4,8 @@
 //! 这是一个启发式检查，不替代完整的量纲分析工具。
 
 use anyhow::Result;
+use regex::Regex;
+use std::sync::LazyLock;
 
 /// 常见物理量纲符号及其 SI 基本量纲组合。
 const DIMENSION_TABLE: &[(&str, &str)] = &[
@@ -81,9 +83,12 @@ fn extract_unit_symbols(text: &str) -> Vec<String> {
 
 /// 提取维度标注文本（如 [L], [M], [T] 等）。
 fn extract_dimension_tokens(text: &str) -> Vec<String> {
-    #[allow(clippy::expect_used)]
-    let re = regex::Regex::new(r"\[([A-Z](?:[A-Za-z\^0-9+\-]*)?)\]").expect("static regex");
-    re.captures_iter(text)
+    static DIMENSION_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r"\[([A-Z](?:[A-Za-z\^0-9+\-]*)?)\]")
+            .expect("invalid dimension regex")
+    });
+    DIMENSION_RE
+        .captures_iter(text)
         .map(|cap| cap[1].to_string())
         .collect()
 }

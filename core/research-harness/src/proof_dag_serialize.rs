@@ -23,10 +23,16 @@ pub fn serialize_blueprint(bp: &Blueprint) -> Result<String, FrameworkError> {
 pub fn deserialize_blueprint(json: &str) -> Result<Blueprint, FrameworkError> {
     let wrapper: serde_json::Value = serde_json::from_str(json)?;
 
-    let schema = wrapper
-        .get("schema_version")
-        .and_then(|v| v.as_str())
-        .unwrap_or("unknown");
+    let schema_val = wrapper.get("schema_version");
+    let schema = match schema_val {
+        Some(v) if v.is_string() => v.as_str().unwrap_or("unknown"),
+        Some(v) => {
+            return Err(FrameworkError::validation(format!(
+                "schema_version must be a string, got {v}"
+            )));
+        }
+        None => "unknown",
+    };
     if schema != SERIALIZATION_SCHEMA_VERSION {
         return Err(FrameworkError::validation(format!(
             "schema version mismatch: expected {SERIALIZATION_SCHEMA_VERSION}, got {schema}"
@@ -54,7 +60,8 @@ pub fn apply_update(bp: &mut Blueprint, update: &serde_json::Value) -> Result<()
                     .get("node_id")
                     .and_then(|v| v.as_str())
                     .ok_or(FrameworkError::validation("backtrack requires 'node_id'"))?;
-                bp.backtrack(node_id)
+                let mut visited = std::collections::HashSet::new();
+                bp.backtrack(node_id, &mut visited)
             }
             _ => Err(FrameworkError::validation(format!(
                 "unknown action: {action}"

@@ -198,7 +198,7 @@ pub fn tool_definitions() -> Vec<Value> {
         ),
         tool_def(
             "research_smoke",
-            "对 arXiv 和 Semantic Scholar 做数据源可达性烟雾测试",
+            "通用实验烟雾测试引擎 — 运行可执行实验模板，支持 LRU+TTL 缓存、并行子进程执行、参数注入为环境变量",
             json!({ "type": "object", "properties": {} }),
         ),
         tool_def(

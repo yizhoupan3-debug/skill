@@ -17,7 +17,7 @@ pub const PREFIX_LINE: &str = "**PAPER_ADVERSARIAL_HOOK**";
 
 /// 编译期嵌入的回落文案：与 `REL_PATH` **同源**（同一份磁盘 txt），仅在用户仓库内
 /// 文件缺失 / 空 / 仅标题时启用。
-const BUILTIN_TXT: &str = include_str!("../../../../configs/framework/PAPER_ADVERSARIAL_HOOK.txt");
+const BUILTIN_TXT: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../configs/framework/PAPER_ADVERSARIAL_HOOK.txt"));
 
 // ── Static state ──
 

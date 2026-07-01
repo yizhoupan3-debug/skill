@@ -7,6 +7,7 @@
 use anyhow::Result;
 use serde_json::Value;
 use std::fs;
+use std::io;
 use std::path::Path;
 
 use crate::util::{
@@ -1127,7 +1128,14 @@ pub fn sync_managed_file(
     block_end: &str,
     content: String,
 ) -> Result<()> {
-    let existing = fs::read_to_string(path).unwrap_or_default();
+    let existing = fs::read_to_string(path).unwrap_or_else(|e| {
+        if e.kind() == io::ErrorKind::NotFound {
+            String::new()
+        } else {
+            tracing::warn!("sync_managed_file: failed to read {}: {}", path.display(), e);
+            String::new()
+        }
+    });
     let updated = upsert_managed_block(&existing, block_start, block_end, &content);
     let final_content = if existing.is_empty() {
         format!("{header}{updated}")

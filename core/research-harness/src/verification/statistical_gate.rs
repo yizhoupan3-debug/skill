@@ -52,37 +52,66 @@ impl GateChecker for StatisticalChecker {
 
         // GRIM test
         if let Some(grim) = data.get("grim") {
-            let mean = grim.get("mean").and_then(|v| v.as_f64()).unwrap_or(0.0);
-            let n = grim.get("n").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+            let mean = grim.get("mean").and_then(|v| v.as_f64());
+            let n = grim.get("n").and_then(|v| v.as_u64());
             let decimals = grim.get("decimals").and_then(|v| v.as_u64()).unwrap_or(2) as usize;
-            match statistical::grim_test(mean, n, decimals) {
-                Ok(passed) => {
-                    findings.push(Finding {
-                        id: "statistical_grim".to_string(),
-                        severity: if passed { Severity::C } else { Severity::B },
-                        description: format!(
-                            "GRIM test for mean={mean}, n={n}, decimals={decimals}: {}",
-                            if passed { "consistent" } else { "inconsistent" }
-                        ),
-                        location: None,
-                        suggestion: if passed {
-                            None
-                        } else {
-                            Some(
-                                "mean is not granular-compatible with sample size — check data"
-                                    .to_string(),
-                            )
-                        },
-                    });
-                }
-                Err(e) => {
-                    findings.push(Finding {
-                        id: "statistical_grim_error".to_string(),
-                        severity: Severity::C,
-                        description: format!("GRIM test error: {e}"),
-                        location: None,
-                        suggestion: None,
-                    });
+
+            if mean.is_none() {
+                findings.push(Finding {
+                    id: "statistical_grim_missing_mean".to_string(),
+                    severity: Severity::Warning,
+                    description: "GRIM test skipped: 'mean' field missing in output_data.grim".to_string(),
+                    location: None,
+                    suggestion: Some("provide 'mean' as a float in output_data.grim".to_string()),
+                });
+            } else if n.is_none() {
+                findings.push(Finding {
+                    id: "statistical_grim_missing_n".to_string(),
+                    severity: Severity::Warning,
+                    description: "GRIM test skipped: 'n' field missing in output_data.grim".to_string(),
+                    location: None,
+                    suggestion: Some("provide 'n' as an integer in output_data.grim".to_string()),
+                });
+            } else if n == Some(0) {
+                findings.push(Finding {
+                    id: "statistical_grim_zero_n".to_string(),
+                    severity: Severity::Warning,
+                    description: "GRIM test skipped: n=0 is invalid".to_string(),
+                    location: None,
+                    suggestion: Some("provide a positive integer for 'n' in output_data.grim".to_string()),
+                });
+            } else {
+                let mean = mean.unwrap();
+                let n = n.unwrap() as usize;
+                match statistical::grim_test(mean, n, decimals) {
+                    Ok(passed) => {
+                        findings.push(Finding {
+                            id: "statistical_grim".to_string(),
+                            severity: if passed { Severity::C } else { Severity::B },
+                            description: format!(
+                                "GRIM test for mean={mean}, n={n}, decimals={decimals}: {}",
+                                if passed { "consistent" } else { "inconsistent" }
+                            ),
+                            location: None,
+                            suggestion: if passed {
+                                None
+                            } else {
+                                Some(
+                                    "mean is not granular-compatible with sample size — check data"
+                                        .to_string(),
+                                )
+                            },
+                        });
+                    }
+                    Err(e) => {
+                        findings.push(Finding {
+                            id: "statistical_grim_error".to_string(),
+                            severity: Severity::C,
+                            description: format!("GRIM test error: {e}"),
+                            location: None,
+                            suggestion: None,
+                        });
+                    }
                 }
             }
         }

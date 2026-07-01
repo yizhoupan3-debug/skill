@@ -6,6 +6,7 @@
 //! deduplicates results, and ranks by relevance.
 
 use anyhow::{Result, bail};
+use chrono::Datelike;
 use serde_json::{Value, json};
 
 use crate::search::helpers::*;
@@ -115,7 +116,19 @@ const CONFERENCE_TIER: &[(&str, u32)] = &[
 
 fn lookup_impact_factor(venue: &str) -> Option<f64> {
     let v = venue.to_ascii_lowercase().trim().to_string();
-    JOURNAL_IF.iter().find(|(name, _)| v.contains(name)).map(|(_, if_)| *if_)
+    // Sort by venue name length (longest first) so specific matches like
+    // "Nature Communications" are tried before generic "nature".
+    let sorted: Vec<_> = {
+        let mut v: Vec<_> = JOURNAL_IF.iter().collect();
+        v.sort_by(|a, b| b.0.len().cmp(&a.0.len()));
+        v
+    };
+    for (venue_name, if_val) in &sorted {
+        if v.contains(venue_name) {
+            return Some(*if_val);
+        }
+    }
+    None
 }
 
 fn lookup_conference_tier(venue: &str) -> Option<u32> {
@@ -247,7 +260,7 @@ fn score_paper(paper: &Value, current_year: u32) -> (i32, Vec<String>) {
 
 fn current_year() -> u32 {
     // Compute from current UTC date.
-    chrono::Utc::now().format("%Y").to_string().parse().unwrap_or(2026)
+    chrono::Utc::now().year() as u32
 }
 
 // ── Blocking search ──

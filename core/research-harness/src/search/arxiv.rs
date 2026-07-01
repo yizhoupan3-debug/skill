@@ -60,7 +60,7 @@ fn try_search(client: &Client, opts: &SearchOptions) -> Result<Vec<Value>> {
     let search_query = if opts.query.trim().is_empty() {
         // Empty query with no advanced_query — use a catch-all to avoid
         // generating invalid arXiv query syntax.
-        String::from("all:\"\")")
+        String::from("all:introduction")
     } else if let Some(ref adv) = opts.advanced_query {
         adv.clone()
     } else if opts.fuzzy_query {

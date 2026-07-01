@@ -156,6 +156,11 @@ enum Commands {
         #[arg(long)]
         id: Option<String>,
     },
+    /// List all hypotheses
+    ListHypotheses {
+        #[arg(short, long, default_value = ".")]
+        workspace: PathBuf,
+    },
     /// Record an experiment run
     RecordRun {
         #[arg(short, long, default_value = ".")]
@@ -699,6 +704,51 @@ fn cmd_record_run(
     Ok(())
 }
 
+fn cmd_list_hypotheses(workspace: &PathBuf) -> Result<()> {
+    let ws = resolve_workspace(workspace)?;
+    let state = load_state(&ws)?;
+    let hypotheses = state
+        .get("hypotheses")
+        .and_then(Value::as_array)
+        .map_or(0, Vec::len);
+    if hypotheses == 0 {
+        println!("No hypotheses found. Use add-hypothesis to create one.");
+        return Ok(());
+    }
+    println!("Hypotheses ({hypotheses} total):");
+    for (i, h) in state
+        .get("hypotheses")
+        .and_then(Value::as_array)
+        .unwrap_or(&vec![])
+        .iter()
+        .enumerate()
+    {
+        let id = h.get("id").and_then(Value::as_str).unwrap_or("?");
+        let claim = h.get("claim").and_then(Value::as_str).unwrap_or("-");
+        let status = h
+            .get("status")
+            .and_then(Value::as_str)
+            .unwrap_or("active");
+        println!(
+            "  {}. {} [{}]: {}",
+            i + 1,
+            id,
+            status,
+            truncate_str(claim, 80)
+        );
+    }
+    Ok(())
+}
+
+/// Truncate a string to at most `max` characters, appending "..." if truncated.
+fn truncate_str(s: &str, max: usize) -> String {
+    if s.len() <= max {
+        s.to_string()
+    } else {
+        format!("{}...", &s[..max.saturating_sub(3)])
+    }
+}
+
 fn cmd_annotate_run(
     workspace: &PathBuf,
     run_id: &str,
@@ -983,6 +1033,7 @@ fn main() -> Result<()> {
             &priority,
             id,
         )?,
+        Commands::ListHypotheses { workspace } => cmd_list_hypotheses(&workspace)?,
         Commands::RecordRun {
             workspace,
             hypothesis_id,

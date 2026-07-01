@@ -264,14 +264,34 @@ fn parse_one_term(t: &str) -> Option<(f64, Option<String>)> {
 
 /// Solve a system of linear inequalities using minilp.
 pub fn solve_system(system: &InequalitySystem, timeout_ms: Option<u64>) -> FeasibilityResult {
-    let _timeout = timeout_ms.unwrap_or(5000);
     if system.is_empty() {
         return FeasibilityResult::Feasible {
             model: HashMap::new(),
         };
     }
 
-    let result = solve_via_minilp(system);
+    let (tx, rx) = std::sync::mpsc::channel();
+    let system_clone = system.clone();
+    std::thread::spawn(move || {
+        let _ = tx.send(solve_via_minilp(&system_clone));
+    });
+
+    let result = match timeout_ms {
+        Some(ms) => match rx.recv_timeout(std::time::Duration::from_millis(ms)) {
+            Ok(r) => r,
+            Err(_) => {
+                return FeasibilityResult::Timeout {
+                    timeout_ms: ms,
+                }
+            }
+        },
+        None => rx.recv().unwrap_or_else(|_| {
+            Err(FrameworkError::validation(
+                "inequality solver channel closed unexpectedly",
+            ))
+        }),
+    };
+
     match result {
         Ok(model) => FeasibilityResult::Feasible { model },
         Err(cert) => FeasibilityResult::Infeasible {

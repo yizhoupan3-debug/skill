@@ -14,7 +14,7 @@ const REL_PATH: &str = "configs/framework/PAPER_PROSE_QUALITY_HOOK.txt";
 pub const PREFIX_LINE: &str = "**PAPER_PROSE_QUALITY_HOOK**";
 
 const BUILTIN_TXT: &str =
-    include_str!("../../../../configs/framework/PAPER_PROSE_QUALITY_HOOK.txt");
+    include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../configs/framework/PAPER_PROSE_QUALITY_HOOK.txt"));
 
 // ── Static state ──
 

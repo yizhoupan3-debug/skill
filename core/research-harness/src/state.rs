@@ -199,7 +199,10 @@ pub fn migrate_state(state: &Value) -> Result<Value> {
 /// `Ok(state)` without clone.
 pub fn hydrate_state(state: &Value) -> Result<Value> {
     // Fast path — state already has root defaults, skip clone.
-    if state.get("schema_version").and_then(Value::as_str).is_some()
+    // NOTE: `state.clone()` below is unavoidable because the return type is
+    // `Result<Value>` (owned). If this becomes a measured bottleneck, consider
+    // a `hydrate_state_in_place(&mut Value)` variant.
+    if state.get("schema_version").and_then(Value::as_i64).is_some()
         && state.get("status").and_then(Value::as_str).is_some()
         && state.get("novelty_gate").is_some()
     {

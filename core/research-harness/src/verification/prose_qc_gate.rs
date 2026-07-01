@@ -12,6 +12,7 @@ use std::path::Path;
 
 use quality_gate::checker::GateChecker;
 use quality_gate::types::{CheckContext, CheckResult, Finding, Severity};
+use std::collections::HashMap;
 
 use super::prose_qc;
 
@@ -157,6 +158,43 @@ impl GateChecker for ProseQCChecker {
                             .to_string(),
                     ),
                 });
+            }
+
+            // Terminology consistency check
+            if let Some(glossary_val) = ctx.output_data.as_ref().and_then(|d| d.get("glossary"))
+            {
+                if let Some(glossary_obj) = glossary_val.as_object() {
+                    let glossary: HashMap<String, String> = glossary_obj
+                        .iter()
+                        .map(|(k, v)| {
+                            let val_str = v.as_str().map(|s| s.to_string()).unwrap_or_else(|| v.to_string());
+                            (k.clone(), val_str)
+                        })
+                        .collect();
+                    if !glossary.is_empty() {
+                        if let Ok(term_violations) =
+                            prose_qc::check_terminology_consistency(&content, &glossary)
+                        {
+                            if !term_violations.is_empty() {
+                                findings.push(Finding {
+                                    id: "prose_qc_terminology".to_string(),
+                                    severity: Severity::C,
+                                    description: format!(
+                                        "{} terminology violations in {}: {}",
+                                        term_violations.len(),
+                                        file_path.display(),
+                                        term_violations.join("; "),
+                                    ),
+                                    location: Some(file_path.display().to_string()),
+                                    suggestion: Some(
+                                        "replace non-standard terminology variants with the canonical form in your glossary"
+                                            .to_string(),
+                                    ),
+                                });
+                            }
+                        }
+                    }
+                }
             }
         }
 

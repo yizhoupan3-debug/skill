@@ -100,8 +100,9 @@ systematic research and returns candidates.
 | `hypothesis_tracking` | `add-hypothesis / list-hypotheses` | Hypothesis CRUD |
 | `run_recording` | `record-run` | Experiment recording (env + git) |
 | `reflection` | `reflect` | Experiment reflection + drift detection |
-| `log` | `log:record / log:search / log:insight / log:connect` | Layered logging (text + SQLite); bridges `research-log-rs` CLI |
+| `sync` | `sync` | Sync to artifact |
 | `smoke_test` | `smoke-test` | Quick directional experiment probes via templates/ |
+| `log` | (library API) | Layered logging — SQLite FTS5 (`research_harness::log`) |
 | `barrier_escalation` | `barrier <problem>` | **Loop bridge**: systematic research on hard barriers |
 | `sync` | `sync` | Sync to artifact |
 

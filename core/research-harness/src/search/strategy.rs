@@ -256,7 +256,7 @@ pub fn build_search_plan_entry(record: &Value) -> Value {
         "recommended_order": record.get("recommended_order").cloned().unwrap_or(Value::Null),
         "keywords": compact_words(claim, 6),
         "queries": build_search_queries(claim, axis),
-        "sources": ["Semantic Scholar", "arXiv", "Google Scholar"],
+        "sources": ["Semantic Scholar", "arXiv"],
         "required_evidence": default_required_evidence(axis),
     })
 }
@@ -315,7 +315,7 @@ pub fn current_brief(state: &Value) -> Option<Value> {
         "priority_reason": str_field_default(&top, "priority_reason", "_No reason recorded._"),
         "decision_goal": "Decide whether this claim is safe to keep, should be reframed, or should be dropped.",
         "verification_standard": verification_standard_for_priority(str_field_default(&top, "priority_label", "later")),
-        "sources": matching.and_then(|item| item.get("sources")).cloned().unwrap_or(json!(["Semantic Scholar", "arXiv", "Google Scholar"])),
+        "sources": matching.and_then(|item| item.get("sources")).cloned().unwrap_or(json!(["Semantic Scholar", "arXiv"])),
         "queries": matching.and_then(|item| item.get("queries")).cloned().unwrap_or_else(|| json!(build_search_queries(str_field(&top, "claim"), axis))),
         "required_evidence": matching.and_then(|item| item.get("required_evidence")).cloned().unwrap_or_else(|| json!(default_required_evidence(axis))),
         "expected_baselines": expected_baselines_for_axis(axis),

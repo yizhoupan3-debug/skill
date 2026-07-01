@@ -112,7 +112,15 @@ pub fn run_uv_module_with_timeout(
 
 fn truncate(s: &str, max: usize) -> String {
     if s.len() > max {
-        let mut t = s[..max].to_string();
+        // Use char_indices to find a safe UTF-8 boundary; byte slicing s[..max]
+        // would panic on multi-byte chars (e.g. Chinese error text).
+        let end = s
+            .char_indices()
+            .take_while(|(i, _)| *i < max)
+            .last()
+            .map(|(i, c)| i + c.len_utf8())
+            .unwrap_or(0);
+        let mut t = s[..end].to_string();
         t.push_str(&format!("... ({} total)", s.len()));
         t
     } else {

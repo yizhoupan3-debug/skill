@@ -11,7 +11,7 @@
 use crate::types::VerificationStatus;
 use core_errors::FrameworkError;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 // ===========================================================================
 // Types
@@ -130,6 +130,16 @@ pub struct Blueprint {
     pub round: u64,
 }
 
+/// Priority for OR node best-result selection (higher = more informative in OR context).
+fn status_priority(s: &VerificationStatus) -> u8 {
+    match s {
+        VerificationStatus::Pass => 0,
+        VerificationStatus::Warn => 1,
+        VerificationStatus::Skip => 2,
+        VerificationStatus::Fail => 3,
+    }
+}
+
 impl Blueprint {
     /// Create a new Blueprint with a single OR root node.
     pub fn new(goal: &str, name: &str) -> Self {
@@ -187,6 +197,20 @@ impl Blueprint {
         }
         let parent_label = parent.label().to_string();
 
+        // Validate non-empty IDs
+        if parent_id.is_empty() {
+            return Err(FrameworkError::validation(
+                "parent node_id must not be empty",
+            ));
+        }
+        for child in &children {
+            if child.id().is_empty() {
+                return Err(FrameworkError::validation(
+                    "child ID must not be empty",
+                ));
+            }
+        }
+
         // AND constraint: at least one child must be non-ManualProse
         if and
             && children
@@ -200,6 +224,20 @@ impl Blueprint {
 
         // Collect child IDs and insert children
         let child_ids: Vec<DagNodeId> = children.iter().map(|c| c.id().to_string()).collect();
+
+        // Check for duplicate child IDs
+        let mut seen_ids = HashSet::new();
+        let dupes: Vec<&str> = child_ids
+            .iter()
+            .filter(|id| !seen_ids.insert((*id).clone()))
+            .map(|s| s.as_str())
+            .collect();
+        if !dupes.is_empty() {
+            return Err(FrameworkError::validation(format!(
+                "duplicate child IDs in decompose: {dupes:?}"
+            )));
+        }
+
         for child in children {
             let cid = child.id().to_string();
             self.nodes.insert(cid.clone(), child);
@@ -244,7 +282,8 @@ impl Blueprint {
         }
 
         // Recursive verification
-        let root_status = self.verify_node(&self.root.clone(), current_round)?;
+        let mut visited = HashSet::new();
+        let root_status = self.verify_node(&self.root.clone(), current_round, &mut visited)?;
         self.status.insert(self.root.clone(), root_status);
 
         Ok(())
@@ -254,9 +293,15 @@ impl Blueprint {
         &mut self,
         node_id: &str,
         round: u64,
+        visited: &mut HashSet<String>,
     ) -> Result<VerificationResultExt, FrameworkError> {
+        // Cycle detection: if already visited, this is a cyclic graph -> fail
+        if !visited.insert(node_id.to_string()) {
+            return Ok(VerificationResultExt::new(VerificationStatus::Fail, round));
+        }
+
         // Extract all data from self.nodes before any mutation to avoid borrow conflicts
-        let (node_children, node_is_leaf, node_backend, is_or) = {
+        let (node_children, node_is_leaf, _node_backend, is_or) = {
             let node = self
                 .nodes
                 .get(node_id)
@@ -281,11 +326,17 @@ impl Blueprint {
             // OR: one child must pass
             let mut best: Option<VerificationResultExt> = None;
             for child_id in &node_children {
-                let child_result = self.verify_node(child_id, round)?;
+                let child_result = self.verify_node(child_id, round, visited)?;
                 if child_result.status == VerificationStatus::Pass {
                     return Ok(VerificationResultExt::new(VerificationStatus::Pass, round));
                 }
-                best = best.or(Some(child_result));
+                best = Some(best.map_or(child_result.clone(), |b| {
+                    if status_priority(&child_result.status) > status_priority(&b.status) {
+                        child_result
+                    } else {
+                        b
+                    }
+                }));
             }
             Ok(best.unwrap_or_else(|| VerificationResultExt::new(VerificationStatus::Fail, round)))
         } else {
@@ -294,7 +345,7 @@ impl Blueprint {
             let mut all_skip = true;
             let mut worst = VerificationStatus::Pass;
             for child_id in &node_children {
-                let child_result = self.verify_node(child_id, round)?;
+                let child_result = self.verify_node(child_id, round, visited)?;
                 match child_result.status {
                     VerificationStatus::Fail => {
                         all_pass = false;
@@ -324,7 +375,16 @@ impl Blueprint {
     }
 
     /// Backtrack: remove all children of a node, turning it back into a leaf-like OR node.
-    pub fn backtrack(&mut self, node_id: &str) -> Result<(), FrameworkError> {
+    pub fn backtrack(
+        &mut self,
+        node_id: &str,
+        visited: &mut HashSet<String>,
+    ) -> Result<(), FrameworkError> {
+        // Skip if already visited (cycle detection)
+        if !visited.insert(node_id.to_string()) {
+            return Ok(());
+        }
+
         // Capture children and label BEFORE any mutable operations on self.nodes
         // (avoids holding an immutable borrow across mutable HashMap operations).
         let (children, label) = {
@@ -409,14 +469,19 @@ impl Blueprint {
 
     /// Validate that ManualProse ratio does not exceed max_pct (default 0.30).
     pub fn validate_manual_prose_ratio(&self, max_pct: f64) -> Result<(), FrameworkError> {
-        let ratio = self.manual_prose_ratio();
+        let (total, manual) = self.leaf_counts();
+        let ratio = if total == 0 {
+            0.0
+        } else {
+            manual as f64 / total as f64
+        };
         if ratio > max_pct {
             Err(FrameworkError::validation(format!(
                 "ManualProse ratio {:.1}% exceeds cap of {:.0}% ({} manual / {} total leaves)",
                 ratio * 100.0,
                 max_pct * 100.0,
-                self.leaf_counts().1,
-                self.leaf_counts().0,
+                manual,
+                total,
             )))
         } else {
             Ok(())
@@ -522,7 +587,8 @@ mod tests {
         }];
         bp.decompose("root", children, false).unwrap();
         assert_eq!(bp.nodes.len(), 2);
-        bp.backtrack("root").unwrap();
+        let mut visited = HashSet::new();
+        bp.backtrack("root", &mut visited).unwrap();
         assert_eq!(bp.nodes.len(), 1);
     }
 
@@ -655,7 +721,8 @@ mod tests {
     #[test]
     fn test_backtrack_nonexistent() {
         let mut bp = Blueprint::new("goal", "test");
-        let result = bp.backtrack("nonexistent");
+        let mut visited = HashSet::new();
+        let result = bp.backtrack("nonexistent", &mut visited);
         assert!(result.is_err());
     }
 

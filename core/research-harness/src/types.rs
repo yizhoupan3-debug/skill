@@ -146,6 +146,18 @@ pub enum ClaimCeiling {
     TopVenue,
 }
 
+impl ClaimCeiling {
+    /// Returns a numeric rank for ordering (higher = stronger claim).
+    pub fn rank(&self) -> u8 {
+        match self {
+            ClaimCeiling::NoClaim => 0,
+            ClaimCeiling::LocalOnly => 1,
+            ClaimCeiling::ConferenceReady => 2,
+            ClaimCeiling::TopVenue => 3,
+        }
+    }
+}
+
 // ── AIGC ──
 
 /// AIGC detection result for a text segment.

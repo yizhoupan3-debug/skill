@@ -216,6 +216,9 @@ mod tests {
 
     #[test]
     fn dispatch_adversarial_returns_context() {
+        // Ensure env is clean before testing default-enabled behavior
+        // (parallel tests may have set RESEARCH_HOOK_ADVERSARIAL=0)
+        unsafe { core_state_utils::env_sync::remove_env("RESEARCH_HOOK_ADVERSARIAL") };
         let result = dispatch_adversarial("请根据审稿意见修改论文", None);
         assert!(result.is_some());
         assert!(result.unwrap().contains("PAPER_ADVERSARIAL_HOOK"));
@@ -223,12 +226,16 @@ mod tests {
 
     #[test]
     fn dispatch_adversarial_disabled() {
-        // SAFETY: test-only; no other thread reads/writes env concurrently in this test context.
+        // Save previous value for restore
+        let prev = std::env::var("RESEARCH_HOOK_ADVERSARIAL").ok();
         unsafe { core_state_utils::env_sync::set_env("RESEARCH_HOOK_ADVERSARIAL", "0") };
         let result = dispatch_adversarial("请根据审稿意见修改论文", None);
         assert!(result.is_none());
-        // SAFETY: test-only; no other thread reads/writes env concurrently in this test context.
-        unsafe { core_state_utils::env_sync::remove_env("RESEARCH_HOOK_ADVERSARIAL") };
+        // Restore previous value
+        match prev {
+            Some(v) => unsafe { core_state_utils::env_sync::set_env("RESEARCH_HOOK_ADVERSARIAL", &v) },
+            None => unsafe { core_state_utils::env_sync::remove_env("RESEARCH_HOOK_ADVERSARIAL") },
+        }
     }
 
     #[test]

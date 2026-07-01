@@ -19,6 +19,35 @@ use crate::search::options::*;
 /// S2 does not expose a sort-by-date parameter on the search endpoint;
 /// results are always ordered by relevance.
 pub fn search(client: &Client, opts: &SearchOptions) -> Result<Vec<Value>> {
+    let mut first_non_transient: Option<anyhow::Error> = None;
+    for attempt in 0..3 {
+        match try_search(client, opts) {
+            Ok(results) => return Ok(results),
+            Err(e) => {
+                let msg = e.to_string();
+                let is_transient = msg.contains("503")
+                    || msg.contains("502")
+                    || msg.contains("429")
+                    || msg.contains("timeout")
+                    || msg.contains("connection");
+                if is_transient && attempt < 2 {
+                    std::thread::sleep(std::time::Duration::from_millis(500 * (1 << attempt)));
+                    continue;
+                }
+                if !is_transient && first_non_transient.is_none() {
+                    first_non_transient = Some(anyhow::anyhow!("{msg}"));
+                }
+                if let Some(ctx) = first_non_transient {
+                    return Err(ctx);
+                }
+                return Err(anyhow::anyhow!("S2 search failed: {msg}"));
+            }
+        }
+    }
+    Err(anyhow::anyhow!("S2 search failed after 3 retries"))
+}
+
+fn try_search(client: &Client, opts: &SearchOptions) -> Result<Vec<Value>> {
     crate::util::validate_url_for_fetch(SEMANTIC_SCHOLAR_BASE_URL)?;
 
     let mut query_params: Vec<(&str, String)> = vec![

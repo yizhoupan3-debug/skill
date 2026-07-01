@@ -64,9 +64,9 @@ impl BlockCache {
             Ok(t) => {
                 if t.len() > MAX_BLOCK_BYTES {
                     tracing::warn!(
-                        "{} block file exceeds {MAX_BLOCK_BYTES} bytes ({} B), using builtin",
-                        self.log_label,
-                        t.len()
+                        "paper_block_cache: {} ({:.1} KiB) exceeds {} KiB limit — using built-in fallback. \
+                         Increase MAX_BLOCK_BYTES or reduce file size.",
+                        path.display(), t.len() as f64 / 1024.0, MAX_BLOCK_BYTES / 1024,
                     );
                     builtin()
                 } else {

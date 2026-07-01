@@ -47,10 +47,11 @@
 | `add-hypothesis / list-hypotheses` | 假设 CRUD |
 | `record-run` | 实验记录（环境 + git）|
 | `reflect` | 实验反思 + drift 检测 |
-| `log:record / log:search / log:insight / log:connect` | 分层日志 |
-| `smoke-test` | 快速实验探测 |
+| `sync` | 同步到 artifact |
 | `barrier <problem>` | **Loop bridge**：瓶颈研究 → BARRIER_REPORT.json |
 | `sync` | 同步到 artifact |
+
+分层日志功能通过 `research_harness::log` 库接口提供（SQLite FTS5 日志存储 + 知识图谱）。快速实验探测通过 `smoke-test` 模板执行。
 
 调用方式：`cargo run -p research-harness --bin autoresearch -- <subcommand>`。
 

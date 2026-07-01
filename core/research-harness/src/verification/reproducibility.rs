@@ -5,6 +5,7 @@
 
 use anyhow::Result;
 use sha2::{Digest, Sha256};
+use std::io::Read;
 use std::path::Path;
 
 /// 检查结果封装。
@@ -71,9 +72,29 @@ const CHECKPOINT_PATTERNS: &[&str] = &[
 /// 检查 #1: 种子已设置。
 ///
 /// 在实验代码目录中递归搜索常见的种子设置模式。
+/// 默认递归深度上限为 5 层。
 pub fn check_seed_set(experiment_dir: &Path) -> Result<CheckResult> {
+    check_seed_set_impl(experiment_dir, 0, 5)
+}
+
+/// `check_seed_set` 的内部实现，带递归深度限制。
+fn check_seed_set_impl(
+    experiment_dir: &Path,
+    depth: u32,
+    max_depth: u32,
+) -> Result<CheckResult> {
     let mut found = false;
     let mut locations = Vec::new();
+
+    if depth >= max_depth {
+        return Ok(CheckResult {
+            name: "seed_set",
+            status: CheckStatus::Skip(format!(
+                "Maximum recursion depth ({max_depth}) reached at {}",
+                experiment_dir.display(),
+            )),
+        });
+    }
 
     if let Ok(entries) = std::fs::read_dir(experiment_dir) {
         for entry in entries.flatten() {
@@ -88,8 +109,8 @@ pub fn check_seed_set(experiment_dir: &Path) -> Result<CheckResult> {
                 {
                     continue;
                 }
-                // 递归检查子目录（深度限制为 3）
-                if let Ok(result) = check_seed_set(&path) {
+                // 递归检查子目录（深度限制为 max_depth）
+                if let Ok(result) = check_seed_set_impl(&path, depth + 1, max_depth) {
                     if matches!(result.status, CheckStatus::Pass) {
                         return Ok(result);
                     }
@@ -144,7 +165,7 @@ pub fn check_seed_set(experiment_dir: &Path) -> Result<CheckResult> {
     }
 }
 
-/// 计算文件或目录的 SHA-256 哈希。
+/// 计算文件或目录的 SHA-256 哈希（流式读取，避免 OOM）。
 fn sha256_hash(path: &Path) -> Result<String> {
     let mut hasher = Sha256::new();
 
@@ -152,16 +173,47 @@ fn sha256_hash(path: &Path) -> Result<String> {
         let mut entries: Vec<_> = std::fs::read_dir(path)?
             .filter_map(|e| e.ok())
             .filter(|e| e.path().is_file())
+            .filter(|e| {
+                // 跳过 .git/, target/, node_modules/ 中的文件
+                let p = e.path();
+                !p.components().any(|c| {
+                    let s = c.as_os_str().to_string_lossy();
+                    s == ".git" || s == "target" || s == "node_modules"
+                })
+            })
             .collect();
         entries.sort_by_key(|e| e.path());
 
         for entry in &entries {
-            let bytes = std::fs::read(entry.path())?;
-            hasher.update(&bytes);
+            let file = std::fs::File::open(entry.path())?;
+            let mut reader = std::io::BufReader::new(file);
+            let mut buffer = [0u8; 8192];
+            loop {
+                let n = reader.read(&mut buffer)?;
+                if n == 0 {
+                    break;
+                }
+                hasher.update(&buffer[..n]);
+            }
         }
     } else {
-        let bytes = std::fs::read(path)?;
-        hasher.update(&bytes);
+        // 跳过 .git/, target/, node_modules/ 路径中的文件
+        if path.components().any(|c| {
+            let s = c.as_os_str().to_string_lossy();
+            s == ".git" || s == "target" || s == "node_modules"
+        }) {
+            return Ok(String::new());
+        }
+        let file = std::fs::File::open(path)?;
+        let mut reader = std::io::BufReader::new(file);
+        let mut buffer = [0u8; 8192];
+        loop {
+            let n = reader.read(&mut buffer)?;
+            if n == 0 {
+                break;
+            }
+            hasher.update(&buffer[..n]);
+        }
     }
 
     let result = hasher.finalize();

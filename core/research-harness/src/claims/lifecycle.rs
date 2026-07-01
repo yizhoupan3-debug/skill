@@ -344,11 +344,21 @@ pub fn record_run(state: &Value, input: &RecordRunInput<'_>, _workspace: &Path) 
             bail!("Novelty gate override requires --override-reason");
         }
     }
-    let current_status = find_hypothesis(&next, input.hypothesis_id)
-        .and_then(|h| h.get("status"))
-        .and_then(Value::as_str)
-        .unwrap_or("queued")
-        .to_string();
+    // Reuse the index from find_hypothesis_index (avoids a second O(n) scan).
+    let current_status = {
+        let hypotheses = arr(&next, "hypotheses");
+        let h = hypotheses.get(index).ok_or_else(|| {
+            anyhow!(
+                "Hypothesis {} missing at index {}",
+                input.hypothesis_id,
+                index
+            )
+        })?;
+        h.get("status")
+            .and_then(Value::as_str)
+            .unwrap_or("queued")
+            .to_string()
+    };
     if !["active", "queued"].contains(&current_status.as_str()) {
         bail!(
             "Hypothesis {} must be active or queued, current: {current_status}",
@@ -686,55 +696,80 @@ pub fn state_freshness(state: &Value) -> StateFreshness {
         .unwrap_or(true);
 
     let active_id = state.get("active_hypothesis").and_then(Value::as_str);
-    let all_runs = arr(state, "run_history");
-    let all_decisions = arr(state, "decisions");
+
+    // Sort once and reuse — avoids cloning the entire array 3+ times in separate
+    // calls to sort_entries_by_recency within this function.
+    fn sort_by_ts<'a>(entries: &[&'a Value], field: &str) -> Vec<&'a Value> {
+        let mut sorted: Vec<&Value> = entries.iter().copied().collect();
+        sorted.sort_by(|a, b| {
+            let ta = parse_iso_timestamp(str_field(a, field))
+                .unwrap_or(DateTime::<Utc>::MIN_UTC);
+            let tb = parse_iso_timestamp(str_field(b, field))
+                .unwrap_or(DateTime::<Utc>::MIN_UTC);
+            tb.cmp(&ta)
+        });
+        sorted
+    }
+
+    let all_runs: Vec<&Value> = arr(state, "run_history").iter().collect();
+    let all_decisions: Vec<&Value> = arr(state, "decisions").iter().collect();
+    let sorted_runs = sort_by_ts(&all_runs, "recorded_at");
+    let sorted_decisions = sort_by_ts(&all_decisions, "recorded_at");
 
     // Recent runs: prefer active hypothesis, fall back to chronological
-    let recent_runs: Vec<Value> = if let Some(active_id) = active_id {
-        let filtered: Vec<_> = sort_entries_by_recency(all_runs, "recorded_at")
-            .into_iter()
+    let recent_runs: Vec<&Value> = if let Some(active_id) = active_id {
+        let filtered: Vec<_> = sorted_runs
+            .iter()
+            .copied()
             .filter(|r| r.get("hypothesis_id").and_then(Value::as_str) == Some(active_id))
             .filter(|r| {
-                days_since(str_field(r, "recorded_at")).is_some_and(|d| d <= RECENT_ACTIVITY_DAYS)
+                days_since(str_field(r, "recorded_at"))
+                    .is_some_and(|d| d <= RECENT_ACTIVITY_DAYS)
             })
             .take(FALLBACK_ACTIVITY_LIMIT)
             .collect();
         if !filtered.is_empty() {
             filtered
         } else {
-            sort_entries_by_recency(all_runs, "recorded_at")
-                .into_iter()
+            sorted_runs
+                .iter()
+                .copied()
                 .take(FALLBACK_ACTIVITY_LIMIT)
                 .collect()
         }
     } else {
-        sort_entries_by_recency(all_runs, "recorded_at")
-            .into_iter()
+        sorted_runs
+            .iter()
+            .copied()
             .take(FALLBACK_ACTIVITY_LIMIT)
             .collect()
     };
 
     // Recent decisions: same logic
-    let recent_decisions: Vec<Value> = if let Some(active_id) = active_id {
-        let filtered: Vec<_> = sort_entries_by_recency(all_decisions, "recorded_at")
-            .into_iter()
+    let recent_decisions: Vec<&Value> = if let Some(active_id) = active_id {
+        let filtered: Vec<_> = sorted_decisions
+            .iter()
+            .copied()
             .filter(|d| d.get("hypothesis_id").and_then(Value::as_str) == Some(active_id))
             .filter(|d| {
-                days_since(str_field(d, "recorded_at")).is_some_and(|d| d <= RECENT_ACTIVITY_DAYS)
+                days_since(str_field(d, "recorded_at"))
+                    .is_some_and(|d| d <= RECENT_ACTIVITY_DAYS)
             })
             .take(FALLBACK_ACTIVITY_LIMIT)
             .collect();
         if !filtered.is_empty() {
             filtered
         } else {
-            sort_entries_by_recency(all_decisions, "recorded_at")
-                .into_iter()
+            sorted_decisions
+                .iter()
+                .copied()
                 .take(FALLBACK_ACTIVITY_LIMIT)
                 .collect()
         }
     } else {
-        sort_entries_by_recency(all_decisions, "recorded_at")
-            .into_iter()
+        sorted_decisions
+            .iter()
+            .copied()
             .take(FALLBACK_ACTIVITY_LIMIT)
             .collect()
     };
@@ -746,8 +781,8 @@ pub fn state_freshness(state: &Value) -> StateFreshness {
     StateFreshness {
         stale,
         history_bias_risk,
-        recent_runs,
-        recent_decisions,
+        recent_runs: recent_runs.into_iter().cloned().collect(),
+        recent_decisions: recent_decisions.into_iter().cloned().collect(),
     }
 }
 
