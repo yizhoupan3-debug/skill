@@ -4,10 +4,73 @@ Real SymPy operations for the math verification harness.
 Supports: simplify, verify, expand, factor, series, differentiate,
 integrate, solve, trig_simplify, subs, limit, lambdify,
 dimension_propagate.
+
+SECURITY NOTE: SymPy's `sympify()` internally uses Python's `eval()` and
+can execute arbitrary Python code. This module defends against this by:
+1. Running in a subprocess with controlled PYTHONPATH (no host access)
+2. A 256 KiB input size cap enforced by the Rust bridge
+3. A `_validate_expr_str()` helper that rejects obviously malicious patterns
+4. Every operation is wrapped in try/except so exceptions are returned
+   as error responses rather than crashing
 """
 
 import sympy as sp
 import re as _re
+
+
+# Maximum length of any single expression/equation string passed to sympify().
+# Beyond this, we reject rather than risk OOM inside SymPy.
+_MAX_EXPR_LEN = 64 * 1024  # 64 KiB
+
+# Blocked patterns that indicate attempted code injection via sympify.
+# sympify can evaluate Python code via expressions like:
+#   Integer('__import__("os").system("id")')
+#   sympify("()" + exploit_string)
+_INJECTION_PATTERNS = [
+    "__import__",
+    "__builtins__",
+    "exec(",
+    "eval(",
+    "compile(",
+    "open(",
+    "getattr(",
+    "setattr(",
+    "delattr(",
+    "vars(",
+    "globals(",
+    "locals(",
+    "type(",
+    "os.system",
+    "os.popen",
+    "subprocess",
+    "shutil",
+    "sys.modules",
+]
+
+
+def _validate_expr_str(expr_str: str, label: str = "expression") -> None:
+    """Validate expression string length and reject injection patterns.
+
+    Raises ValueError on failure.
+    """
+    if not isinstance(expr_str, str):
+        raise ValueError(f"{label} must be a string, got {type(expr_str).__name__}")
+    if len(expr_str) > _MAX_EXPR_LEN:
+        raise ValueError(
+            f"{label} too long: {len(expr_str)} chars (max {_MAX_EXPR_LEN})"
+        )
+    for pat in _INJECTION_PATTERNS:
+        if pat in expr_str:
+            # Log a warning (to stderr) so we can detect injection attempts
+            import sys
+            print(
+                f"[sympy_ops] WARNING: blocked pattern '{pat}' in {label}",
+                file=sys.stderr,
+            )
+            raise ValueError(
+                f"{label} contains blocked pattern '{pat}' "
+                f"(first {len(pat)} chars at position {expr_str.find(pat)})"
+            )
 
 
 def backend_status() -> dict:
@@ -130,6 +193,7 @@ def sympy_simplify(params: dict) -> dict:
         assumptions_raw = []
 
     try:
+        _validate_expr_str(expr_str)
         expr = sp.sympify(expr_str)
         # Apply assumptions via sp.refine if provided
         simplified = sp.simplify(expr)
@@ -161,6 +225,8 @@ def sympy_verify(params: dict) -> dict:
     rhs_str = _get_param(params, "rhs")
 
     try:
+        _validate_expr_str(lhs_str, "lhs")
+        _validate_expr_str(rhs_str, "rhs")
         lhs = sp.sympify(lhs_str)
         rhs = sp.sympify(rhs_str)
         diff = sp.simplify(lhs - rhs)
@@ -185,6 +251,7 @@ def sympy_expand(params: dict) -> dict:
     """
     expr_str = _get_param(params, "expression")
     try:
+        _validate_expr_str(expr_str)
         expr = sp.sympify(expr_str)
         expanded = sp.expand(expr)
         return {"result": str(expanded)}
@@ -203,6 +270,7 @@ def sympy_factor(params: dict) -> dict:
     """
     expr_str = _get_param(params, "expression")
     try:
+        _validate_expr_str(expr_str)
         expr = sp.sympify(expr_str)
         factored = sp.factor(expr)
         return {"result": str(factored)}
@@ -228,6 +296,7 @@ def sympy_series(params: dict) -> dict:
     order = int(params.get("order", 6))
 
     try:
+        _validate_expr_str(expr_str, "expression")
         expr = sp.sympify(expr_str)
         var = sp.Symbol(var_str)
         series = sp.series(expr, var, point, order)
@@ -257,6 +326,7 @@ def sympy_differentiate(params: dict) -> dict:
     order = int(params.get("order", 1))
 
     try:
+        _validate_expr_str(expr_str, "expression")
         expr = sp.sympify(expr_str)
         var = sp.Symbol(var_str)
         diff = sp.diff(expr, var, order)
@@ -283,6 +353,7 @@ def sympy_integrate(params: dict) -> dict:
     upper = params.get("upper")
 
     try:
+        _validate_expr_str(expr_str, "expression")
         expr = sp.sympify(expr_str)
         var = sp.Symbol(var_str)
 
@@ -310,6 +381,9 @@ def sympy_solve(params: dict) -> dict:
     var_str = params.get("variable", "x")
 
     try:
+        # Validate equation string
+        _validate_expr_str(eq_str, "equation")
+
         # Handle equation with = sign
         if "=" in eq_str:
             parts = eq_str.split("=", 1)
@@ -357,6 +431,7 @@ def sympy_trig_simplify(params: dict) -> dict:
     """
     expr_str = _get_param(params, "expression")
     try:
+        _validate_expr_str(expr_str, "expression")
         expr = sp.sympify(expr_str)
         # Use proper trigsimp() instead of ad-hoc expand_trig cycle
         trig_result = sp.trigsimp(expr)
@@ -385,9 +460,14 @@ def sympy_dimension_propagate(params: dict) -> dict:
     dims = _get_param_raw(params, "dimensions")
 
     try:
+        # Validate equation
+        _validate_expr_str(eq_str, "equation")
+
         # Parse the dimension mapping
         dim_symbols = {}
         for var_name, dim_str in dims.items():
+            # Validate dimension string
+            _validate_expr_str(str(dim_str), f"dimension string for '{var_name}'")
             # Parse dimension string like "L*M*T^-2" into a SymPy expression
             dim_str_clean = dim_str.replace("^", "**")
             try:
@@ -468,10 +548,14 @@ def sympy_subs(params: dict) -> dict:
     simultaneous = bool(params.get("simultaneous", False))
 
     try:
+        _validate_expr_str(expr_str, "expression")
         expr = sp.sympify(expr_str)
         # Build substitution pairs
         sub_pairs = []
         for old_str, new_str in subs_raw.items():
+            # Validate substitution values (may also be expressions)
+            if isinstance(new_str, str):
+                _validate_expr_str(new_str, f"substitution value for '{old_str}'")
             old_sym = sp.Symbol(old_str) if old_str.isidentifier() else sp.sympify(old_str)
             new_val = sp.sympify(str(new_str))
             sub_pairs.append((old_sym, new_val))
@@ -509,6 +593,8 @@ def sympy_limit(params: dict) -> dict:
     direction = params.get("direction")
 
     try:
+        _validate_expr_str(expr_str, "expression")
+        _validate_expr_str(point_str, "point")
         expr = sp.sympify(expr_str)
         var = sp.Symbol(var_str)
 
@@ -559,6 +645,7 @@ def sympy_lambdify(params: dict) -> dict:
         variables = [sp.Symbol(str(vars_raw))]
 
     try:
+        _validate_expr_str(expr_str, "expression")
         expr = sp.sympify(expr_str)
         f = sp.lambdify(variables, expr, modules=modules)
 

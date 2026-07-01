@@ -33,8 +33,18 @@ last_verified: "2026-07-01"
 | `math_proof_dag_status` | 纯 Rust | DAG 验证状态摘要 |
 | `math_sympy_verify` | SymPy (后端可用时) + 纯 Rust 降级 | 代数恒等式验证 |
 | `math_sympy_simplify` | SymPy (后端可用时) + 纯 Rust 降级 | 表达式化简 |
+| `math_sympy_trig_simplify` | SymPy (后端可用时) + 纯 Rust 降级 | 三角函数恒等式化简 |
+| `math_sympy_subs` | SymPy (后端可用时) + 纯 Rust 降级 | 符号表达式变量替换 |
+| `math_sympy_limit` | SymPy (后端可用时) + 纯 Rust 降级 | 符号表达式极限计算 |
+| `math_sympy_lambdify` | SymPy (后端可用时) + 纯 Rust 降级 | 符号表达式转数值函数 |
 | `math_lean_verify` | Lean 4 (系统 PATH) | Lean 定理证明 |
-| `math_backend_status` | 综合 | 全面后端诊断 |
+| `math_z3_prove` | Z3 (Python 后端) | Z3 逻辑公式可满足性验证 |
+| `math_z3_solver_push` | Z3 (Python 后端) | Z3 求解器上下文推入 |
+| `math_z3_solver_pop` | Z3 (Python 后端) | Z3 求解器上下文弹出 |
+| `math_z3_solver_add` | Z3 (Python 后端) | Z3 求解器添加约束 |
+| `math_z3_solver_check` | Z3 (Python 后端) | Z3 求解器当前上下文检查 |
+| `math_z3_solver_reset` | Z3 (Python 后端) | Z3 求解器重置 |
+| `math_z3_solver_batch` | Z3 (Python 后端) | Z3 求解器批量操作（push/pop/add/check/reset） |
 
 ### 架构图
 
@@ -54,6 +64,7 @@ last_verified: "2026-07-01"
     │   │    └── 非线性 → python_bridge → Z3 (Python 子进程)
     │   │
     │   ├── "math_sympy_*"             ─→ sympy_bridge.rs
+    │   │    ├── verify/simplify/trig_simplify/subs/limit/lambdify
     │   │    ├── SymPy 可用 → python_bridge → SymPy
     │   │    └── SymPy 不可用 → symbolic.rs (纯 Rust 符号引擎)
     │   │
@@ -273,7 +284,7 @@ Error → stdout:
 
 | op | 模块 | 功能 | MCP 可用性 |
 |----|------|------|-----------|
-| `backend_status` | 综合 | 查询所有后端版本和可用性 | ✅ `math_backend_available` / `math_backend_status` |
+| `backend_status` | 综合 | 查询所有后端版本和可用性 | ✅ `math_backend_available` |
 | `sympy_simplify` | SymPy | 表达式化简（自动 trig/代数） | ✅ `math_sympy_simplify` |
 | `sympy_verify` | SymPy | 恒等式验证 | ✅ `math_sympy_verify` |
 | `sympy_expand` | SymPy | 多项式展开 | ❌ 仅 Python 层 API |
@@ -282,10 +293,13 @@ Error → stdout:
 | `sympy_differentiate` | SymPy | 符号微分 | ❌ 仅 Python 层 API |
 | `sympy_integrate` | SymPy | 符号积分 | ❌ 仅 Python 层 API |
 | `sympy_solve` | SymPy | 方程求解 | ❌ 仅 Python 层 API |
-| `sympy_trig_simplify` | SymPy | 三角恒等式化简 | ❌ 仅 Python 层 API |
+| `sympy_trig_simplify` | SymPy | 三角恒等式化简 | ✅ `math_sympy_trig_simplify` |
+| `sympy_subs` | SymPy | 变量替换 | ✅ `math_sympy_subs` |
+| `sympy_limit` | SymPy | 极限计算 | ✅ `math_sympy_limit` |
+| `sympy_lambdify` | SymPy | 转数值函数 | ✅ `math_sympy_lambdify` |
 | `sympy_dimension_propagate` | SymPy | 维度传播分析 | 🔹 `research_verification_formal`(dimensional) 内部调用 |
 | `z3_check` | Z3 | 单不等式 SMT 求解 | ✅ `math_prove_inequality` |
-| `z3_check_system` | Z3 | 多约束系统求解 | ❌ 仅 Python 层 API |
+| `z3_check_system` | Z3 | 多约束系统求解 | 🔹 `math_z3_solver_add` + `math_z3_solver_check` 组合 |
 | `z3_optimize` | Z3 | 带目标函数的优化 | ❌ 仅 Python 层 API |
 
 ---

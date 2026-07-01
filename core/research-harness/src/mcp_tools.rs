@@ -1,11 +1,21 @@
 //! MCP tool dispatch for research tools.
 //!
 //! Delegated from host-projection's tool dispatcher (Phase 4 T1).
+//!
+//! # Input limits
+//!
+//! Array-type parameters (steps, witnesses, constraints, claims, references,
+//! findings, children) are capped at MAX_ARRAY_ELEMENTS to prevent memory
+//! exhaustion from oversized payloads received through the MCP tool interface.
 
 use core_errors::FrameworkError;
 use std::sync::OnceLock;
 use serde_json::{Value, json};
 use std::collections::HashMap;
+
+/// Maximum number of elements in any array-type parameter to a research tool.
+/// Prevents single-call memory exhaustion via malicious oversized arrays.
+const MAX_ARRAY_ELEMENTS: usize = 10_000;
 
 /// Handle a research MCP tool call.
 /// Delegates to the appropriate research-harness module.
@@ -53,6 +63,13 @@ fn math_tool_dispatch(name: &str, arguments: &Value) -> Result<String, Framework
         "math_asymptotic_chain" => tool_math_asymptotic_chain(arguments),
         "math_backend_available" => tool_math_backend_available(arguments),
         "math_lean_verify" => tool_math_lean_verify(arguments),
+        "math_sympy_expand" => tool_math_sympy_expand(arguments),
+        "math_sympy_factor" => tool_math_sympy_factor(arguments),
+        "math_sympy_series" => tool_math_sympy_series(arguments),
+        "math_sympy_differentiate" => tool_math_sympy_differentiate(arguments),
+        "math_sympy_integrate" => tool_math_sympy_integrate(arguments),
+        "math_sympy_solve" => tool_math_sympy_solve(arguments),
+        "math_sympy_dimension_propagate" => tool_math_sympy_dimension_propagate(arguments),
         _ => Err(FrameworkError::validation(format!(
             "unknown math tool: {name}"
         ))),
@@ -407,6 +424,13 @@ fn tool_math_proof_dag_decompose(arguments: &Value) -> Result<String, FrameworkE
             .ok_or(FrameworkError::validation(
                 "math_proof_dag_decompose requires 'children' array",
             ))?;
+
+    if children_val.len() > MAX_ARRAY_ELEMENTS {
+        return Err(FrameworkError::validation(format!(
+            "children array too large: {} elements (max {MAX_ARRAY_ELEMENTS})",
+            children_val.len()
+        )));
+    }
     let children: Vec<crate::proof_dag::DagNode> =
         serde_json::from_value(Value::Array(children_val.clone()))
             .map_err(|e| FrameworkError::Json(e))?;
@@ -704,18 +728,36 @@ fn parse_evidence_anchors(arr: Option<&[Value]>) -> Vec<crate::types::EvidenceAn
 }
 
 fn tool_research_claim_drift(arguments: &Value) -> Result<String, FrameworkError> {
-    let original_claims = arguments
+    let original_claims_val = arguments
         .get("original_claims")
         .and_then(Value::as_array)
         .ok_or(FrameworkError::validation(
             "research_claim_drift requires 'original_claims' array",
         ))?;
-    let current_claims = arguments
+    let current_claims_val = arguments
         .get("current_claims")
         .and_then(Value::as_array)
         .ok_or(FrameworkError::validation(
             "research_claim_drift requires 'current_claims' array",
         ))?;
+
+    // Enforce array size limits
+    if original_claims_val.len() > MAX_ARRAY_ELEMENTS {
+        return Err(FrameworkError::validation(format!(
+            "original_claims array too large: {} elements (max {MAX_ARRAY_ELEMENTS})",
+            original_claims_val.len()
+        )));
+    }
+    if current_claims_val.len() > MAX_ARRAY_ELEMENTS {
+        return Err(FrameworkError::validation(format!(
+            "current_claims array too large: {} elements (max {MAX_ARRAY_ELEMENTS})",
+            current_claims_val.len()
+        )));
+    }
+
+    // Clone to satisfy borrow checker
+    let original_claims = original_claims_val.clone();
+    let current_claims = current_claims_val.clone();
 
     let parse_claims = |arr: &[Value]| -> Vec<crate::types::Claim> {
         arr.iter()
@@ -746,8 +788,8 @@ fn tool_research_claim_drift(arguments: &Value) -> Result<String, FrameworkError
             .collect()
     };
 
-    let orig = parse_claims(original_claims);
-    let curr = parse_claims(current_claims);
+    let orig = parse_claims(&original_claims);
+    let curr = parse_claims(&current_claims);
 
     let results = crate::claims::drift::detect_drift(&orig, &curr)
         .map_err(|e| FrameworkError::validation(e.to_string()))?;
@@ -1008,6 +1050,13 @@ fn tool_math_z3_solver_batch(arguments: &Value) -> Result<String, FrameworkError
             "math_z3_solver_batch requires 'steps' array",
         ))?;
 
+    if steps_val.len() > MAX_ARRAY_ELEMENTS {
+        return Err(FrameworkError::validation(format!(
+            "steps array too large: {} elements (max {MAX_ARRAY_ELEMENTS})",
+            steps_val.len()
+        )));
+    }
+
     let steps: Vec<SolverBatchStep> = steps_val
         .iter()
         .map(|v| {
@@ -1061,6 +1110,13 @@ fn tool_math_asymptotic_chain(arguments: &Value) -> Result<String, FrameworkErro
         .ok_or(FrameworkError::validation(
             "math_asymptotic_chain requires 'steps' array",
         ))?;
+
+    if steps_val.len() > MAX_ARRAY_ELEMENTS {
+        return Err(FrameworkError::validation(format!(
+            "steps array too large: {} elements (max {MAX_ARRAY_ELEMENTS})",
+            steps_val.len()
+        )));
+    }
     let variable = arguments
         .get("variable")
         .and_then(Value::as_str)
@@ -1159,6 +1215,153 @@ fn tool_math_backend_available(arguments: &Value) -> Result<String, FrameworkErr
     .map_err(FrameworkError::Json)
 }
 
+// ── Math sympy_expand / factor / series / differentiate / integrate / solve / dimension_propagate tools ──
+
+fn tool_math_sympy_expand(arguments: &Value) -> Result<String, FrameworkError> {
+    let expr = arguments
+        .get("expression")
+        .and_then(Value::as_str)
+        .ok_or(FrameworkError::validation(
+            "math_sympy_expand requires 'expression' (string)",
+        ))?;
+    let vr = crate::verification::sympy_bridge::expand_expression(expr);
+    serde_json::to_string_pretty(&json!({
+        "check_name": vr.check_name, "status": format!("{:?}", vr.status),
+        "details": vr.details, "expression": expr,
+    }))
+    .map_err(FrameworkError::Json)
+}
+
+fn tool_math_sympy_factor(arguments: &Value) -> Result<String, FrameworkError> {
+    let expr = arguments
+        .get("expression")
+        .and_then(Value::as_str)
+        .ok_or(FrameworkError::validation(
+            "math_sympy_factor requires 'expression' (string)",
+        ))?;
+    let vr = crate::verification::sympy_bridge::factor_expression(expr);
+    serde_json::to_string_pretty(&json!({
+        "check_name": vr.check_name, "status": format!("{:?}", vr.status),
+        "details": vr.details, "expression": expr,
+    }))
+    .map_err(FrameworkError::Json)
+}
+
+fn tool_math_sympy_series(arguments: &Value) -> Result<String, FrameworkError> {
+    let expr = arguments
+        .get("expression")
+        .and_then(Value::as_str)
+        .ok_or(FrameworkError::validation(
+            "math_sympy_series requires 'expression' (string)",
+        ))?;
+    let variable = arguments
+        .get("variable")
+        .and_then(Value::as_str)
+        .unwrap_or("x");
+    let point = arguments
+        .get("point")
+        .and_then(Value::as_f64)
+        .unwrap_or(0.0);
+    let order = arguments
+        .get("order")
+        .and_then(Value::as_u64)
+        .unwrap_or(6) as u32;
+    let vr = crate::verification::sympy_bridge::series_expression(expr, variable, point, order);
+    serde_json::to_string_pretty(&json!({
+        "check_name": vr.check_name, "status": format!("{:?}", vr.status),
+        "details": vr.details, "expression": expr,
+        "variable": variable, "point": point, "order": order,
+    }))
+    .map_err(FrameworkError::Json)
+}
+
+fn tool_math_sympy_differentiate(arguments: &Value) -> Result<String, FrameworkError> {
+    let expr = arguments
+        .get("expression")
+        .and_then(Value::as_str)
+        .ok_or(FrameworkError::validation(
+            "math_sympy_differentiate requires 'expression' (string)",
+        ))?;
+    let variable = arguments
+        .get("variable")
+        .and_then(Value::as_str)
+        .unwrap_or("x");
+    let order = arguments
+        .get("order")
+        .and_then(Value::as_u64)
+        .unwrap_or(1) as u32;
+    let vr = crate::verification::sympy_bridge::differentiate_expression(expr, variable, order);
+    serde_json::to_string_pretty(&json!({
+        "check_name": vr.check_name, "status": format!("{:?}", vr.status),
+        "details": vr.details, "expression": expr,
+        "variable": variable, "order": order,
+    }))
+    .map_err(FrameworkError::Json)
+}
+
+fn tool_math_sympy_integrate(arguments: &Value) -> Result<String, FrameworkError> {
+    let expr = arguments
+        .get("expression")
+        .and_then(Value::as_str)
+        .ok_or(FrameworkError::validation(
+            "math_sympy_integrate requires 'expression' (string)",
+        ))?;
+    let variable = arguments
+        .get("variable")
+        .and_then(Value::as_str)
+        .unwrap_or("x");
+    let lower = arguments.get("lower").and_then(Value::as_f64);
+    let upper = arguments.get("upper").and_then(Value::as_f64);
+    let vr = crate::verification::sympy_bridge::integrate_expression(expr, variable, lower, upper);
+    serde_json::to_string_pretty(&json!({
+        "check_name": vr.check_name, "status": format!("{:?}", vr.status),
+        "details": vr.details, "expression": expr,
+        "variable": variable, "lower": lower, "upper": upper,
+    }))
+    .map_err(FrameworkError::Json)
+}
+
+fn tool_math_sympy_solve(arguments: &Value) -> Result<String, FrameworkError> {
+    let equation = arguments
+        .get("equation")
+        .and_then(Value::as_str)
+        .ok_or(FrameworkError::validation(
+            "math_sympy_solve requires 'equation' (string) — e.g. \"x^2 - 4 = 0\"",
+        ))?;
+    let variable = arguments
+        .get("variable")
+        .and_then(Value::as_str)
+        .unwrap_or("x");
+    let vr = crate::verification::sympy_bridge::solve_equation(equation, variable);
+    serde_json::to_string_pretty(&json!({
+        "check_name": vr.check_name, "status": format!("{:?}", vr.status),
+        "details": vr.details, "equation": equation,
+        "variable": variable,
+    }))
+    .map_err(FrameworkError::Json)
+}
+
+fn tool_math_sympy_dimension_propagate(arguments: &Value) -> Result<String, FrameworkError> {
+    let equation = arguments
+        .get("equation")
+        .and_then(Value::as_str)
+        .ok_or(FrameworkError::validation(
+            "math_sympy_dimension_propagate requires 'equation' (string)",
+        ))?;
+    let dimensions = arguments
+        .get("dimensions")
+        .ok_or(FrameworkError::validation(
+            "math_sympy_dimension_propagate requires 'dimensions' (object)",
+        ))?;
+    let vr = crate::verification::sympy_bridge::dimension_propagate(equation, dimensions);
+    serde_json::to_string_pretty(&json!({
+        "check_name": vr.check_name, "status": format!("{:?}", vr.status),
+        "details": vr.details, "equation": equation,
+        "dimensions": dimensions,
+    }))
+    .map_err(FrameworkError::Json)
+}
+
 // ── Lean verification tool ──
 
 fn tool_math_lean_verify(arguments: &Value) -> Result<String, FrameworkError> {
@@ -1235,6 +1438,19 @@ fn tool_verification_literature(arguments: &Value) -> Result<String, FrameworkEr
                 .ok_or(FrameworkError::validation(
                     "claim_coverage requires 'references' array",
                 ))?;
+
+            if claims_val.len() > MAX_ARRAY_ELEMENTS {
+                return Err(FrameworkError::validation(format!(
+                    "claims array too large: {} elements (max {MAX_ARRAY_ELEMENTS})",
+                    claims_val.len()
+                )));
+            }
+            if references_val.len() > MAX_ARRAY_ELEMENTS {
+                return Err(FrameworkError::validation(format!(
+                    "references array too large: {} elements (max {MAX_ARRAY_ELEMENTS})",
+                    references_val.len()
+                )));
+            }
             let claims: Vec<String> = claims_val
                 .iter()
                 .filter_map(|v| v.as_str().map(String::from))
@@ -1462,6 +1678,13 @@ fn tool_verification_formal(arguments: &Value) -> Result<String, FrameworkError>
                 .ok_or(FrameworkError::validation(
                     "witness check requires 'witnesses' array of objects, e.g. [{\"x\": 1, \"y\": 2}, {\"x\": 3, \"y\": 5}]",
                 ))?;
+
+            if witnesses_val.len() > MAX_ARRAY_ELEMENTS {
+                return Err(FrameworkError::validation(format!(
+                    "witnesses array too large: {} elements (max {MAX_ARRAY_ELEMENTS})",
+                    witnesses_val.len()
+                )));
+            }
             let witnesses: Vec<HashMap<String, f64>> = witnesses_val
                 .iter()
                 .map(|w| {

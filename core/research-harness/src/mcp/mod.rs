@@ -262,6 +262,182 @@ pub fn tool_definitions() -> Vec<Value> {
             }),
         ),
         tool_def(
+            "math_sympy_expand",
+            "展开多项式表达式：使用 SymPy expand()，适用于乘积展开和幂展开",
+            json!({
+                "type": "object",
+                "properties": {
+                    "expression": {"type": "string", "description": "待展开的数学表达式（如 \"(x+1)^2\"）"}
+                },
+                "required": ["expression"]
+            }),
+        ),
+        tool_def(
+            "math_sympy_factor",
+            "因式分解表达式：使用 SymPy factor()，适用于多项式因式分解",
+            json!({
+                "type": "object",
+                "properties": {
+                    "expression": {"type": "string", "description": "待因式分解的表达式（如 \"x^2 + 2*x + 1\"）"}
+                },
+                "required": ["expression"]
+            }),
+        ),
+        tool_def(
+            "math_sympy_series",
+            "计算符号级数展开：使用 SymPy series()，支持在指定点展开到指定阶数",
+            json!({
+                "type": "object",
+                "properties": {
+                    "expression": {"type": "string", "description": "待展开的表达式"},
+                    "variable": {"type": "string", "description": "展开变量（默认 x）"},
+                    "point": {"type": "number", "description": "展开点（默认 0）"},
+                    "order": {"type": "integer", "description": "展开阶数（默认 6）"}
+                },
+                "required": ["expression"]
+            }),
+        ),
+        tool_def(
+            "math_sympy_differentiate",
+            "符号微分：使用 SymPy diff()，支持任意阶导数",
+            json!({
+                "type": "object",
+                "properties": {
+                    "expression": {"type": "string", "description": "待求导的表达式"},
+                    "variable": {"type": "string", "description": "微分变量（默认 x）"},
+                    "order": {"type": "integer", "description": "求导阶数（默认 1）"}
+                },
+                "required": ["expression"]
+            }),
+        ),
+        tool_def(
+            "math_sympy_integrate",
+            "符号积分：使用 SymPy integrate()，支持定积分和不定积分",
+            json!({
+                "type": "object",
+                "properties": {
+                    "expression": {"type": "string", "description": "待积分的表达式"},
+                    "variable": {"type": "string", "description": "积分变量（默认 x）"},
+                    "lower": {"type": "number", "description": "定积分下限（可选），省略则执行不定积分"},
+                    "upper": {"type": "number", "description": "定积分上限（可选），省略则执行不定积分"}
+                },
+                "required": ["expression"]
+            }),
+        ),
+        tool_def(
+            "math_sympy_solve",
+            "解方程/方程组：使用 SymPy solve()，支持等号和表达式形式",
+            json!({
+                "type": "object",
+                "properties": {
+                    "equation": {"type": "string", "description": "待解的方程（如 \"x^2 - 4 = 0\" 或 \"x^2 - 4\"）"},
+                    "variable": {"type": "string", "description": "求解变量（默认 x）"}
+                },
+                "required": ["equation"]
+            }),
+        ),
+        tool_def(
+            "math_sympy_dimension_propagate",
+            "物理量纲传播验证：分析方程两侧量纲一致性",
+            json!({
+                "type": "object",
+                "properties": {
+                    "equation": {"type": "string", "description": "物理方程（如 \"F = m*a\"）"},
+                    "dimensions": {
+                        "type": "object",
+                        "description": "变量→量纲映射，如 {\"F\": \"L*M*T^-2\", \"m\": \"M\", \"a\": \"L*T^-2\"}",
+                        "additionalProperties": true
+                    }
+                },
+                "required": ["equation", "dimensions"]
+            }),
+        ),
+        // ── Z3 solver tools (in dispatch but missing schema — added 2026-07-01) ──
+        tool_def(
+            "math_z3_prove",
+            "Z3 SMT 验证逻辑表达式（含量词、非线性算术）",
+            json!({
+                "type": "object",
+                "required": ["expression"],
+                "properties": {
+                    "expression": {"type": "string", "description": "待验证的逻辑表达式（如 'x > 0 implies x + 1 > 0'）"}
+                }
+            }),
+        ),
+        tool_def(
+            "math_z3_solver_push",
+            "创建 Z3 求解器上下文快照（push n 层）",
+            json!({
+                "type": "object",
+                "properties": {
+                    "n": {"type": "integer", "description": "推入层数（默认 1）"}
+                }
+            }),
+        ),
+        tool_def(
+            "math_z3_solver_pop",
+            "恢复 Z3 求解器上下文快照（pop n 层）",
+            json!({
+                "type": "object",
+                "properties": {
+                    "n": {"type": "integer", "description": "弹出层数（默认 1）"}
+                }
+            }),
+        ),
+        tool_def(
+            "math_z3_solver_add",
+            "向 Z3 求解器添加约束表达式",
+            json!({
+                "type": "object",
+                "required": ["expression"],
+                "properties": {
+                    "expression": {"type": "string", "description": "约束表达式字符串"}
+                }
+            }),
+        ),
+        tool_def(
+            "math_z3_solver_check",
+            "检查当前 Z3 求解器上下文的可满足性",
+            json!({
+                "type": "object",
+                "properties": {
+                    "timeout_ms": {"type": "integer", "description": "超时时间（毫秒，默认不限）"}
+                }
+            }),
+        ),
+        tool_def(
+            "math_z3_solver_reset",
+            "重置 Z3 求解器状态（清空全部约束）",
+            json!({
+                "type": "object",
+                "properties": {}
+            }),
+        ),
+        tool_def(
+            "math_z3_solver_batch",
+            "批量执行 Z3 求解器操作（push/pop/add/check/reset）",
+            json!({
+                "type": "object",
+                "required": ["steps"],
+                "properties": {
+                    "steps": {
+                        "type": "array",
+                        "description": "步骤列表",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "action": {"type": "string", "enum": ["push", "pop", "add", "check", "reset"], "description": "操作类型"},
+                                "n": {"type": "integer", "description": "push/pop 层数"},
+                                "expression": {"type": "string", "description": "add 操作的约束表达式"},
+                                "timeout_ms": {"type": "integer", "description": "check 操作的超时毫秒数"}
+                            },
+                            "required": ["action"]
+                        }
+                    }
+                }
+            }),
+        ),
+        tool_def(
             "research_verification_prose",
             "验证论文文本质控（术语/slop/hedging）",
             json!({

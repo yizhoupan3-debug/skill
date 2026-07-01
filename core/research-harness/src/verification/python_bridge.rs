@@ -12,6 +12,18 @@
 //! # Layer boundary
 //!
 //! FEATURE layer only. Tool dispatch belongs in `mcp_tools.rs`.
+//!
+//! # Security
+//!
+//! The Python backend uses SymPy's `sympify()`, which internally calls
+//! Python's `eval()` and can execute arbitrary code. This is a known
+//! limitation of SymPy. Mitigations:
+//!
+//! - Input is isolated in a subprocess with a controlled PYTHONPATH
+//! - Timeout kills runaway processes
+//! - The stdin payload is capped at MAX_INPUT_BYTES
+//! - The real defense is that the MCP tool system only allows the LLM
+//!   to call these tools, not arbitrary users
 
 use core_errors::FrameworkError;
 use serde_json::{Value, json};
@@ -23,6 +35,11 @@ const DEFAULT_TIMEOUT_MS: u64 = 30_000;
 
 /// Cache TTL for backend availability status in seconds.
 const STATUS_CACHE_TTL: u64 = 30;
+
+/// Maximum allowed size (in bytes) for the JSON request written to the
+/// Python subprocess stdin. Prevents single-call OOM via gigabyte-sized
+/// expression strings.
+const MAX_INPUT_BYTES: usize = 256 * 1024; // 256 KiB
 
 // ===========================================================================
 // Cached backend status
@@ -116,11 +133,26 @@ fn call_math_backend_inner(
 
     // Write stdin
     let input = serde_json::to_string(&request)?;
+    if input.len() > MAX_INPUT_BYTES {
+        tracing::warn!(
+            "[python_bridge] request too large: {} bytes (max {MAX_INPUT_BYTES}) for op={op}",
+            input.len()
+        );
+        return Err(FrameworkError::validation(format!(
+            "request too large: {} bytes (max {MAX_INPUT_BYTES})",
+            input.len()
+        )));
+    }
     if let Some(mut stdin) = child.stdin.take() {
         use std::io::Write;
         if let Err(e) = stdin.write_all(input.as_bytes()) {
             tracing::warn!("[python_bridge] stdin write error: {e}");
+            // The child may have exited before reading stdin. Continue
+            // to read stdout/stderr so the error path reports the exit
+            // status rather than a pipe error.
         }
+        // Drop stdin explicitly so the child gets EOF and can proceed.
+        drop(stdin);
     }
 
     // Wait with timeout

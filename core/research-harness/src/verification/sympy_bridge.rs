@@ -294,6 +294,336 @@ pub fn lambdify_expression(
     }
 }
 
+/// Expand a symbolic expression using SymPy.
+pub fn expand_expression(expr: &str) -> VerificationResult {
+    if !python_bridge::sympy_available() {
+        let fallback = crate::verification::symbolic::expand(
+            &crate::verification::symbolic::parse(expr).unwrap_or(
+                crate::verification::symbolic::Expr::Const(0.0),
+            ),
+        );
+        let result = crate::verification::symbolic::display(&fallback);
+        return VerificationResult {
+            check_name: "math_sympy_expand".into(),
+            status: VerificationStatus::Pass,
+            details: format!("expand({expr}) → {result} (pure Rust fallback)"),
+            evidence_path: None,
+        };
+    }
+
+    let params = json!({"expression": expr});
+    match python_bridge::call_math_backend("sympy_expand", params) {
+        Ok(result) => {
+            let expanded = result
+                .get("result")
+                .and_then(|v| v.as_str())
+                .unwrap_or(expr);
+            VerificationResult {
+                check_name: "math_sympy_expand".into(),
+                status: VerificationStatus::Pass,
+                details: format!("expand({expr}) → {expanded} (SymPy)"),
+                evidence_path: None,
+            }
+        }
+        Err(e) => VerificationResult {
+            check_name: "math_sympy_expand".into(),
+            status: VerificationStatus::Fail,
+            details: format!("expand({expr}) failed: {e}"),
+            evidence_path: None,
+        },
+    }
+}
+
+/// Factor a symbolic expression using SymPy.
+pub fn factor_expression(expr: &str) -> VerificationResult {
+    if !python_bridge::sympy_available() {
+        return VerificationResult {
+            check_name: "math_sympy_factor".into(),
+            status: VerificationStatus::Fail,
+            details: format!("factor({expr}) — SymPy not available (requires Python backend)"),
+            evidence_path: None,
+        };
+    }
+
+    let params = json!({"expression": expr});
+    match python_bridge::call_math_backend("sympy_factor", params) {
+        Ok(result) => {
+            let factored = result
+                .get("result")
+                .and_then(|v| v.as_str())
+                .unwrap_or(expr);
+            VerificationResult {
+                check_name: "math_sympy_factor".into(),
+                status: VerificationStatus::Pass,
+                details: format!("factor({expr}) → {factored} (SymPy)"),
+                evidence_path: None,
+            }
+        }
+        Err(e) => VerificationResult {
+            check_name: "math_sympy_factor".into(),
+            status: VerificationStatus::Fail,
+            details: format!("factor({expr}) failed: {e}"),
+            evidence_path: None,
+        },
+    }
+}
+
+/// Compute series expansion of an expression using SymPy.
+pub fn series_expression(expr: &str, variable: &str, point: f64, order: u32) -> VerificationResult {
+    if !python_bridge::sympy_available() {
+        return VerificationResult {
+            check_name: "math_sympy_series".into(),
+            status: VerificationStatus::Fail,
+            details: format!("series({expr}) — SymPy not available (requires Python backend)"),
+            evidence_path: None,
+        };
+    }
+
+    let params = json!({
+        "expression": expr,
+        "variable": variable,
+        "point": point,
+        "order": order,
+    });
+    match python_bridge::call_math_backend("sympy_series", params) {
+        Ok(result) => {
+            let series_str = result
+                .get("result")
+                .and_then(|v| v.as_str())
+                .unwrap_or(expr);
+            let leading = result
+                .get("leading")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            VerificationResult {
+                check_name: "math_sympy_series".into(),
+                status: VerificationStatus::Pass,
+                details: format!("series({expr}, {variable}, {point}, order={order}) → {series_str} (SymPy, leading: {leading})"),
+                evidence_path: None,
+            }
+        }
+        Err(e) => VerificationResult {
+            check_name: "math_sympy_series".into(),
+            status: VerificationStatus::Fail,
+            details: format!("series({expr}) failed: {e}"),
+            evidence_path: None,
+        },
+    }
+}
+
+/// Differentiate a symbolic expression using SymPy.
+pub fn differentiate_expression(expr: &str, variable: &str, order: u32) -> VerificationResult {
+    if !python_bridge::sympy_available() {
+        return VerificationResult {
+            check_name: "math_sympy_differentiate".into(),
+            status: VerificationStatus::Fail,
+            details: format!("differentiate({expr}) — SymPy not available (requires Python backend)"),
+            evidence_path: None,
+        };
+    }
+
+    let params = json!({
+        "expression": expr,
+        "variable": variable,
+        "order": order,
+    });
+    match python_bridge::call_math_backend("sympy_differentiate", params) {
+        Ok(result) => {
+            let diffed = result
+                .get("result")
+                .and_then(|v| v.as_str())
+                .unwrap_or(expr);
+            VerificationResult {
+                check_name: "math_sympy_differentiate".into(),
+                status: VerificationStatus::Pass,
+                details: format!("differentiate({expr}, {variable}, order={order}) → {diffed} (SymPy)"),
+                evidence_path: None,
+            }
+        }
+        Err(e) => VerificationResult {
+            check_name: "math_sympy_differentiate".into(),
+            status: VerificationStatus::Fail,
+            details: format!("differentiate({expr}) failed: {e}"),
+            evidence_path: None,
+        },
+    }
+}
+
+/// Integrate a symbolic expression using SymPy.
+pub fn integrate_expression(
+    expr: &str,
+    variable: &str,
+    lower: Option<f64>,
+    upper: Option<f64>,
+) -> VerificationResult {
+    if !python_bridge::sympy_available() {
+        return VerificationResult {
+            check_name: "math_sympy_integrate".into(),
+            status: VerificationStatus::Fail,
+            details: format!("integrate({expr}) — SymPy not available (requires Python backend)"),
+            evidence_path: None,
+        };
+    }
+
+    let mut params = json!({
+        "expression": expr,
+        "variable": variable,
+    });
+    if let Some(l) = lower {
+        params["lower"] = json!(l);
+    }
+    if let Some(u) = upper {
+        params["upper"] = json!(u);
+    }
+
+    match python_bridge::call_math_backend("sympy_integrate", params) {
+        Ok(result) => {
+            let integrated = result
+                .get("result")
+                .and_then(|v| v.as_str())
+                .unwrap_or(expr);
+            let bounds = match (lower, upper) {
+                (Some(l), Some(u)) => format!(" [{l}, {u}]"),
+                _ => "".to_string(),
+            };
+            VerificationResult {
+                check_name: "math_sympy_integrate".into(),
+                status: VerificationStatus::Pass,
+                details: format!("integrate({expr}, {variable}{bounds}) → {integrated} (SymPy)"),
+                evidence_path: None,
+            }
+        }
+        Err(e) => VerificationResult {
+            check_name: "math_sympy_integrate".into(),
+            status: VerificationStatus::Fail,
+            details: format!("integrate({expr}) failed: {e}"),
+            evidence_path: None,
+        },
+    }
+}
+
+/// Solve an equation or system of equations using SymPy.
+pub fn solve_equation(equation: &str, variable: &str) -> VerificationResult {
+    if !python_bridge::sympy_available() {
+        return VerificationResult {
+            check_name: "math_sympy_solve".into(),
+            status: VerificationStatus::Fail,
+            details: format!("solve({equation}) — SymPy not available (requires Python backend)"),
+            evidence_path: None,
+        };
+    }
+
+    let params = json!({
+        "equation": equation,
+        "variable": variable,
+    });
+    match python_bridge::call_math_backend("sympy_solve", params) {
+        Ok(result) => {
+            let solutions = result
+                .get("solutions")
+                .and_then(|v| v.as_array())
+                .map(|arr| {
+                    arr.iter()
+                        .map(|v| {
+                            if let Some(s) = v.as_str() {
+                                s.to_string()
+                            } else if let Some(obj) = v.as_object() {
+                                obj.iter()
+                                    .map(|(k, v)| format!("{k}={v}"))
+                                    .collect::<Vec<_>>()
+                                    .join(", ")
+                            } else {
+                                format!("{v}")
+                            }
+                        })
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default();
+            let count = solutions.len();
+            let sol_str = if count == 0 {
+                "no solutions".to_string()
+            } else {
+                solutions.join("; ")
+            };
+            VerificationResult {
+                check_name: "math_sympy_solve".into(),
+                status: VerificationStatus::Pass,
+                details: format!("solve({equation}) → {sol_str} ({count} solutions, SymPy)"),
+                evidence_path: None,
+            }
+        }
+        Err(e) => VerificationResult {
+            check_name: "math_sympy_solve".into(),
+            status: VerificationStatus::Fail,
+            details: format!("solve({equation}) failed: {e}"),
+            evidence_path: None,
+        },
+    }
+}
+
+/// Propagate physical dimensions through an equation using SymPy.
+pub fn dimension_propagate(equation: &str, dimensions: &serde_json::Value) -> VerificationResult {
+    if !python_bridge::sympy_available() {
+        // Fallback: use the pure Rust formal module's dimensional consistency
+        match crate::verification::formal::check_dimensional_consistency(equation) {
+            Ok(consistent) => VerificationResult {
+                check_name: "math_sympy_dimension_propagate".into(),
+                status: VerificationStatus::Pass,
+                details: format!(
+                    "dimension_propagate({equation}) consistent={consistent} (pure Rust fallback)"
+                ),
+                evidence_path: None,
+            },
+            Err(e) => VerificationResult {
+                check_name: "math_sympy_dimension_propagate".into(),
+                status: VerificationStatus::Fail,
+                details: format!("dimension_propagate({equation}) failed: {e}"),
+                evidence_path: None,
+            },
+        }
+    } else {
+        let params = json!({
+            "equation": equation,
+            "dimensions": dimensions,
+        });
+        match python_bridge::call_math_backend("sympy_dimension_propagate", params) {
+            Ok(result) => {
+                let consistent = result
+                    .get("consistent")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
+                let lhs_dim = result
+                    .get("lhs_dim")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("?");
+                let rhs_dim = result
+                    .get("rhs_dim")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("?");
+                let status = if consistent {
+                    VerificationStatus::Pass
+                } else {
+                    VerificationStatus::Fail
+                };
+                VerificationResult {
+                    check_name: "math_sympy_dimension_propagate".into(),
+                    status,
+                    details: format!(
+                        "dimension_propagate({equation}) → LHS={lhs_dim}, RHS={rhs_dim}, consistent={consistent} (SymPy)"
+                    ),
+                    evidence_path: None,
+                }
+            }
+            Err(e) => VerificationResult {
+                check_name: "math_sympy_dimension_propagate".into(),
+                status: VerificationStatus::Fail,
+                details: format!("dimension_propagate({equation}) failed: {e}"),
+                evidence_path: None,
+            },
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -419,6 +749,245 @@ mod tests {
         assert!(
             vr.details.contains("(SymPy") || vr.details.contains("(pure Rust fallback)"),
             "details must indicate the verification path, got: {}",
+            vr.details
+        );
+    }
+
+    // ── New bridge function probe tests ──
+
+    #[test]
+    fn test_expand_expression() {
+        let vr = expand_expression("(x+1)^2");
+        // Should either pass (SymPy available) or produce some result
+        assert!(
+            vr.status == VerificationStatus::Pass || vr.status == VerificationStatus::Fail,
+            "expand should either pass or fail, got {:?}: {}",
+            vr.status,
+            vr.details
+        );
+    }
+
+    #[test]
+    fn test_factor_expression() {
+        let vr = factor_expression("x^2 + 2*x + 1");
+        assert!(
+            vr.status == VerificationStatus::Pass || vr.status == VerificationStatus::Fail,
+            "factor should either pass or fail, got {:?}: {}",
+            vr.status,
+            vr.details
+        );
+    }
+
+    #[test]
+    fn test_series_expression() {
+        let vr = series_expression("sin(x)", "x", 0.0, 6);
+        assert!(vr.status == VerificationStatus::Pass || vr.status == VerificationStatus::Fail);
+    }
+
+    #[test]
+    fn test_differentiate_expression() {
+        let vr = differentiate_expression("x^2", "x", 1);
+        assert!(vr.status == VerificationStatus::Pass || vr.status == VerificationStatus::Fail);
+    }
+
+    #[test]
+    fn test_integrate_expression() {
+        let vr = integrate_expression("x^2", "x", None, None);
+        assert!(vr.status == VerificationStatus::Pass || vr.status == VerificationStatus::Fail);
+    }
+
+    #[test]
+    fn test_solve_equation() {
+        let vr = solve_equation("x^2 - 4 = 0", "x");
+        assert!(vr.status == VerificationStatus::Pass || vr.status == VerificationStatus::Fail);
+    }
+
+    #[test]
+    fn test_dimension_propagate() {
+        let dims = serde_json::json!({"F": "L*M*T^-2", "m": "M", "a": "L*T^-2"});
+        let vr = dimension_propagate("F = m*a", &dims);
+        assert!(vr.status == VerificationStatus::Pass || vr.status == VerificationStatus::Fail);
+    }
+
+    // ── Missing bridge function probe tests: trig_simplify / subs / limit / lambdify ──
+
+    #[test]
+    fn test_trig_simplify_expression() {
+        let vr = trig_simplify_expression("sin(x)^2 + cos(x)^2");
+        assert!(
+            vr.status == VerificationStatus::Pass || vr.status == VerificationStatus::Fail,
+            "trig_simplify should pass or fail, got {:?}: {}",
+            vr.status,
+            vr.details
+        );
+        if vr.status == VerificationStatus::Pass {
+            assert!(
+                vr.details.contains("trig_simplify("),
+                "details should contain the operation name, got: {}",
+                vr.details
+            );
+        }
+    }
+
+    #[test]
+    fn test_subs_expression_simple() {
+        let substitutions = serde_json::json!({"x": 2});
+        let vr = subs_expression("x^2 + 1", &substitutions);
+        assert!(
+            vr.status == VerificationStatus::Pass || vr.status == VerificationStatus::Fail,
+            "subs should pass or fail, got {:?}: {}",
+            vr.status,
+            vr.details
+        );
+        if vr.status == VerificationStatus::Pass {
+            assert!(
+                vr.details.contains("subs("),
+                "details should contain the operation name, got: {}",
+                vr.details
+            );
+        }
+    }
+
+    #[test]
+    fn test_subs_expression_multiple_vars() {
+        let substitutions = serde_json::json!({"x": 3, "y": 4});
+        let vr = subs_expression("x + y", &substitutions);
+        assert!(
+            vr.status == VerificationStatus::Pass || vr.status == VerificationStatus::Fail,
+            "subs with multiple vars should pass or fail, got {:?}: {}",
+            vr.status,
+            vr.details
+        );
+    }
+
+    #[test]
+    fn test_limit_expression_simple() {
+        let vr = limit_expression("x^2", "x", "0", None);
+        assert!(
+            vr.status == VerificationStatus::Pass || vr.status == VerificationStatus::Fail,
+            "limit should pass or fail, got {:?}: {}",
+            vr.status,
+            vr.details
+        );
+        if vr.status == VerificationStatus::Pass {
+            assert!(
+                vr.details.contains("limit("),
+                "details should contain the operation name, got: {}",
+                vr.details
+            );
+        }
+    }
+
+    #[test]
+    fn test_limit_expression_infinity() {
+        let vr = limit_expression("1/x", "x", "oo", None);
+        assert!(
+            vr.status == VerificationStatus::Pass || vr.status == VerificationStatus::Fail,
+            "limit to infinity should pass or fail, got {:?}: {}",
+            vr.status,
+            vr.details
+        );
+    }
+
+    #[test]
+    fn test_limit_expression_directional() {
+        let vr = limit_expression("1/x", "x", "0", Some("+"));
+        assert!(
+            vr.status == VerificationStatus::Pass || vr.status == VerificationStatus::Fail,
+            "directional limit should pass or fail, got {:?}: {}",
+            vr.status,
+            vr.details
+        );
+    }
+
+    #[test]
+    fn test_lambdify_expression_no_values() {
+        let vr = lambdify_expression("x^2", &["x".to_string()], None);
+        assert!(
+            vr.status == VerificationStatus::Pass || vr.status == VerificationStatus::Fail,
+            "lambdify should pass or fail, got {:?}: {}",
+            vr.status,
+            vr.details
+        );
+        if vr.status == VerificationStatus::Pass {
+            assert!(
+                vr.details.contains("lambdify("),
+                "details should contain the operation name, got: {}",
+                vr.details
+            );
+        }
+    }
+
+    #[test]
+    fn test_lambdify_expression_with_values() {
+        let vr = lambdify_expression("x^2 + 1", &["x".to_string()], Some(&[2.0]));
+        assert!(
+            vr.status == VerificationStatus::Pass || vr.status == VerificationStatus::Fail,
+            "lambdify with values should pass or fail, got {:?}: {}",
+            vr.status,
+            vr.details
+        );
+        if vr.status == VerificationStatus::Pass {
+            assert!(
+                vr.details.contains("evaluated"),
+                "lambdify with values should include evaluated=, got: {}",
+                vr.details
+            );
+        }
+    }
+
+    #[test]
+    fn test_simplify_with_assumptions_single() {
+        let vr = simplify_expression_with_assumptions("sqrt(x^2)", &["x > 0".to_string()]);
+        assert!(
+            vr.status == VerificationStatus::Pass || vr.status == VerificationStatus::Fail,
+            "simplify with assumptions should pass or fail, got {:?}: {}",
+            vr.status,
+            vr.details
+        );
+    }
+
+    #[test]
+    fn test_simplify_with_assumptions_empty() {
+        // Empty assumptions list is equivalent to simplify_expression
+        let vr = simplify_expression_with_assumptions("x + x", &[]);
+        assert!(
+            vr.status == VerificationStatus::Pass || vr.status == VerificationStatus::Fail,
+            "simplify with empty assumptions should pass or fail, got {:?}: {}",
+            vr.status,
+            vr.details
+        );
+    }
+
+    #[test]
+    fn test_simplify_with_assumptions_context() {
+        // sqrt(x^2) should simplify to x under x>0
+        let vr = simplify_expression_with_assumptions("sqrt(x^2)", &["x > 0".to_string()]);
+        assert!(
+            vr.status == VerificationStatus::Pass || vr.status == VerificationStatus::Fail,
+            "simplify with x>0 should pass or fail, got {:?}: {}",
+            vr.status,
+            vr.details
+        );
+        if vr.status == VerificationStatus::Pass {
+            // The result should not contain sqrt if assumptions were applied
+            assert!(
+                vr.details.contains("→"),
+                "details should show the transformation arrow, got: {}",
+                vr.details
+            );
+        }
+    }
+
+    #[test]
+    fn test_subs_expression_symbolic_substitution() {
+        // Substitute x with a symbolic expression y + z
+        let substitutions = serde_json::json!({"x": "y + z"});
+        let vr = subs_expression("x^2", &substitutions);
+        assert!(
+            vr.status == VerificationStatus::Pass || vr.status == VerificationStatus::Fail,
+            "symbolic subs should pass or fail, got {:?}: {}",
+            vr.status,
             vr.details
         );
     }

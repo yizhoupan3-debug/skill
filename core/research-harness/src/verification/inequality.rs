@@ -9,7 +9,6 @@
 //! formatting, and MCP tool dispatch belong in `mcp_tools.rs`.
 
 use crate::types::{VerificationResult, VerificationStatus};
-use crate::verification::python_bridge;
 use core_errors::FrameworkError;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -590,6 +589,7 @@ pub fn solver_available() -> bool {
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
+    use crate::verification::python_bridge;
     use super::*;
 
     #[test]

@@ -504,7 +504,7 @@ mod tests {
             "year": 2023,
             "citation_count": 5
         });
-        let (score, reasons) = score_paper(&paper, 2026);
+        let (_score, reasons) = score_paper(&paper, 2026);
         // Should have: cross-ref +1, 5 cites (no bonus), 2023 (age 3, +1), no venue → -1
         // Total: 1
         assert!(reasons.iter().any(|r| r.contains("no venue")));
@@ -518,7 +518,7 @@ mod tests {
             "venue": "ICML",
             "external_ids": {"DOI": "10.1234/test"}
         });
-        let (score, reasons) = score_paper(&paper, 2026);
+        let (_score, reasons) = score_paper(&paper, 2026);
         assert!(reasons.iter().any(|r| r.contains("current year")));
     }
 
