@@ -6,7 +6,7 @@
 use core_errors::FrameworkError;
 use framework_runtime::runtime_view;
 use framework_runtime::constants::{FRAMEWORK_CONTRACT_SUMMARY_SCHEMA_VERSION, FRAMEWORK_RUNTIME_AUTHORITY};
-use framework_runtime::json_io::read_json_strict;
+use core_state_utils::json_io::read_json_strict;
 use framework_runtime::json_value::{nonempty_string, value_string_list, value_text};
 use framework_runtime::util::supervisor_contract;
 use hex;

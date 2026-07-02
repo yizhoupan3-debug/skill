@@ -8,11 +8,11 @@
 //! Storage layout (under `artifact_root/content-store/`):
 //!   {shard}/{hash}.json   — each file is `{"hash":"…","content":"…"}`
 //!
-//! Reuses `framework_runtime::json_io::*` for all I/O (no new filesystem primitives).
+//! Reuses `core_state_utils::json_io::*` for all I/O (no new filesystem primitives).
 
 use core_errors::FrameworkError;
 use framework_runtime::constants::CONTENT_STORE_DIR;
-use framework_runtime::json_io::write_json_if_changed;
+use core_state_utils::json_io::write_json_if_changed;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};

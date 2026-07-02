@@ -5,7 +5,7 @@
 
 use crate::constants::EVIDENCE_INDEX_FILENAME;
 use crate::constants::*;
-use crate::json_io::{read_json_if_exists, read_json_strict};
+use core_state_utils::json_io::{read_json_if_exists, read_json_strict};
 use crate::json_value::{
     first_nonempty, join_lines, nonempty_string, safe_slug, stable_line_items, value_bool_or_none,
     value_string_list, value_text,

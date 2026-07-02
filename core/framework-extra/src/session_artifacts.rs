@@ -5,7 +5,7 @@ use framework_runtime::constants::{
     TASK_POINTERS_FILENAME, TASK_POINTERS_SCHEMA_VERSION, TERMINAL_STORY_STATES,
     TERMINAL_VERIFICATION_STATUSES,
 };
-use framework_runtime::json_io::read_json_strict;
+use core_state_utils::json_io::read_json_strict;
 use framework_runtime::json_value::{build_task_id, safe_slug, value_bool_or_none, value_text};
 use framework_runtime::types::TaskRegistryEntry;
 use framework_runtime::util::{defaulted_payload_text, required_payload_text};

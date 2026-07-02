@@ -8,7 +8,7 @@ use framework_runtime::constants::{
     FRAMEWORK_SESSION_ARTIFACT_WRITE_AUTHORITY, HOOK_EVIDENCE_APPEND_SCHEMA_VERSION,
     TASK_POINTERS_FILENAME,
 };
-use framework_runtime::json_io::read_json_strict;
+use core_state_utils::json_io::read_json_strict;
 use framework_runtime::json_value::value_text;
 use framework_core::repo_roots::resolve_repo_root_arg;
 use serde_json::{Map, Value, json};
