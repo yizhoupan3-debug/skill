@@ -15,8 +15,16 @@ mod routing_integration_tests {
             mcp_server: "router-rs".to_string(),
             tool_flags: vec![],
             input_schema_json: None,
+            // Precomputed routing tokens (empty for tests — populated at load time)
+            slug_lower: String::new(),
+            display_name_lower: String::new(),
+            name_tokens: std::collections::HashSet::new(),
+            keyword_tokens: std::collections::HashSet::new(),
+            desc_tokens: std::collections::HashSet::new(),
+            alias_tokens: std::collections::HashSet::new(),
         }
-    }
+}
+
 
     fn make_records() -> Vec<McpToolRecord> {
         vec![

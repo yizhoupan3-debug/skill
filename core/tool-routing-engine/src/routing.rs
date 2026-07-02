@@ -141,27 +141,32 @@ pub(crate) fn score_tool(
     query_tokens: &[String],
     weights: &crate::scoring_config::ToolScoringWeights,
 ) -> (f64, Vec<String>, usize) {
-    // Derive routing tokens from the raw record inline.
-    let slug_lower = record.slug.to_lowercase();
-    let display_name_lower = record.display_name.to_lowercase();
+    // Use precomputed token sets (populated at load time in mcp-tool-registry).
+    // Fall back to inline computation when precomputed fields are empty
+    // (e.g. in tests or legacy code paths).
+    let slug_lower: String;
+    let display_name_lower: String;
+    let name_tokens: HashSet<String>;
+    let keyword_tokens: HashSet<String>;
+    let desc_tokens: HashSet<String>;
+    let alias_tokens: HashSet<String>;
 
-    let name_tokens: HashSet<String> = slug_lower
-        .split(['-', '_'])
-        .filter(|t| !t.is_empty())
-        .map(|t| t.to_string())
-        .collect();
-
-    let keyword_tokens: HashSet<String> = record
-        .trigger_hints
-        .iter()
-        .flat_map(|hint| tokenize_text(&hint.to_lowercase()))
-        .collect();
-
-    let desc_tokens: HashSet<String> = tokenize_text(&record.description.to_lowercase())
-        .into_iter()
-        .collect();
-
-    let alias_tokens: HashSet<String> = tokenize_text(&display_name_lower).into_iter().collect();
+    if record.name_tokens.is_empty() {
+        // Inline fallback — precomputed fields not populated
+        slug_lower = record.slug.to_lowercase();
+        display_name_lower = record.display_name.to_lowercase();
+        name_tokens = slug_lower.split(['-', '_']).filter(|t| !t.is_empty()).map(|t| t.to_string()).collect();
+        keyword_tokens = record.trigger_hints.iter().flat_map(|h| tokenize_text(&h.to_lowercase())).collect();
+        desc_tokens = tokenize_text(&record.description.to_lowercase()).into_iter().collect();
+        alias_tokens = tokenize_text(&display_name_lower).into_iter().collect();
+    } else {
+        slug_lower = record.slug_lower.clone();
+        display_name_lower = record.display_name_lower.clone();
+        name_tokens = record.name_tokens.clone();
+        keyword_tokens = record.keyword_tokens.clone();
+        desc_tokens = record.desc_tokens.clone();
+        alias_tokens = record.alias_tokens.clone();
+    }
 
     // Steps 1-4: Use shared pipeline (exact name, name tokens, trigger hints, keywords, aliases)
     let shared_weights = routing_core::scoring::TokenScoreWeights::from_tool_weights(
@@ -231,6 +236,7 @@ mod tests {
     use super::*;
     
     fn test_tool_record(slug: &str, keywords: &[&str]) -> McpToolRecord {
+        let slug_lower = slug.to_lowercase();
         McpToolRecord {
             slug: slug.to_string(),
             display_name: format!("Display {slug}"),
@@ -242,8 +248,15 @@ mod tests {
             mcp_server: "router-rs".to_string(),
             tool_flags: vec![],
             input_schema_json: None,
+            slug_lower,
+            display_name_lower: String::new(),
+            name_tokens: std::collections::HashSet::new(),
+            keyword_tokens: std::collections::HashSet::new(),
+            desc_tokens: std::collections::HashSet::new(),
+            alias_tokens: std::collections::HashSet::new(),
         }
-    }
+}
+
 
     #[test]
     fn exact_match_wins() {
@@ -324,7 +337,15 @@ mod tests {
             mcp_server: "ext-server".to_string(),
             tool_flags: vec![],
             input_schema_json: None,
-        };
+            // Precomputed routing tokens (empty for tests — populated at load time)
+            slug_lower: String::new(),
+            display_name_lower: String::new(),
+            name_tokens: std::collections::HashSet::new(),
+            keyword_tokens: std::collections::HashSet::new(),
+            desc_tokens: std::collections::HashSet::new(),
+            alias_tokens: std::collections::HashSet::new(),
+}
+;
         let query_tokens = tokenize_text("ext_tool");
         let (score_builtin, _, _) = score_tool(
             &make_record(ToolLayer::Builtin),

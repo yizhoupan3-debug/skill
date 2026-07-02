@@ -79,6 +79,39 @@ pub fn load_tool_records(registry_path: &Path) -> Result<Vec<McpToolRecord>, Fra
         }
     }
 
+    // ── Precompute routing token sets ──
+    let records: Vec<McpToolRecord> = records
+        .into_iter()
+        .map(|mut r| {
+            let slug_lower = r.slug.to_lowercase();
+            let display_name_lower = r.display_name.to_lowercase();
+
+            r.slug_lower = slug_lower.clone();
+            r.display_name_lower = display_name_lower.clone();
+            r.name_tokens = slug_lower
+                .split(['-', '_'])
+                .filter(|t| !t.is_empty())
+                .map(|t| t.to_string())
+                .collect();
+            r.keyword_tokens = r
+                .trigger_hints
+                .iter()
+                .flat_map(|hint| {
+                    core_state_utils::text_utils::tokenize_cjk_aware(&hint.to_lowercase())
+                })
+                .collect();
+            r.desc_tokens = core_state_utils::text_utils::tokenize_cjk_aware(
+                &r.description.to_lowercase(),
+            )
+            .into_iter()
+            .collect();
+            r.alias_tokens = core_state_utils::text_utils::tokenize_cjk_aware(&display_name_lower)
+                .into_iter()
+                .collect();
+            r
+        })
+        .collect();
+
     // ── MTR-8: input_schema structural validation ──
     for record in &records {
         if let Some(ref schema) = record.input_schema_json {

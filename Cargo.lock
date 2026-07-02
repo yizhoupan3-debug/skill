@@ -2239,6 +2239,7 @@ name = "mcp-tool-registry"
 version = "0.1.0"
 dependencies = [
  "core-errors",
+ "core-state-utils",
  "framework-core",
  "routing-core",
  "serde",

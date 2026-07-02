@@ -204,6 +204,27 @@ pub struct McpToolRecord {
     /// Only populated for `dispatch_domain.starts_with("domain:")` tools.
     #[serde(default, rename = "input_schema")]
     pub input_schema_json: Option<McpToolInputSchema>,
+
+    // ── Precomputed routing tokens (populated at load time; serde never touches these) ──
+
+    /// Lowercased slug, precomputed for routing.
+    #[serde(skip)]
+    pub slug_lower: String,
+    /// Lowercased display_name, precomputed for routing.
+    #[serde(skip)]
+    pub display_name_lower: String,
+    /// Tokens from slug split by `-_`.
+    #[serde(skip)]
+    pub name_tokens: std::collections::HashSet<String>,
+    /// Tokens from trigger_hints.
+    #[serde(skip)]
+    pub keyword_tokens: std::collections::HashSet<String>,
+    /// Tokens from description.
+    #[serde(skip)]
+    pub desc_tokens: std::collections::HashSet<String>,
+    /// Tokens from display_name.
+    #[serde(skip)]
+    pub alias_tokens: std::collections::HashSet<String>,
 }
 
 impl McpToolRecord {

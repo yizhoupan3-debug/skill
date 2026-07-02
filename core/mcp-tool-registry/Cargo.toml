@@ -8,6 +8,7 @@ workspace = true
 
 [dependencies]
 core-errors = { path = "../core-errors" }
+core-state-utils = { path = "../core-state-utils" }
 framework-core = { path = "../framework-core" }
 routing-core = { path = "../routing-core" }
 serde.workspace = true

@@ -80,7 +80,15 @@ fn make_tool_records(count: usize) -> Vec<McpToolRecord> {
                 mcp_server: format!("server-{}", DD[cat]),
                 tool_flags: vec![],
                 input_schema_json: None,
-            }
+            // Precomputed routing tokens (empty for tests — populated at load time)
+            slug_lower: String::new(),
+            display_name_lower: String::new(),
+            name_tokens: std::collections::HashSet::new(),
+            keyword_tokens: std::collections::HashSet::new(),
+            desc_tokens: std::collections::HashSet::new(),
+            alias_tokens: std::collections::HashSet::new(),
+}
+
         })
         .collect()
 }
