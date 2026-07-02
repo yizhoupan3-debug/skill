@@ -111,22 +111,6 @@ impl RuntimeCoreHooks {
     pub fn runtime_concurrency_defaults_payload(&self) -> Result<Value, FrameworkError> {
         (self.runtime_concurrency_defaults_payload)()
     }
-    pub fn eval_route_contract(&self) -> Value {
-        (self.eval_route_contract)()
-    }
-    pub fn run_eval_route(
-        &self,
-        cases_path: &Path,
-        runtime: Option<&Path>,
-    ) -> Result<Value, FrameworkError> {
-        (self.run_eval_route)(cases_path, runtime)
-    }
-    pub fn generated_artifacts_status_for_repo(
-        &self,
-        repo_root: &Path,
-    ) -> Result<String, FrameworkError> {
-        (self.generated_artifacts_status_for_repo)(repo_root)
-    }
     pub fn ensure_kernel_bootstrap(&self) {
         (self.ensure_kernel_bootstrap)()
     }
@@ -153,9 +137,6 @@ pub struct RuntimeCoreHooksBuilder {
     handle_orchestrator_operation: Option<fn(Value) -> Result<Value, FrameworkError>>,
     handle_background_state_operation: Option<fn(Value) -> Result<Value, FrameworkError>>,
     runtime_concurrency_defaults_payload: Option<fn() -> Result<Value, FrameworkError>>,
-    eval_route_contract: Option<fn() -> Value>,
-    run_eval_route: Option<fn(&Path, Option<&Path>) -> Result<Value, FrameworkError>>,
-    generated_artifacts_status_for_repo: Option<fn(&Path) -> Result<String, FrameworkError>>,
     ensure_kernel_bootstrap: Option<fn()>,
     evaluate_quality_gate: Option<fn(serde_json::Value) -> Result<serde_json::Value, FrameworkError>>,
     evaluate_closeout_gate: Option<fn(serde_json::Value) -> Result<serde_json::Value, FrameworkError>>,
@@ -173,9 +154,6 @@ impl RuntimeCoreHooksBuilder {
             handle_orchestrator_operation: None,
             handle_background_state_operation: None,
             runtime_concurrency_defaults_payload: None,
-            eval_route_contract: None,
-            run_eval_route: None,
-            generated_artifacts_status_for_repo: None,
             ensure_kernel_bootstrap: None,
             evaluate_quality_gate: None,
             evaluate_closeout_gate: None,
@@ -187,9 +165,6 @@ impl RuntimeCoreHooksBuilder {
     pub fn handle_orchestrator_operation(mut self, v: fn(Value) -> Result<Value, FrameworkError>) -> Self { self.handle_orchestrator_operation = Some(v); self }
     pub fn handle_background_state_operation(mut self, v: fn(Value) -> Result<Value, FrameworkError>) -> Self { self.handle_background_state_operation = Some(v); self }
     pub fn runtime_concurrency_defaults_payload(mut self, v: fn() -> Result<Value, FrameworkError>) -> Self { self.runtime_concurrency_defaults_payload = Some(v); self }
-    pub fn eval_route_contract(mut self, v: fn() -> Value) -> Self { self.eval_route_contract = Some(v); self }
-    pub fn run_eval_route(mut self, v: fn(&Path, Option<&Path>) -> Result<Value, FrameworkError>) -> Self { self.run_eval_route = Some(v); self }
-    pub fn generated_artifacts_status_for_repo(mut self, v: fn(&Path) -> Result<String, FrameworkError>) -> Self { self.generated_artifacts_status_for_repo = Some(v); self }
     pub fn ensure_kernel_bootstrap(mut self, v: fn()) -> Self { self.ensure_kernel_bootstrap = Some(v); self }
     pub fn evaluate_quality_gate(mut self, v: fn(serde_json::Value) -> Result<serde_json::Value, FrameworkError>) -> Self { self.evaluate_quality_gate = Some(v); self }
     pub fn evaluate_closeout_gate(mut self, v: fn(serde_json::Value) -> Result<serde_json::Value, FrameworkError>) -> Self { self.evaluate_closeout_gate = Some(v); self }
@@ -198,11 +173,8 @@ impl RuntimeCoreHooksBuilder {
     pub fn for_testing() -> Self {
         fn stub(_: Value) -> Result<Value, FrameworkError> { Ok(Value::Null) }
         fn stub2() -> Result<Value, FrameworkError> { Ok(Value::Null) }
-        fn stub3() -> Value { Value::Null }
-        fn stub4(_: &Path) -> Result<String, FrameworkError> { Ok(String::new()) }
-        fn stub5(_: &Path, _: Option<&Path>) -> Result<Value, FrameworkError> { Ok(Value::Null) }
-        fn stub6() {}
-        fn stub7(_: serde_json::Value) -> Result<serde_json::Value, FrameworkError> { Ok(serde_json::Value::Null) }
+        fn stub3() {}
+        fn stub4(_: serde_json::Value) -> Result<serde_json::Value, FrameworkError> { Ok(serde_json::Value::Null) }
         Self {
             host_provider: Some(HostProviderHooks {
                 for_routing_spelling: |_| None,
@@ -213,12 +185,9 @@ impl RuntimeCoreHooksBuilder {
             handle_orchestrator_operation: Some(stub),
             handle_background_state_operation: Some(stub),
             runtime_concurrency_defaults_payload: Some(stub2),
-            eval_route_contract: Some(stub3),
-            run_eval_route: Some(stub5),
-            generated_artifacts_status_for_repo: Some(stub4),
-            ensure_kernel_bootstrap: Some(stub6),
-            evaluate_quality_gate: Some(stub7),
-            evaluate_closeout_gate: Some(stub7),
+            ensure_kernel_bootstrap: Some(stub3),
+            evaluate_quality_gate: Some(stub4),
+            evaluate_closeout_gate: Some(stub4),
         }
     }
 
@@ -230,9 +199,6 @@ impl RuntimeCoreHooksBuilder {
             handle_orchestrator_operation: self.handle_orchestrator_operation.ok_or("handle_orchestrator_operation not set")?,
             handle_background_state_operation: self.handle_background_state_operation.ok_or("handle_background_state_operation not set")?,
             runtime_concurrency_defaults_payload: self.runtime_concurrency_defaults_payload.ok_or("runtime_concurrency_defaults_payload not set")?,
-            eval_route_contract: self.eval_route_contract.ok_or("eval_route_contract not set")?,
-            run_eval_route: self.run_eval_route.ok_or("run_eval_route not set")?,
-            generated_artifacts_status_for_repo: self.generated_artifacts_status_for_repo.ok_or("generated_artifacts_status_for_repo not set")?,
             ensure_kernel_bootstrap: self.ensure_kernel_bootstrap.ok_or("ensure_kernel_bootstrap not set")?,
             evaluate_quality_gate: self.evaluate_quality_gate.ok_or("evaluate_quality_gate not set")?,
             evaluate_closeout_gate: self.evaluate_closeout_gate.ok_or("evaluate_closeout_gate not set")?,
@@ -255,15 +221,6 @@ pub struct RuntimeCoreHooks {
     pub handle_orchestrator_operation: fn(Value) -> Result<Value, FrameworkError>,
     pub handle_background_state_operation: fn(Value) -> Result<Value, FrameworkError>,
     pub runtime_concurrency_defaults_payload: fn() -> Result<Value, FrameworkError>,
-
-    // ── Route evaluation ──
-    pub eval_route_contract: fn() -> Value,
-    #[allow(clippy::type_complexity)]
-    pub run_eval_route:
-        fn(cases_path: &Path, runtime: Option<&Path>) -> Result<Value, FrameworkError>,
-
-    // ── Diagnostics ──
-    pub generated_artifacts_status_for_repo: fn(repo_root: &Path) -> Result<String, FrameworkError>,
 
     // ── Kernel bootstrap ──
     //
