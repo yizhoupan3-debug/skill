@@ -1,4 +1,3 @@
-use crate::hooks;
 use crate::types::DriverCommandSpec;
 use core_errors::FrameworkError;
 
@@ -58,32 +57,17 @@ pub fn resolve_worktree_cwd(
 pub fn build_driver_command(
     host: &str,
     cwd: &str,
-    prompt: Option<String>,
-    resume_target: Option<String>,
-    resume_mode: &str,
+    _prompt: Option<String>,
+    _resume_target: Option<String>,
+    _resume_mode: &str,
     resume_only: bool,
     worktree_name: Option<String>,
     worktree_path: Option<String>,
 ) -> Result<DriverCommandSpec, FrameworkError> {
-    let effective_cwd =
+    let _effective_cwd =
         resolve_worktree_cwd(cwd, worktree_name.as_deref(), worktree_path.as_deref());
 
     // Try trait-based dispatch via host provider registry (via hooks).
-    if let Some(h) = hooks::hooks()
-        && let Some(result) = (h.build_driver_command)(
-            host,
-            &effective_cwd,
-            prompt.clone(),
-            resume_target.clone(),
-            resume_mode,
-            resume_only,
-            worktree_name.clone(),
-            worktree_path.clone(),
-        )
-    {
-        return result;
-    }
-
     // Fallback: smoke-shell test host (not in provider registry).
     let lowered = host.trim().to_ascii_lowercase();
     match lowered.as_str() {
@@ -137,12 +121,7 @@ pub fn build_driver_command(
     }
 }
 
-pub fn driver_id_for_host(host: &str) -> &'static str {
-    if let Some(h) = hooks::hooks()
-        && let Some(id) = (h.driver_id_for_host)(host)
-    {
-        return id;
-    }
+pub fn driver_id_for_host(_host: &str) -> &'static str {
     "unknown_driver"
 }
 

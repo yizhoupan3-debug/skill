@@ -111,9 +111,6 @@ pub(crate) fn install_test_deps() {
         fn test_evidence_append(payload: Value) -> Result<Value, FrameworkError> {
             Ok(payload)
         }
-        fn test_extract_duration(_event: &Value) -> Option<u64> {
-            None
-        }
         fn test_post_tool_ok(_event: &Value) -> bool {
             true
         }
@@ -155,8 +152,6 @@ pub(crate) fn install_test_deps() {
         hooks::set_runtime_hooks(hooks::RuntimeHooks {
             // framework_runtime
             closeout_record_path_for_task: test_closeout_record_path,
-            evaluate_closeout_record_file_for_task: test_evaluate_closeout_record,
-            extract_post_tool_duration_ms: test_extract_duration,
             post_tool_call_succeeded: test_post_tool_ok,
             closeout_stop_followup_for_completion_text: test_closeout_followup,
             // paper hooks (defaults — individual OnceLock has priority)
@@ -170,14 +165,8 @@ pub(crate) fn install_test_deps() {
             ensure_kernel_bootstrap: || {},
             // framework_runtime_extra
             current_local_timestamp: || "1970-01-01T00:00:00Z".into(),
-            write_framework_session_artifacts: |_| Err(FrameworkError::validation("not registered in test")),
-            build_automatic_continuity_checkpoint_payload: |_, _, _, _, _, _| Value::Null,
             append_evidence_index: |_, _, _| Err(FrameworkError::validation("not registered in test")),
             closeout_record_schema_version: || "closeout-record-v1",
-            // web_fetch_guard
-            validate_and_resolve_web_fetch_url: |_| Err(FrameworkError::validation("not registered in test")),
-            resolve_web_fetch_redirect: |_, _| Err(FrameworkError::validation("not registered in test")),
-            resolve_web_fetch_addresses: |_, _| Err(FrameworkError::validation("not registered in test")),
             // mcp_pre_guard
             evaluate_mcp_pre_guard_safe: |_, _, _| hooks::McpPreGuardVerdict { blocked: false, reason: None },
             // research_tool_dispatch

@@ -17,7 +17,6 @@ mod worker;
 #[cfg(test)]
 mod tests;
 
-pub mod hooks;
 pub mod router_env_flags;
 
 pub use types::AgentHealthEntry;

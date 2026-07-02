@@ -352,8 +352,6 @@ pub fn route_task(
     allow_overlay: bool,
     first_turn: bool,
 ) -> Result<RouteDecision, FrameworkError> {
-    crate::hooks::touch_kernel_bootstrap();
-    crate::hooks::ensure_kernel_bootstrap();
     if records.is_empty() {
         return Err(FrameworkError::NotFound {
             what: "No skill records available for route decision.".to_string(),

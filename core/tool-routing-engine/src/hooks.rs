@@ -1,6 +1,10 @@
-//! Hook registry for tool-routing-engine dependency injection.
-//!
-//! Delegates to the shared routing config hooks in `routing-core`.
-//! Use `routing_core::config_hooks::register_routing_config_hooks` to register.
+//! Direct path resolution (was a fn-ptr hook — simplified down).
 
-pub use routing_core::config_hooks::discover_scoring_weights_path;
+const TOOL_SCORING_WEIGHTS_RELATIVE_PATH: &str = "configs/tool_scoring_weights.json";
+
+/// Resolve the path to the tool scoring weights JSON.
+/// Uses `SKILL_FRAMEWORK_ROOT` env var if set, otherwise returns None.
+pub fn discover_scoring_weights_path() -> Option<String> {
+    let root = std::env::var("SKILL_FRAMEWORK_ROOT").ok()?;
+    Some(format!("{root}/{TOOL_SCORING_WEIGHTS_RELATIVE_PATH}"))
+}

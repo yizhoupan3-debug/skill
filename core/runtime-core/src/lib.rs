@@ -170,8 +170,6 @@ pub fn init_hooks() {
         routing_engine::hooks::register_hooks(
             framework_core::hook_common::is_review_prompt,
             hosts::host_provider::host_provider_routing_aliases,
-            touch_test_kernel_bootstrap,
-            kernel_bootstrap::ensure_kernel_bootstrap,
             skill_repo::discover_skill_policy_repo_root,
             skill_repo::skill_routing_runtime_json,
             || {
@@ -185,26 +183,11 @@ pub fn init_hooks() {
         )
         .ok(); // ignore Err if already registered
 
-        // 2. Routing config hooks
-        routing_core::config_hooks::register_routing_config_hooks(
-            || {
-                let path = std::path::PathBuf::from(framework_core::constants::MCP_TOOL_REGISTRY_RELATIVE_PATH);
-                Some(path)
-            },
-            || {
-                let root = std::env::var("SKILL_FRAMEWORK_ROOT").ok()?;
-                Some(format!("{root}/{}", framework_core::constants::TOOL_SCORING_WEIGHTS_RELATIVE_PATH))
-            },
-        )
-        .ok();
-
         // 3. Host-projection hooks (RuntimeHooks struct, direct construction)
         host_projection::hooks::set_runtime_hooks(
             host_projection::hooks::RuntimeHooks {
-                // framework_runtime (5 fields)
+                // framework_runtime (3 fields)
                 closeout_record_path_for_task: framework_extra::closeout::closeout_record_path_for_task,
-                evaluate_closeout_record_file_for_task: framework_extra::closeout::evaluate_closeout_record_file_for_task,
-                extract_post_tool_duration_ms: framework_extra::evidence::extract_post_tool_duration_ms,
                 post_tool_call_succeeded: framework_extra::evidence::post_tool_call_succeeded,
                 closeout_stop_followup_for_completion_text: framework_extra::closeout::closeout_stop_followup_for_completion_text,
                 // paper hooks (4 fields) — defaults; research-harness overrides via individual OnceLock
@@ -216,28 +199,10 @@ pub fn init_hooks() {
                 maybe_record_research_activity: |_, _, _| {},
                 // kernel bootstrap (1 field)
                 ensure_kernel_bootstrap: kernel_bootstrap::ensure_kernel_bootstrap,
-                // framework_runtime_extra (7 fields)
+                // framework_runtime_extra (3 fields)
                 current_local_timestamp: framework_extra::util::current_local_timestamp,
-                write_framework_session_artifacts: framework_extra::session_artifacts::write_framework_session_artifacts,
-                build_automatic_continuity_checkpoint_payload: crate::framework_runtime::build_automatic_continuity_checkpoint_payload_with_task_id,
                 append_evidence_index: framework_extra::evidence::append_evidence_index_merged_row,
                 closeout_record_schema_version: || closeout_validation::CLOSEOUT_RECORD_SCHEMA_VERSION,
-                // web_fetch_guard (3 fields)
-                validate_and_resolve_web_fetch_url: |url| {
-                    web_fetch_guard::validate_and_resolve_web_fetch_url(url).map(|(u, addrs)| {
-                        (u.to_string(), addrs.iter().map(|a| a.to_string()).collect())
-                    })
-                },
-                resolve_web_fetch_redirect: |base, location| {
-                    let base_url = reqwest::Url::parse(base)
-                        .map_err(|e| format!("web_fetch redirect base URL parse error: {e}"))?;
-                    web_fetch_guard::resolve_web_fetch_redirect(&base_url, location)
-                        .map(|(u, addrs)| (u.to_string(), addrs.iter().map(|a| a.to_string()).collect()))
-                },
-                resolve_web_fetch_addresses: |host, port| {
-                    web_fetch_guard::resolve_web_fetch_addresses(host, port)
-                        .map(|addrs| addrs.iter().map(|a| a.to_string()).collect())
-                },
                 // mcp_pre_guard (1 field)
                 evaluate_mcp_pre_guard_safe: |tool, args, repo_root| {
                     let v = mcp_pre_guard::evaluate_mcp_pre_guard_safe(tool, args, repo_root);
@@ -315,18 +280,7 @@ pub fn init_hooks() {
                         core_errors::FrameworkError::validation(format!("runtime_concurrency_defaults_payload serialization: {e}"))
                     })
             },
-            eval_route_contract: eval_route::eval_route_contract,
-            run_eval_route: |cases_path, runtime| {
-                let report = eval_route::run_eval_route(cases_path, runtime)?;
-                serde_json::to_value(report).map_err(|e| {
-                    tracing::warn!(error = %e, "eval_route report serialization failed");
-                    core_errors::FrameworkError::validation(format!("eval_route report serialization: {e}"))
-                })
-            },
-            generated_artifacts_status_for_repo: |repo_root| {
-                crate::host_integration::generated_artifacts_status_for_repo(repo_root)
-                    .map(|v| v.to_string())
-            },
+
             ensure_kernel_bootstrap: kernel_bootstrap::ensure_kernel_bootstrap,
             evaluate_quality_gate: crate::qg_entry::evaluate_quality_gate_hook,
             evaluate_closeout_gate: crate::framework_runtime::tool_handlers::closeout_handler::evaluate_closeout_gate_hook,

@@ -1,12 +1,10 @@
-//! Hook registry for mcp-tool-registry dependency injection.
-//!
-//! This module re-exports `discover_tool_registry_path` from the shared
-//! `routing-core` config hooks.  The module is intentionally kept as a thin
-//! re-export layer so that all DI wiring stays in `routing-core` while
-//! `mcp-tool-registry` (and its consumers) only depend on the narrowed
-//! interface they need.
-//!
-//! If more hooks are added in the future (e.g. injectable path resolvers,
-//! environment overrides), add them here and delegate to `routing-core`.
+//! Direct path resolution (was a fn-ptr hook — simplified down).
 
-pub use routing_core::config_hooks::discover_tool_registry_path;
+use std::path::PathBuf;
+
+const MCP_TOOL_REGISTRY_RELATIVE_PATH: &str = "configs/framework/MCP_TOOL_REGISTRY.json";
+
+/// Resolve the path to the MCP tool registry JSON file.
+pub fn discover_tool_registry_path() -> Option<PathBuf> {
+    Some(PathBuf::from(MCP_TOOL_REGISTRY_RELATIVE_PATH))
+}

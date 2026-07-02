@@ -18,7 +18,6 @@
 //! - `scoring::best_fuzzy_score()` — shared fuzzy rescue
 //! - `scoring::TokenScoreWeights`, `scoring::TokenScoreResult`
 
-pub mod config_hooks;
 pub mod fuzzy;
 pub mod scoring;
 

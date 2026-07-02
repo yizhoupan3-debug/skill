@@ -19,9 +19,6 @@ use std::sync::Mutex;
 /// Shared routing records — passed through hook boundary to avoid disk re-read.
 pub type RoutingRecords = std::sync::Arc<Vec<routing_engine::route::SkillRecord>>;
 
-/// Build automatic continuity checkpoint payload: (repo_root, task_id, session_id, current_query, allow_overlay, first_turn) -> Value
-type BuildCheckpointFn = fn(&Path, &str, &str, Option<&str>, bool, bool) -> Value;
-
 /// Append evidence index row: (repo_root, task_id, metadata) -> Result<()>
 type AppendEvidenceFn = fn(&Path, Option<&str>, serde_json::Map<String, Value>) -> Result<()>;
 
@@ -185,8 +182,6 @@ pub fn read_stdin_limited<R: std::io::Read>(reader: &mut R) -> Result<String> {
 // ────────────────────────────────────────────────────────────────
 
 runtime_hook_proxy! { fn closeout_record_path_for_task(repo_root: &Path, task_id: &str) -> Result<PathBuf> = err("CLOSEOUT_RECORD_PATH not registered — runtime-core boot required"); }
-runtime_hook_proxy! { fn evaluate_closeout_record_file_for_task(repo_root: &Path, task_id: &str, record_path: &Path) -> Result<Value> = err("hook framework_runtime not registered — runtime-core boot required"); }
-runtime_hook_proxy! { fn extract_post_tool_duration_ms(event: &Value) -> Option<u64> = None; }
 runtime_hook_proxy! { fn post_tool_call_succeeded(event: &Value) -> bool = true; }
 runtime_hook_proxy! { fn closeout_stop_followup_for_completion_text(repo_root: &Path, text: &str) -> Option<String> = None; }
 
@@ -253,24 +248,9 @@ pub fn ensure_kernel_bootstrap() {
 // ── framework_runtime_extra ──
 
 runtime_hook_proxy! { fn current_local_timestamp() -> String = "1970-01-01T00:00:00Z".into(); }
-runtime_hook_proxy! { fn write_framework_session_artifacts(payload: Value) -> Result<Value> = err("WRITE_FRAMEWORK_SESSION_ARTIFACTS not registered — runtime-core boot required"); }
 runtime_hook_proxy! { fn append_evidence_index(repo_root: &Path, task_id: Option<&str>, entry: serde_json::Map<String, Value>) -> Result<()> = err("APPEND_EVIDENCE_INDEX not registered — runtime-core boot required"); }
 runtime_hook_proxy! { fn closeout_record_schema_version() -> &'static str = "closeout-record-v1"; }
 
-// ── web_fetch_guard ──
-
-/// Validate and resolve web fetch URL: (url) -> Result<(resolved_url, addresses)>
-type ValidateWebFetchUrlFn = fn(&str) -> Result<(String, Vec<String>)>;
-
-/// Resolve web fetch redirect: (base_url, location) -> Result<(resolved_url, addresses)>
-type ResolveWebFetchRedirectFn = fn(&str, &str) -> Result<(String, Vec<String>)>;
-
-/// Resolve web fetch addresses: (host, port) -> Result<addresses>
-type ResolveWebFetchAddressesFn = fn(&str, u16) -> Result<Vec<String>>;
-
-runtime_hook_proxy! { fn validate_and_resolve_web_fetch_url(url: &str) -> Result<(String, Vec<String>)> = err("VALIDATE_AND_RESOLVE_WEB_FETCH_URL not registered — runtime-core boot required"); }
-runtime_hook_proxy! { fn resolve_web_fetch_redirect(base: &str, location: &str) -> Result<(String, Vec<String>)> = err("RESOLVE_WEB_FETCH_REDIRECT not registered — runtime-core boot required"); }
-runtime_hook_proxy! { fn resolve_web_fetch_addresses(host: &str, port: u16) -> Result<Vec<String>> = err("RESOLVE_WEB_FETCH_ADDRESSES not registered — runtime-core boot required"); }
 
 // ── mcp_pre_guard ──
 
@@ -361,10 +341,8 @@ runtime_hook_proxy! { fn tool_closeout_gate_evaluate(args: &Value, repo_root: &P
 /// `modify_runtime_hooks()` to extend research-specific fields after bootstrap.
 #[derive(Clone, Copy)]
 pub struct RuntimeHooks {
-    // framework_runtime (5 fields)
+    // framework_runtime (3 fields)
     pub closeout_record_path_for_task: fn(&Path, &str) -> Result<PathBuf>,
-    pub evaluate_closeout_record_file_for_task: fn(&Path, &str, &Path) -> Result<Value>,
-    pub extract_post_tool_duration_ms: fn(&Value) -> Option<u64>,
     pub post_tool_call_succeeded: fn(&Value) -> bool,
     pub closeout_stop_followup_for_completion_text: fn(&Path, &str) -> Option<String>,
     // paper hooks (4 fields)
@@ -376,16 +354,10 @@ pub struct RuntimeHooks {
     pub maybe_record_research_activity: fn(&Path, &str, &str),
     // kernel bootstrap (1 field)
     pub ensure_kernel_bootstrap: fn(),
-    // framework_runtime_extra (5 fields)
+    // framework_runtime_extra (3 fields)
     pub current_local_timestamp: fn() -> String,
-    pub write_framework_session_artifacts: fn(Value) -> Result<Value>,
-    pub build_automatic_continuity_checkpoint_payload: BuildCheckpointFn,
     pub append_evidence_index: AppendEvidenceFn,
     pub closeout_record_schema_version: fn() -> &'static str,
-    // web_fetch_guard (3 fields)
-    pub validate_and_resolve_web_fetch_url: ValidateWebFetchUrlFn,
-    pub resolve_web_fetch_redirect: ResolveWebFetchRedirectFn,
-    pub resolve_web_fetch_addresses: ResolveWebFetchAddressesFn,
     // mcp_pre_guard (1 field)
     pub evaluate_mcp_pre_guard_safe: fn(&str, &Value, &Path) -> McpPreGuardVerdict,
     // research_tool_dispatch (1 field)
@@ -410,18 +382,12 @@ pub struct RuntimeHooks {
 impl Default for RuntimeHooks {
     fn default() -> Self {
         Self {
-            // framework_runtime (5 fields)
+            // framework_runtime (3 fields)
             closeout_record_path_for_task: |_, _| {
                 Err(FrameworkError::validation(
                     "CLOSEOUT_RECORD_PATH not registered",
                 ))
             },
-            evaluate_closeout_record_file_for_task: |_, _, _| {
-                Err(FrameworkError::validation(
-                    "evaluate_closeout_record_file_for_task not registered",
-                ))
-            },
-            extract_post_tool_duration_ms: |_| None,
             post_tool_call_succeeded: |_| true,
             closeout_stop_followup_for_completion_text: |_, _| None,
             // paper hooks (4 fields) — no-op defaults
@@ -433,36 +399,14 @@ impl Default for RuntimeHooks {
             maybe_record_research_activity: |_, _, _| {},
             // kernel bootstrap (1 field)
             ensure_kernel_bootstrap: || {},
-            // framework_runtime_extra (5 fields)
+            // framework_runtime_extra (3 fields)
             current_local_timestamp: || "1970-01-01T00:00:00Z".to_string(),
-            write_framework_session_artifacts: |_| {
-                Err(FrameworkError::validation(
-                    "WRITE_FRAMEWORK_SESSION_ARTIFACTS not registered",
-                ))
-            },
-            build_automatic_continuity_checkpoint_payload: |_, _, _, _, _, _| Value::Null,
             append_evidence_index: |_, _, _| {
                 Err(FrameworkError::validation(
                     "APPEND_EVIDENCE_INDEX not registered",
                 ))
             },
             closeout_record_schema_version: || "closeout-record-v1",
-            // web_fetch_guard (3 fields)
-            validate_and_resolve_web_fetch_url: |_| {
-                Err(FrameworkError::validation(
-                    "VALIDATE_AND_RESOLVE_WEB_FETCH_URL not registered",
-                ))
-            },
-            resolve_web_fetch_redirect: |_, _| {
-                Err(FrameworkError::validation(
-                    "RESOLVE_WEB_FETCH_REDIRECT not registered",
-                ))
-            },
-            resolve_web_fetch_addresses: |_, _| {
-                Err(FrameworkError::validation(
-                    "RESOLVE_WEB_FETCH_ADDRESSES not registered",
-                ))
-            },
             // mcp_pre_guard (1 field) — blocked by default
             evaluate_mcp_pre_guard_safe: |_, _, _| McpPreGuardVerdict {
                 blocked: true,

@@ -31,8 +31,6 @@ pub struct ParallelReviewMarkers {
 
 type IsReviewPromptFn = fn(&str) -> bool;
 type HostProviderRoutingAliasesFn = fn(&str) -> Vec<String>;
-type TouchKernelBootstrapFn = fn();
-type EnsureKernelBootstrapFn = fn();
 type DiscoverSkillRepoRootFn = fn() -> Option<PathBuf>;
 type SkillRoutingRuntimeJsonFn = fn(&std::path::Path) -> PathBuf;
 type ParallelReviewMarkersFn = fn() -> ParallelReviewMarkers;
@@ -40,8 +38,6 @@ type ParallelReviewMarkersFn = fn() -> ParallelReviewMarkers;
 struct RoutingHooks {
     is_review_prompt: IsReviewPromptFn,
     host_provider_routing_aliases: HostProviderRoutingAliasesFn,
-    touch_kernel_bootstrap: TouchKernelBootstrapFn,
-    ensure_kernel_bootstrap: EnsureKernelBootstrapFn,
     discover_skill_repo_root: DiscoverSkillRepoRootFn,
     skill_routing_runtime_json: SkillRoutingRuntimeJsonFn,
     parallel_review_markers: ParallelReviewMarkersFn,
@@ -54,8 +50,6 @@ static HOOKS: OnceLock<RoutingHooks> = OnceLock::new();
 pub fn register_hooks(
     is_review_prompt: IsReviewPromptFn,
     host_provider_routing_aliases: HostProviderRoutingAliasesFn,
-    touch_kernel_bootstrap: TouchKernelBootstrapFn,
-    ensure_kernel_bootstrap: EnsureKernelBootstrapFn,
     discover_skill_repo_root: DiscoverSkillRepoRootFn,
     skill_routing_runtime_json: SkillRoutingRuntimeJsonFn,
     parallel_review_markers: ParallelReviewMarkersFn,
@@ -64,8 +58,6 @@ pub fn register_hooks(
         .set(RoutingHooks {
             is_review_prompt,
             host_provider_routing_aliases,
-            touch_kernel_bootstrap,
-            ensure_kernel_bootstrap,
             discover_skill_repo_root,
             skill_routing_runtime_json,
             parallel_review_markers,
@@ -95,22 +87,6 @@ pub fn host_provider_routing_aliases(host_id: &str) -> Vec<String> {
         .get()
         .map(|h| (h.host_provider_routing_aliases)(host_id))
         .unwrap_or_else(|| vec![host_id.trim().to_ascii_lowercase()])
-}
-
-/// Touch test kernel bootstrap (test-mode initialization).
-/// Default: no-op.
-pub fn touch_kernel_bootstrap() {
-    if let Some(h) = HOOKS.get() {
-        (h.touch_kernel_bootstrap)();
-    }
-}
-
-/// Ensure kernel bootstrap has been performed.
-/// Default: no-op.
-pub fn ensure_kernel_bootstrap() {
-    if let Some(h) = HOOKS.get() {
-        (h.ensure_kernel_bootstrap)();
-    }
 }
 
 /// Discover the skill policy repository root.
