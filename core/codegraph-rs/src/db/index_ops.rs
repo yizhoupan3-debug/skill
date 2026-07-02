@@ -61,7 +61,7 @@ impl<'conn> IngestStmts<'conn> {
     pub fn prepare(conn: &'conn Connection) -> rusqlite::Result<Self> {
         Ok(Self {
             insert_node: conn.prepare(
-                "INSERT INTO nodes (id, symbol, kind, language, file_path, line, extra) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                "INSERT OR REPLACE INTO nodes (id, symbol, kind, language, file_path, line, extra) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             )?,
             insert_node_ignore: conn.prepare(
                 "INSERT OR IGNORE INTO nodes (id, symbol, kind, language, file_path, line, extra) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
@@ -105,7 +105,7 @@ pub fn ingest_parsed_file_with_stmts(
             sym.line,
             sym.extra_json()
         ])?;
-        node_ids.insert(sym.symbol.clone(), id);
+        node_ids.entry(sym.symbol.clone()).or_insert(id);
     }
     let mut edge_count = 0u64;
     for edge in &parsed.edges {

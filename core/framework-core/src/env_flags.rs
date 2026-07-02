@@ -256,20 +256,49 @@ pub fn router_rs_pre_goal_enabled() -> bool {
 
 /// Canonical `ROUTER_RS_HOOK_SILENT`; legacy `ROUTER_RS_CURSOR_HOOK_SILENT` — default false.
 pub fn router_rs_hook_silent_enabled() -> bool {
-    env_enabled_default_false("ROUTER_RS_HOOK_SILENT")
-        || env_enabled_default_false("ROUTER_RS_CURSOR_HOOK_SILENT")
+    #[cfg(not(test))]
+    {
+        use std::sync::OnceLock;
+        static CACHE: OnceLock<bool> = OnceLock::new();
+        return *CACHE.get_or_init(|| {
+            env_enabled_default_false("ROUTER_RS_HOOK_SILENT")
+                || env_enabled_default_false("ROUTER_RS_CURSOR_HOOK_SILENT")
+        });
+    }
+    #[cfg(test)]
+    {
+        env_enabled_default_false("ROUTER_RS_HOOK_SILENT")
+            || env_enabled_default_false("ROUTER_RS_CURSOR_HOOK_SILENT")
+    }
 }
 
 /// Hook outbound context max chars (clamped [1024, 65536], default 8192).
 /// Canonical `ROUTER_RS_HOOK_OUTBOUND_CONTEXT_MAX_CHARS`; legacy `ROUTER_RS_CURSOR_HOOK_OUTBOUND_CONTEXT_MAX_CHARS`.
 pub fn router_rs_hook_outbound_context_max_bytes() -> usize {
-    parse_usize_clamped(
-        "ROUTER_RS_HOOK_OUTBOUND_CONTEXT_MAX_CHARS",
-        "ROUTER_RS_CURSOR_HOOK_OUTBOUND_CONTEXT_MAX_CHARS",
-        8192,
-        1024,
-        65536,
-    )
+    #[cfg(not(test))]
+    {
+        use std::sync::OnceLock;
+        static CACHE: OnceLock<usize> = OnceLock::new();
+        return *CACHE.get_or_init(|| {
+            parse_usize_clamped(
+                "ROUTER_RS_HOOK_OUTBOUND_CONTEXT_MAX_CHARS",
+                "ROUTER_RS_CURSOR_HOOK_OUTBOUND_CONTEXT_MAX_CHARS",
+                8192,
+                1024,
+                65536,
+            )
+        });
+    }
+    #[cfg(test)]
+    {
+        parse_usize_clamped(
+            "ROUTER_RS_HOOK_OUTBOUND_CONTEXT_MAX_CHARS",
+            "ROUTER_RS_CURSOR_HOOK_OUTBOUND_CONTEXT_MAX_CHARS",
+            8192,
+            1024,
+            65536,
+        )
+    }
 }
 
 /// Canonical `ROUTER_RS_PRE_GOAL_STRICT_DISK`; legacy `ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK`.
@@ -286,8 +315,20 @@ pub fn router_rs_pre_goal_strict_disk_enabled() -> bool {
 
 /// Canonical `ROUTER_RS_HOOK_STATE_FAIL_OPEN`; legacy `ROUTER_RS_CURSOR_HOOK_STATE_FAIL_OPEN`.
 pub fn router_rs_hook_state_fail_open_enabled() -> bool {
-    env_enabled_default_false("ROUTER_RS_HOOK_STATE_FAIL_OPEN")
-        || env_enabled_default_false("ROUTER_RS_CURSOR_HOOK_STATE_FAIL_OPEN")
+    #[cfg(not(test))]
+    {
+        use std::sync::OnceLock;
+        static CACHE: OnceLock<bool> = OnceLock::new();
+        return *CACHE.get_or_init(|| {
+            env_enabled_default_false("ROUTER_RS_HOOK_STATE_FAIL_OPEN")
+                || env_enabled_default_false("ROUTER_RS_CURSOR_HOOK_STATE_FAIL_OPEN")
+        });
+    }
+    #[cfg(test)]
+    {
+        env_enabled_default_false("ROUTER_RS_HOOK_STATE_FAIL_OPEN")
+            || env_enabled_default_false("ROUTER_RS_CURSOR_HOOK_STATE_FAIL_OPEN")
+    }
 }
 
 fn parse_env_u32(key: &str) -> Option<u32> {
@@ -296,21 +337,58 @@ fn parse_env_u32(key: &str) -> Option<u32> {
 
 /// Canonical `ROUTER_RS_HOOK_STATE_LOCK_RETRIES`; legacy `ROUTER_RS_CURSOR_HOOK_STATE_LOCK_RETRIES` (default 100).
 pub fn router_rs_hook_state_lock_retries() -> u32 {
-    parse_env_u32("ROUTER_RS_HOOK_STATE_LOCK_RETRIES")
-        .or_else(|| parse_env_u32("ROUTER_RS_CURSOR_HOOK_STATE_LOCK_RETRIES"))
-        .unwrap_or(100)
+    #[cfg(not(test))]
+    {
+        use std::sync::OnceLock;
+        static CACHE: OnceLock<u32> = OnceLock::new();
+        return *CACHE.get_or_init(|| {
+            parse_env_u32("ROUTER_RS_HOOK_STATE_LOCK_RETRIES")
+                .or_else(|| parse_env_u32("ROUTER_RS_CURSOR_HOOK_STATE_LOCK_RETRIES"))
+                .unwrap_or(100)
+        });
+    }
+    #[cfg(test)]
+    {
+        parse_env_u32("ROUTER_RS_HOOK_STATE_LOCK_RETRIES")
+            .or_else(|| parse_env_u32("ROUTER_RS_CURSOR_HOOK_STATE_LOCK_RETRIES"))
+            .unwrap_or(100)
+    }
 }
 
 /// Canonical `ROUTER_RS_HOOK_STATE_FILE_SYNC`; legacy `ROUTER_RS_CURSOR_HOOK_STATE_FILE_SYNC`.
 pub fn router_rs_hook_state_file_sync_enabled() -> bool {
-    env_enabled_default_false("ROUTER_RS_HOOK_STATE_FILE_SYNC")
-        || env_enabled_default_false("ROUTER_RS_CURSOR_HOOK_STATE_FILE_SYNC")
+    #[cfg(not(test))]
+    {
+        use std::sync::OnceLock;
+        static CACHE: OnceLock<bool> = OnceLock::new();
+        return *CACHE.get_or_init(|| {
+            env_enabled_default_false("ROUTER_RS_HOOK_STATE_FILE_SYNC")
+                || env_enabled_default_false("ROUTER_RS_CURSOR_HOOK_STATE_FILE_SYNC")
+        });
+    }
+    #[cfg(test)]
+    {
+        env_enabled_default_false("ROUTER_RS_HOOK_STATE_FILE_SYNC")
+            || env_enabled_default_false("ROUTER_RS_CURSOR_HOOK_STATE_FILE_SYNC")
+    }
 }
 
 /// Canonical `ROUTER_RS_HOOK_STATE_DIR_SYNC`; legacy `ROUTER_RS_CURSOR_HOOK_STATE_DIR_SYNC`.
 pub fn router_rs_hook_state_dir_sync_enabled() -> bool {
-    env_enabled_default_false("ROUTER_RS_HOOK_STATE_DIR_SYNC")
-        || env_enabled_default_false("ROUTER_RS_CURSOR_HOOK_STATE_DIR_SYNC")
+    #[cfg(not(test))]
+    {
+        use std::sync::OnceLock;
+        static CACHE: OnceLock<bool> = OnceLock::new();
+        return *CACHE.get_or_init(|| {
+            env_enabled_default_false("ROUTER_RS_HOOK_STATE_DIR_SYNC")
+                || env_enabled_default_false("ROUTER_RS_CURSOR_HOOK_STATE_DIR_SYNC")
+        });
+    }
+    #[cfg(test)]
+    {
+        env_enabled_default_false("ROUTER_RS_HOOK_STATE_DIR_SYNC")
+            || env_enabled_default_false("ROUTER_RS_CURSOR_HOOK_STATE_DIR_SYNC")
+    }
 }
 
 /// Canonical `ROUTER_RS_CARGO_CHECK_SYNC`; legacy `ROUTER_RS_CURSOR_CARGO_CHECK_SYNC`.

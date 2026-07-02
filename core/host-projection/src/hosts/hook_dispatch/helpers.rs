@@ -235,29 +235,6 @@ pub(crate) fn value_to_hook_output(val: &Value) -> Option<HookOutput> {
     Some(HookOutput::Raw(val.clone()))
 }
 
-/// Convert a HookOutput to a JSON value (host-agnostic).
-#[cfg(any(test, feature = "test-support"))]
-pub(crate) fn hook_output_to_json_value(event_name: &str, output: Option<HookOutput>) -> Value {
-    match output {
-        None => serde_json::json!({}),
-        Some(HookOutput::None) => serde_json::json!({}),
-        Some(HookOutput::AdditionalContext(ctx)) => {
-            serde_json::json!({ "context_append": format!("[{event_name}] {ctx}") })
-        }
-        Some(HookOutput::Advisory { message }) => {
-            serde_json::json!({ "followup_message": message })
-        }
-        Some(HookOutput::Block { reason }) => {
-            serde_json::json!({ "decision": "block", "reason": reason })
-        }
-        Some(HookOutput::Deny { reason }) => {
-            serde_json::json!({ "decision": "block", "reason": reason })
-        }
-        Some(HookOutput::Warn { message }) => serde_json::json!({ "warning": message }),
-        Some(HookOutput::Raw(v)) => v,
-    }
-}
-
 /// Check if a payload looks like a foreign host's hook stdin envelope (not the active host).
 /// Detects Cursor-style envelopes by checking for `cursor_version` + `workspace_roots`.
 pub fn payload_looks_like_foreign_hook_stdin(payload: &Value) -> bool {

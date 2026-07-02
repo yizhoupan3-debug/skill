@@ -58,44 +58,23 @@ pub(crate) fn compile_patterns(patterns: &[&str]) -> Result<Vec<Regex>, regex::E
 
 /// Strip fenced code blocks, inline code, URLs, blockquotes, and double-quoted strings from text.
 /// Used by review_signals and goal_signals for signal detection on sanitized input.
+///
+/// Single combined regex replaces the previous 5 separate `replace_all` passes,
+/// reducing string scans from 5× to 1× for texts >= 200 chars.
 pub fn strip_quoted_or_codeblock_or_url(text: &str) -> String {
-    // Short text fast path: avoid 5 regex replace_all passes.
+    // Short text fast path: avoid regex scan entirely.
     if text.len() < 200 {
         return text.to_string();
     }
-    static RE_FENCED: OnceLock<Regex> = OnceLock::new();
-    static RE_INLINE: OnceLock<Regex> = OnceLock::new();
-    static RE_URL: OnceLock<Regex> = OnceLock::new();
-    static RE_BLOCKQUOTE: OnceLock<Regex> = OnceLock::new();
-    static RE_QUOTED: OnceLock<Regex> = OnceLock::new();
-    let mut cleaned = text.to_string();
-    cleaned = RE_FENCED
+    static RE_COMBINED: OnceLock<Regex> = OnceLock::new();
+    RE_COMBINED
         .get_or_init(|| {
-            Regex::new(r"(?s)```.*?```").unwrap_or_else(|e| panic!("invalid regex: {e}"))
+            Regex::new(
+                r#"(?s)```.*?```|`[^`\n]*`|https?://\S+|(?m)^\s*>\s.*$|"[^"\n]*""#,
+            )
+            .unwrap_or_else(|e| panic!("invalid combined re: {e}"))
         })
-        .replace_all(&cleaned, " ")
-        .into_owned();
-    cleaned = RE_INLINE
-        .get_or_init(|| Regex::new(r"`[^`\n]*`").unwrap_or_else(|e| panic!("invalid regex: {e}")))
-        .replace_all(&cleaned, " ")
-        .into_owned();
-    cleaned = RE_URL
-        .get_or_init(|| {
-            Regex::new(r"https?://\S+").unwrap_or_else(|e| panic!("invalid regex: {e}"))
-        })
-        .replace_all(&cleaned, " ")
-        .into_owned();
-    cleaned = RE_BLOCKQUOTE
-        .get_or_init(|| {
-            Regex::new(r"(?m)^\s*>\s.*$").unwrap_or_else(|e| panic!("invalid regex: {e}"))
-        })
-        .replace_all(&cleaned, " ")
-        .into_owned();
-    RE_QUOTED
-        .get_or_init(|| {
-            Regex::new("\"[^\"\\n]*\"").unwrap_or_else(|e| panic!("invalid regex: {e}"))
-        })
-        .replace_all(&cleaned, " ")
+        .replace_all(text, " ")
         .into_owned()
 }
 

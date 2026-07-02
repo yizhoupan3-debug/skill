@@ -20,11 +20,6 @@ pub fn mark_hook_start() {
 
 pub fn emit_hook_timing_line(event: &str) {
     if !router_rs_hook_timing_enabled() {
-        // Reset thread-local accumulators in case a prior call accumulated state
-        // before the env flag was turned off at runtime.
-        HOOK_STARTED.with(|c| c.set(None));
-        LOCK_WAIT_MS.with(|c| c.set(0));
-        CARGO_CHECK_MS.with(|c| c.set(0));
         return;
     }
     let duration_ms = HOOK_STARTED

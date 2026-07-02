@@ -1,10 +1,11 @@
 //! Workspace DAG compliance smoke tests.
 //!
-//! Verifies the eight-crate architecture matches roadmap v5 §1.3:
-//! - 8 core crates exist in workspace (core-math merged into runtime-core 2026-06-11)
+//! Verifies the core-crate architecture:
 //! - Leaf crates have zero workspace deps
 //! - DAG direction is correct (no reverse edges)
 //! - B10/B8 are fully independent
+//!
+//! Note: core-policy and framework-kernel have been merged into framework-core (2026-06-29).
 
 use std::path::PathBuf;
 
@@ -31,32 +32,34 @@ fn read_cargo_toml(relative_path: &str) -> String {
 }
 
 fn has_workspace_dep(content: &str, dep_name: &str) -> bool {
-    // Check if dep_name appears as a path dependency
+    // Check if dep_name appears as a path dependency (exact match, not prefix)
     for line in content.lines() {
         let trimmed = line.trim();
-        if trimmed.starts_with(dep_name) && trimmed.contains("path") {
-            return true;
-        }
-        // Also check quoted form: "dep-name" = { path = ... }
-        if trimmed.starts_with(&format!("\"{}\"", dep_name)) && trimmed.contains("path") {
-            return true;
+        if trimmed.contains("path") {
+            // Match "name = {" or "\"name\" = {"  (exact dep name, not prefix)
+            // Split on '=' and check the first part matches
+            if let Some(name_part) = trimmed.split('=').next() {
+                let name = name_part.trim().trim_matches('"');
+                if name == dep_name {
+                    return true;
+                }
+            }
         }
     }
     false
 }
 
 #[test]
-fn workspace_has_nine_core_crates() {
+fn workspace_has_seven_core_crates() {
     let root = workspace_root();
     let workspace_content = std::fs::read_to_string(root.join("Cargo.toml")).unwrap();
 
     let expected_crates = [
         "core/core-state",
-        "core/core-policy",
-        "core/framework-kernel",
+        "core/framework-core",
         "core/routing-engine",
         "core/router-rs",
-        "tools/codegraph-rs",
+        "core/codegraph-rs",
         "core/research-harness",
     ];
 
@@ -70,62 +73,33 @@ fn workspace_has_nine_core_crates() {
 }
 
 #[test]
-fn leaf_crates_have_zero_workspace_deps() {
-    // These crates should have NO path dependencies to other workspace crates
-    // Note: research-harness depends on core-state, so it's no longer a leaf
-    let leaf_crates = [
-        "core/core-state",
-        "core/framework-kernel",
-        "core/routing-engine",
-        "tools/codegraph-rs",
-    ];
-
-    let workspace_core = [
+fn framework_core_is_foundation_leaf() {
+    // framework-core (merged from core-policy + framework-kernel) is the L0 foundation.
+    // It should not depend on any higher-layer workspace crate.
+    let content = read_cargo_toml("core/framework-core");
+    let higher_crates = [
         "core-state",
-        "core-policy",
-        "framework-kernel",
         "routing-engine",
         "router-rs",
         "codegraph-rs",
         "research-harness",
     ];
-
-    for leaf in &leaf_crates {
-        let content = read_cargo_toml(leaf);
-        for dep in &workspace_core {
-            // Skip self-references
-            if leaf.ends_with(dep) {
-                continue;
-            }
-            assert!(
-                !has_workspace_dep(&content, dep),
-                "Leaf crate {} should not depend on {}",
-                leaf,
-                dep
-            );
-        }
+    for dep in &higher_crates {
+        assert!(
+            !has_workspace_dep(&content, dep),
+            "framework-core should not depend on {}",
+            dep
+        );
     }
 }
 
 #[test]
-fn core_policy_deps_are_correct() {
-    let content = read_cargo_toml("core/core-policy");
+fn core_state_deps_are_correct() {
+    // core-state (L4) depends on framework-core (L0)
+    let content = read_cargo_toml("core/core-state");
     assert!(
-        has_workspace_dep(&content, "core-state"),
-        "core-policy should depend on core-state"
-    );
-    assert!(
-        has_workspace_dep(&content, "framework-kernel"),
-        "core-policy should depend on framework-kernel"
-    );
-    // Should NOT depend on router-rs, routing-engine, etc.
-    assert!(
-        !has_workspace_dep(&content, "router-rs"),
-        "core-policy should not depend on router-rs"
-    );
-    assert!(
-        !has_workspace_dep(&content, "routing-engine"),
-        "core-policy should not depend on routing-engine"
+        has_workspace_dep(&content, "framework-core"),
+        "core-state should depend on framework-core"
     );
 }
 
@@ -134,8 +108,7 @@ fn router_rs_deps_are_correct() {
     let content = read_cargo_toml("core/router-rs");
     let expected_deps = [
         "core-state",
-        "framework-kernel",
-        "core-policy",
+        "framework-core",
         "routing-engine",
     ];
     for dep in &expected_deps {
@@ -149,11 +122,10 @@ fn router_rs_deps_are_correct() {
 
 #[test]
 fn b10_codegraph_rs_is_independent() {
-    let content = read_cargo_toml("tools/codegraph-rs");
+    let content = read_cargo_toml("core/codegraph-rs");
     let framework_crates = [
         "core-state",
-        "core-policy",
-        "framework-kernel",
+        "framework-core",
         "routing-engine",
         "router-rs",
     ];
@@ -167,18 +139,10 @@ fn b10_codegraph_rs_is_independent() {
 }
 
 #[test]
-fn dag_max_depth_is_four_hops() {
-    // Longest path: B7 → B4 → B3 → B1 → B0 = 4 hops
-    // Verify by checking the dependency chain exists:
-    // router-rs → core-policy → core-state (3 hops)
-    // router-rs → core-policy → framework-kernel (3 hops)
-    // This is currently the longest actual path (B7/B3/B4 are still in router-rs)
+fn dag_max_depth_is_three_hops() {
+    // Longest path: router-rs → core-state → framework-core = 3 hops
     let content = read_cargo_toml("core/router-rs");
-    assert!(has_workspace_dep(&content, "core-policy"));
-    let policy_content = read_cargo_toml("core/core-policy");
-    assert!(has_workspace_dep(&policy_content, "core-state"));
-    assert!(has_workspace_dep(&policy_content, "framework-kernel"));
-
-    // When B3/B4/B7 are extracted, the path will extend to 4 hops
-    // This test documents the current max depth
+    assert!(has_workspace_dep(&content, "core-state"));
+    let state = read_cargo_toml("core/core-state");
+    assert!(has_workspace_dep(&state, "framework-core"));
 }

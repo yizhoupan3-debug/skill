@@ -63,6 +63,10 @@ fn parse_manifest_content(
     let mut symbols = Vec::new();
     let mut edges = Vec::new();
 
+    // Track line numbers for keyword nodes to avoid node ID collisions with skill slugs
+    // (both use `path:line:symbol` as the ID, and skill nodes all use line=0).
+    let mut next_keyword_line: u32 = 1;
+
     for entry in skills {
         let arr = match entry.as_array() {
             Some(a) if a.len() > KEY_SKILL_PATH => a,
@@ -92,11 +96,12 @@ fn parse_manifest_content(
                 symbols.push(ParsedSymbol {
                     symbol: kw.to_string(),
                     kind: "keyword".to_string(),
-                    line: 0,
+                    line: next_keyword_line,
                     start_col: 0,
                     end_line: 0,
                     end_col: 0,
                 });
+                next_keyword_line += 1;
                 edges.push(ParsedEdge {
                     caller_symbol: slug.to_string(),
                     callee_symbol: kw.to_string(),

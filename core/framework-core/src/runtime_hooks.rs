@@ -26,22 +26,6 @@ pub fn check_hook_duplicates(_repo_root: &Path) -> Vec<String> {
 
 static RUNTIME_CORE_HOOKS: RwLock<Option<RuntimeCoreHooks>> = RwLock::new(None);
 
-/// Get the registered RuntimeCoreHooks, panicking if not initialized.
-/// Prefer `try_hooks()` which returns `Option` for graceful handling.
-///
-/// # Panics
-/// Panics if `init_hooks()` (or `register()`) has not been called before this function is invoked.
-/// There is no compile-time check enforcing this ordering — incorrect initialization will cause a panic.
-#[deprecated(note = "use try_hooks() instead for non-panicking access")]
-#[track_caller]
-pub fn hooks() -> RuntimeCoreHooks {
-    RUNTIME_CORE_HOOKS
-        .read()
-        .unwrap_or_else(|e| e.into_inner())
-        .clone()
-        .unwrap_or_else(|| panic!("RuntimeCoreHooks not registered (call register() before use)"))
-}
-
 /// Try to get registered hooks without panicking.
 /// Returns `None` if `register()` has not been called yet.
 pub fn try_hooks() -> Option<RuntimeCoreHooks> {

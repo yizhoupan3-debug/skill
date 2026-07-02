@@ -7,7 +7,7 @@ use tempfile::tempdir;
 
 #[test]
 fn update_audit_cli_contract_is_registered() {
-    let args = read_text(&project_root().join("core/framework-kernel/src/cli_args.rs"));
+    let args = read_text(&project_root().join("core/framework-core/src/cli_args.rs"));
     let maint = read_text(&project_root().join("core/framework-maint/src/maint.rs"));
     assert!(args.contains("UpdateAudit(UpdateAuditArgs)"));
     assert!(args.contains("repo_root: Option<PathBuf>"));
@@ -32,7 +32,7 @@ fn update_audit_cli_contract_is_registered() {
 
 #[test]
 fn refresh_host_projections_keeps_claude_code_projection_explicit() {
-    let args = read_text(&project_root().join("core/framework-kernel/src/cli_args.rs"));
+    let args = read_text(&project_root().join("core/framework-core/src/cli_args.rs"));
     let maint = read_text(&project_root().join("core/framework-maint/src/maint.rs"));
     assert!(args.contains("non-Codex framework installs"));
     assert!(maint.contains("let installable_tools = installable_projection_tools(&fw)?"));
