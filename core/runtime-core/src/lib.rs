@@ -249,16 +249,8 @@ pub fn init_hooks() {
                 // research_tool_dispatch (1 field) — default; research-harness overrides via OnceLock
                 research_tool_dispatch: |_, _| Err(core_errors::FrameworkError::validation("research_tool_dispatch not registered")),
                 // mcp_tool_routing (2 fields)
-                mcp_tool_skill_route: |query: &str, host_id: &str, first_turn: bool, repo_root: &str| {
-                    let repo_root = std::path::Path::new(repo_root);
-                    let runtime_path = framework_core::skill_repo::skill_routing_runtime_json(repo_root);
-                    let records = routing_engine::route::load_records_cached_for_stdio(
-                        Some(&runtime_path),
-                    )?;
-                    // Direct call to route_task_with_manifest_fallback avoids:
-                    // 1. Double filter_records_for_host (done once inside the function)
-                    // 2. SkillRecord → serde_json::Value → SkillRecord round-trip
-                    // 3. Hook function pointer indirection
+                mcp_tool_skill_route: |query: &str, host_id: &str, first_turn: bool, records: std::sync::Arc<Vec<routing_engine::route::SkillRecord>>| {
+                    let start = std::time::Instant::now();
                     let decision = framework_extra::route_manifest_fallback::route_task_with_manifest_fallback(
                         records.as_ref(),
                         Some(host_id),
@@ -266,20 +258,19 @@ pub fn init_hooks() {
                         "session",
                         true,
                         first_turn,
-                    )?;
-                    if decision.selected_skill.is_empty() || decision.selected_skill == "none" {
-                        Ok(serde_json::to_string(&serde_json::json!({
-                            "routed": false, "skill_slug": null,
-                            "skill_path": null, "match_reason": "no match",
-                        })).map_err(|e| e.to_string())?)
-                    } else {
-                        Ok(serde_json::to_string(&serde_json::json!({
-                            "routed": true,
-                            "skill_slug": decision.selected_skill,
-                            "skill_path": decision.selected_skill_path,
-                            "match_reason": decision.reasons.first().cloned().unwrap_or_default(),
-                        })).map_err(|e| e.to_string())?)
+                    );
+                    let elapsed = start.elapsed();
+                    match &decision {
+                        Ok(d) => tracing::debug!(
+                            query = %query, skill = %d.selected_skill, score = d.score,
+                            latency_us = elapsed.as_micros(), "skill_route decision"
+                        ),
+                        Err(e) => tracing::warn!(
+                            query = %query, latency_us = elapsed.as_micros(),
+                            error = %e, "skill_route error"
+                        ),
                     }
+                    decision
                 },
                 // tool_dispatch (4 fields)
                 tool_goal_state_manage_dispatch: crate::framework_runtime::tool_handlers::goal_state_manage_dispatch,

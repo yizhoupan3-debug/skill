@@ -114,74 +114,74 @@ pub(super) fn tool_skill_route(
     // cross-session state pollution (P2 #16). All calls are treated uniformly.
     let first_turn = false;
 
-    let route_result = crate::hooks::mcp_tool_skill_route(
-        query,
-        host_id,
-        first_turn,
-        &repo_root.to_string_lossy(),
-    )?;
+    // Load records once — hook receives pre-loaded Arc so it never re-reads disk.
+    let runtime_path = skill_routing_runtime_json(repo_root);
+    let records: std::sync::Arc<Vec<routing_engine::route::SkillRecord>> =
+        routing_engine::route::load_records_cached_for_stdio(Some(&runtime_path))?;
 
-    // Enhance: append recommended_tools + skill_summary from tool routing
-    let mut result_value: Value = serde_json::from_str(&route_result).unwrap_or(Value::Null);
-    if let Some(obj) = result_value.as_object_mut() {
-        // --- recommended_tools ---
-        let registry_path = mcp_tool_registry::resolve_tool_registry_path()
-            .unwrap_or_else(|| {
-                repo_root.join(framework_core::constants::MCP_TOOL_REGISTRY_RELATIVE_PATH)
-            });
+    // Route via hook — returns rich RouteDecision, no lossy JSON round-trip.
+    let decision = crate::hooks::mcp_tool_skill_route(query, host_id, first_turn, records)?;
 
-        let tools = (|| -> Option<Vec<Value>> {
-            let records = mcp_tool_registry::load_tool_records_cached(&registry_path).ok()?;
-            let filtered: Vec<_> = records
-                .into_iter()
-                .filter(|r| !r.tool_flags.iter().any(|f| f == "no_routing"))
-                .collect();
-            if filtered.is_empty() {
-                return None;
-            }
-            let results = tool_routing_engine::search::search_tools(query, &filtered, 3);
-            if results.is_empty() {
-                return None;
-            }
-            Some(
-                results
+    let no_hit = decision.selected_skill.is_empty() || decision.selected_skill == "none";
+
+    // Build JSON response from RouteDecision fields
+    let mut response = serde_json::json!({
+        "selected_skill": if no_hit { Value::Null } else { Value::String(decision.selected_skill.clone()) },
+        "score": decision.score,
+        "reasons": decision.reasons,
+        "matched_token_count": decision.matched_token_count,
+        "layer": decision.layer,
+        "fuzzy_match": decision.fuzzy_match,
+        "overlay_skill": decision.overlay_skill,
+        "route_context": decision.route_context,
+    });
+
+    if let Some(obj) = response.as_object_mut() {
+        if !no_hit {
+            // --- recommended_tools (top-3, excluding no_routing) ---
+            let registry_path = mcp_tool_registry::resolve_tool_registry_path()
+                .unwrap_or_else(|| {
+                    repo_root.join(framework_core::constants::MCP_TOOL_REGISTRY_RELATIVE_PATH)
+                });
+            let tools = (|| -> Option<Vec<Value>> {
+                let records = mcp_tool_registry::load_tool_records_cached(&registry_path).ok()?;
+                let filtered: Vec<_> = records
                     .into_iter()
-                    .map(|d| {
-                        json!({
-                            "slug": d.selected_tool,
-                            "score": d.score,
-                            "dispatch_domain": d.dispatch_domain,
-                            "fuzzy_match": d.fuzzy_match,
-                            "reasons": d.reasons,
-                        })
-                    })
-                    .collect(),
-            )
-        })();
+                    .filter(|r| !r.tool_flags.iter().any(|f| f == "no_routing"))
+                    .collect();
+                if filtered.is_empty() {
+                    return None;
+                }
+                let results = tool_routing_engine::search::search_tools(query, &filtered, 3);
+                if results.is_empty() {
+                    return None;
+                }
+                Some(results.into_iter().map(|d| json!({
+                    "slug": d.selected_tool, "score": d.score,
+                    "dispatch_domain": d.dispatch_domain,
+                    "fuzzy_match": d.fuzzy_match,
+                    "reasons": d.reasons,
+                })).collect())
+            })();
+            if let Some(t) = tools {
+                obj.insert("recommended_tools".to_string(), json!(t));
+            }
 
-        if let Some(tools) = tools {
-            obj.insert("recommended_tools".to_string(), json!(tools));
-        }
-
-        // --- skill_summary: inline SKILL.md first N chars ---
-        if let Some(skill_slug) = obj.get("selected_skill").and_then(Value::as_str) {
-            if !skill_slug.is_empty() && skill_slug != "none" {
-                if let Ok(path) = skill_body_path(repo_root, skill_slug) {
-                    if let Ok(content) = std::fs::read_to_string(&path) {
-                        let preview: String = content.chars().take(600).collect();
-                        let truncated = content.chars().count() > 600;
-                        obj.insert("skill_summary".to_string(), json!({
-                            "preview": preview,
-                            "truncated": truncated,
-                            "full_path": format!("{}", path.display()),
-                        }));
-                    }
+            // --- skill_summary: inline SKILL.md first N chars ---
+            if let Ok(path) = skill_body_path(repo_root, &decision.selected_skill) {
+                if let Ok(content) = std::fs::read_to_string(&path) {
+                    let preview: String = content.chars().take(600).collect();
+                    let truncated = content.chars().count() > 600;
+                    obj.insert("skill_summary".to_string(), json!({
+                        "preview": preview, "truncated": truncated,
+                        "full_path": format!("{}", path.display()),
+                    }));
                 }
             }
         }
     }
 
-    Ok(result_value.to_string())
+    Ok(serde_json::to_string(&response).map_err(|e| e.to_string())?)
 }
 
 pub(super) fn tool_skill_search(

@@ -16,6 +16,9 @@ use std::sync::Mutex;
 
 // ── Function pointer type aliases (reduce type_complexity warnings) ──
 
+/// Shared routing records — passed through hook boundary to avoid disk re-read.
+pub type RoutingRecords = std::sync::Arc<Vec<routing_engine::route::SkillRecord>>;
+
 /// Build automatic continuity checkpoint payload: (repo_root, task_id, session_id, current_query, allow_overlay, first_turn) -> Value
 type BuildCheckpointFn = fn(&Path, &str, &str, Option<&str>, bool, bool) -> Value;
 
@@ -294,10 +297,14 @@ pub(crate) fn get_research_tool_dispatch() -> Option<ResearchToolDispatchFn> {
 // JSON — no routing-engine types cross the boundary.
 
 /// MCP tool skill route: route a query to the best matching skill.
-type McpToolSkillRouteFn =
-    fn(query: &str, host_id: &str, first_turn: bool, repo_root: &str) -> Result<String>;
+type McpToolSkillRouteFn = fn(
+    query: &str,
+    host_id: &str,
+    first_turn: bool,
+    records: RoutingRecords,
+) -> Result<routing_engine::RouteDecision>;
 
-runtime_hook_proxy! { fn mcp_tool_skill_route(query: &str, host_id: &str, first_turn: bool, repo_root: &str) -> Result<String> = err("MCP_TOOL_SKILL_ROUTE not registered — runtime-core boot required"); }
+runtime_hook_proxy! { fn mcp_tool_skill_route(query: &str, host_id: &str, first_turn: bool, records: RoutingRecords) -> Result<routing_engine::RouteDecision> = err("MCP_TOOL_SKILL_ROUTE not registered — runtime-core boot required"); }
 // ── Browser dispatch (via RuntimeHooks, set via modify_runtime_hooks) ──
 type BrowserDispatchFn = fn(framework_core::cli_args::BrowserSubcommand) -> Result<()>;
 
