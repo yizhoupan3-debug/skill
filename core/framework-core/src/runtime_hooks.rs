@@ -248,7 +248,7 @@ pub struct RuntimeCoreHooks {
     // ── Host (3 fields → 1 group) ──
     pub host_provider: HostProviderHooks,
 
-    // ── Goal / RFV ──
+    // ── Goal / Quality Gate ──
     pub framework_goal_drive: fn(Value) -> Result<Value, FrameworkError>,
 
     // ── Session / background ──
