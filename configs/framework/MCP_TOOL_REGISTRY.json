@@ -1,9 +1,9 @@
 {
   "schema_version": "mcp-tool-registry-v2",
   "scope": {
-    "total_count": 79,
+    "total_count": 96,
     "builtin_count": 22,
-    "research_count": 23,
+    "research_count": 40,
     "independent_count": 15,
     "external_count": 19,
     "_comment": "auto-generated — update via tools when adding/removing tools. This is the SOLE source of truth for all tool routing."
@@ -1903,6 +1903,346 @@
           }
         }
       }
+    },
+    {
+      "slug": "math_sympy_trig_simplify",
+      "display_name": "SymPy 三角化简",
+      "description": "用 SymPy 化简三角表达式：合并 sin/cos 乘积、和差化积、双角公式化简",
+      "layer": "research",
+      "dispatch_domain": "domain:research",
+      "owner": "research",
+      "mcp_server": "research-harness",
+      "tool_flags": [
+        "readonly"
+      ],
+      "trigger_hints": [
+        "三角化简",
+        "trig",
+        "三角函数化简",
+        "合并 sin cos",
+        "三角恒等式"
+      ],
+      "input_schema": null
+    },
+    {
+      "slug": "math_sympy_subs",
+      "display_name": "SymPy 代入求值",
+      "description": "SymPy 符号代入：用数值或表达式替换符号变量，计算代入后的结果",
+      "layer": "research",
+      "dispatch_domain": "domain:research",
+      "owner": "research",
+      "mcp_server": "research-harness",
+      "tool_flags": [
+        "readonly"
+      ],
+      "trigger_hints": [
+        "代入",
+        "substitute",
+        "符号代入",
+        "替换变量",
+        "数值代入"
+      ],
+      "input_schema": null
+    },
+    {
+      "slug": "math_sympy_limit",
+      "display_name": "SymPy 求极限",
+      "description": "SymPy 符号极限计算：单侧极限、无穷极限、趋于某点的极限",
+      "layer": "research",
+      "dispatch_domain": "domain:research",
+      "owner": "research",
+      "mcp_server": "research-harness",
+      "tool_flags": [
+        "readonly"
+      ],
+      "trigger_hints": [
+        "极限",
+        "limit",
+        "求极限",
+        "lim",
+        "无穷极限"
+      ],
+      "input_schema": null
+    },
+    {
+      "slug": "math_sympy_lambdify",
+      "display_name": "SymPy 符号转数值函数",
+      "description": "SymPy lambdify：将符号表达式转为可数值计算的 Python 函数，支持 numpy 数组输入",
+      "layer": "research",
+      "dispatch_domain": "domain:research",
+      "owner": "research",
+      "mcp_server": "research-harness",
+      "tool_flags": [
+        "readonly"
+      ],
+      "trigger_hints": [
+        "lambdify",
+        "符号转数值",
+        "符号函数化",
+        "数值求值"
+      ],
+      "input_schema": null
+    },
+    {
+      "slug": "math_sympy_expand",
+      "display_name": "SymPy 展开表达式",
+      "description": "SymPy 代数展开：多项式展开、因式展开、指数和对数展开",
+      "layer": "research",
+      "dispatch_domain": "domain:research",
+      "owner": "research",
+      "mcp_server": "research-harness",
+      "tool_flags": [
+        "readonly"
+      ],
+      "trigger_hints": [
+        "展开",
+        "expand",
+        "代数展开",
+        "多项式展开"
+      ],
+      "input_schema": null
+    },
+    {
+      "slug": "math_sympy_factor",
+      "display_name": "SymPy 因式分解",
+      "description": "SymPy 因式分解：多项式因式分解、有理式简化、数域扩展因式分解",
+      "layer": "research",
+      "dispatch_domain": "domain:research",
+      "owner": "research",
+      "mcp_server": "research-harness",
+      "tool_flags": [
+        "readonly"
+      ],
+      "trigger_hints": [
+        "因式分解",
+        "factor",
+        "因式",
+        "多项式分解"
+      ],
+      "input_schema": null
+    },
+    {
+      "slug": "math_sympy_series",
+      "display_name": "SymPy 级数展开",
+      "description": "SymPy 级数展开：Taylor 展开、Laurent 级数、幂级数展开到指定阶数",
+      "layer": "research",
+      "dispatch_domain": "domain:research",
+      "owner": "research",
+      "mcp_server": "research-harness",
+      "tool_flags": [
+        "readonly"
+      ],
+      "trigger_hints": [
+        "级数",
+        "series",
+        "泰勒展开",
+        "Taylor展开",
+        "幂级数",
+        "展开到n阶"
+      ],
+      "input_schema": null
+    },
+    {
+      "slug": "math_sympy_differentiate",
+      "display_name": "SymPy 符号微分",
+      "description": "SymPy 符号求导：一阶/高阶导数、偏导数、方向导数",
+      "layer": "research",
+      "dispatch_domain": "domain:research",
+      "owner": "research",
+      "mcp_server": "research-harness",
+      "tool_flags": [
+        "readonly"
+      ],
+      "trigger_hints": [
+        "求导",
+        "微分",
+        "derivative",
+        "differential",
+        "偏导",
+        "高阶导数"
+      ],
+      "input_schema": null
+    },
+    {
+      "slug": "math_sympy_integrate",
+      "display_name": "SymPy 符号积分",
+      "description": "SymPy 符号积分：不定积分、定积分、多重积分",
+      "layer": "research",
+      "dispatch_domain": "domain:research",
+      "owner": "research",
+      "mcp_server": "research-harness",
+      "tool_flags": [
+        "readonly"
+      ],
+      "trigger_hints": [
+        "积分",
+        "integrate",
+        "不定积分",
+        "定积分",
+        "integration"
+      ],
+      "input_schema": null
+    },
+    {
+      "slug": "math_sympy_solve",
+      "display_name": "SymPy 方程求解",
+      "description": "SymPy 方程求解：代数方程、方程组、微分方程、差分方程",
+      "layer": "research",
+      "dispatch_domain": "domain:research",
+      "owner": "research",
+      "mcp_server": "research-harness",
+      "tool_flags": [
+        "readonly"
+      ],
+      "trigger_hints": [
+        "求解",
+        "solve",
+        "方程求解",
+        "方程",
+        "解方程",
+        "方程组"
+      ],
+      "input_schema": null
+    },
+    {
+      "slug": "math_sympy_dimension_propagate",
+      "display_name": "SymPy 量纲传播",
+      "description": "SymPy 量纲传播：在符号表达式中传播和推导物理量纲，验证量纲一致性",
+      "layer": "research",
+      "dispatch_domain": "domain:research",
+      "owner": "research",
+      "mcp_server": "research-harness",
+      "tool_flags": [
+        "readonly"
+      ],
+      "trigger_hints": [
+        "量纲",
+        "dimension",
+        "物理量纲",
+        "量纲分析",
+        "量纲传播"
+      ],
+      "input_schema": null
+    },
+    {
+      "slug": "math_auto_prove",
+      "display_name": "自动定理证明",
+      "description": "自动定理证明：用 SMT/Z3 自动证明数学目标命题，支持蕴含断言和循环证明",
+      "layer": "research",
+      "dispatch_domain": "domain:research",
+      "owner": "research",
+      "mcp_server": "research-harness",
+      "tool_flags": [
+        "readonly"
+      ],
+      "trigger_hints": [
+        "自动证明",
+        "auto-prove",
+        "自动定理",
+        "SMT证明",
+        "命题证明"
+      ],
+      "input_schema": null
+    },
+    {
+      "slug": "math_identity_chain",
+      "display_name": "恒等式链验证",
+      "description": "恒等式链验证：用 SymPy 验证代数恒等式链的每一步推导是否正确，支持渐近链",
+      "layer": "research",
+      "dispatch_domain": "domain:research",
+      "owner": "research",
+      "mcp_server": "research-harness",
+      "tool_flags": [
+        "readonly"
+      ],
+      "trigger_hints": [
+        "恒等式",
+        "identity",
+        "等式链",
+        "恒等式验证",
+        "等式推导"
+      ],
+      "input_schema": null
+    },
+    {
+      "slug": "math_tighten_bounds",
+      "display_name": "上下界收紧",
+      "description": "上下界收紧：用 Z3/SymPy 自动收紧数值不等式边界，寻找更紧的上下界",
+      "layer": "research",
+      "dispatch_domain": "domain:research",
+      "owner": "research",
+      "mcp_server": "research-harness",
+      "tool_flags": [
+        "readonly"
+      ],
+      "trigger_hints": [
+        "上下界",
+        "bounds",
+        "收紧",
+        "不等式边界",
+        "bound tightening"
+      ],
+      "input_schema": null
+    },
+    {
+      "slug": "math_witness_consistency",
+      "display_name": "见证一致性检查",
+      "description": "见证一致性检查：用 Z3 验证数学证明中的关键点（witness）是否满足给定条件",
+      "layer": "research",
+      "dispatch_domain": "domain:research",
+      "owner": "research",
+      "mcp_server": "research-harness",
+      "tool_flags": [
+        "readonly"
+      ],
+      "trigger_hints": [
+        "witness",
+        "见证",
+        "一致性",
+        "条件验证",
+        "关键点"
+      ],
+      "input_schema": null
+    },
+    {
+      "slug": "math_check_homomorphism",
+      "display_name": "同态检验",
+      "description": "同态检验：用 Z3 验证映射是否保持代数结构（同态验证）",
+      "layer": "research",
+      "dispatch_domain": "domain:research",
+      "owner": "research",
+      "mcp_server": "research-harness",
+      "tool_flags": [
+        "readonly"
+      ],
+      "trigger_hints": [
+        "同态",
+        "homomorphism",
+        "代数结构",
+        "映射保持",
+        "结构保持"
+      ],
+      "input_schema": null
+    },
+    {
+      "slug": "math_proof_trace_record",
+      "display_name": "证明追踪记录",
+      "description": "证明追踪记录：记录并持久化整个证明过程的推导步骤，支持进度追踪和回溯",
+      "layer": "research",
+      "dispatch_domain": "domain:research",
+      "owner": "research",
+      "mcp_server": "research-harness",
+      "tool_flags": [
+        "readonly"
+      ],
+      "trigger_hints": [
+        "证明追踪",
+        "proof trace",
+        "推导记录",
+        "证明日志",
+        "步骤记录"
+      ],
+      "input_schema": null
     }
   ]
 }

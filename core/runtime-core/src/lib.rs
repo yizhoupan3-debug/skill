@@ -270,14 +270,12 @@ pub fn init_hooks() {
                     let records = routing_engine::route::load_records_cached_for_stdio(
                         Some(&runtime_path),
                     )?;
-                    let records = routing_engine::route::filter_records_for_host(
-                        records.as_ref(), Some(host_id),
-                    )?;
-                    let records_json: Vec<serde_json::Value> = records.iter()
-                        .filter_map(|r| serde_json::to_value(r).ok())
-                        .collect();
-                    let decision = host_projection::hooks::route_task_with_manifest_fallback(
-                        &records_json,
+                    // Direct call to route_task_with_manifest_fallback avoids:
+                    // 1. Double filter_records_for_host (done once inside the function)
+                    // 2. SkillRecord → serde_json::Value → SkillRecord round-trip
+                    // 3. Hook function pointer indirection
+                    let decision = framework_extra::route_manifest_fallback::route_task_with_manifest_fallback(
+                        records.as_ref(),
                         Some(host_id),
                         query,
                         "session",
