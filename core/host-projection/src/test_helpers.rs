@@ -171,7 +171,6 @@ pub(crate) fn install_test_deps() {
             // framework_runtime_extra
             current_local_timestamp: || "1970-01-01T00:00:00Z".into(),
             write_framework_session_artifacts: |_| Err(FrameworkError::validation("not registered in test")),
-            route_task_with_manifest_fallback: |_, _, _, _, _, _| Err(FrameworkError::validation("not registered in test")),
             build_automatic_continuity_checkpoint_payload: |_, _, _, _, _, _| Value::Null,
             append_evidence_index: |_, _, _| Err(FrameworkError::validation("not registered in test")),
             closeout_record_schema_version: || "closeout-record-v1",
@@ -185,7 +184,6 @@ pub(crate) fn install_test_deps() {
             research_tool_dispatch: |_, _| Err(FrameworkError::validation("not registered in test")),
             // mcp_tool_routing
             mcp_tool_skill_route: |_, _, _, _| Err(FrameworkError::validation("not registered in test")),
-            mcp_tool_search_skills: |_, _, _, _| Err(FrameworkError::validation("not registered in test")),
             // tool_dispatch
             tool_goal_state_manage_dispatch: |_, _, _| Err(FrameworkError::validation("not registered in test")),
             tool_closeout_record_write_dispatch: |_, _| Err(FrameworkError::validation("not registered in test")),

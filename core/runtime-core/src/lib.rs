@@ -219,21 +219,6 @@ pub fn init_hooks() {
                 // framework_runtime_extra (7 fields)
                 current_local_timestamp: framework_extra::util::current_local_timestamp,
                 write_framework_session_artifacts: framework_extra::session_artifacts::write_framework_session_artifacts,
-                route_task_with_manifest_fallback: |records_json, host_id, query, session_id, allow_overlay, first_turn| {
-                    let records: Vec<routing_engine::route::SkillRecord> = records_json.iter()
-                        .filter_map(|v| serde_json::from_value(v.clone()).ok())
-                        .collect();
-                    Ok(framework_extra::route_manifest_fallback::route_task_with_manifest_fallback(
-                        &records, host_id, query, session_id, allow_overlay, first_turn,
-                    )
-                    .map(|d| host_projection::hooks::RouteDecision {
-                        selected_skill: d.selected_skill,
-                        selected_skill_path: d.selected_skill_path,
-                        reasons: d.reasons,
-                        score: d.score,
-                        checker_id: d.checker_id,
-                    })?)
-                },
                 build_automatic_continuity_checkpoint_payload: crate::framework_runtime::build_automatic_continuity_checkpoint_payload_with_task_id,
                 append_evidence_index: framework_extra::evidence::append_evidence_index_merged_row,
                 closeout_record_schema_version: || closeout_validation::CLOSEOUT_RECORD_SCHEMA_VERSION,
@@ -295,21 +280,6 @@ pub fn init_hooks() {
                             "match_reason": decision.reasons.first().cloned().unwrap_or_default(),
                         })).map_err(|e| e.to_string())?)
                     }
-                },
-                mcp_tool_search_skills: |query: &str, limit: usize, effective_host: &str, repo_root: &str| {
-                    let repo_root = std::path::Path::new(repo_root);
-                    let runtime_path = framework_core::skill_repo::skill_routing_runtime_json(repo_root);
-                    let records = routing_engine::route::load_records_cached_for_stdio(
-                        Some(&runtime_path),
-                    )?;
-                    let host_indices = routing_engine::route::filter_record_indices_for_host(
-                        records.as_ref(), Some(effective_host),
-                    )?;
-                    let rows = routing_engine::route::search_skills_subset(
-                        records.as_ref(), Some(&host_indices), query, limit,
-                    );
-                    let results = routing_engine::route::build_search_results_payload(query, rows);
-                    Ok(serde_json::to_string(&results).map_err(|e| e.to_string())?)
                 },
                 // tool_dispatch (4 fields)
                 tool_goal_state_manage_dispatch: crate::framework_runtime::tool_handlers::goal_state_manage_dispatch,

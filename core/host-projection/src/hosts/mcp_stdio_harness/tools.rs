@@ -206,6 +206,7 @@ pub(super) fn tool_skill_search(
     }
     let effective_host = host_id;
 
+    // Direct inline: no hook indirection needed (all deps available)
     let runtime_path = skill_routing_runtime_json(repo_root);
     if !runtime_path.is_file() {
         return Err(FrameworkError::from(format!(
@@ -213,12 +214,17 @@ pub(super) fn tool_skill_search(
             runtime_path.display()
         )));
     }
-    Ok(crate::hooks::mcp_tool_search_skills(
-        query,
-        limit,
-        effective_host,
-        &repo_root.to_string_lossy(),
-    )?)
+    let records = routing_engine::route::load_records_cached_for_stdio(
+        Some(&runtime_path),
+    )?;
+    let host_indices = routing_engine::route::filter_record_indices_for_host(
+        records.as_ref(), Some(effective_host),
+    )?;
+    let rows = routing_engine::route::search_skills_subset(
+        records.as_ref(), Some(&host_indices), query, limit,
+    );
+    let results = routing_engine::route::build_search_results_payload(query, rows);
+    Ok(serde_json::to_string(&results).map_err(|e| e.to_string())?)
 }
 
 pub(super) fn tool_skill_read(

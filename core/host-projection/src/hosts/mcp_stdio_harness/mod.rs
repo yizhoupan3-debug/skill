@@ -770,7 +770,7 @@ fn handle_prompts_get(
 
     let text = match prompt_name {
         "framework_routing" => {
-            let source_rel = "skills/SKILL_ROUTING_RUNTIME.json";
+            let _source_rel = "skills/SKILL_ROUTING_RUNTIME.json";
             format!(
                 "面向用户的回复必须使用简体中文（代码/路径/命令/第三方原文除外）。\n\n\
                  Use this repo shared framework runtime.\n\n\

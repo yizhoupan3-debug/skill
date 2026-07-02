@@ -16,11 +16,6 @@ use std::sync::Mutex;
 
 // ── Function pointer type aliases (reduce type_complexity warnings) ──
 
-/// Route task with manifest fallback: (records_json, host_id, query, session_id, allow_overlay, first_turn) -> Result<RouteDecision>
-/// `records_json` is a JSON-serialized slice of SkillRecord values (avoids L5→L1 dep on routing_engine).
-type RouteTaskFn =
-    fn(&[serde_json::Value], Option<&str>, &str, &str, bool, bool) -> Result<RouteDecision>;
-
 /// Build automatic continuity checkpoint payload: (repo_root, task_id, session_id, current_query, allow_overlay, first_turn) -> Value
 type BuildCheckpointFn = fn(&Path, &str, &str, Option<&str>, bool, bool) -> Value;
 
@@ -107,10 +102,6 @@ pub struct McpPreGuardVerdict {
     pub reason: Option<String>,
 }
 
-/// Mirror of `routing_engine::route::RouteDecision`.
-/// NOTE: deprecated — all callers use framework_extra directly.
-#[derive(Debug, Clone, Default)]
-#[deprecated(note = "use routing_engine::RouteDecision directly")]
 pub struct RouteDecision {
     pub selected_skill: String,
     pub selected_skill_path: Option<String>,
@@ -239,8 +230,6 @@ runtime_hook_proxy! { fn maybe_record_research_activity(repo_root: &Path, tool_n
 
 // ── Skill routing bridge: removed ──
 // Was never registered in production (register_skill_routing_bridge not called).
-// Route decision goes through route_task_with_manifest_fallback instead.
-
 // ────────────────────────────────────────────────────────────────
 // kernel_bootstrap: RuntimeHooks proxy (Phase C)
 // ────────────────────────────────────────────────────────────────
@@ -262,8 +251,6 @@ pub fn ensure_kernel_bootstrap() {
 
 runtime_hook_proxy! { fn current_local_timestamp() -> String = "1970-01-01T00:00:00Z".into(); }
 runtime_hook_proxy! { fn write_framework_session_artifacts(payload: Value) -> Result<Value> = err("WRITE_FRAMEWORK_SESSION_ARTIFACTS not registered — runtime-core boot required"); }
-runtime_hook_proxy! { fn route_task_with_manifest_fallback(runtime_records: &[serde_json::Value], host_id: Option<&str>, query: &str, session_id: &str, allow_overlay: bool, first_turn: bool) -> Result<RouteDecision> = err("ROUTE_TASK_WITH_MANIFEST_FALLBACK not registered — runtime-core boot required"); }
-runtime_hook_proxy! { fn build_automatic_continuity_checkpoint_payload(repo_root: &Path, task_line: &str, summary_text: &str, task_id: Option<&str>, repointer_focus: bool, update_registry_only_if_known: bool) -> Value = Value::Null; }
 runtime_hook_proxy! { fn append_evidence_index(repo_root: &Path, task_id: Option<&str>, entry: serde_json::Map<String, Value>) -> Result<()> = err("APPEND_EVIDENCE_INDEX not registered — runtime-core boot required"); }
 runtime_hook_proxy! { fn closeout_record_schema_version() -> &'static str = "closeout-record-v1"; }
 
@@ -309,13 +296,8 @@ pub(crate) fn get_research_tool_dispatch() -> Option<ResearchToolDispatchFn> {
 /// MCP tool skill route: route a query to the best matching skill.
 type McpToolSkillRouteFn =
     fn(query: &str, host_id: &str, first_turn: bool, repo_root: &str) -> Result<String>;
-/// MCP tool search skills: search skills by query string.
-type McpToolSearchSkillsFn =
-    fn(query: &str, limit: usize, effective_host: &str, repo_root: &str) -> Result<String>;
 
 runtime_hook_proxy! { fn mcp_tool_skill_route(query: &str, host_id: &str, first_turn: bool, repo_root: &str) -> Result<String> = err("MCP_TOOL_SKILL_ROUTE not registered — runtime-core boot required"); }
-runtime_hook_proxy! { fn mcp_tool_search_skills(query: &str, limit: usize, effective_host: &str, repo_root: &str) -> Result<String> = err("MCP_TOOL_SEARCH_SKILLS not registered — runtime-core boot required"); }
-
 // ── Browser dispatch (via RuntimeHooks, set via modify_runtime_hooks) ──
 type BrowserDispatchFn = fn(framework_core::cli_args::BrowserSubcommand) -> Result<()>;
 
@@ -387,10 +369,9 @@ pub struct RuntimeHooks {
     pub maybe_record_research_activity: fn(&Path, &str, &str),
     // kernel bootstrap (1 field)
     pub ensure_kernel_bootstrap: fn(),
-    // framework_runtime_extra (6 fields)
+    // framework_runtime_extra (5 fields)
     pub current_local_timestamp: fn() -> String,
     pub write_framework_session_artifacts: fn(Value) -> Result<Value>,
-    pub route_task_with_manifest_fallback: RouteTaskFn,
     pub build_automatic_continuity_checkpoint_payload: BuildCheckpointFn,
     pub append_evidence_index: AppendEvidenceFn,
     pub closeout_record_schema_version: fn() -> &'static str,
@@ -402,10 +383,8 @@ pub struct RuntimeHooks {
     pub evaluate_mcp_pre_guard_safe: fn(&str, &Value, &Path) -> McpPreGuardVerdict,
     // research_tool_dispatch (1 field)
     pub research_tool_dispatch: ResearchToolDispatchFn,
-    // mcp_tool_routing (2 fields)
+    // mcp_tool_routing (1 field)
     pub mcp_tool_skill_route: McpToolSkillRouteFn,
-    pub mcp_tool_search_skills: McpToolSearchSkillsFn,
-    // tool_dispatch (3 fields)
     pub tool_goal_state_manage_dispatch: GoalStateManageDispatchFn,
     pub tool_closeout_record_write_dispatch: CloseoutRecordWriteDispatchFn,
     pub tool_closeout_gate_evaluate: CloseoutGateEvaluateFn,
@@ -447,16 +426,11 @@ impl Default for RuntimeHooks {
             maybe_record_research_activity: |_, _, _| {},
             // kernel bootstrap (1 field)
             ensure_kernel_bootstrap: || {},
-            // framework_runtime_extra (7 fields)
+            // framework_runtime_extra (5 fields)
             current_local_timestamp: || "1970-01-01T00:00:00Z".to_string(),
             write_framework_session_artifacts: |_| {
                 Err(FrameworkError::validation(
                     "WRITE_FRAMEWORK_SESSION_ARTIFACTS not registered",
-                ))
-            },
-            route_task_with_manifest_fallback: |_, _, _, _, _, _| {
-                Err(FrameworkError::validation(
-                    "ROUTE_TASK_WITH_MANIFEST_FALLBACK not registered",
                 ))
             },
             build_automatic_continuity_checkpoint_payload: |_, _, _, _, _, _| Value::Null,
@@ -495,15 +469,10 @@ impl Default for RuntimeHooks {
                     "research_tool_dispatch not registered",
                 ))
             },
-            // mcp_tool_routing (2 fields)
+            // mcp_tool_routing (1 field)
             mcp_tool_skill_route: |_, _, _, _| {
                 Err(FrameworkError::validation(
                     "MCP_TOOL_SKILL_ROUTE not registered",
-                ))
-            },
-            mcp_tool_search_skills: |_, _, _, _| {
-                Err(FrameworkError::validation(
-                    "MCP_TOOL_SEARCH_SKILLS not registered",
                 ))
             },
             // tool_dispatch (3 fields)
@@ -587,58 +556,9 @@ mod mirror_type_tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
-    /// Verify that `RouteDecision` mirror matches `routing_engine::RouteDecision`.
-    #[test]
-    fn route_decision_mirror_structural_invariants() {
-        let d = RouteDecision::default();
-        assert_eq!(d.selected_skill, String::new());
-        assert!(d.selected_skill_path.is_none());
-        assert!(d.reasons.is_empty());
-        assert_eq!(d.score, 0.0f64);
-
-        // Cross-crate structural check: verify mirror fields exist in the
-        // real routing_engine::RouteDecision.  If routing_engine changes
-        // its struct, this test catches the drift.
-        let _ref: &str = &routing_engine::RouteDecision::default().selected_skill;
-        let _ = routing_engine::RouteDecision::default().score;
-
-        let field_estimate = std::mem::size_of::<RouteDecision>();
-        assert!(
-            field_estimate > 0,
-            "RouteDecision structural invariant check"
-        );
-
-        // Populated variant test
-        let d2 = RouteDecision {
-            selected_skill: "test-skill".into(),
-            selected_skill_path: Some("skills/test/SKILL.md".into()),
-            reasons: vec!["matched by routing".into()],
-            score: 0.95,
-            checker_id: None,
-        };
-        assert_eq!(d2.selected_skill.as_str(), "test-skill");
-    }
-
-    /// Verify that `McpPreGuardVerdict` has the expected field layout.
-    #[test]
-    fn mcp_pre_guard_verdict_mirror_structural_invariants() {
-        let v = McpPreGuardVerdict::default();
-        assert!(!v.blocked);
-        assert!(v.reason.is_none());
-
-        let v2 = McpPreGuardVerdict {
-            blocked: true,
-            reason: Some("blocked by policy".into()),
-        };
-        assert!(v2.blocked);
-        assert_eq!(v2.reason.as_deref(), Some("blocked by policy"));
-    }
-
     /// Verify that mirrored constants match expected values.
     #[test]
     fn mirrored_constants_values() {
-        // These mirrors of runtime-core constants should be reviewed
-        // when the source crate changes versions.
         assert_eq!(MAX_CONCURRENT_SUBAGENTS_LIMIT, 24);
     }
 
