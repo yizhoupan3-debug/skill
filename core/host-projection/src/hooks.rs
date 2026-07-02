@@ -108,7 +108,9 @@ pub struct McpPreGuardVerdict {
 }
 
 /// Mirror of `routing_engine::route::RouteDecision`.
+/// NOTE: deprecated — all callers use framework_extra directly.
 #[derive(Debug, Clone, Default)]
+#[deprecated(note = "use routing_engine::RouteDecision directly")]
 pub struct RouteDecision {
     pub selected_skill: String,
     pub selected_skill_path: Option<String>,
