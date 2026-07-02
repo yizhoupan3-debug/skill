@@ -211,7 +211,7 @@ fn spawn_routing_runtime_cache_invalidator() {
                 tracing::debug!("kernel_bootstrap: shutdown requested, exiting cache invalidator");
                 return;
             }
-            thread::sleep(Duration::from_secs(1));
+            thread::sleep(Duration::from_secs(30));
             if !matches!(rx.has_changed(), Ok(true)) {
                 continue;
             }

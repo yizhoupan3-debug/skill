@@ -13,108 +13,40 @@
     },
     "mcp-codegraph": {
       "args": [
-        "run",
-        "--release",
-        "--quiet",
-        "-p",
-        "codegraph-rs",
-        "--bin",
-        "mcp-codegraph",
-        "--",
         "--repo-root",
         "/Users/joe/Developer/skill"
       ],
-      "command": "cargo",
+      "command": "mcp-codegraph",
       "description": "Code knowledge graph (search, callers, callees, impact) via mcp-codegraph",
       "type": "stdio"
     },
     "mcp-pdf": {
-      "args": [
-        "run",
-        "--release",
-        "--quiet",
-        "--manifest-path",
-        "rust_tools/pdf_tool_rs/Cargo.toml",
-        "--bin",
-        "mcp-pdf",
-        "--"
-      ],
-      "command": "cargo",
+      "command": "mcp-pdf",
       "description": "PDF text extraction and metadata (mcp-pdf)",
       "type": "stdio"
     },
     "mcp-ooxml": {
-      "args": [
-        "run",
-        "--release",
-        "--quiet",
-        "--manifest-path",
-        "rust_tools/ooxml_parser_rs/Cargo.toml",
-        "--bin",
-        "mcp-ooxml",
-        "--"
-      ],
-      "command": "cargo",
+      "command": "mcp-ooxml",
       "description": "Office Open XML parsing (xlsx/docx/pptx) via mcp-ooxml",
       "type": "stdio"
     },
     "mcp-pptx": {
-      "args": [
-        "run",
-        "--release",
-        "--quiet",
-        "--manifest-path",
-        "rust_tools/pptx_tool_rs/Cargo.toml",
-        "--bin",
-        "mcp-pptx",
-        "--"
-      ],
-      "command": "cargo",
+      "command": "mcp-pptx",
       "description": "PowerPoint slide generation and analysis (mcp-pptx)",
       "type": "stdio"
     },
     "mcp-financial-data": {
-      "args": [
-        "run",
-        "--release",
-        "--quiet",
-        "--manifest-path",
-        "rust_tools/financial_data_rs/Cargo.toml",
-        "--bin",
-        "mcp-financial-data",
-        "--"
-      ],
-      "command": "cargo",
+      "command": "mcp-financial-data",
       "description": "Financial market data (OHLCV, fundamentals) via mcp-financial-data",
       "type": "stdio"
     },
     "mcp-citation": {
-      "args": [
-        "run",
-        "--release",
-        "--quiet",
-        "--manifest-path",
-        "rust_tools/citation_tool_rs/Cargo.toml",
-        "--bin",
-        "mcp-citation",
-        "--"
-      ],
-      "command": "cargo",
+      "command": "mcp-citation",
       "description": "Academic citation audit and lint (mcp-citation)",
       "type": "stdio"
     },
     "mcp-gh-source-gate": {
-      "args": [
-        "run",
-        "--release",
-        "--quiet",
-        "--manifest-path",
-        "rust_tools/gh_source_gate_rs/Cargo.toml",
-        "--bin",
-        "mcp-gh-source-gate",
-        "--"
-      ],
-      "command": "cargo",
+      "command": "mcp-gh-source-gate",
       "description": "GitHub PR/check source gate (mcp-gh-source-gate)",
       "type": "stdio"
     },

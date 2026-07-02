@@ -201,3 +201,4 @@ core/router-rs/artifacts/evolution/.last_idle_trigger
 /toctou
 /toctou_test
 /toctou_test2
+logs/

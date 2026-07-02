@@ -639,8 +639,13 @@ fn handle_initialize(id: Option<Value>) -> Value {
     })
 }
 
+/// Cached result of `build_tools_from_registry()` — the tool list
+/// never changes during a session, so we serialize + filter once.
+static CACHED_TOOL_LIST: OnceLock<Vec<Value>> = OnceLock::new();
+
 pub fn handle_tools_list(id: Option<Value>) -> Value {
-    let tools = build_tools_from_registry();
+    let tools = CACHED_TOOL_LIST
+        .get_or_init(build_tools_from_registry);
 
     json!({
         "jsonrpc": "2.0",

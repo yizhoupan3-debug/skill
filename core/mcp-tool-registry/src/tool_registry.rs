@@ -32,8 +32,8 @@ use core_errors::FrameworkError;
 
 pub const EXPECTED_SCHEMA: &str = "mcp-tool-registry-v2";
 
-/// Default TTL for the cached registry (10 seconds).
-const CACHE_TTL_SECS: u64 = 10;
+/// Default TTL for the cached registry (60 seconds).
+const CACHE_TTL_SECS: u64 = 60;
 
 /// Maximum consecutive reload failures before propagating the error.
 const MAX_CONSECUTIVE_FAILURES: u32 = 3;
