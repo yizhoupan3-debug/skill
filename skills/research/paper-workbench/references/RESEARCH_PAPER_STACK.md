@@ -46,7 +46,7 @@
 - **用语 / 内部口径 / 防御式堆叠**：只信 [`research-language-norms.md`](research-language-norms.md)。
 - **严重度 / Warning**：只信 [`severity-spec.md`](severity-spec.md)（含 exhaustive 模式 `Warning` 层）。
 - **Exhaustive 查稿步骤与输出信封**：只信 [`paper-exhaustive-audit.md`](paper-exhaustive-audit.md)。
-- **RFV（代码）vs PAPER_GATE（手稿）**：协议首段 —— 勿混 PASS 语义。
+- **Quality Gate（代码）vs PAPER_GATE（手稿）**：协议首段 —— 勿混 PASS 语义。
 
 ## 已收敛的断裂
 

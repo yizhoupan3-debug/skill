@@ -350,7 +350,7 @@ fn check_generated_artifacts(repo_root: &Path, warns: &mut Vec<String>) {
     println!("\n--- continuity ledger ---");
     if router_rs_task_ledger_flock_enabled() {
         println!(
-            "ROUTER_RS_TASK_LEDGER_FLOCK: enabled (default) — cross-process GOAL/RFV/EVIDENCE writes serialize under artifacts/current/.router-rs.task-ledger.lock."
+            "ROUTER_RS_TASK_LEDGER_FLOCK: enabled (default) — cross-process GOAL/Quality Gate/EVIDENCE writes serialize under artifacts/current/.router-rs.task-ledger.lock."
         );
     } else {
         let msg = "ROUTER_RS_TASK_LEDGER_FLOCK is disabled — parallel hook subprocesses may interleave writes to artifacts/current/**; treat TASK_STATE.json and rollups as best-effort until flock is re-enabled.".to_string();

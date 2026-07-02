@@ -103,7 +103,7 @@ writing_handoff: surgical | refactor  # 若需多段/全节骨架重组
 
 模板：[`templates/PROSE_QC_LOG.template.md`](templates/PROSE_QC_LOG.template.md)
 
-与 harness `artifacts/current/<task_id>/EVIDENCE_INDEX`：**正交**；手稿 prose 关停以 `PROSE_QC_LOG` + 用户确认为主，不要求 RFV PASS。
+与 harness `artifacts/current/<task_id>/EVIDENCE_INDEX`：**正交**；手稿 prose 关停以 `PROSE_QC_LOG` + 用户确认为主，不要求 Quality Gate PASS。
 
 ## L4 宿主短码（per-host）
 

@@ -1,5 +1,5 @@
 //! Cross-process **advisory flock** for **continuity ledger** mutations under a repo’s
-//! `artifacts/current/**`: `GOAL_STATE.json`, `RFV_LOOP_STATE.json`, `STEP_LEDGER.jsonl` append,
+//! `artifacts/current/**`: `GOAL_STATE.json`, `QUALITY_GATE_STATE.json`, `STEP_LEDGER.jsonl` append,
 //! session artifact batch writes, and `EVIDENCE_INDEX.json` read-modify-write.
 //!
 //! Serialization for multiple hook processes is **`flock(2)`** on

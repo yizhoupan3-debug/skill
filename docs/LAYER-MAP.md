@@ -52,7 +52,7 @@ Skill层 (5L:skill)             L2（元数据/发现/健康）
 | 注册表 | 位置（crate） | 字段数 | 注册方 | 消费方 |
 |--------|-------------|-------|--------|--------|
 | `RuntimeHooks` | `host-projection::hooks` | ~30 | `runtime-core::init_hooks()` | `host-projection` 各模块 |
-| `RuntimeCoreHooks` | `framework-kernel::runtime_hooks` | ~10 | `runtime-core::init_hooks()` | `fr-contracts`, `framework-extra`, `core-state` |
+| `RuntimeCoreHooks` | `framework-kernel::runtime_hooks` | ~10 | `runtime-core::init_hooks()` | `framework-extra`, `core-state` |
 
 `RuntimeHooks` → 宿主侧代理函数（closeout/evidence/paper/research/skill-route/fetch-guard/tool-dispatch/浏览器/追踪）。
 `RuntimeCoreHooks` → 运行层内核回调（host-provider-lookup/goal-drive/orchestrator/background-state/concurrency-defaults/eval-route）。
@@ -173,9 +173,9 @@ MCP 工具注册表、工具路由、框架内建工具实现、独立 MCP 服�
 | `runtime-storage` | `core/runtime-storage` | 存储后端（文件系统 + SQLite + 内存） |
 | `runtime-infra` | `core/runtime-infra` | 运行时基础设施：kernel_bootstrap、stdio_transport |
 | `trace-runtime` | `core/trace-runtime` | 追踪记录：event record、compact、compress |
-| `fr-utils` | `core/fr-utils` | IO 工具、常量、类型（无止义逻辑） |
-| `fr-contracts` | `core/fr-contracts` | 执行合约：PreExecutionGuard |
-| `fr-exec` | `core/fr-exec` | 执行引擎：实时执行、运行时视图、trace_attach |
+| ~~`fr-utils`~~ | ~~`core/fr-utils`~~ | ~~IO 工具、常量、类型（无止义逻辑）~~ *(已合并到 runtime-core, 2026-07)* |
+| ~~`fr-contracts`~~ | ~~`core/fr-contracts`~~ | ~~执行合约：PreExecutionGuard~~ *(已合并到 runtime-core, 2026-07)* |
+| ~~`fr-exec`~~ | ~~`core/fr-exec`~~ | ~~执行引擎：实时执行、运行时视图、trace_attach~~ *(已合并到 runtime-core, 2026-07)* |
 | `http-util` | `core/http-util` | HTTP 工具函数 |
 | `codegraph-rs` | `core/codegraph-rs` | 代码知识图谱 |
 
@@ -213,13 +213,13 @@ MCP 工具注册表、工具路由、框架内建工具实现、独立 MCP 服�
 | 18 | `runtime-storage` | 运行层 | L1 | 存储后端：FS + SQLite + 内存 |
 | 19 | `runtime-infra` | 运行层 | B0 | kernel_bootstrap / stdio_transport |
 | 20 | `trace-runtime` | 运行层 | L1 | 追踪记录 + 压缩 |
-| 21 | `fr-utils` | 运行层 | L1 | IO 工具 / 常量 |
-| 22 | `fr-contracts` | 运行层 | L2 | 执行合约（PreExecutionGuard） |
-| 23 | `fr-exec` | 运行层 | L3 | 执行引擎 / trace_attach |
-| 27 | `framework-extra` | 运行层 | L6 | 编排控制（closeout / evidence） |
-| 28 | `framework-maint` | 运行层 | L6 | 框架维护（snapshot / maint） |
-| 29 | `research-harness` | 运行层 | L5 | 研究工具（review_loop / aigc_check） |
-| 30 | `http-util` | 运行层 | — | HTTP 工具函数 |
+| 21 | ~~`fr-utils`~~ | ~~运行层~~ | ~~L1~~ | ~~IO 工具 / 常量~~ *(已合并到 runtime-core, 2026-07)* |
+| 22 | ~~`fr-contracts`~~ | ~~运行层~~ | ~~L2~~ | ~~执行合约（PreExecutionGuard）~~ *(已合并到 runtime-core, 2026-07)* |
+| 23 | ~~`fr-exec`~~ | ~~运行层~~ | ~~L3~~ | ~~执行引擎 / trace_attach~~ *(已合并到 runtime-core, 2026-07)* |
+| 24 | `framework-extra` | 运行层 | L6 | 编排控制（closeout / evidence） |
+| 25 | `framework-maint` | 运行层 | L6 | 框架维护（snapshot / maint） |
+| 26 | `research-harness` | 运行层 | L5 | 研究工具（review_loop / aigc_check） |
+| 27 | `http-util` | 运行层 | — | HTTP 工具函数 |
 | 31 | `codegraph-rs` | 运行层 | — | 代码知识图谱 |
 
 ---

@@ -83,7 +83,7 @@ fn formal_tool_tokens(lower: &str) -> bool {
     crate::formal_toolchain::ascii_lower_contains_formal_toolchain_tokens(lower)
 }
 
-/// OR of [`text_signals_math_or_formal_checker`] over RFV `goal` and `verify_commands`.
+/// OR of [`text_signals_math_or_formal_checker`] over QG `goal` and `verify_commands`.
 pub fn quality_gate_state_signals_math(state: &Value) -> bool {
     if state
         .get("goal")

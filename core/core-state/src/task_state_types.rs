@@ -28,7 +28,7 @@ impl Default for TaskPointers {
     }
 }
 
-/// Rolled-up depth compliance metrics for a single task (RFV rounds + GOAL checkpoints + EVIDENCE).
+/// Rolled-up depth compliance metrics for a single task (QG rounds + GOAL checkpoints + EVIDENCE).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 #[serde(deny_unknown_fields)]
 pub struct DepthCompliance {
@@ -106,8 +106,8 @@ pub struct GoalCompletionGates {
     /// Minimum GOAL checkpoints. `None` = no constraint.
     pub min_goal_checkpoints: Option<u64>,
     /// Block completed if `qg_pass_without_evidence_count > 0`.
-    #[serde(default)]
-    pub block_on_rfv_pass_without_evidence: bool,
+    #[serde(default, alias = "block_on_rfv_pass_without_evidence")]
+    pub block_on_quality_gate_pass_without_evidence: bool,
 }
 
 const fn default_gate_enabled() -> bool {

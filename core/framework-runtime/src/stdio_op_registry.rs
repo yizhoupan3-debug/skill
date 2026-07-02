@@ -7,7 +7,7 @@ use serde_json::Value;
 ///
 /// Each variant corresponds to a namespace of op strings: Routing (skill/router dispatch),
 /// Runtime (execution, background, session control), Trace (event recording/replay), or Framework
-/// (snapshot, contract, goal/RFV). Use to group ops for dispatch routing and contract validation.
+/// (snapshot, contract, goal/Quality Gate). Use to group ops for dispatch routing and contract validation.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum StdioOpDomain {
     Routing,

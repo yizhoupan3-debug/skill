@@ -414,7 +414,7 @@ pub fn task_evidence_success_only_self_attested(repo_root: &Path, task_id: &str)
 
 /// 指定 `task_id` 任务目录下 `EVIDENCE_INDEX.json`：是否存在非空 `artifacts`、是否至少有一条成功验证记录。
 /// 单条 artifact 的「成功」判定下沉到 [`super::evidence_index_entry_implies_success`]，
-/// 与 `rfv_loop` 共用一份口径。
+/// 与 `quality_gate_loop` 共用一份口径。
 pub fn task_evidence_artifacts_summary_for_task(repo_root: &Path, task_id: &str) -> (bool, bool) {
     use super::EVIDENCE_INDEX_FILENAME;
     if task_id.trim().is_empty() {

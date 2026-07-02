@@ -2,7 +2,7 @@
 name = "core-state"
 version = "0.1.0"
 edition = "2024"
-description = "L4 task state machine: Goal/RFV/Evidence, ledger, and cross-session continuity"
+description = "L4 task state machine: Goal/Quality Gate/Evidence, ledger, and cross-session continuity"
 [lints]
 workspace = true
 

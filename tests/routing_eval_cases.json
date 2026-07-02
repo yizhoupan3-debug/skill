@@ -397,7 +397,7 @@
       "id": "route-009-paper-writing",
       "category": "should-trigger",
       "task": "帮我写论文的 related work 部分",
-      "expected_owner": "research-discovery",
+      "expected_owner": "paper-workbench",
       "expected_overlay": null,
       "notes": "Manuscript section writing enters paper-workbench front door; inline paper-writing with prose-quality-gate"
     },
@@ -405,7 +405,7 @@
       "id": "route-009d-paper-review-only-negation",
       "category": "should-trigger",
       "task": "只审不改，别润色，看 claim 和证据",
-      "expected_owner": "autoresearch",
+      "expected_owner": "paper-workbench",
       "expected_overlay": null,
       "notes": "Review-only with prose negation boosts paper-workbench (inline paper-reviewer)"
     },
@@ -477,18 +477,18 @@
       "expected_overlay": null,
       "expected_layer": "L4",
       "first_turn": true,
-      "notes": "纯定理证明/数学推导优先 math-derivation，不与 research-discovery/execution 抢路由"
+      "notes": "纯定理证明/数学推导优先 math-derivation，不与 research 抢路由"
     },
     {
       "id": "route-015-research-execution-ablation",
       "category": "should-trigger",
       "task": "帮我设计实验：两组 ablation 怎么做，baseline 和控制变量怎么定。",
-      "focus_skill": "research-execution",
-      "expected_owner": "research-execution",
+      "focus_skill": "research",
+      "expected_owner": "research",
       "expected_overlay": null,
       "expected_layer": "L2",
       "first_turn": true,
-      "notes": "实验/ablation 编排走 research-execution；与纯数学 do_not_use 不冲突"
+      "notes": "实验/ablation 编排走 research（原 research-execution）；与纯数学 do_not_use 不冲突"
     },
     {
       "id": "route-016-python-env-management",
@@ -540,18 +540,18 @@
       "id": "research-discovery-literature-survey",
       "category": "should-trigger",
       "task": "帮我做文献综述，调研一下这个方向的最新进展",
-      "focus_skill": "research-discovery",
-      "expected_owner": "research-discovery",
+      "focus_skill": "research",
+      "expected_owner": "research",
       "expected_overlay": null,
       "expected_layer": "L2",
       "first_turn": true,
-      "notes": "文献综述/调研方向触发 research-discovery 前门"
+      "notes": "文献综述/调研方向触发 research 前门（原 research-discovery）"
     },
     {
       "id": "research-discovery-paper-search",
       "category": "should-trigger",
       "task": "查一下有哪些论文在用 attention 机制做时间序列预测",
-      "focus_skill": "research-discovery",
+      "focus_skill": "research",
       "expected_owner": "agent-swarm-orchestration",
       "expected_overlay": null,
       "first_turn": true,
@@ -561,56 +561,56 @@
       "id": "research-discovery-math-background",
       "category": "should-trigger",
       "task": "这个物理过程该用什么数学理论来描述？有什么相关定理？",
-      "focus_skill": "research-discovery",
-      "expected_owner": "research-discovery",
+      "focus_skill": "research",
+      "expected_owner": "research",
       "expected_overlay": null,
       "expected_layer": "L2",
       "first_turn": true,
-      "notes": "理论背景/数学背景查询触发 research-discovery math_background_inquiry lane"
+      "notes": "理论背景/数学背景查询触发 research discovery lane（原 research-discovery）"
     },
     {
       "id": "research-discovery-barrier-escalation",
       "category": "should-trigger",
       "task": "这个方向走不通了，瓶颈在 attention 的计算复杂度，有什么替代方案？",
-      "focus_skill": "research-discovery",
-      "expected_owner": "research-discovery",
+      "focus_skill": "research",
+      "expected_owner": "research",
       "expected_overlay": null,
       "expected_layer": "L2",
       "first_turn": true,
-      "notes": "barrier 信号（走不通/瓶颈）触发 research-discovery 的 barrier escalation"
+      "notes": "barrier 信号（走不通/瓶颈）触发 research 的 barrier escalation lane（原 research-discovery）"
     },
     {
       "id": "autoresearch-workspace-init",
       "category": "should-trigger",
       "task": "帮我初始化一个研究方向：improving LLM reasoning via structured memory",
       "focus_skill": null,
-      "expected_owner": "research-discovery",
+      "expected_owner": "research",
       "expected_overlay": null,
       "expected_layer": "L2",
       "first_turn": true,
-      "notes": "研究方向触发词当前归 research-discovery；待 autoresearch 触发词同步后改回"
+      "notes": "研究方向触发词归 research（research-workspace lane）。2026-07 merge 后路由到统一出口"
     },
     {
       "id": "autoresearch-barrier-command",
       "category": "should-trigger",
       "task": "自动研究一下这个瓶颈：模型在长文本上推理准确率突破不了 60%",
-      "focus_skill": "autoresearch",
-      "expected_owner": "research-discovery",
+      "focus_skill": "research",
+      "expected_owner": "research",
       "expected_overlay": null,
       "expected_layer": "L2",
       "first_turn": true,
-      "notes": "自动研究+瓶颈关键词当前归 research-discovery；待 autoresearch 触发词同步后改回"
+      "notes": "自动研究+瓶颈关键词归 research（research-workspace lane）。2026-07 merge 后路由到统一出口"
     },
     {
       "id": "research-execution-experiment-design",
       "category": "should-trigger",
       "task": "帮我设计 ablation 实验，控制变量，定 baseline",
-      "focus_skill": "research-execution",
-      "expected_owner": "research-execution",
+      "focus_skill": "research",
+      "expected_owner": "research",
       "expected_overlay": null,
       "expected_layer": "L2",
       "first_turn": true,
-      "notes": "实验设计触发 research-execution experiment_design lane"
+      "notes": "实验设计触发 research execution lane（原 research-execution）"
     },
     {
       "id": "eval-algo-trading-backtest",

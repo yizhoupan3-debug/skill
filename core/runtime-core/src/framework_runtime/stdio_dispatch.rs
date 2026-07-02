@@ -433,7 +433,7 @@ fn dispatch_framework_stdio_request(op: &str, payload: Value) -> Result<Value, F
             framework_hook_evidence_append(payload)
         }
         "framework_goal_drive" => runtime_infra::kernel_utils::framework_goal_drive(payload),
-        "framework_rfv_loop" => {
+        "framework_quality_gate_loop" => {
             let repo_root_str = payload
                 .get("repo_root")
                 .and_then(|v| v.as_str())

@@ -1,4 +1,4 @@
-//! Named **task ledger** mutations (phase 2.5): single dispatch surface over goal drive, RFV loop,
+//! Named **task ledger** mutations (phase 2.5): single dispatch surface over goal drive, Quality Gate loop,
 //! session artifact batch write, and hook evidence append.
 //!
 //! Writers serialize through **repo-root `flock`** on `artifacts/current/.router-rs.task-ledger.lock`

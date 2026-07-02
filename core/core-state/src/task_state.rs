@@ -75,11 +75,11 @@ pub const RESOLUTION_NOTE_ACTIVE_GOAL_NOT_DRIVING_FOCUS_DRIVES: &str =
 pub const RESOLUTION_NOTE_DUAL_GOAL_POINTER_CONFLICT: &str =
     "continuity:dual_goal_pointer_conflict";
 
-/// Marker string in RFV cross_check field indicating a PASS round without an evidence window.
+/// Marker string in old QG cross_check field indicating a PASS round without an evidence window.
 pub const NO_EVIDENCE_WINDOW_MARKER: &str = "no_evidence_window";
 
 /// Pushes [`RESOLUTION_NOTE_ACTIVE_GOAL_MISSING_FOCUS_HAS_GOAL`] when appropriate. Active may still
-/// have RFV or other task-scoped state with no readable GOAL; the note is about pointers vs
+/// have old QG or other task-scoped state with no readable GOAL; the note is about pointers vs
 /// hydration, not "goal_drive-only".
 fn maybe_note_active_goal_missing_focus_has_goal(
     _repo_root: &Path,
@@ -305,11 +305,11 @@ fn extract_goal_checkpoint_count(goal: Option<&Value>) -> u64 {
         .unwrap_or(0)
 }
 
-/// Accumulate RFV round metrics from optional `RFV_LOOP_STATE` value.
+/// Accumulate QG round metrics from optional quality-gate-state value.
 ///
 /// Populates all `qg_*` counters in [`DepthCompliance`] and returns the
 /// `external_research_strict` flag for downstream score computation.
-fn accumulate_rfv_round_metrics(qg: Option<&Value>) -> (bool, DepthCompliance) {
+fn accumulate_qg_round_metrics(qg: Option<&Value>) -> (bool, DepthCompliance) {
     let mut c = DepthCompliance::default();
     let Some(r) = qg else {
         return (false, c);
@@ -398,31 +398,31 @@ fn compute_depth_score(c: &DepthCompliance, evidence_ok: bool) -> u8 {
     score
 }
 
-/// Roll up RFV rounds + optional GOAL checkpoints + evidence_ok into [`DepthCompliance`].
+/// Roll up QG rounds + optional GOAL checkpoints + evidence_ok into [`DepthCompliance`].
 ///
-/// Used by [`resolve_task_view`] and by RFV **`close_gates`** pre-write preview（显式 close 与
-/// `max_rounds` 轮次上限收口）so rollup stays single-sourced. `rfv` is typically `RFV_LOOP_STATE` root; `goal` is optional `GOAL_STATE`.
+/// Used by [`resolve_task_view`] and by QG **`close_gates`** pre-write preview（显式 close 与
+/// `max_rounds` 轮次上限收口）so rollup stays single-sourced. `qg` is typically the quality-gate-state root; `goal` is optional `GOAL_STATE`.
 pub fn depth_compliance_aggregate(
     goal: Option<&Value>,
     qg: Option<&Value>,
     evidence_ok: bool,
 ) -> DepthCompliance {
     let goal_checkpoint_count = extract_goal_checkpoint_count(goal);
-    let (_strict_task, rfv) = accumulate_rfv_round_metrics(qg);
+    let (_strict_task, qg) = accumulate_qg_round_metrics(qg);
 
     // Construct the full struct first so that compute_depth_score sees all fields
     // (including goal_checkpoint_count from extract_goal_checkpoint_count).
     let mut c = DepthCompliance {
         goal_checkpoint_count,
-        qg_adversarial_round_count: rfv.qg_adversarial_round_count,
-        qg_falsification_test_count: rfv.qg_falsification_test_count,
-        qg_pass_round_count: rfv.qg_pass_round_count,
-        qg_fail_round_count: rfv.qg_fail_round_count,
-        qg_skipped_round_count: rfv.qg_skipped_round_count,
-        qg_unknown_round_count: rfv.qg_unknown_round_count,
-        qg_pass_without_evidence_count: rfv.qg_pass_without_evidence_count,
-        qg_external_deep_structured_round_count: rfv.qg_external_deep_structured_round_count,
-        qg_external_strict_ok_round_count: rfv.qg_external_strict_ok_round_count,
+        qg_adversarial_round_count: qg.qg_adversarial_round_count,
+        qg_falsification_test_count: qg.qg_falsification_test_count,
+        qg_pass_round_count: qg.qg_pass_round_count,
+        qg_fail_round_count: qg.qg_fail_round_count,
+        qg_skipped_round_count: qg.qg_skipped_round_count,
+        qg_unknown_round_count: qg.qg_unknown_round_count,
+        qg_pass_without_evidence_count: qg.qg_pass_without_evidence_count,
+        qg_external_deep_structured_round_count: qg.qg_external_deep_structured_round_count,
+        qg_external_strict_ok_round_count: qg.qg_external_strict_ok_round_count,
         depth_score: 0,
     };
     c.depth_score = compute_depth_score(&c, evidence_ok);
@@ -711,7 +711,7 @@ pub fn parse_goal_completion_gates(goal: &Value) -> Option<GoalCompletionGates> 
             .and_then(Value::as_bool)
             .unwrap_or(false);
         let min_goal_checkpoints = o.get("min_goal_checkpoints").and_then(Value::as_u64);
-        let block_on_rfv_pass_without_evidence = o
+        let block_on_quality_gate_pass_without_evidence = o
             .get("block_on_rfv_pass_without_evidence")
             .and_then(Value::as_bool)
             .unwrap_or(false);
@@ -720,7 +720,7 @@ pub fn parse_goal_completion_gates(goal: &Value) -> Option<GoalCompletionGates> 
             min_depth_score,
             require_successful_evidence_row,
             min_goal_checkpoints,
-            block_on_rfv_pass_without_evidence,
+            block_on_quality_gate_pass_without_evidence,
         });
     }
     // Array format (legacy): treat as basic metadata with no advanced constraints
@@ -730,7 +730,7 @@ pub fn parse_goal_completion_gates(goal: &Value) -> Option<GoalCompletionGates> 
             min_depth_score: None,
             require_successful_evidence_row: false,
             min_goal_checkpoints: None,
-            block_on_rfv_pass_without_evidence: false,
+            block_on_quality_gate_pass_without_evidence: false,
         });
     }
     None
@@ -753,7 +753,7 @@ pub fn validate_goal_completion_gates(
         && dc.depth_score < min
     {
         return Err(FrameworkError::validation(format!(
-            "GOAL completion_gates: depth_score={} < min_depth_score={} (fix RFV/EVIDENCE/checkpoints or lower the gate; rollup from resolve_task_view)",
+            "GOAL completion_gates: depth_score={} < min_depth_score={} (fix QG/EVIDENCE/checkpoints or lower the gate; rollup from resolve_task_view)",
             dc.depth_score, min
         )));
     }
@@ -782,9 +782,9 @@ pub fn validate_goal_completion_gates(
             )));
         }
     }
-    if gates.block_on_rfv_pass_without_evidence && dc.qg_pass_without_evidence_count > 0 {
+    if gates.block_on_quality_gate_pass_without_evidence && dc.qg_pass_without_evidence_count > 0 {
         return Err(FrameworkError::validation(format!(
-            "GOAL completion_gates: block_on_rfv_pass_without_evidence but qg_pass_without_evidence_count={}",
+            "GOAL completion_gates: block_on_quality_gate_pass_without_evidence but qg_pass_without_evidence_count={}",
             dc.qg_pass_without_evidence_count
         )));
     }
@@ -1033,7 +1033,7 @@ mod tests {
     }
 
     #[test]
-    fn conflict_when_goal_and_rfv_active() {
+    fn conflict_when_goal_and_qg_active() {
         let tmp = unique_repo("conflict");
         let tid = "t2";
         write_active(&tmp, tid);
@@ -1050,7 +1050,7 @@ mod tests {
         )
         .unwrap();
         fs::write(
-            task_dir.join("RFV_LOOP_STATE.json"),
+            task_dir.join("QUALITY_GATE_STATE.json"),
             serde_json::to_string_pretty(&json!({
                 "schema_version": "router-rs-quality-gate-v1",
                 "loop_status": "active",
@@ -1068,7 +1068,7 @@ mod tests {
     }
 
     #[test]
-    fn depth_score_rewards_adversarial_rfv_without_goal_checkpoints() {
+    fn depth_score_rewards_adversarial_quality_gate_without_goal_checkpoints() {
         let tmp = unique_repo("adv");
         let tid = "t-adv";
         write_active(&tmp, tid);
@@ -1082,7 +1082,7 @@ mod tests {
 
         let v = resolve_task_view(&tmp, Some(tid));
         let dc = v.depth_compliance.expect("dc");
-        assert_eq!(dc.depth_score, 0, "no RFV, no evidence, no checkpoints");
+        assert_eq!(dc.depth_score, 0, "no QG, no evidence, no checkpoints");
         let _ = fs::remove_dir_all(&tmp);
     }
 
@@ -1107,7 +1107,7 @@ mod tests {
 
         let v = resolve_task_view(&tmp, Some(tid));
         let dc = v.depth_compliance.expect("dc");
-        assert_eq!(dc.depth_score, 1, "only evidence_ok, no RFV/checkpoints");
+        assert_eq!(dc.depth_score, 1, "only evidence_ok, no QG/checkpoints");
         match prior {
             Some(p) => {
                 // SAFETY: test-only; DEPTH_SCORE_MODE_ENV_TEST_MUTEX prevents concurrent env access from other tests.

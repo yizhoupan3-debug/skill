@@ -34,7 +34,7 @@ Unified research harness crate for the skill framework. Integrates paper revisio
 - `core-state`, `core-state-utils`, `core-policy` (leaf crates, no cycle risk)
 - `framework-kernel` (L0 kernel utilities)
 - `host-projection` (L5 hook dispatch via function pointers)
-- `fr-utils` (constants, types)
+- ~~`fr-utils`~~ *(merged into `runtime-core`, 2026-07)*
 - Common workspace deps (anyhow, chrono, reqwest, rusqlite, serde, regex, ...)
 
 Does **not** depend on `runtime-core` — avoids circular dependency.

@@ -21,7 +21,7 @@ use serde::{Deserialize, Serialize};
 /// - PREFLIGHT: safety checks, budget validation
 /// - RUNNING: actions are dispatched and executed by subagents
 /// - PAUSED: loop paused via signal, waiting for human input (resume/redirect/kill)
-/// - VERIFYING: closeout verification, RFV convergence, anti-drift
+/// - VERIFYING: closeout verification, Quality Gate convergence, anti-drift
 /// - COMPLETED: report written, lock released
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

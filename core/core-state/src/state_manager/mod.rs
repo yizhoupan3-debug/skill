@@ -897,36 +897,36 @@ mod tests {
         let _ = fs::remove_dir_all(&repo);
     }
 
-    /// GOAL 与旧 RFV 同 task：goal_drive start 不再需要 supersede RFV
+    /// GOAL 与旧 QG 同 task：goal_drive start 不再需要 supersede QG
     /// (QG↔Goal 互斥在 Wave 4a-ii 中删除，QG 只是 Goal 内部模式)。
     #[test]
-    fn goal_drive_start_ignores_old_rfv_same_task() {
+    fn goal_drive_start_ignores_old_qg_same_task() {
         let suffix = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("time")
             .as_nanos();
-        let repo = std::env::temp_dir().join(format!("router-rs-goal-rfv-mutex-ag-{suffix}"));
+        let repo = std::env::temp_dir().join(format!("router-rs-goal-qg-mutex-ag-{suffix}"));
         let _ = fs::remove_dir_all(&repo);
         fs::create_dir_all(repo.join("artifacts/current/mx-task")).expect("mkdir");
         let rr = repo.display().to_string();
 
-        // Write old-format RFV state file (remnant of removed QG state machine).
-        let rfv_path = repo.join("artifacts/current/mx-task/RFV_LOOP_STATE.json");
-        if let Some(parent) = rfv_path.parent() {
-            fs::create_dir_all(parent).expect("mkdir rfv dir");
+        // Write old-format QG state file (remnant of removed QG state machine).
+        let qg_path = repo.join("artifacts/current/mx-task/QUALITY_GATE_STATE.json");
+        if let Some(parent) = qg_path.parent() {
+            fs::create_dir_all(parent).expect("mkdir qg dir");
         }
         crate::utils::atomic_write::write_atomic_json(
-            &rfv_path,
+            &qg_path,
             &json!({
                 "schema_version": "router-rs-quality-gate-v1",
-                "goal": "rfv phase",
+                "goal": "qg phase",
                 "loop_status": "active",
                 "max_rounds": 3u64,
             }),
         )
-        .expect("write rfv state");
+        .expect("write qg state");
 
-        // Goal start should succeed despite old RFV state (no longer superseded).
+        // Goal start should succeed despite old QG state (no longer superseded).
         let ag = framework_goal_drive(json!({
             "repo_root": rr,
             "operation": "start",
@@ -939,17 +939,17 @@ mod tests {
         }))
         .expect("goal start");
 
-        // Verify goal was started (not that old RFV was superseded).
+        // Verify goal was started (not that old QG was superseded).
         assert_eq!(ag["operation"], json!("start"));
         assert_eq!(ag["status"], json!("running"));
 
-        // Old RFV file is left as-is (Wave 4a-ii: no mutual exclusion).
-        let raw = fs::read_to_string(&rfv_path).expect("read rfv");
-        let v: Value = serde_json::from_str(&raw).expect("parse rfv");
+        // Old QG file is left as-is (Wave 4a-ii: no mutual exclusion).
+        let raw = fs::read_to_string(&qg_path).expect("read qg");
+        let v: Value = serde_json::from_str(&raw).expect("parse qg");
         assert_eq!(
             v["loop_status"],
             json!("active"),
-            "old RFV should not be superseded — QG互斥已删除"
+            "old QG should not be superseded — QG互斥已删除"
         );
 
         let _ = fs::remove_dir_all(&repo);
@@ -1040,10 +1040,10 @@ mod tests {
         )
         .expect("evidence");
         fs::write(
-            repo.join("artifacts/current/gok").join("RFV_LOOP_STATE.json"),
+            repo.join("artifacts/current/gok").join("QUALITY_GATE_STATE.json"),
             r#"{"schema_version":"router-rs-quality-gate-v1","loop_status":"active","goal":"g","max_rounds":3,"current_round":1,"rounds":[{"round":1,"verify_result":"PASS"}]}"#,
         )
-        .expect("rfv");
+        .expect("qg");
         let out = framework_goal_drive(json!({
             "repo_root": rr,
             "operation": "complete",

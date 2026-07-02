@@ -28,7 +28,7 @@
             "research_enabled": true,
             "research": {
                 "barrier_threshold": 3,
-                "escalation_target": "autoresearch",
+                "escalation_target": "research-workspace",
                 "max_research_time_min": 30,
                 "auto_resume": true,
                 "require_human_approval": false
@@ -55,7 +55,7 @@
             "research_enabled": true,
             "research": {
                 "barrier_threshold": 3,
-                "escalation_target": "autoresearch",
+                "escalation_target": "research-workspace",
                 "max_research_time_min": 20,
                 "auto_resume": true,
                 "require_human_approval": false

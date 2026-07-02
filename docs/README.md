@@ -130,16 +130,13 @@ scope: architecture-reference
 | `runtime-storage` | `core/runtime-storage` | L1 | 存储后端（文件系统 + SQLite + 内存） |
 | `runtime-infra` | `core/runtime-infra` | B0 | kernel_bootstrap、stdio_transport |
 | `trace-runtime` | `core/trace-runtime` | L1 | 追踪记录：event record、compact、compress |
-| `fr-utils` | `core/fr-utils` | L1 | IO 工具、常量、类型（无止义逻辑） |
-| `fr-contracts` | `core/fr-contracts` | L2 | 执行合约：PreExecutionGuard |
-| `fr-exec` | `core/fr-exec` | L3 | 执行引擎：实时执行、运行时视图、trace_attach |
+| ~~`fr-utils`~~ | ~~`core/fr-utils`~~ | ~~L1~~ | ~~IO 工具、常量、类型~~ *(已合并到 runtime-core, 2026-07)* |
+| ~~`fr-contracts`~~ | ~~`core/fr-contracts`~~ | ~~L2~~ | ~~执行合约：PreExecutionGuard~~ *(已合并到 runtime-core, 2026-07)* |
+| ~~`fr-exec`~~ | ~~`core/fr-exec`~~ | ~~L3~~ | ~~执行引擎~~ *(已合并到 runtime-core, 2026-07)* |
 | `http-util` | `core/http-util` | — | HTTP 工具函数 |
 | `codegraph-rs` | `core/codegraph-rs` | — | 代码知识图谱（MCP 8 工具） |
 
-**6.5 运行时扩展**
-
-| Crate | 路径 | 说明 |
-|-------|------|------|
+**5. ~~`fr-utils`~~ / ~~`fr-contracts`~~ / ~~`fr-exec`~~** *(已合并到 `runtime-core`, 2026-07)* — 执行合约与常量层不再独立。
 | `framework-extra` | `core/framework-extra` | 编排控制：closeout、evidence、manifest_fallback |
 | `framework-maint` | `core/framework-maint` | 框架维护：内联快照、maint 命令 |
 | `research-harness` | `core/research-harness` | 研究工具：review_loop、aigc_check、verification、claim_drift |

@@ -469,7 +469,7 @@ convergence:
     threshold: 3                    # 连续 3 轮只发现 C/Warning → 提示用户
 ```
 
-RFV 引擎在 Rust 层强制执行 `min_rounds` 和 `consecutive_stable_required`——即使 supervisor（LLM）传入 `supervisor_decision: "close"`，round < min_rounds 时仍被拦截为 "active"。
+Quality Gate 引擎在 Rust 层强制执行 `min_rounds` 和 `consecutive_stable_required`——即使 supervisor（LLM）传入 `supervisor_decision: "close"`，round < min_rounds 时仍被拦截为 "active"。
 
 ### Subagent 约束
 

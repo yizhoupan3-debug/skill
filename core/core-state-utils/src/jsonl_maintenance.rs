@@ -18,8 +18,8 @@ use std::collections::HashMap;
 /// can be discarded during compaction.
 const STATE_SNAPSHOT_TX_TYPES: &[&str] = &[
     "goal_state",
-    "rfv_loop_state",
-    "quality_gate_state", // legacy name — QG now writes "rfv_loop_state"
+    "rfv_loop_state",   // legacy — old QG tx_type (retained for ledger replay compat)
+    "quality_gate_state", // legacy — old QG tx_type (retained for ledger replay compat)
     "evidence",
 ];
 

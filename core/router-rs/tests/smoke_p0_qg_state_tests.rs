@@ -3,7 +3,7 @@
 use crate::harness_context_signals::quality_gate_state_signals_math;
 use serde_json::json;
 
-/// Harness math/formal signal gate over RFV `goal` + `verify_commands` (router-rs P0).
+/// Harness math/formal signal gate over QG `goal` + `verify_commands` (router-rs P0).
 #[test]
 fn quality_gate_state_signals_math_smoke() {
     let formal = json!({

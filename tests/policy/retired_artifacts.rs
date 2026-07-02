@@ -59,13 +59,13 @@ fn refresh_skill_stays_out_of_project_host_entrypoints() {
 }
 
 #[test]
-fn rfv_harness_reference_moved_to_docs() {
+fn quality_gate_harness_reference_moved_to_docs() {
     assert!(
         !project_root()
             .join("skills/review-fix-verify-loop/SKILL.md")
             .exists()
     );
-    // RFV harness 文档已整合入 codebase 模块文档，不再作为独立文件存在。
+    // QG (旧 RFV) harness 文档已整合入 codebase 模块文档，不再作为独立文件存在。
     // 实现逻辑见 core/runtime-core/src/qg_entry.rs。
 }
 
