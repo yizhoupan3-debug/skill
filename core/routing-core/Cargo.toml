@@ -8,6 +8,8 @@ workspace = true
 
 [dependencies]
 core-state-utils = { path = "../core-state-utils" }
+serde.workspace = true
+serde_json.workspace = true
 
 [dev-dependencies]
 criterion = { workspace = true }

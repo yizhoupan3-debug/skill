@@ -38,6 +38,14 @@ fn evaluate_mcp_pre_guard_inner(
     }
 
     if let Some(reason) = dangerous_mcp_tool_reason(tool_name, Some(arguments)) {
+        if reason.starts_with("confirmation-gate:") {
+            // Soft gate — warn/request confirmation, don't hard-block.
+            // The caller can inspect `reason` to prompt the user for confirmation.
+            return McpPreGuardVerdict {
+                blocked: false,
+                reason: Some(reason),
+            };
+        }
         return McpPreGuardVerdict::block(reason);
     }
 
@@ -110,5 +118,77 @@ mod tests {
         let verdict =
             evaluate_mcp_pre_guard_safe("framework_snapshot", &serde_json::json!({}), &repo());
         assert!(!verdict.blocked);
+    }
+
+    #[test]
+    fn confirmation_gate_does_not_block_goal_state_manage() {
+        let verdict = evaluate_mcp_pre_guard_safe(
+            "goal_state_manage",
+            &serde_json::json!({"operation": "create", "task_id": "t1"}),
+            &repo(),
+        );
+        // Confirmation gates are NOT hard-blocked
+        assert!(!verdict.blocked, "confirmation gates should not be hard-blocked");
+        let reason = verdict
+            .reason
+            .as_deref()
+            .expect("confirmation gate should have a reason");
+        assert!(
+            reason.starts_with("confirmation-gate:"),
+            "reason should start with confirmation-gate prefix, got: {reason}"
+        );
+    }
+
+    #[test]
+    fn confirmation_gate_does_not_block_task_create() {
+        let verdict = evaluate_mcp_pre_guard_safe(
+            "task_create",
+            &serde_json::json!({"task_id": "test-task"}),
+            &repo(),
+        );
+        assert!(!verdict.blocked, "confirmation gates should not be hard-blocked");
+        let reason = verdict
+            .reason
+            .as_deref()
+            .expect("confirmation gate should have a reason");
+        assert!(
+            reason.starts_with("confirmation-gate:"),
+            "reason should start with confirmation-gate prefix, got: {reason}"
+        );
+    }
+
+    #[test]
+    fn confirmation_gate_does_not_block_task_complete() {
+        let verdict = evaluate_mcp_pre_guard_safe(
+            "task_complete",
+            &serde_json::json!({"task_id": "t1"}),
+            &repo(),
+        );
+        assert!(!verdict.blocked, "confirmation gates should not be hard-blocked");
+        let reason = verdict.reason.as_deref().expect("confirmation gate should have a reason");
+        assert!(reason.starts_with("confirmation-gate:"));
+    }
+
+    #[test]
+    fn confirmation_gate_does_not_block_loop_pause() {
+        let verdict = evaluate_mcp_pre_guard_safe(
+            "loop_pause",
+            &serde_json::json!({"loop_id": "l1"}),
+            &repo(),
+        );
+        assert!(!verdict.blocked, "confirmation gates should not be hard-blocked");
+        let reason = verdict.reason.as_deref().expect("confirmation gate should have a reason");
+        assert!(reason.starts_with("confirmation-gate:"));
+    }
+
+    #[test]
+    fn existing_hard_blocks_not_affected_by_confirmation_gates() {
+        // Ensure existing hard blocks still work
+        let verdict = evaluate_mcp_pre_guard_safe(
+            "session_resume_due",
+            &serde_json::json!({"workerId": "w1"}),
+            &repo(),
+        );
+        assert!(verdict.blocked, "session_resume_due should still be hard-blocked");
     }
 }

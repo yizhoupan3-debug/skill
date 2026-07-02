@@ -26,7 +26,6 @@ pub fn search_tools(
     query: &str,
     records: &[McpToolRecord],
     top_k: usize,
-    _host_id: Option<&str>,
 ) -> Vec<McpToolDecision> {
     if records.is_empty() || query.trim().is_empty() || top_k == 0 {
         return Vec::new();
@@ -138,7 +137,7 @@ mod tests {
             test_tool_record("browser_screenshot", &["截图", "浏览器"]),
             test_tool_record("browser_click", &["点击", "浏览器"]),
         ];
-        let results = search_tools("pdf", &records, 2, None);
+        let results = search_tools("pdf", &records, 2);
         assert_eq!(results.len(), 2);
         assert!(results[0].selected_tool.contains("pdf"));
     }
@@ -146,13 +145,13 @@ mod tests {
     #[test]
     fn search_empty_query() {
         let records = vec![test_tool_record("pdf_read", &["pdf"])];
-        assert!(search_tools("", &records, 10, None).is_empty());
+        assert!(search_tools("", &records, 10).is_empty());
     }
 
     #[test]
     fn search_zero_top_k() {
         let records = vec![test_tool_record("pdf_read", &["pdf"])];
-        assert!(search_tools("pdf", &records, 0, None).is_empty());
+        assert!(search_tools("pdf", &records, 0).is_empty());
     }
 
     #[test]
@@ -163,7 +162,7 @@ mod tests {
         )];
         // "screeenshot" is a typo that scores 0 in token-based scoring but
         // fuzzy-matches "screenshot" via trigram Jaccard
-        let results = search_tools("screeenshot", &records, 5, None);
+        let results = search_tools("screeenshot", &records, 5);
         assert!(!results.is_empty(), "typo should fuzzy-match in search");
         assert!(results[0].fuzzy_match, "should be flagged as fuzzy match");
         assert_eq!(results[0].selected_tool, "browser_screenshot");
@@ -174,7 +173,7 @@ mod tests {
         let mut record = test_tool_record("old_tool", &["legacy", "old"]);
         record.tool_flags = vec!["deprecated".to_string()];
         let records = vec![record];
-        let results = search_tools("legacy old_tool", &records, 5, None);
+        let results = search_tools("legacy old_tool", &records, 5);
         assert!(
             results.is_empty(),
             "deprecated tool must be excluded from search"
@@ -186,7 +185,7 @@ mod tests {
         let mut record = test_tool_record("task_create", &["task", "创建"]);
         record.tool_flags = vec!["no_routing".to_string()];
         let records = vec![record];
-        let results = search_tools("task_create", &records, 5, None);
+        let results = search_tools("task_create", &records, 5);
         assert!(
             results.is_empty(),
             "no_routing tool must be excluded from search"

@@ -5,7 +5,6 @@
     "default_surface_loadout": {
       "description": "Default hot routing surface (routing, memory, continuity, host projection).",
       "tier_activation": "default",
-      "hot_first_turn_owners_from_policy": true,
       "skill_slugs": []
     },
     "research_loadout": {

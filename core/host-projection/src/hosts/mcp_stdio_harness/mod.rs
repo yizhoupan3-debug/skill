@@ -561,7 +561,7 @@ fn generate_connection_session_id(host_id: &str) -> String {
     let entropy: u64 = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| (d.as_nanos() as u64) ^ (d.as_secs() << 32))
-        .unwrap_or(0);
+        .unwrap_or_else(|_| std::process::id() as u64);
     format!("{host_id}-{entropy:x}-{counter}")
 }
 
@@ -776,7 +776,10 @@ fn handle_prompts_get(
                  Use this repo shared framework runtime.\n\n\
                  1) Start from AGENTS.md。\n\
                  2) Route via {source_rel}.\n\
-                 3) Read only the matched skill_path.\n\n\
+                 3) Read only the matched skill_path.\n\
+                 4) Use route_tool(query) or search_tools(query, top_k) to find matching\n\
+                    MCP tools.  skill_route now returns recommended_tools alongside the\n\
+                    selected skill — tools within the matched skill's domain.\n\n\
                  Framework root: core/router-rs/"
             )
         }
@@ -1136,11 +1139,13 @@ fn spawn_cli_tool(
 
     // Clean up temp file created for lean-verify
     if tool_name == "math_lean_verify" {
-        let nanos = std::time::SystemTime::now()
+        let pid = std::process::id();
+        let uuid = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_nanos();
-        let tmp_path = std::env::temp_dir().join(format!("router_rs_lean_{nanos}.lean"));
+        let tmp_path =
+            std::env::temp_dir().join(format!("router_rs_lean_{pid}_{uuid:016x}.lean"));
         let _ = std::fs::remove_file(&tmp_path);
     }
 

@@ -157,7 +157,7 @@ fn stdio_request_dispatches_route_snapshot_payload() {
 #[test]
 fn stdio_route_supports_inline_skill_catalog_and_token_budget_bias() {
     let response = handle_stdio_json_line(
-        r#"{"id":4,"op":"route","payload":{"query":"这是多阶段任务，但只要 bounded sidecar，保留主线程集成，降低 token 开销，不要完整 worker 编排","session_id":"inline-route","allow_overlay":true,"first_turn":true,"skills":[{"name":"agent-swarm-orchestration","description":"Decide whether work should stay local, use bounded sidecars, or fall back to a local supervisor queue.","routing_layer":"L0","routing_owner":"gate","routing_gate":"delegation","routing_priority":"P1","trigger_hints":["subagent","sidecar","delegation"]},{"name":"deepinterview","description":"Evidence-first clarification and convergence review.","routing_layer":"L1","routing_owner":"owner","routing_gate":"none","routing_priority":"P1","trigger_hints":["deepinterview","review"]}]}}"#,
+        r#"{"id":4,"op":"route","payload":{"query":"这是多阶段任务，但只要 bounded sidecar，保留主线程集成，降低 token 开销，不要完整 worker 编排","session_id":"inline-route","allow_overlay":true,"first_turn":true,"skills":[{"name":"agent-swarm-orchestration","description":"Decide whether work should stay local, use bounded sidecars, or fall back to a local supervisor queue.","routing_layer":"L0","routing_owner":"owner","routing_gate":"delegation","routing_priority":"P1","trigger_hints":["subagent","sidecar","delegation"]},{"name":"deepinterview","description":"Evidence-first clarification and convergence review.","routing_layer":"L1","routing_owner":"owner","routing_gate":"none","routing_priority":"P1","trigger_hints":["deepinterview","review"]}]}}"#,
     );
     assert!(response.ok, "{:?}", response.error);
     let payload = response.payload.expect("payload");

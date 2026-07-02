@@ -121,10 +121,50 @@ pub(super) fn tool_skill_route(
         &repo_root.to_string_lossy(),
     )?;
 
-    // (P2 #16): per-process SKILL_ROUTE_EVER_CALLED flag removed.
-    // No state to update after a successful route call.
+    // Enhance: append recommended_tools from tool routing
+    let mut result_value: Value = serde_json::from_str(&route_result).unwrap_or(Value::Null);
+    if let Some(obj) = result_value.as_object_mut() {
+        let registry_path = mcp_tool_registry::resolve_tool_registry_path()
+            .unwrap_or_else(|| {
+                repo_root.join(framework_core::constants::MCP_TOOL_REGISTRY_RELATIVE_PATH)
+            });
 
-    Ok(route_result)
+        let tools = (|| -> Option<Vec<Value>> {
+            let records = mcp_tool_registry::load_tool_records_cached(&registry_path).ok()?;
+            // Exclude no_routing tools (meta-tools) from recommendations
+            let filtered: Vec<_> = records
+                .into_iter()
+                .filter(|r| !r.tool_flags.iter().any(|f| f == "no_routing"))
+                .collect();
+            if filtered.is_empty() {
+                return None;
+            }
+            let results = tool_routing_engine::search::search_tools(query, &filtered, 3);
+            if results.is_empty() {
+                return None;
+            }
+            Some(
+                results
+                    .into_iter()
+                    .map(|d| {
+                        json!({
+                            "slug": d.selected_tool,
+                            "score": d.score,
+                            "dispatch_domain": d.dispatch_domain,
+                            "fuzzy_match": d.fuzzy_match,
+                            "reasons": d.reasons,
+                        })
+                    })
+                    .collect(),
+            )
+        })();
+
+        if let Some(tools) = tools {
+            obj.insert("recommended_tools".to_string(), json!(tools));
+        }
+    }
+
+    Ok(result_value.to_string())
 }
 
 pub(super) fn tool_skill_search(

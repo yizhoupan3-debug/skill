@@ -11,13 +11,15 @@ use serde_json::Value;
 // ---------------------------------------------------------------------------
 
 /// Valid values for `routing_owner`.
+///
+/// `Owner` — competes as a domain owner in routing.
+/// `Overlay` — secondary pick that can activate alongside the primary owner
+///             (never competes for primary ownership).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RoutingOwner {
     Owner,
-    Gate,
-    User,
-    None,
+    Overlay,
 }
 
 /// Valid values for `routing_layer`.

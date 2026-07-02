@@ -419,26 +419,25 @@ pub(crate) fn has_existing_image_file_context(
     .any(|marker| query_text.contains(marker) || text_matches_phrase(query_token_list, marker))
 }
 
-/// Returns `true` when the record`s `owner_lower` is `"overlay"`.
+/// Returns `true` when the record's `owner_lower` is `"overlay"`.
 ///
-/// This is a broad string match: any record whose owner is literally
-/// `"overlay"` (lowercased) is considered an overlay record. This includes
-/// records whose `owner` field happens to contain the string "overlay" when
-/// lowercased. The match is intentionally liberal because the owner space
-/// is closed — new owners must be explicitly registered in frontmatter
-/// validation — and false positives from a substring match are already
-/// precluded by closed-set validation upstream.
+/// Overlay records do not compete for primary ownership; they can be picked
+/// alongside the primary owner via `pick_overlay()` if `allow_overlay` is true.
 pub fn is_overlay_record(record: &SkillRecord) -> bool {
     record.owner_lower == "overlay"
 }
 
+/// A record can be primary owner when it has no admission gate and is not a
+/// framework alias that requires explicit invocation.
+///
+/// Gate-ness is determined solely by `gate_lower` — the `routing_owner` field
+/// now only distinguishes `owner` from `overlay`. Overlay records are excluded
+/// from the primary-owner pool by separate filtering (`!is_overlay_record`).
 pub fn can_be_primary_owner(record: &SkillRecord) -> bool {
     if !record.primary_allowed {
         return false;
     }
-    record.gate_lower == "none"
-        && !framework_alias_requires_explicit_call(record)
-        && !matches!(record.owner_lower.as_str(), "gate" | "overlay")
+    record.gate_lower == "none" && !framework_alias_requires_explicit_call(record)
 }
 
 pub fn can_be_fallback_owner(record: &SkillRecord) -> bool {

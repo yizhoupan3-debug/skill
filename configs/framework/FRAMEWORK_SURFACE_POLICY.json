@@ -12,21 +12,6 @@
       "framework_loadout",
       "ops_loadout"
     ],
-    "hot_first_turn_owners": [
-      "skill-framework-developer",
-      "paper-workbench",
-      "citation-management",
-      "statistical-analysis",
-      "experiment-reproducibility",
-      "code-review-deep",
-      "plan-mode",
-      "research-discovery",
-      "research-execution",
-      "math-derivation",
-      "deep-search",
-      "good-story",
-      "good-question"
-    ],
     "lean_default_owners": [],
     "tier_activation_defaults": {
       "core": "default",

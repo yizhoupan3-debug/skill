@@ -26,8 +26,6 @@ pub struct ToolScoringWeights {
     pub alias_hits_per_hit: f64,
     pub description_per_match: f64,
     pub description_max: f64,
-    pub do_not_use_penalty_max_ratio: f64,
-    pub do_not_use_penalty_per_hit: f64,
     /// Layer penalty mapping: layer name → penalty score.
     /// e.g. {"builtin": 0.0, "external": -2.0}
     pub layer_penalties: HashMap<String, f64>,
@@ -122,8 +120,6 @@ mod tests {
             "alias_hits_per_hit": 4.0,
             "description_per_match": 1.0,
             "description_max": 15.0,
-            "do_not_use_penalty_max_ratio": 0.3,
-            "do_not_use_penalty_per_hit": 5.0,
             "layer_penalties": {"builtin": 0.0, "external": -2.0}
         }"#;
         let w: ToolScoringWeights = serde_json::from_str(v1_json).expect("v1 JSON with defaults");

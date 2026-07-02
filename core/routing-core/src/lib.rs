@@ -3,18 +3,27 @@
 //!
 //! Shared routing primitives for the Routing Layer.
 //!
-//! Provides trigram-based fuzzy matching used by both skill routing
-//! (`routing-engine`) and tool routing (`tool-routing-engine`).
+//! Provides trigram-based fuzzy matching and shared token-scoring pipeline
+//! used by both skill routing (`routing-engine`) and tool routing
+//! (`tool-routing-engine`).
 //!
-//! ## Re-exports
+//! ## Fuzzy matching
 //!
 //! - `fuzzy::extract_trigrams`, `fuzzy::jaccard_similarity`,
 //!   `fuzzy::trigram_similarity`, `fuzzy::best_fuzzy_jaccard`
+//!
+//! ## Token scoring
+//!
+//! - `scoring::score_shared_token_matches()` — 5-step dedup token scoring
+//! - `scoring::best_fuzzy_score()` — shared fuzzy rescue
+//! - `scoring::TokenScoreWeights`, `scoring::TokenScoreResult`
 
 pub mod config_hooks;
 pub mod fuzzy;
+pub mod scoring;
 
 pub use fuzzy::{
     best_fuzzy_jaccard, character_ngrams, cosine_similarity, extract_trigrams, jaccard_similarity,
     weighted_ngram_similarity,
 };
+pub use scoring::{best_fuzzy_score, score_shared_token_matches, TokenScoreResult, TokenScoreWeights};

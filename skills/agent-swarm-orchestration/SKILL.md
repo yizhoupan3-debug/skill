@@ -14,7 +14,7 @@ scene: general
 risk: medium
 routing_gate: delegation
 routing_layer: L0
-routing_owner: gate
+routing_owner: owner
 routing_priority: P1
 session_start: required
 source: project

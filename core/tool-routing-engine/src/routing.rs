@@ -12,24 +12,21 @@ use crate::fuzzy::best_fuzzy_score;
 use crate::scoring_config::tool_scoring_weights;
 use crate::types::{McpToolDecision, ToolCandidate};
 use core_errors::FrameworkError;
-use core_state_utils::text_utils::is_ascii_word;
 use core_state_utils::text_utils::tokenize_cjk_aware as tokenize_text;
 use mcp_tool_registry::McpToolRecord;
 use std::collections::HashSet;
 
 use crate::routing_logger::log_tool_decision;
-#[allow(unused_imports)]
+#[cfg(test)]
 use mcp_tool_registry::{DispatchDomain, ToolLayer, ToolOwner};
 
 const DECISION_SCHEMA_VERSION: &str = "1.0.0";
 
 /// Route a natural language query to the best-matching tool.
 ///
-/// `_host_id` is retained for API compatibility (host_platforms removed from McpToolRecord).
 pub fn route_tool(
     query: &str,
     registry_path: &std::path::Path,
-    _host_id: Option<&str>,
 ) -> Result<Option<McpToolDecision>, FrameworkError> {
     if query.len() > crate::MAX_QUERY_LEN {
         return Err(FrameworkError::validation(format!(
@@ -137,8 +134,7 @@ pub fn route_tool_from_records(
 
 /// 6-step scoring pipeline. Steps 1-5 produce the primary score;
 /// step 6 (layer penalty) is applied as an adjustment.
-/// Step 3 (display_name) was merged into Step 4's alias mechanism to avoid
-/// double-counting — the same alias_tokens were being scored twice.
+/// Steps 1-4 use the shared pipeline from `routing_core`.
 pub(crate) fn score_tool(
     record: &McpToolRecord,
     query_lower: &str,
@@ -167,101 +163,42 @@ pub(crate) fn score_tool(
 
     let alias_tokens: HashSet<String> = tokenize_text(&display_name_lower).into_iter().collect();
 
-    let mut score = 0.0f64;
-    let mut reasons = Vec::new();
-    let mut matched_token_count = 0usize;
-    // Track matched tokens across scoring steps to prevent double-counting.
-    // A token matched in name/keyword/alias should only score once.
-    let mut unique_matched: HashSet<&str> = HashSet::new();
+    // Steps 1-4: Use shared pipeline (exact name, name tokens, trigger hints, keywords, aliases)
+    let shared_weights = routing_core::scoring::TokenScoreWeights::from_tool_weights(
+        weights.exact_name_boost,
+        weights.name_tokens_base,
+        weights.name_tokens_per_token,
+        weights.trigger_hint_per_match,
+        weights.keyword_per_keyword,
+        weights.keyword_max,
+        weights.alias_hits_base,
+        weights.alias_hits_per_hit,
+    );
 
-    // Step 1: Exact name match (slug or display_name)
-    if slug_lower == query_lower || display_name_lower == query_lower {
-        score += weights.exact_name_boost;
-        reasons.push("exact_name_match".to_string());
-    }
+    let shared = routing_core::scoring::score_shared_token_matches(
+        query_lower,
+        query_tokens,
+        &slug_lower,
+        &display_name_lower,
+        &name_tokens,
+        &record.trigger_hints,
+        &keyword_tokens,
+        &alias_tokens,
+        &shared_weights,
+    );
 
-    // Step 2: Name token matching (dedup against unique_matched)
-    let name_match_count = query_tokens
-        .iter()
-        .filter(|qt| name_tokens.contains(qt.as_str()) && !unique_matched.contains(qt.as_str()))
-        .count();
-    if name_match_count > 0 {
-        score +=
-            weights.name_tokens_base + weights.name_tokens_per_token * (name_match_count as f64);
-        reasons.push(format!("name_tokens:{name_match_count}"));
-        matched_token_count += name_match_count;
-        unique_matched.extend(
-            query_tokens
-                .iter()
-                .filter(|qt| name_tokens.contains(qt.as_str()))
-                .map(|s| s.as_str()),
-        );
-    }
+    let mut score = shared.score;
+    let mut reasons = shared.reasons;
+    let mut matched_token_count = shared.matched_token_count;
 
-    // Step 3: Trigger hint matching
-    let trigger_match_count = record
-        .trigger_hints
-        .iter()
-        .filter(|hint| {
-            let hint_lower = hint.to_lowercase();
-            if hint_lower.is_empty() {
-                return false;
-            }
-            if is_ascii_word(&hint_lower) {
-                query_tokens.iter().any(|qt| qt == &hint_lower)
-            } else {
-                query_lower.contains(&hint_lower)
-            }
-        })
-        .count();
-    if trigger_match_count > 0 {
-        score += weights.trigger_hint_per_match * (trigger_match_count as f64);
-        reasons.push(format!("trigger_hints:{trigger_match_count}"));
-        matched_token_count += trigger_match_count;
-    }
+    // Build a set of already-matched tokens for domain-specific dedup.
+    let matched_set: std::collections::HashSet<&str> =
+        shared.matched_tokens.iter().map(|s| s.as_str()).collect();
 
-    // Step 4: Keyword + Alias token matching (both dedup against unique_matched)
-    let keyword_match_count = query_tokens
-        .iter()
-        .filter(|qt| keyword_tokens.contains(qt.as_str()) && !unique_matched.contains(qt.as_str()))
-        .count();
-    if keyword_match_count > 0 {
-        let kw_score =
-            (weights.keyword_per_keyword * (keyword_match_count as f64)).min(weights.keyword_max);
-        score += kw_score;
-        reasons.push(format!("keywords:{keyword_match_count}"));
-        matched_token_count += keyword_match_count;
-        unique_matched.extend(
-            query_tokens
-                .iter()
-                .filter(|qt| keyword_tokens.contains(qt.as_str()))
-                .map(|s| s.as_str()),
-        );
-    }
-
-    // Alias matching uses a separate unique count against both keyword_tokens and unique_matched.
-    let alias_match_count = query_tokens
-        .iter()
-        .filter(|qt| alias_tokens.contains(qt.as_str()) && !unique_matched.contains(qt.as_str()))
-        .count();
-    if alias_match_count > 0 {
-        let alias_score =
-            weights.alias_hits_base + weights.alias_hits_per_hit * (alias_match_count as f64);
-        score += alias_score;
-        reasons.push(format!("alias_tokens:{alias_match_count}"));
-        matched_token_count += alias_match_count;
-        unique_matched.extend(
-            query_tokens
-                .iter()
-                .filter(|qt| alias_tokens.contains(qt.as_str()))
-                .map(|s| s.as_str()),
-        );
-    }
-
-    // Step 5: Description token matching (dedup against unique_matched)
+    // Step 5: Description token matching (dedup against matched_set)
     let desc_match_count = query_tokens
         .iter()
-        .filter(|qt| desc_tokens.contains(qt.as_str()) && !unique_matched.contains(qt.as_str()))
+        .filter(|qt| desc_tokens.contains(qt.as_str()) && !matched_set.contains(qt.as_str()))
         .count();
     if desc_match_count > 0 {
         let desc_score = (weights.description_per_match * (desc_match_count as f64))

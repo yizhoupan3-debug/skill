@@ -318,10 +318,9 @@ fn tool_route_tool(
             tracing::warn!("host_id override rejected: caller tried to override '{host_id}' with '{override_host}'");
         }
     }
-    let effective_host = host_id;
     let registry_path = resolve_tool_registry_path(ctx_repo_root);
     let decision =
-        tool_routing_engine::routing::route_tool(query, &registry_path, Some(effective_host))?
+        tool_routing_engine::routing::route_tool(query, &registry_path)?
             .ok_or_else(|| {
                 FrameworkError::from(format!(
                     "route_tool: no matching tool found for query '{query}'"
@@ -347,12 +346,11 @@ fn tool_search_tools(
             tracing::warn!("host_id override rejected: caller tried to override '{host_id}' with '{override_host}'");
         }
     }
-    let effective_host = host_id;
     let registry_path = resolve_tool_registry_path(ctx_repo_root);
     let records = mcp_tool_registry::load_tool_records_cached(&registry_path)
         .map_err(|e| FrameworkError::from(format!("search_tools: failed to load registry: {e}")))?;
     let results =
-        tool_routing_engine::search::search_tools(query, &records, top_k, Some(effective_host));
+        tool_routing_engine::search::search_tools(query, &records, top_k);
     serde_json::to_string(&results).map_err(|e| FrameworkError::from(e.to_string()))
 }
 

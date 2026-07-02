@@ -13,6 +13,7 @@
 
 #![deny(clippy::unwrap_used, clippy::expect_used)]
 
+use serde_json::Value;
 use std::path::Path;
 
 /// The type of task transition being validated.
@@ -33,6 +34,12 @@ pub struct TransitionVerdict {
     pub passed: bool,
     /// Human-readable reason for the verdict.
     pub reason: String,
+    /// Goal type from GOAL_STATE.json (if available).
+    pub goal_type: Option<String>,
+    /// Number of evidence artifacts found.
+    pub evidence_count: usize,
+    /// The target transition type (e.g. "Start", "Complete", "Fail").
+    pub transition_target: Option<String>,
 }
 
 impl TransitionVerdict {
@@ -40,6 +47,9 @@ impl TransitionVerdict {
         Self {
             passed: true,
             reason: reason.into(),
+            goal_type: None,
+            evidence_count: 0,
+            transition_target: None,
         }
     }
 
@@ -47,7 +57,25 @@ impl TransitionVerdict {
         Self {
             passed: false,
             reason: reason.into(),
+            goal_type: None,
+            evidence_count: 0,
+            transition_target: None,
         }
+    }
+
+    fn with_goal_type(mut self, goal_type: Option<String>) -> Self {
+        self.goal_type = goal_type;
+        self
+    }
+
+    fn with_evidence_count(mut self, count: usize) -> Self {
+        self.evidence_count = count;
+        self
+    }
+
+    fn with_transition_target(mut self, target: Option<String>) -> Self {
+        self.transition_target = target;
+        self
     }
 }
 
@@ -67,35 +95,65 @@ pub fn validate_transition(
     match transition {
         TaskTransition::Start => {
             TransitionVerdict::allowed("start transition — no evidence required")
+                .with_transition_target(Some("Start".to_string()))
         }
         TaskTransition::Fail => {
             TransitionVerdict::allowed("fail transition — no evidence required")
+                .with_transition_target(Some("Fail".to_string()))
         }
         TaskTransition::Complete => validate_complete_transition(repo_root, task_id),
     }
 }
 
+fn count_evidence_artifacts_inner(repo_root: &Path, tid: &str) -> usize {
+    let index_path = repo_root
+        .join("artifacts/current")
+        .join(tid)
+        .join("EVIDENCE_INDEX.json");
+    if !index_path.is_file() {
+        return 0;
+    }
+    let Ok(raw) = std::fs::read_to_string(&index_path) else {
+        return 0;
+    };
+    let Ok(val) = serde_json::from_str::<serde_json::Value>(&raw) else {
+        return 0;
+    };
+    val.get("artifacts")
+        .and_then(|v| v.as_array())
+        .map(|a| a.len())
+        .unwrap_or(0)
+}
+
 fn validate_complete_transition(repo_root: &Path, task_id: &str) -> TransitionVerdict {
     let tid = task_id.trim();
     if tid.is_empty() {
-        return TransitionVerdict::blocked("task_id is empty");
+        return TransitionVerdict::blocked("task_id is empty")
+            .with_transition_target(Some("Complete".to_string()));
     }
 
     // P2-03: Validate task_id before path construction
     if let Err(e) = crate::utils::path_guard::validate_task_id_component(tid) {
-        return TransitionVerdict::blocked(format!("invalid task_id: {e}"));
+        return TransitionVerdict::blocked(format!("invalid task_id: {e}"))
+            .with_transition_target(Some("Complete".to_string()));
     }
 
-    // D5: No GOAL_STATE.json or task directory = no active task → auto-pass.
-    // Check GOAL_STATE.json existence directly rather than TASK_POINTERS.tasks array,
-    // because write_active_task_pointer does not populate the tasks array.
-    // (TASK_POINTERS.tasks is only populated by write_focus_task_pointer_minimal.)
-    // Direct GOAL_STATE check is authoritative and avoids the array-hollowing vulnerability.
+    // Read GOAL_STATE.json to check existence and extract goal_type
     let goal_state_path = repo_root
         .join("artifacts/current")
         .join(tid)
         .join("GOAL_STATE.json");
-    if !goal_state_path.is_file() {
+    let goal_state_raw = goal_state_path.is_file().then(|| {
+        std::fs::read_to_string(&goal_state_path).ok()
+    }).flatten();
+    let goal_type: Option<String> = goal_state_raw.as_deref()
+        .and_then(|raw| serde_json::from_str::<Value>(raw).ok())
+        .and_then(|v| v.get("goal_type").and_then(Value::as_str).map(String::from));
+    let has_goal_state = goal_state_raw.is_some();
+
+    let evidence_count = count_evidence_artifacts_inner(repo_root, tid);
+
+    if !has_goal_state {
         // D5: No GOAL_STATE.json = no active task.
         // If evidence exists for this task_id, verify it before auto-passing.
         let (has_ev, ev_ok) =
@@ -103,11 +161,15 @@ fn validate_complete_transition(repo_root: &Path, task_id: &str) -> TransitionVe
         if has_ev && !ev_ok {
             return TransitionVerdict::blocked(format!(
                 "task '{tid}' has no GOAL_STATE.json but evidence exists and indicates failure"
-            ));
+            ))
+            .with_evidence_count(evidence_count)
+            .with_transition_target(Some("Complete".to_string()));
         }
         return TransitionVerdict::allowed(
             "no GOAL_STATE.json found for this task — D5 auto-pass",
-        );
+        )
+        .with_evidence_count(evidence_count)
+        .with_transition_target(Some("Complete".to_string()));
     }
 
     let (has_evidence, evidence_ok) =
@@ -116,19 +178,28 @@ fn validate_complete_transition(repo_root: &Path, task_id: &str) -> TransitionVe
     if !has_evidence {
         return TransitionVerdict::blocked(format!(
             "task '{tid}' has no evidence artifacts — cannot verify completion"
-        ));
+        ))
+        .with_goal_type(goal_type)
+        .with_evidence_count(evidence_count)
+        .with_transition_target(Some("Complete".to_string()));
     }
 
     if !evidence_ok {
         return TransitionVerdict::blocked(format!(
             "task '{tid}' has evidence artifacts but none indicate success \
                  (no exit_code=0 or success=true)"
-        ));
+        ))
+        .with_goal_type(goal_type)
+        .with_evidence_count(evidence_count)
+        .with_transition_target(Some("Complete".to_string()));
     }
 
     TransitionVerdict::allowed(format!(
         "task '{tid}' has valid evidence artifacts confirming completion"
     ))
+    .with_goal_type(goal_type)
+    .with_evidence_count(evidence_count)
+    .with_transition_target(Some("Complete".to_string()))
 }
 
 #[cfg(test)]

@@ -23,7 +23,7 @@ network_access: conditional
 risk: low
 routing_gate: evidence
 routing_layer: L0
-routing_owner: gate
+routing_owner: owner
 routing_priority: P2
 session_start: n/a
 short_description: Investigate unknown failures before fixing

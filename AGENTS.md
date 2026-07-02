@@ -23,6 +23,10 @@
 - **Review findings-only by default**: review 产出仅为 findings（P0→P1→P2→Caveat），不默认改代码、不执行。参见 `skills/code-review-deep/SKILL.md`。
 - Closeout: 完成时使用 `goal_state_manage(operation=complete)` 记录 closeout evidence。
 - Skill Routing: 使用 `skill_route` / `skill_search` MCP 工具进行路由。
+- **Tool Routing**: 使用 `route_tool(query)` / `search_tools(query, top_k)` 查找 MCP 工具。
+  - `skill_route` 现在会返回 `recommended_tools` 字段（与命中 skill 同域的工具列表）。
+  - Agent 优先用 `skill_route` 定位 skill，然后参考 `recommended_tools` + 读 SKILL.md 进行后续操作。
+  - 工具注册表见 `configs/framework/MCP_TOOL_REGISTRY.json`。
 
 ## Skill 目录
 

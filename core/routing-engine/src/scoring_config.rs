@@ -25,7 +25,7 @@ fn resolve_runtime_weights_path() -> Option<String> {
     None
 }
 
-const EXPECTED_SCHEMA: &str = "scoring-weights-v1";
+const EXPECTED_SCHEMA: &str = "scoring-weights-v2";
 
 /// Returns the schema version constant embedded at compile time for
 /// `scoring_weights.json`. Used by integration tests to verify
@@ -87,26 +87,9 @@ pub struct ScoringWeights {
     pub top_owner_score_threshold: f64,
     pub gate_before_owner_threshold: f64,
 
-    // -- layer thresholds (pick_owner / routing.rs) --
-    #[serde(rename = "layer_threshold_L0")]
-    pub layer_threshold_l0: f64,
-    #[serde(rename = "layer_threshold_L1")]
-    pub layer_threshold_l1: f64,
-    #[serde(rename = "layer_threshold_L2_L3")]
-    pub layer_threshold_l2_l3: f64,
-    pub layer_threshold_default: f64,
 }
 
 impl ScoringWeights {
-    /// Return the score floor for the given layer name.
-    pub fn layer_threshold(&self, layer: &str) -> f64 {
-        match layer {
-            "L0" => self.layer_threshold_l0,
-            "L1" => self.layer_threshold_l1,
-            "L2" | "L3" => self.layer_threshold_l2_l3,
-            _ => self.layer_threshold_default,
-        }
-    }
 }
 
 impl Default for ScoringWeights {
@@ -167,14 +150,5 @@ mod tests {
         );
     }
 
-    #[test]
-    fn layer_threshold_maps_known_layers() {
-        let weights: ScoringWeights = serde_json::from_str(DEFAULTS_JSON).unwrap();
-        assert_eq!(weights.layer_threshold("L0"), weights.layer_threshold_l0);
-        assert_eq!(weights.layer_threshold("L2"), weights.layer_threshold_l2_l3);
-        assert_eq!(
-            weights.layer_threshold("unknown"),
-            weights.layer_threshold_default
-        );
-    }
+
 }

@@ -585,8 +585,7 @@ mod mirror_type_tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
-    /// Verify that `RouteDecision` has the expected field count and types.
-    /// If the source (routing_engine) changes, this test catches structural drift.
+    /// Verify that `RouteDecision` mirror matches `routing_engine::RouteDecision`.
     #[test]
     fn route_decision_mirror_structural_invariants() {
         let d = RouteDecision::default();
@@ -595,8 +594,12 @@ mod mirror_type_tests {
         assert!(d.reasons.is_empty());
         assert_eq!(d.score, 0.0f64);
 
-        // Verify this mirrors routing_engine's RouteDecision (4 fields)
-        // Change this count when the source struct changes.
+        // Cross-crate structural check: verify mirror fields exist in the
+        // real routing_engine::RouteDecision.  If routing_engine changes
+        // its struct, this test catches the drift.
+        let _ref: &str = &routing_engine::RouteDecision::default().selected_skill;
+        let _ = routing_engine::RouteDecision::default().score;
+
         let field_estimate = std::mem::size_of::<RouteDecision>();
         assert!(
             field_estimate > 0,

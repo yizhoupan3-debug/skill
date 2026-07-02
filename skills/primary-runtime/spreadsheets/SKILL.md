@@ -4,7 +4,7 @@ description: |
   Route workbook-native spreadsheet artifact work before choosing a narrower implementation lane.
   Use this artifact gate at 每轮对话开始 / first-turn / conversation start when the main artifact is an Excel workbook or spreadsheet-like file and formulas, formatting, charts, recalculation, or workbook fidelity matter.
 routing_layer: L3
-routing_owner: gate
+routing_owner: owner
 routing_gate: artifact
 routing_priority: P1
 session_start: required

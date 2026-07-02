@@ -172,7 +172,7 @@ fn score_gate_name_token_signals(
     let mut delta = 0.0f64;
     let mut matched_count = 0usize;
 
-    // Exact skill name
+    // Exact skill name check (slug_lower + $prefix)
     if !record.slug_lower.is_empty()
         && (text_matches_phrase(query_token_list, &record.slug_lower)
             || query_text.contains(&format!("${}", record.slug_lower)))
@@ -208,25 +208,39 @@ fn score_gate_name_token_signals(
         }
     }
 
-    // Name tokens (single-pass: count + collect matched names)
-    let mut shared_name_tokens: usize = 0;
-    let mut matched_names: Vec<&str> = Vec::new();
-    for token in &record.name_tokens {
-        if query_tokens.contains(token.as_str()) {
-            shared_name_tokens += 1;
-            matched_names.push(token.as_str());
+    // Shared name-token scoring (from routing-core, includes dedup tracking
+    // against name_tokens, keywords, and alias_tokens)
+    let shared = routing_core::scoring::score_shared_token_matches(
+        query_text,
+        query_token_list,
+        &record.slug_lower,
+        "", // display_name not tracked in SkillRecord
+        &record.name_tokens,
+        &[], // trigger hints use text_matches_phrase below
+        &record.keyword_tokens,
+        &record.alias_tokens,
+        &routing_core::scoring::TokenScoreWeights::from_skill_weights(
+            w.exact_skill_name_boost,
+            w.name_tokens_base,
+            w.name_tokens_per_token,
+            w.trigger_hint_per_match,
+            w.keywords_per_keyword,
+            w.keywords_max,
+            w.alias_hits_base,
+            w.alias_hits_per_hit,
+        ),
+    );
+    delta += shared.score;
+    matched_count += shared.matched_token_count;
+    // Only push reasons that aren't already covered by exact-skill-name above
+    for r in &shared.reasons {
+        if !r.starts_with("exact_name") {
+            reasons.push(r.clone());
         }
     }
-    if shared_name_tokens > 0 {
-        delta += w.name_tokens_base + (shared_name_tokens as f64) * w.name_tokens_per_token;
-        reasons.push(format!(
-            "Name tokens matched: {}.",
-            matched_names.join(", ")
-        ));
-        matched_count += shared_name_tokens;
-    }
 
-    // Trigger hints
+    // Trigger hints (use text_matches_phrase rather than shared pipeline's
+    // is_ascii_word/contains — preserves order-aware phrase matching)
     let matched_trigger_hints: Vec<&str> = record
         .trigger_hints
         .iter()
@@ -252,11 +266,12 @@ fn score_gate_name_token_signals(
 }
 
 /// Score metadata positive triggers, keyword tokens, and alias tokens.
-/// Returns `(delta, reasons, matched_query_token_count)`.
+/// Keywords and aliases delegated to `routing_core::scoring::score_shared_token_matches`.
+/// Metadata triggers stay domain-specific (use text_matches_phrase).
 #[inline]
 fn score_metadata_trigger_signals(
     record: &SkillRecord,
-    query_tokens: &HashSet<&str>,
+    query_text: &str,
     query_token_list: &[String],
     w: &ScoringWeights,
     reasons: &mut Vec<String>,
@@ -286,51 +301,41 @@ fn score_metadata_trigger_signals(
         }
     }
 
-    // Keyword tokens
-    let mut shared_keywords: Vec<&str> = record
-        .keyword_tokens
-        .iter()
-        .filter(|token| query_tokens.contains(token.as_str()))
-        .map(|s| s.as_str())
-        .collect();
-    shared_keywords.sort();
-    if !shared_keywords.is_empty() {
-        delta += f64::min(
+    // Keyword + alias tokens via shared pipeline (includes dedup against
+    // the unique_matched set from score_gate_name_token_signals above).
+    // We build fresh weights so the shared function only contributes the
+    // keyword + alias portions (name_tokens matched in gate step already
+    // contribute zero due to dedup).
+    let shared = routing_core::scoring::score_shared_token_matches(
+        query_text,
+        query_token_list,
+        &record.slug_lower,
+        "",
+        &record.name_tokens,
+        &[],
+        &record.keyword_tokens,
+        &record.alias_tokens,
+        &routing_core::scoring::TokenScoreWeights::from_skill_weights(
+            w.exact_skill_name_boost,
+            w.name_tokens_base,
+            w.name_tokens_per_token,
+            w.trigger_hint_per_match,
+            w.keywords_per_keyword,
             w.keywords_max,
-            (shared_keywords.len() as f64) * w.keywords_per_keyword,
-        );
-        reasons.push(format!(
-            "Description keywords matched: {}.",
-            shared_keywords
-                .iter()
-                .take(8)
-                .copied()
-                .collect::<Vec<_>>()
-                .join(", ")
-        ));
-        matched_count += shared_keywords.len();
-    }
-
-    // Alias tokens
-    let mut alias_hits: Vec<&str> = record
-        .alias_tokens
-        .iter()
-        .filter(|token| query_tokens.contains(token.as_str()))
-        .map(|s| s.as_str())
-        .collect();
-    alias_hits.sort();
-    if !alias_hits.is_empty() {
-        delta += w.alias_hits_base + (alias_hits.len() as f64) * w.alias_hits_per_hit;
-        reasons.push(format!(
-            "Skill alias hints matched: {}.",
-            alias_hits
-                .iter()
-                .take(8)
-                .copied()
-                .collect::<Vec<_>>()
-                .join(", ")
-        ));
-        matched_count += alias_hits.len();
+            w.alias_hits_base,
+            w.alias_hits_per_hit,
+        ),
+    );
+    // Dedup against tokens already matched in the gate/name step.
+    // Since routing-core internally tracks unique_matched, the second call
+    // with the same query_tokens will only contribute NEW matches that
+    // weren't hit in gate_name_token_signals.
+    delta += shared.score;
+    matched_count += shared.matched_token_count;
+    for r in &shared.reasons {
+        if !r.starts_with("exact_name") && !r.starts_with("name_tokens") && !r.starts_with("trigger_hints") {
+            reasons.push(r.clone());
+        }
     }
 
     (delta, matched_count)
@@ -465,7 +470,7 @@ fn score_paper_workbench_signals(
 ///   7. Gate/ name-token/ trigger-hint scoring (score_gate_name_token_signals)
 ///   8. Metadata trigger/ keyword/ alias scoring (score_metadata_trigger_signals)
 ///   9. Session-start + code-review-deep scoring (score_session_start_signals)
-///  10. Gate-owner boost (owner_lower == "gate")
+///  10. Gate-owner boost (gate_lower != "none")
 ///  11. Visual-review special logic (slug == "visual-review")
 ///  12. Do-not-use token penalty
 ///  13. Paper-workbench boost (slug == "paper-workbench")
@@ -581,7 +586,7 @@ pub fn score_route_candidate<'a>(
 
     // --- metadata-trigger / keyword / alias signals ---
     let (meta_delta, meta_count) =
-        score_metadata_trigger_signals(record, query_tokens, query_token_list, w, &mut reasons);
+        score_metadata_trigger_signals(record, query_text, query_token_list, w, &mut reasons);
     score += meta_delta;
     matched_token_count += meta_count;
 
@@ -596,7 +601,9 @@ pub fn score_route_candidate<'a>(
         &mut reasons,
     );
 
-    if record.owner_lower == "gate" && score > 0.0 {
+    // Gate skills get a small score bump when their admission gate is active.
+    // Gate-ness is determined by `gate_lower != "none"`, not by the owner field.
+    if record.gate_lower != "none" && score > 0.0 {
         score += w.gate_owner_boost;
     }
 
@@ -717,11 +724,9 @@ pub fn pick_owner<'a>(
         .map(|&i| candidates[i].score)
         .unwrap_or(f64::NEG_INFINITY);
 
-    // Gate index
+    // Gate index — gate-ness is solely from `gate_lower` (not `owner_lower`).
     let gate_idx: Option<usize> = (0..n)
-        .filter(|&i| {
-            candidates[i].record.owner_lower == "gate" || candidates[i].record.gate_lower != "none"
-        })
+        .filter(|&i| candidates[i].record.gate_lower != "none")
         .min_by(|&a, &b| route_candidate_cmp(&candidates[a], &candidates[b]));
 
     // Determine winner index and optional extra reason in a single pass.
@@ -769,59 +774,16 @@ pub fn pick_owner<'a>(
                 pool_indices = (0..candidates.len()).collect();
             }
 
-            // Layer ranking (use &str instead of cloned String)
-            let mut layers: Vec<&str> = pool_indices
-                .iter()
-                .map(|&i| candidates[i].record.layer.as_str())
-                .collect::<HashSet<_>>()
-                .into_iter()
-                .collect();
-            layers.sort_unstable_by_key(|layer| layer_rank(layer));
-
-            let mut layer_winner: Option<usize> = None;
-            for layer in layers {
-                let mut layer_candidates: Vec<usize> = pool_indices
-                    .iter()
-                    .filter(|&&i| candidates[i].record.layer == layer)
-                    .copied()
-                    .collect();
-                layer_candidates
-                    .sort_unstable_by(|&a, &b| route_candidate_cmp(&candidates[a], &candidates[b]));
-                if let Some(&top) = layer_candidates.first()
-                    && candidates[top].score >= w.layer_threshold(layer) {
-                        layer_winner = Some(top);
-                        break;
-                    }
-            }
-
-            match layer_winner {
-                Some(idx) => (idx, None),
-                None => {
-                    // Fallback: sort pool by layer, score, priority, slug
-                    let mut fallback_pool = pool_indices;
-                    fallback_pool.sort_unstable_by(|&a, &b| {
-                        layer_rank(&candidates[a].record.layer)
-                            .cmp(&layer_rank(&candidates[b].record.layer))
-                            .then_with(|| {
-                                finite_route_score(candidates[b].score)
-                                    .partial_cmp(&finite_route_score(candidates[a].score))
-                                    .unwrap_or(Ordering::Equal)
-                            })
-                            .then_with(|| {
-                                priority_rank(&candidates[a].record.priority)
-                                    .cmp(&priority_rank(&candidates[b].record.priority))
-                            })
-                            .then_with(|| candidates[a].record.slug.cmp(&candidates[b].record.slug))
-                    });
-                    let idx = match fallback_pool.first() {
-                        Some(&idx) => idx,
-                        None => return Err(FrameworkError::validation(
-                            "pick_owner: fallback_pool empty after exhaustive fallbacks",
-                        )),
-                    };
-                    (idx, None)
-                }
-            }
+            // Score-based pool selection — layer no longer influences routing.
+            pool_indices
+                .sort_unstable_by(|&a, &b| route_candidate_cmp(&candidates[a], &candidates[b]));
+            let idx = match pool_indices.first() {
+                Some(&idx) => idx,
+                None => return Err(FrameworkError::validation(
+                    "pick_owner: pool empty after exhaustive fallbacks",
+                )),
+            };
+            (idx, None)
         };
 
     // Single swap_remove at the end — no fragile index invariant needed.
@@ -875,9 +837,8 @@ pub fn pick_overlay(
 
     let mut ordered = records.iter().collect::<Vec<_>>();
     ordered.sort_unstable_by(|left, right| {
-        layer_rank(&left.layer)
-            .cmp(&layer_rank(&right.layer))
-            .then_with(|| priority_rank(&left.priority).cmp(&priority_rank(&right.priority)))
+        priority_rank(&left.priority)
+            .cmp(&priority_rank(&right.priority))
             .then_with(|| left.slug.cmp(&right.slug))
     });
 
@@ -986,18 +947,6 @@ pub fn reasons_class(reasons: &[String]) -> String {
         return "none".to_string();
     }
     out.join("|")
-}
-
-pub fn layer_rank(layer: &str) -> i32 {
-    match layer {
-        "L-1" => -1,
-        "L0" => 0,
-        "L1" => 1,
-        "L2" => 2,
-        "L3" => 3,
-        "L4" => 4,
-        _ => 99,
-    }
 }
 
 pub fn priority_rank(priority: &str) -> i32 {

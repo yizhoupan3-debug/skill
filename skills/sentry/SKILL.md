@@ -23,7 +23,7 @@ network_access: required
 risk: medium
 routing_gate: source
 routing_layer: L0
-routing_owner: gate
+routing_owner: owner
 routing_priority: P2
 session_start: required
 source: project

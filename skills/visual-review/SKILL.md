@@ -23,7 +23,7 @@ scene: visual
 network_access: conditional
 routing_gate: evidence
 routing_layer: L3
-routing_owner: gate
+routing_owner: owner
 routing_priority: P1
 session_start: required
 source: project

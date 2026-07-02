@@ -24,7 +24,7 @@ network_access: conditional
 risk: medium
 routing_gate: artifact
 routing_layer: L3
-routing_owner: gate
+routing_owner: owner
 routing_priority: P1
 session_start: required
 source: project

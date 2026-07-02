@@ -2,6 +2,46 @@
 //!
 //! Delegated from host-projection's tool dispatcher (Phase 4 T1).
 //!
+//! # Dispatch architecture
+//!
+//! ## External entry point
+//! [`handle_research_tool`] is the sole public entry point. It is wired into
+//! host-projection's tool dispatcher via the global `research_tool_dispatch`
+//! hook (set at runtime-core startup in `hooks.rs`). The host-projection
+//! `dispatch_tool` function falls through to this hook for any tool name not
+//! handled by its built-in `CompositeRegistry` (task CRUD, loop control, etc.).
+//!
+//! Tools reachable through [`handle_research_tool`] are registered in
+//! **`MCP_TOOL_REGISTRY.json`** with `mcp_server: "research-harness"`.
+//! The routing chain is:
+//!
+//! ```text
+//! MCP_TOOL_REGISTRY.json  ──→  host-projection dispatch_tool()
+//!     └─ falls through to →  research_tool_dispatch hook
+//!         └─ calls →  handle_research_tool()
+//! ```
+//!
+//! ## Sub-dispatchers (internal-only, NOT in MCP_TOOL_REGISTRY directly)
+//!
+//! These private functions route to specific tool families and are never
+//! called directly by the MCP layer — only via [`handle_research_tool`]:
+//!
+//! - [`math_tool_dispatch`] — routes all `math_*` tools
+//! - [`verification_tool_dispatch`] — routes all `research_verification_*` tools
+//!
+//! ## Directly dispatched tools (in `handle_research_tool`)
+//!
+//! The following tools are dispatched directly (no sub-dispatcher):
+//! `research_aigc_check`, `research_review_dimensions`, `research_claim_drift`,
+//! `research_review_loop`, `research_smoke`, `research_literature_search`.
+//!
+//! ## Individual tool functions
+//!
+//! Every `tool_*` function is implemented in its own module within this crate
+//! (e.g. `aigc::tool_research_aigc_check`, `claims::tool_research_claim_drift`,
+//! `proof_dag::tool_math_proof_dag_init`, etc.) and imported here for dispatch.
+//! All are externally reachable — none is internal-only by design.
+//!
 //! # Input limits
 //!
 //! Array-type parameters (steps, witnesses, constraints, claims, references,

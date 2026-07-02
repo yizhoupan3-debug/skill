@@ -45,6 +45,12 @@ pub struct HostHooksSnapshot {
 
 // ---------------------------------------------------------------------------
 // Gate timeout expectations (shared across all hosts that use the same format)
+//
+// NOTE: This table is hardcoded. In the future, timeout values should be
+// made per-host configurable — either via the host's hooks manifest directly
+// or through a per-host override map in this module — so that hosts with
+// different latency profiles (e.g. remote agents vs local CLIs) can specify
+// their own timeouts without editing global constants.
 // ---------------------------------------------------------------------------
 
 const GATE_TIMEOUT_SECS: &[(&str, u64)] = &[
@@ -60,6 +66,7 @@ const GATE_TIMEOUT_SECS: &[(&str, u64)] = &[
     ("pre-tool-use", 20),
     ("user-prompt-submit", 20),
     // PascalCase events
+    ("BeforeSubmitPrompt", 20),
     ("SessionStart", 5),
     ("PreToolUse", 20),
     ("UserPromptSubmit", 20),

@@ -1,14 +1,8 @@
-//! N-gram fuzzy matching fallback for skill routing.
+//! N-gram fuzzy matching fallback for skill routing (delegates to routing-core).
 //!
-//! Wraps `routing-core` character n-gram primitives with skill-record-specific logic.
-//! Uses weighted character n-gram cosine similarity (unigram+bigram+trigram)
-//! instead of trigram Jaccard for better CJK cross-language matching.
-//!
-//! The core scoring pipeline has its own n-gram step (via `NgramCache` in
-//! `route::ngram`); this module is the **fuzzy rescue** path, invoked when
-//! no skill scored above zero.  The `fuzzy_fallback_score` function reuses
-//! `NgramCache` so that the weight formula (0.5 unigram + 0.3 bigram + 0.2
-//! trigram) is defined in a single location.
+//! The core n-gram computation is in `routing-core::scoring::best_fuzzy_score` and
+//! `routing-core::fuzzy`. This module keeps the NgramCache optimization for
+//! query-once-compare-many efficiency.
 
 use super::text::normalize_text;
 use super::types::SkillRecord;

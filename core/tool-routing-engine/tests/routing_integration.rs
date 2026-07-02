@@ -90,7 +90,7 @@ mod routing_integration_tests {
     #[test]
     fn search_returns_ranked() {
         let records = make_records();
-        let results = tool_routing_engine::search::search_tools("PDF 文档", &records, 3, None);
+        let results = tool_routing_engine::search::search_tools("PDF 文档", &records, 3);
         assert!(!results.is_empty());
         assert_eq!(results[0].selected_tool, "pdf-read");
     }
@@ -154,7 +154,7 @@ mod routing_integration_tests {
     #[test]
     fn search_top_k_overflow() {
         let records = make_records();
-        let results = tool_routing_engine::search::search_tools("pdf", &records, 9999, None);
+        let results = tool_routing_engine::search::search_tools("pdf", &records, 9999);
         assert!(!results.is_empty(), "should still return results");
         assert!(results.len() <= 100, "top_k should be clamped to MAX_TOP_K");
         assert!(
@@ -206,6 +206,45 @@ mod routing_integration_tests {
             );
             if let Some(d) = decision {
                 assert_eq!(d.selected_tool, record.slug);
+            }
+        }
+    }
+
+    #[test]
+    fn research_tools_discoverable_via_nl_query() {
+        let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        let registry_path = manifest_dir.join("../../configs/framework/MCP_TOOL_REGISTRY.json");
+        let records = mcp_tool_registry::load_tool_records(&registry_path)
+            .expect("should load real registry");
+
+        // NL queries that should route to research-harness or research-domain tools.
+        // Check dispatch_domain rather than exact slug to account for
+        // multiple tools that may match the same query (e.g. paperplain tools
+        // vs research-harness tools).
+        let test_cases = &[
+            ("查文献 attention 机制", "research"),
+            ("验证这篇论文的统计方法", "research"),
+            ("帮我化简代数表达式", "research"),
+            ("检查这个不等式的证明", "research"),
+            ("检测 AI 生成文本", "research"),
+            ("LaTeX 结构检查", "research"),
+        ];
+
+        for (query, expected_domain) in test_cases {
+            let decision =
+                tool_routing_engine::routing::route_tool_from_records(query, &records);
+            assert!(
+                decision.is_some(),
+                "NL query '{}' should match a research-domain tool",
+                query,
+            );
+            if let Some(d) = decision {
+                let domain = d.dispatch_domain.to_lowercase();
+                assert!(
+                    domain.contains(expected_domain),
+                    "NL query '{}' routed to '{}' (domain={}) — expected domain containing '{}'",
+                    query, d.selected_tool, d.dispatch_domain, expected_domain,
+                );
             }
         }
     }

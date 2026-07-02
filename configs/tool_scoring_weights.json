@@ -10,8 +10,6 @@
   "alias_hits_per_hit": 4.0,
   "description_per_match": 1.0,
   "description_max": 15.0,
-  "do_not_use_penalty_max_ratio": 0.8,
-  "do_not_use_penalty_per_hit": 25.0,
   "layer_penalties": {
     "builtin": 0.0,
     "research": 0.0,

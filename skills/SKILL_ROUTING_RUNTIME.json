@@ -107,7 +107,7 @@
     [
       "agent-swarm-orchestration",
       "L0",
-      "gate",
+      "owner",
       "delegation",
       "P1",
       "Decide whether work should stay local, use bounded sidecars, or escalate to workflow orchestration. Also design and debug multi-agent systems when the real problem is coordination, handoff, worker boundaries, and inter-agent information sharing.",
@@ -513,7 +513,7 @@
     [
       "design-md",
       "L3",
-      "gate",
+      "owner",
       "artifact",
       "P1",
       "Manage DESIGN.md design-system contracts and visual tokens.",
@@ -584,7 +584,7 @@
     [
       "doc",
       "L3",
-      "gate",
+      "owner",
       "artifact",
       "P1",
       "Handle layout-aware Word .docx creation, edits, and review.",
@@ -781,7 +781,7 @@
     [
       "gh-address-comments",
       "L0",
-      "gate",
+      "owner",
       "source",
       "P2",
       "Address GitHub PR review comments and lightweight PR triage summaries with gh-source-gate.",
@@ -855,7 +855,7 @@
     [
       "gh-fix-ci",
       "L0",
-      "gate",
+      "owner",
       "source",
       "P2",
       "Triage and fix failing GitHub Actions PR checks with gh-source-gate.",
@@ -1297,7 +1297,7 @@
     [
       "pdf",
       "L3",
-      "gate",
+      "owner",
       "artifact",
       "P1",
       "Handle layout-aware PDF reading, editing, repair, and review.",
@@ -1750,7 +1750,7 @@
     [
       "sentry",
       "L0",
-      "gate",
+      "owner",
       "source",
       "P2",
       "Inspect Sentry production errors and issue evidence read-only.",
@@ -1959,7 +1959,7 @@
     [
       "systematic-debugging",
       "L0",
-      "gate",
+      "owner",
       "evidence",
       "P2",
       "Root-cause investigation lane: hypothesis-driven debugging, reproduction capture, flake isolation, incident triage.",
@@ -2027,7 +2027,7 @@
     [
       "slides",
       "L3",
-      "gate",
+      "owner",
       "artifact",
       "P1",
       "Route presentation, PPT, PPTX, and slide deck tasks.",
@@ -2094,7 +2094,7 @@
     [
       "spreadsheets",
       "L3",
-      "gate",
+      "owner",
       "artifact",
       "P1",
       "Route workbook-native spreadsheet artifact work before choosing a narrower implementation lane. Use this artifact gate at every turn / first-turn / conversation start when the main artifact is an Excel workbook or CSV dataset.",
@@ -2480,7 +2480,7 @@
     [
       "visual-review",
       "L3",
-      "gate",
+      "owner",
       "evidence",
       "P1",
       "Review screenshots and rendered visual artifacts.",
@@ -2786,7 +2786,7 @@
     [
       "primary-runtime",
       "L0",
-      "none",
+      "owner",
       "none",
       "P1",
       "Primary runtime entry point — framework lifecycle orchestration. Spawned by the host to handle goal drive, quality gate, and session supervision.",

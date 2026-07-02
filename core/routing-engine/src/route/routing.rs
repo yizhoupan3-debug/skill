@@ -1,4 +1,9 @@
-//! Primary routing entrypoints (search + `route_task`) and manifest fallback helpers.
+//! Primary routing entrypoints (`route_task`, search) and deprecated manifest fallback.
+//!
+//! `should_retry_with_manifest`, `should_accept_manifest_fallback`, and related
+//! helpers are **unused in production** since the v10 runtime cleanup removed
+//! the retry/fallback path.  These ~250 lines are kept for test coverage only
+//! and should be removed or revived in a future cycle.
 use super::aliases::{has_literal_framework_alias_call, qg_checker_id_for_slug};
 use super::constants::{
     FRAMEWORK_COMMAND_KIND, NO_SKILL_SELECTED, PARALLEL_RECORD_SCAN_MIN, PROFILE_COMPILE_AUTHORITY,
@@ -17,6 +22,7 @@ use super::types::{
     SearchMatchRecordPayload, SearchResultsPayload, SkillRecord,
 };
 use core_errors::FrameworkError;
+use std::io::Write;
 use tracing;
 
 /// Shared skeleton for every RouteDecision — avoids repeated `.to_string()` on static constants
@@ -468,46 +474,6 @@ pub fn route_task(
         tracing::debug!(query, session_id, "route: all-overlay candidates allowed");
     }
     let selected = pick_owner(viable, &normalized_query, &query_token_list, w)?;
-    if selected.score < w.layer_threshold(&selected.record.layer) {
-        // --- Fuzzy fallback: try trigram similarity before giving up ---
-        if let Some((record, sim)) = fuzzy_rescue_primary_record(records, &primary_query) {
-            return Ok(log_decision(
-                build_fuzzy_rescue_decision(
-                    records,
-                    record,
-                    sim,
-                    query,
-                    &overlay_normalized_query,
-                    &overlay_query_tokens,
-                    session_id,
-                    route_context,
-                    allow_overlay,
-                    &format!(
-                        "Fuzzy trigram fallback rescued below-threshold match (similarity={sim:.3}, exact_score={:.2}).",
-                        selected.score
-                    ),
-                    Some(selected.score),
-                ),
-                query,
-                session_id,
-            ));
-        }
-        tracing::debug!(
-            query,
-            skill = %selected.record.slug,
-            score = selected.score,
-            threshold = w.layer_threshold(&selected.record.layer),
-            "route: below threshold"
-        );
-        let fallback_reasons = compact_route_reasons(&[
-            "No explicit skill hit; native runtime should proceed without loading a skill.",
-        ]);
-        return Ok(log_decision(
-            make_no_hit_decision(query, session_id, route_context, fallback_reasons),
-            query,
-            session_id,
-        ));
-    }
     let overlay = if allow_overlay {
         pick_overlay(
             records,
@@ -628,16 +594,6 @@ fn primary_owner_query_text(query: &str, records: &[SkillRecord], allow_overlay:
 
 /// Layer-based penalty applied during fuzzy rescue to discourage
 /// low-priority layers from winning fuzzy matches over higher-priority ones.
-fn fuzzy_layer_penalty(layer: &str) -> f64 {
-    match layer {
-        "L0" => 0.0,
-        "L1" => -0.02,
-        "L2" => -0.05,
-        "L3" => -0.08,
-        "L4" => -0.12,
-        _ => -0.05,
-    }
-}
 
 fn fuzzy_rescue_best_match<'a>(
     records: impl Iterator<Item = &'a SkillRecord>,
@@ -645,8 +601,8 @@ fn fuzzy_rescue_best_match<'a>(
 ) -> Option<(&'a SkillRecord, f64)> {
     records
         .map(|record| {
-            let raw_sim = fuzzy_fallback_score(query, record);
-            let effective = (raw_sim + fuzzy_layer_penalty(&record.layer)).max(0.0);
+            
+            let effective = fuzzy_fallback_score(query, record);
             (record, effective)
         })
         .filter(|(_, sim)| *sim >= FUZZY_MIN_SIMILARITY)
@@ -918,7 +874,7 @@ fn is_runtime_required_gate(slug: &str, runtime_records: &[SkillRecord]) -> bool
         .find(|record| record.slug == slug)
         .is_some_and(|record| {
             record.session_start_lower == "required"
-                && (record.owner_lower == "gate" || record.gate_lower != "none")
+                && record.gate_lower != "none"
         })
 }
 
@@ -1072,10 +1028,76 @@ pub fn should_accept_manifest_fallback(
             && full_decision.selected_skill != hot_decision.selected_skill)
 }
 
-/// Wrapper that logs every routing decision and records zero-score queries.
-/// NOTE: routing_logger + zero_match_collector stubs were removed in v10 runtime
-/// cleanup (no-op since the telemetry backend was deleted in Wave 2d).
-fn log_decision(decision: RouteDecision, _query: &str, _session_id: &str) -> RouteDecision {
+/// Wrapper that logs every routing decision to `logs/skill-routing/routing_audit.ndjson`.
+/// Logger auto-initializes on first call (creates directory + file).
+fn log_decision(decision: RouteDecision, query: &str, _session_id: &str) -> RouteDecision {
+    // One-shot auto-init: create directory and open file on first use.
+    static LOG_PATH: std::sync::OnceLock<std::path::PathBuf> = std::sync::OnceLock::new();
+    static LOG_FILE: std::sync::Mutex<Option<std::io::BufWriter<std::fs::File>>> =
+        std::sync::Mutex::new(None);
+
+    let path = LOG_PATH.get_or_init(|| {
+        let root = std::env::var("FRAMEWORK_ROOT")
+            .or_else(|_| std::env::var("CARGO_MANIFEST_DIR"))
+            .unwrap_or_else(|_| ".".to_string());
+        let p = std::path::Path::new(&root).join("logs/skill-routing/routing_audit.ndjson");
+        if let Some(parent) = p.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        p
+    });
+
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default();
+    let secs = now.as_secs();
+    let days = secs / 86400;
+    let time_secs = secs % 86400;
+    let hours = time_secs / 3600;
+    let minutes = (time_secs % 3600) / 60;
+    let seconds = time_secs % 60;
+    let ts = {
+        let z = days as i64 + 719468;
+        let era = if z >= 0 { z } else { z - 146096 } / 146097;
+        let doe = z - era * 146097;
+        let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+        let y = yoe + era * 400;
+        let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+        let mp = (5 * doy + 2) / 153;
+        let d = doy - (153 * mp + 2) / 5 + 1;
+        let m = if mp < 10 { mp + 3 } else { mp - 9 };
+        let y = if m <= 2 { y + 1 } else { y };
+        format!("{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z", y, m, d, hours, minutes, seconds)
+    };
+
+    let entry = serde_json::json!({
+        "ts": ts,
+        "query": query,
+        "selected_skill": decision.selected_skill,
+        "score": decision.score,
+        "layer": decision.layer,
+        "fuzzy_match": decision.fuzzy_match,
+        "overlay_skill": decision.overlay_skill,
+        "matched_token_count": decision.matched_token_count,
+        "top_3_reasons": &decision.reasons.iter().take(3).cloned().collect::<Vec<_>>(),
+    });
+
+    if let Ok(mut guard) = LOG_FILE.lock() {
+        if guard.is_none() {
+            *guard = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .write(true)
+                .open(path)
+                .ok()
+                .map(|f| std::io::BufWriter::new(f));
+        }
+        if let Some(ref mut writer) = *guard {
+            let _ = writeln!(writer, "{}", entry);
+            let _ = writer.flush();
+        }
+    }
+
     decision
 }
 
@@ -1128,13 +1150,13 @@ mod should_retry_with_manifest_tests {
             slug: "visual-review".to_string(),
             skill_path: None,
             layer: "L3".to_string(),
-            owner: "gate".to_string(),
+            owner: "owner".to_string(),
             gate: "evidence".to_string(),
             priority: "P1".to_string(),
             session_start: "required".to_string(),
             summary: String::new(),
             slug_lower: "visual-review".to_string(),
-            owner_lower: "gate".to_string(),
+            owner_lower: "owner".to_string(),
             gate_lower: "evidence".to_string(),
             session_start_lower: "required".to_string(),
             gate_phrases: vec![],
@@ -1260,13 +1282,13 @@ mod should_retry_with_manifest_tests {
             slug: "visual-review".to_string(),
             skill_path: Some("skills/visual-review/SKILL.md".to_string()),
             layer: "L3".to_string(),
-            owner: "gate".to_string(),
+            owner: "owner".to_string(),
             gate: "evidence".to_string(),
             priority: "P1".to_string(),
             session_start: "required".to_string(),
             summary: String::new(),
             slug_lower: "visual-review".to_string(),
-            owner_lower: "gate".to_string(),
+            owner_lower: "owner".to_string(),
             gate_lower: "evidence".to_string(),
             session_start_lower: "required".to_string(),
             gate_phrases: vec!["bug".to_string()],

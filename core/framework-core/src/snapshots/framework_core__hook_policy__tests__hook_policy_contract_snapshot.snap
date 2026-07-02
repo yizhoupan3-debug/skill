@@ -1,6 +1,5 @@
 ---
 source: core/framework-core/src/hook_policy.rs
-assertion_line: 1485
 expression: hook_policy_contract()
 ---
 Object {
@@ -14,6 +13,15 @@ Object {
             String("web_fetch"),
             String("browser_save_session"),
             String("browser_restore_session"),
+        ],
+        "confirmation_gate_tools": Array [
+            String("goal_state_manage"),
+            String("closeout_record_write"),
+            String("task_create"),
+            String("task_complete"),
+            String("task_focus"),
+            String("loop_pause"),
+            String("loop_redirect"),
         ],
         "high_risk_tools": Array [
             String("session_launch"),

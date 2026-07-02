@@ -6,6 +6,7 @@
 
 use core_errors::FrameworkError;
 use regex::Regex;
+use unicode_normalization::UnicodeNormalization;
 use serde_json::{Value, json};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -85,7 +86,9 @@ pub fn classify_protected_path(
 }
 
 fn relative_candidate_path(path: &str, repo_root: &Path) -> String {
-    let candidate = PathBuf::from(path);
+    // NFC-normalize to prevent NFD bypass
+    let nfc_path: String = path.nfc().collect();
+    let candidate = PathBuf::from(nfc_path);
     if candidate.is_absolute()
         && let Ok(rel) = candidate
             .canonicalize()
@@ -103,7 +106,11 @@ fn relative_candidate_path(path: &str, repo_root: &Path) -> String {
 
 /// Normalize a repo-relative path to a canonical form.
 pub fn normalize_repo_relative_path(path: &str) -> String {
-    let normalized = path.replace('\\', "/");
+    // Apply Unicode NFC normalization first to prevent NFC/NFD bypass
+    // (macOS HFS+ uses NFD, so a protected path written as NFC may not
+    // match a user-supplied NFD variant without this normalization.)
+    let nfc_path: String = path.nfc().collect();
+    let normalized = nfc_path.replace('\\', "/");
     let mut parts = Vec::new();
     for part in normalized.split('/') {
         match part {
@@ -274,6 +281,13 @@ static MUTATING_COMMAND_PATTERNS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
         r"\btee\b",
         // dd of= is covered by \bdd\b in combination with bash_segment_redirects_to_hint
         r"\bdd\b",
+        // Shell wrapper bypasses (HPM-5 extension)
+        r"^\s*(eval|source|\.\s+)\b",
+        r"^\s*(bash|sh|zsh|dash)\s+-c\b",
+        // Interpreter/batch bypasses
+        r"\bawk\b",
+        r"\bjq\b.*--in-place|\bjq\b.*-i\b",
+        r"\bgrep\s+-[^\n]*[zZ]\b",
     ]
     .iter()
     .filter_map(|p| Regex::new(p).ok())
@@ -302,13 +316,14 @@ fn bash_segment_redirects_to_hint(segment: &str, hint: &str) -> bool {
         static HINT_RE_CACHE: std::cell::RefCell<HashMap<String, [Regex; 3]>> =
             std::cell::RefCell::new(HashMap::new());
     }
+    let nfc_hint: String = hint.nfc().collect();
     HINT_RE_CACHE.with(|cache| {
         let mut map = cache.borrow_mut();
         // Evict when at capacity and the hint is not already cached
-        if map.len() >= HINT_RE_CACHE_CAP && !map.contains_key(hint) {
+        if map.len() >= HINT_RE_CACHE_CAP && !map.contains_key(&nfc_hint) {
             map.clear();
         }
-        let regexes = map.entry(hint.to_string()).or_insert_with(|| {
+        let regexes = map.entry(nfc_hint.clone()).or_insert_with(|| {
             let escaped = regex::escape(hint);
             let p1 = format!(r#"(>>?|>\|)\s*['\"]?[^'\"\n;&|]*{escaped}[^'\"\n;&|]*['\"]?"#);
             let p2 =

@@ -22,7 +22,7 @@ scene: code_review
 network_access: conditional
 routing_gate: source
 routing_layer: L0
-routing_owner: gate
+routing_owner: owner
 routing_priority: P2
 runtime_requirements:
   commands:

@@ -202,8 +202,15 @@ pub fn evaluate_hook_policy(
             let tool_name = request.tool_name.as_deref().unwrap_or("");
             response.reason = dangerous_mcp_tool_reason(tool_name, request.tool_args.as_ref());
             response.blocked = response.reason.is_some();
-            if response.blocked {
-                response.categories = vec!["mcp-safety".to_string()];
+            if let Some(reason) = &response.reason {
+                if reason.starts_with("confirmation-gate:") {
+                    // Soft gate — don't hard-block, but set a category so the
+                    // caller can distinguish confirmation gates from "no issue"
+                    response.blocked = false;
+                    response.categories = vec!["confirmation-gate".to_string()];
+                } else {
+                    response.categories = vec!["mcp-safety".to_string()];
+                }
             }
         }
         other => {
@@ -703,7 +710,40 @@ const HIGH_RISK_MCP_TOOLS: &[(&str, &str)] = &[
     ),
 ];
 
-/// MCP-specific arg-level risk patterns.
+/// Framework MCP tools that require user confirmation before invocation.
+/// These are "soft" gates — the caller should request confirmation rather
+/// than hard-blocking the call. The prefix "confirmation-gate:" in the
+/// reason string distinguishes these from hard-block reasons.
+const CONFIRMATION_GATE_MCP_TOOLS: &[(&str, &str)] = &[
+    (
+        "goal_state_manage",
+        "confirmation-gate: modifies task lifecycle state (create/complete/pause/resume)",
+    ),
+    (
+        "closeout_record_write",
+        "confirmation-gate: writes closeout records to durable state",
+    ),
+    (
+        "task_create",
+        "confirmation-gate: creates a new named task in the framework",
+    ),
+    (
+        "task_complete",
+        "confirmation-gate: marks a task as completed",
+    ),
+    (
+        "task_focus",
+        "confirmation-gate: changes current task focus",
+    ),
+    (
+        "loop_pause",
+        "confirmation-gate: pauses a running loop",
+    ),
+    (
+        "loop_redirect",
+        "confirmation-gate: redirects a paused loop to a new goal",
+    ),
+];
 /// Each entry: (tool_name_regex, arg_field, value_regex, reason).
 const MCP_ARG_RISK_PATTERNS: &[(&str, &str, &str, &str)] = &[
     (
@@ -852,6 +892,12 @@ pub fn dangerous_mcp_tool_reason(tool_name: &str, tool_args: Option<&Value>) -> 
             return Some("Blocked dangerous bash command via MCP tool args.".to_string());
         }
     }
+    // Layer 4: confirmation-gate tools (soft gate — warn/request confirmation, don't hard-block)
+    for (name, reason) in CONFIRMATION_GATE_MCP_TOOLS {
+        if tool_name == *name {
+            return Some((*reason).to_string());
+        }
+    }
     None
 }
 
@@ -873,6 +919,7 @@ pub fn hook_policy_contract() -> Value {
         "provider_registry_policy": "configs/framework/RUNTIME_PROVIDER_REGISTRY.json is document-only and does not drive hook execution ranking.",
         "mcp_safety_details": {
             "high_risk_tools": ["session_launch", "session_resume_due", "session_terminate", "background_terminate", "preview_eval", "preview_start"],
+            "confirmation_gate_tools": ["goal_state_manage", "closeout_record_write", "task_create", "task_complete", "task_focus", "loop_pause", "loop_redirect"],
             "arg_risk_coverage": ["browser_get_network", "browser_fill", "session_launch", "session_mark_blocked", "web_fetch", "browser_save_session", "browser_restore_session"],
             "shell_injection_in_args": true
         },
@@ -1512,5 +1559,108 @@ mod tests {
         };
         let response = evaluate_hook_policy(request).unwrap();
         insta::assert_debug_snapshot!(response);
+    }
+
+    #[test]
+    fn mcp_tool_safety_confirmation_gate_goal_state_manage() {
+        let request = HookPolicyEvaluateRequest {
+            operation: "mcp-tool-safety".to_string(),
+            command: None,
+            path: None,
+            repo_root: None,
+            runtime_root: None,
+            tool_name: Some("goal_state_manage".to_string()),
+            tool_args: Some(json!({"operation": "create", "task_id": "t1"})),
+        };
+        let response = evaluate_hook_policy(request).unwrap();
+        // Confirmation gates are NOT hard-blocked
+        assert!(!response.blocked, "confirmation gates should not be hard-blocked");
+        let reason = response
+            .reason
+            .as_deref()
+            .expect("confirmation gate should have a reason");
+        assert!(
+            reason.starts_with("confirmation-gate:"),
+            "reason should start with confirmation-gate prefix, got: {reason}"
+        );
+        assert_eq!(response.categories, vec!["confirmation-gate"]);
+    }
+
+    #[test]
+    fn mcp_tool_safety_confirmation_gate_task_create() {
+        let request = HookPolicyEvaluateRequest {
+            operation: "mcp-tool-safety".to_string(),
+            command: None,
+            path: None,
+            repo_root: None,
+            runtime_root: None,
+            tool_name: Some("task_create".to_string()),
+            tool_args: Some(json!({"task_id": "test-task"})),
+        };
+        let response = evaluate_hook_policy(request).unwrap();
+        assert!(!response.blocked, "confirmation gates should not be hard-blocked");
+        let reason = response
+            .reason
+            .as_deref()
+            .expect("confirmation gate should have a reason");
+        assert!(
+            reason.starts_with("confirmation-gate:"),
+            "reason should start with confirmation-gate prefix, got: {reason}"
+        );
+        assert_eq!(response.categories, vec!["confirmation-gate"]);
+    }
+
+    #[test]
+    fn mcp_tool_safety_confirmation_gate_task_complete() {
+        let request = HookPolicyEvaluateRequest {
+            operation: "mcp-tool-safety".to_string(),
+            command: None,
+            path: None,
+            repo_root: None,
+            runtime_root: None,
+            tool_name: Some("task_complete".to_string()),
+            tool_args: Some(json!({"task_id": "t1"})),
+        };
+        let response = evaluate_hook_policy(request).unwrap();
+        assert!(!response.blocked, "confirmation gates should not be hard-blocked");
+        let reason = response.reason.as_deref().expect("confirmation gate should have a reason");
+        assert!(reason.starts_with("confirmation-gate:"));
+        assert_eq!(response.categories, vec!["confirmation-gate"]);
+    }
+
+    #[test]
+    fn mcp_tool_safety_still_blocks_session_resume_due() {
+        // Ensure existing hard blocks are unaffected by confirmation gate changes.
+        let request = HookPolicyEvaluateRequest {
+            operation: "mcp-tool-safety".to_string(),
+            command: None,
+            path: None,
+            repo_root: None,
+            runtime_root: None,
+            tool_name: Some("session_resume_due".to_string()),
+            tool_args: Some(json!({"workerId": "w1"})),
+        };
+        let response = evaluate_hook_policy(request).unwrap();
+        assert!(response.blocked, "session_resume_due should still be hard-blocked");
+    }
+
+    #[test]
+    fn hook_policy_contract_includes_confirmation_gate_tools() {
+        let contract = hook_policy_contract();
+        let details = contract.get("mcp_safety_details").unwrap();
+        let confirm_tools = details.get("confirmation_gate_tools").unwrap();
+        let tools: Vec<&str> = confirm_tools
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| v.as_str().unwrap())
+            .collect();
+        assert!(tools.contains(&"goal_state_manage"));
+        assert!(tools.contains(&"task_create"));
+        assert!(tools.contains(&"closeout_record_write"));
+        assert!(tools.contains(&"task_focus"));
+        assert!(tools.contains(&"loop_pause"));
+        assert!(tools.contains(&"loop_redirect"));
+        assert_eq!(tools.len(), 7);
     }
 }

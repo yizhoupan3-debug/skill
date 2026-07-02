@@ -16,7 +16,7 @@ scene: general
 risk: low
 routing_gate: approve
 routing_layer: L3
-routing_owner: user
+routing_owner: owner
 routing_priority: P2
 session_start: preferred
 short_description: 通用深度搜索引擎 — web 多源覆盖+事实核查+综合报告

@@ -328,8 +328,7 @@ impl std::str::FromStr for RoutingOwner {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "owner" => Ok(Self::Owner),
-            "gate" => Ok(Self::Gate),
-            "user" => Ok(Self::User),
+            "overlay" => Ok(Self::Overlay),
             _ => Err(RoutingOwnerParseError(s.to_string())),
         }
     }
@@ -341,7 +340,7 @@ impl fmt::Display for RoutingOwnerParseError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "invalid routing_owner `{}`; allowed: owner, gate, user",
+            "invalid routing_owner `{}`; allowed: owner, overlay",
             self.0
         )
     }

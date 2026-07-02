@@ -8,6 +8,7 @@ allowed_tools:
 - Agent
 description: Primary runtime entry point — framework lifecycle orchestration. Spawned by the host to handle goal drive, quality gate, and session supervision. Most users should use /plan or a skill-specific entry point instead.
 routing_layer: L0
+routing_owner: owner
 routing_gate: none
 metadata:
   platforms:

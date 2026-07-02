@@ -152,7 +152,7 @@ pub struct RouteDiffReportPayload {
     pub route_snapshot: RouteDecisionSnapshotPayload,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct RouteDecision {
     pub decision_schema_version: String,
     pub authority: String,
@@ -179,7 +179,7 @@ pub struct RouteDecision {
     pub route_snapshot: RouteDecisionSnapshotPayload,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct RouteContextPayload {
     pub execution_protocol: String,
     pub verification_required: bool,

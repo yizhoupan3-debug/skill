@@ -510,7 +510,9 @@
       "trigger_hints": [
         "AI",
         "AIGC",
-        "检测"
+        "检测",
+        "AI生成",
+        "AI检测"
       ],
       "mcp_server": "research-harness",
       "tool_flags": [
@@ -987,7 +989,9 @@
         "审稿",
         "review",
         "维度",
-        "dimensions"
+        "dimensions",
+        "审稿标准",
+        "审稿角度"
       ],
       "mcp_server": "research-harness",
       "tool_flags": [
@@ -1005,7 +1009,9 @@
         "claim",
         "drift",
         "声明",
-        "漂移"
+        "漂移",
+        "声明变化",
+        "证据变化"
       ],
       "mcp_server": "research-harness",
       "tool_flags": [
@@ -1038,7 +1044,10 @@
         "渐近",
         "asymptotic",
         "复杂度",
-        "O量级"
+        "O量级",
+        "大O",
+        "时间复杂",
+        "算法复杂度"
       ],
       "mcp_server": "research-harness",
       "tool_flags": [
@@ -1119,7 +1128,9 @@
       "trigger_hints": [
         "SymPy",
         "验证等式",
-        "identity"
+        "identity",
+        "等式验证",
+        "代数验证"
       ],
       "mcp_server": "research-harness",
       "tool_flags": [
@@ -1136,7 +1147,9 @@
       "trigger_hints": [
         "SymPy",
         "化简",
-        "simplify"
+        "simplify",
+        "代数化简",
+        "化简表达式"
       ],
       "mcp_server": "research-harness",
       "tool_flags": [
@@ -1329,7 +1342,8 @@
         "inequality",
         "不等式",
         "证明不等式",
-        "Z3"
+        "Z3",
+        "SMT求解"
       ],
       "mcp_server": "research-harness",
       "tool_flags": [
@@ -1504,23 +1518,77 @@
       "layer": "research",
       "dispatch_domain": "domain:research",
       "owner": "research",
-      "trigger_hints": ["文献搜索", "学术搜索", "论文搜索", "literature search", "reference search"],
+      "trigger_hints": [
+        "文献搜索",
+        "学术搜索",
+        "论文搜索",
+        "literature search",
+        "reference search",
+        "查资料",
+        "文献调研",
+        "找文献",
+        "文献检索"
+      ],
       "mcp_server": "research-harness",
-      "tool_flags": ["readonly", "network"],
+      "tool_flags": [
+        "readonly",
+        "network"
+      ],
       "input_schema": {
         "type": "object",
-        "required": ["query"],
+        "required": [
+          "query"
+        ],
         "properties": {
-          "query": {"type": "string", "description": "搜索查询文本"},
-          "limit": {"type": "integer", "description": "每源最大结果数（默认 20，最大 100）"},
-          "source": {"type": "string", "enum": ["all", "semantic-scholar", "arxiv"], "description": "搜索源（默认 all）"},
-          "year_from": {"type": "integer", "description": "最早出版年份（含）"},
-          "year_to": {"type": "integer", "description": "最晚出版年份（含）"},
-          "sort_by": {"type": "string", "enum": ["relevance", "date"], "description": "排序方式（默认 relevance）"},
-          "categories": {"type": "string", "description": "arXiv 分类过滤（逗号分隔，如 'cs.AI,cs.LG'）"},
-          "advanced_query": {"type": "string", "description": "arXiv 高级原生查询（覆盖 query）"},
-          "fuzzy_query": {"type": "boolean", "description": "启用模糊/宽泛匹配（默认 false）"},
-          "prefer_authoritative": {"type": "boolean", "description": "启用双通道权威排序（默认 false）"}
+          "query": {
+            "type": "string",
+            "description": "搜索查询文本"
+          },
+          "limit": {
+            "type": "integer",
+            "description": "每源最大结果数（默认 20，最大 100）"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "all",
+              "semantic-scholar",
+              "arxiv"
+            ],
+            "description": "搜索源（默认 all）"
+          },
+          "year_from": {
+            "type": "integer",
+            "description": "最早出版年份（含）"
+          },
+          "year_to": {
+            "type": "integer",
+            "description": "最晚出版年份（含）"
+          },
+          "sort_by": {
+            "type": "string",
+            "enum": [
+              "relevance",
+              "date"
+            ],
+            "description": "排序方式（默认 relevance）"
+          },
+          "categories": {
+            "type": "string",
+            "description": "arXiv 分类过滤（逗号分隔，如 'cs.AI,cs.LG'）"
+          },
+          "advanced_query": {
+            "type": "string",
+            "description": "arXiv 高级原生查询（覆盖 query）"
+          },
+          "fuzzy_query": {
+            "type": "boolean",
+            "description": "启用模糊/宽泛匹配（默认 false）"
+          },
+          "prefer_authoritative": {
+            "type": "boolean",
+            "description": "启用双通道权威排序（默认 false）"
+          }
         }
       }
     },
@@ -1531,17 +1599,54 @@
       "layer": "research",
       "dispatch_domain": "domain:research",
       "owner": "research",
-      "trigger_hints": ["行文", "prose", "术语", "slop", "hedging", "文本质控"],
+      "trigger_hints": [
+        "行文",
+        "prose",
+        "术语",
+        "slop",
+        "hedging",
+        "文本质控",
+        "润色",
+        "文风",
+        "写作质量",
+        "论文润色"
+      ],
       "mcp_server": "research-harness",
-      "tool_flags": ["readonly"],
+      "tool_flags": [
+        "readonly"
+      ],
       "input_schema": {
         "type": "object",
-        "required": ["check", "text"],
+        "required": [
+          "check",
+          "text"
+        ],
         "properties": {
-          "check": {"type": "string", "enum": ["terminology", "slop", "hedging"], "description": "检查类型"},
-          "text": {"type": "string", "description": "待检查文本"},
-          "glossary": {"type": "object", "description": "可选术语表（check=terminology 时使用）"},
-          "language": {"type": "string", "enum": ["en", "zh"], "description": "可选语言（check=slop 时使用，默认 en）"}
+          "check": {
+            "type": "string",
+            "enum": [
+              "terminology",
+              "slop",
+              "hedging"
+            ],
+            "description": "检查类型"
+          },
+          "text": {
+            "type": "string",
+            "description": "待检查文本"
+          },
+          "glossary": {
+            "type": "object",
+            "description": "可选术语表（check=terminology 时使用）"
+          },
+          "language": {
+            "type": "string",
+            "enum": [
+              "en",
+              "zh"
+            ],
+            "description": "可选语言（check=slop 时使用，默认 en）"
+          }
         }
       }
     },
@@ -1552,22 +1657,67 @@
       "layer": "research",
       "dispatch_domain": "domain:research",
       "owner": "research",
-      "trigger_hints": ["统计验证", "GRIM", "p值", "多重比较", "statistical"],
+      "trigger_hints": [
+        "统计验证",
+        "GRIM",
+        "p值",
+        "多重比较",
+        "statistical",
+        "统计方法",
+        "统计检验",
+        "数据验证"
+      ],
       "mcp_server": "research-harness",
-      "tool_flags": ["readonly"],
+      "tool_flags": [
+        "readonly"
+      ],
       "input_schema": {
         "type": "object",
-        "required": ["check"],
+        "required": [
+          "check"
+        ],
         "properties": {
-          "check": {"type": "string", "enum": ["grim", "p_value", "multiple_comparison"], "description": "检查类型"},
-          "mean": {"type": "number", "description": "样本均值（grim 时必须）"},
-          "n": {"type": "integer", "description": "样本量（grim 时必须）"},
-          "decimals": {"type": "integer", "description": "小数位数（grim 可选，默认 2）"},
-          "observed": {"type": "number", "description": "观测 p 值（p_value 时必须）"},
-          "expected": {"type": "number", "description": "期望 p 值（p_value 时必须）"},
-          "tolerance": {"type": "number", "description": "允许误差（p_value 可选，默认 0.01）"},
-          "num_tests": {"type": "integer", "description": "检验总数（multiple_comparison 时必须）"},
-          "correction_applied": {"type": "boolean", "description": "是否已校正（multiple_comparison 可选）"}
+          "check": {
+            "type": "string",
+            "enum": [
+              "grim",
+              "p_value",
+              "multiple_comparison"
+            ],
+            "description": "检查类型"
+          },
+          "mean": {
+            "type": "number",
+            "description": "样本均值（grim 时必须）"
+          },
+          "n": {
+            "type": "integer",
+            "description": "样本量（grim 时必须）"
+          },
+          "decimals": {
+            "type": "integer",
+            "description": "小数位数（grim 可选，默认 2）"
+          },
+          "observed": {
+            "type": "number",
+            "description": "观测 p 值（p_value 时必须）"
+          },
+          "expected": {
+            "type": "number",
+            "description": "期望 p 值（p_value 时必须）"
+          },
+          "tolerance": {
+            "type": "number",
+            "description": "允许误差（p_value 可选，默认 0.01）"
+          },
+          "num_tests": {
+            "type": "integer",
+            "description": "检验总数（multiple_comparison 时必须）"
+          },
+          "correction_applied": {
+            "type": "boolean",
+            "description": "是否已校正（multiple_comparison 可选）"
+          }
         }
       }
     },
@@ -1578,16 +1728,31 @@
       "layer": "research",
       "dispatch_domain": "domain:research",
       "owner": "research",
-      "trigger_hints": ["DOI", "文献", "引用", "claim覆盖"],
+      "trigger_hints": [
+        "DOI",
+        "文献",
+        "引用",
+        "claim覆盖",
+        "参考文献",
+        "引用格式",
+        "参考文献验证"
+      ],
       "mcp_server": "research-harness",
-      "tool_flags": ["readonly"],
+      "tool_flags": [
+        "readonly"
+      ],
       "input_schema": {
         "type": "object",
-        "required": ["check"],
+        "required": [
+          "check"
+        ],
         "properties": {
           "check": {
             "type": "string",
-            "enum": ["doi", "claim_coverage"],
+            "enum": [
+              "doi",
+              "claim_coverage"
+            ],
             "description": "验证类型：doi=DOI可达性检查, claim_coverage=声明覆盖率"
           },
           "doi": {
@@ -1596,12 +1761,16 @@
           },
           "claims": {
             "type": "array",
-            "items": {"type": "string"},
+            "items": {
+              "type": "string"
+            },
             "description": "声明列表（check=claim_coverage 时必须）"
           },
           "references": {
             "type": "array",
-            "items": {"type": "string"},
+            "items": {
+              "type": "string"
+            },
             "description": "引用列表（check=claim_coverage 时必须）"
           }
         }
@@ -1614,16 +1783,32 @@
       "layer": "research",
       "dispatch_domain": "domain:research",
       "owner": "research",
-      "trigger_hints": ["结构", "LaTeX", "编译", "图表引用"],
+      "trigger_hints": [
+        "结构",
+        "LaTeX",
+        "编译",
+        "图表引用",
+        "论文结构",
+        "LaTeX编译",
+        "排版检查"
+      ],
       "mcp_server": "research-harness",
-      "tool_flags": ["readonly"],
+      "tool_flags": [
+        "readonly"
+      ],
       "input_schema": {
         "type": "object",
-        "required": ["check", "path"],
+        "required": [
+          "check",
+          "path"
+        ],
         "properties": {
           "check": {
             "type": "string",
-            "enum": ["latex", "figures"],
+            "enum": [
+              "latex",
+              "figures"
+            ],
             "description": "验证类型：latex=LaTeX编译检查, figures=图表引用检查"
           },
           "path": {
@@ -1640,16 +1825,36 @@
       "layer": "research",
       "dispatch_domain": "domain:research",
       "owner": "research",
-      "trigger_hints": ["重复性", "reproducibility", "可复现", "种子", "确定性"],
+      "trigger_hints": [
+        "重复性",
+        "reproducibility",
+        "可复现",
+        "种子",
+        "确定性",
+        "复现",
+        "环境复现",
+        "实验结果复现"
+      ],
       "mcp_server": "research-harness",
-      "tool_flags": ["readonly"],
+      "tool_flags": [
+        "readonly"
+      ],
       "input_schema": {
         "type": "object",
-        "required": ["check"],
+        "required": [
+          "check"
+        ],
         "properties": {
           "check": {
             "type": "string",
-            "enum": ["seed", "deterministic", "environment", "data_versioned", "checkpoint", "full_audit"],
+            "enum": [
+              "seed",
+              "deterministic",
+              "environment",
+              "data_versioned",
+              "checkpoint",
+              "full_audit"
+            ],
             "description": "验证类型"
           },
           "path": {
@@ -1666,16 +1871,30 @@
       "layer": "research",
       "dispatch_domain": "domain:research",
       "owner": "research",
-      "trigger_hints": ["形式验证", "量纲", "formal", "dimensional"],
+      "trigger_hints": [
+        "形式验证",
+        "量纲",
+        "formal",
+        "dimensional",
+        "量纲分析",
+        "量纲检查"
+      ],
       "mcp_server": "research-harness",
-      "tool_flags": ["readonly"],
+      "tool_flags": [
+        "readonly"
+      ],
       "input_schema": {
         "type": "object",
-        "required": ["check", "equation"],
+        "required": [
+          "check",
+          "equation"
+        ],
         "properties": {
           "check": {
             "type": "string",
-            "enum": ["dimensional"],
+            "enum": [
+              "dimensional"
+            ],
             "description": "验证类型：dimensional=量纲一致性"
           },
           "equation": {

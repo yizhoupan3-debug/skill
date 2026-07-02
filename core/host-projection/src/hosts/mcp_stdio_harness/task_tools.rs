@@ -329,8 +329,10 @@ pub(crate) fn tool_task_complete(
         let transition_v = validate_transition(&repo_root_owned, &id, TaskTransition::Complete);
         if !transition_v.passed {
             return Err(FrameworkError::validation(format!(
-                "task_complete blocked by evidence gate: {}",
-                transition_v.reason
+                "task_complete blocked by evidence gate: {} (goal={}, evidence={})",
+                transition_v.reason,
+                transition_v.goal_type.as_deref().unwrap_or("none"),
+                transition_v.evidence_count,
             )));
         }
 

@@ -17,7 +17,9 @@
 //!   runtime_heartbeat, get_attached_runtime_events
 
 use std::collections::{HashMap, HashSet};
+use std::collections::hash_map::DefaultHasher;
 use std::fs;
+use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 use std::time::{Duration, Instant};
@@ -110,6 +112,19 @@ struct CacheEntry {
     records: Vec<McpToolRecord>,
     loaded_at: Instant,
     consecutive_failures: u32,
+    /// Hash of the file content at load time. Used alongside TTL to detect
+    /// in-place file modifications — if the hash matches the cached entry,
+    /// TTL is refreshed without re-parsing.
+    content_hash: u64,
+}
+
+/// Compute a content fingerprint for the registry file.
+/// Uses SipHash-2-4 (via std's DefaultHasher) — fast and adequate for
+/// cache-invalidation purposes; no cryptographic guarantees needed.
+fn compute_content_hash(content: &str) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    content.hash(&mut hasher);
+    hasher.finish()
 }
 
 /// Process-level TTL cache, keyed by registry path.
@@ -164,6 +179,35 @@ pub fn load_tool_records_cached(
         return Ok(entry.records.clone());
     }
 
+    // ── Content-hash short-circuit ──
+    // If the file content hash matches the cached entry, the file hasn't changed.
+    // Refresh the TTL (loaded_at) so subsequent callers hit the fast path,
+    // without re-parsing the JSON. This prevents tools/list from diverging from
+    // dispatch_tool behavior when the registry file is updated at runtime.
+    let content_hash = fs::read_to_string(registry_path)
+        .ok()
+        .as_deref()
+        .map(compute_content_hash)
+        .unwrap_or(0);
+    if content_hash != 0 {
+        let should_rehash = guard.get(&path_buf)
+            .map(|entry| entry.content_hash == content_hash)
+            .unwrap_or(false);
+        if should_rehash {
+            let records = guard.get(&path_buf).unwrap().records.clone();
+            guard.insert(
+                path_buf,
+                CacheEntry {
+                    records: records.clone(),
+                    loaded_at: Instant::now(),
+                    consecutive_failures: 0,
+                    content_hash,
+                },
+            );
+            return Ok(records);
+        }
+    }
+
     match load_tool_records(registry_path) {
         Ok(records) => {
             guard.insert(
@@ -172,6 +216,7 @@ pub fn load_tool_records_cached(
                     records: records.clone(),
                     loaded_at: Instant::now(),
                     consecutive_failures: 0,
+                    content_hash,
                 },
             );
             Ok(records)
@@ -182,6 +227,7 @@ pub fn load_tool_records_cached(
                 records: entry.records.clone(),
                 loaded_at: entry.loaded_at,
                 consecutive_failures: entry.consecutive_failures + 1,
+                content_hash: entry.content_hash,
             });
             match stale {
                 Some(CacheEntry {
@@ -200,6 +246,7 @@ pub fn load_tool_records_cached(
                             records: records.clone(),
                             loaded_at,
                             consecutive_failures: failures,
+                            content_hash: 0, // hash unknown; next TTL expiry will re-check
                         },
                     );
                     Ok(records)
@@ -220,6 +267,7 @@ pub fn load_tool_records_cached(
                             records: records.clone(),
                             loaded_at,
                             consecutive_failures: failures,
+                            content_hash: 0,
                         },
                     );
                     Err(e)
@@ -279,6 +327,7 @@ pub(crate) fn set_cache_entry_for_test(
             records,
             loaded_at: Instant::now() - age,
             consecutive_failures: failures,
+            content_hash: 0,
         },
     );
 }
