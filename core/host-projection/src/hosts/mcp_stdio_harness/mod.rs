@@ -774,12 +774,12 @@ fn handle_prompts_get(
             format!(
                 "面向用户的回复必须使用简体中文（代码/路径/命令/第三方原文除外）。\n\n\
                  Use this repo shared framework runtime.\n\n\
-                 1) Start from AGENTS.md。\n\
-                 2) Route via {source_rel}.\n\
-                 3) Read only the matched skill_path.\n\
-                 4) Use route_tool(query) or search_tools(query, top_k) to find matching\n\
-                    MCP tools.  skill_route now returns recommended_tools alongside the\n\
-                    selected skill — tools within the matched skill's domain.\n\n\
+                 Routing 指引:\n\
+                 - 我知道要做什么任务 → skill_route(query)\n\
+                   → 响应含 recommended_tools + skill_summary, 读完即用\n\
+                 - 想搜索有什么可用 → skill_search(query, limit)\n\
+                 - 需要单个 MCP 工具 → route_tool(query)\n\
+                 - 探索工具生态 → search_tools(query, top_k)\n\n\
                  Framework root: core/router-rs/"
             )
         }

@@ -121,9 +121,10 @@ pub(super) fn tool_skill_route(
         &repo_root.to_string_lossy(),
     )?;
 
-    // Enhance: append recommended_tools from tool routing
+    // Enhance: append recommended_tools + skill_summary from tool routing
     let mut result_value: Value = serde_json::from_str(&route_result).unwrap_or(Value::Null);
     if let Some(obj) = result_value.as_object_mut() {
+        // --- recommended_tools ---
         let registry_path = mcp_tool_registry::resolve_tool_registry_path()
             .unwrap_or_else(|| {
                 repo_root.join(framework_core::constants::MCP_TOOL_REGISTRY_RELATIVE_PATH)
@@ -131,7 +132,6 @@ pub(super) fn tool_skill_route(
 
         let tools = (|| -> Option<Vec<Value>> {
             let records = mcp_tool_registry::load_tool_records_cached(&registry_path).ok()?;
-            // Exclude no_routing tools (meta-tools) from recommendations
             let filtered: Vec<_> = records
                 .into_iter()
                 .filter(|r| !r.tool_flags.iter().any(|f| f == "no_routing"))
@@ -161,6 +161,23 @@ pub(super) fn tool_skill_route(
 
         if let Some(tools) = tools {
             obj.insert("recommended_tools".to_string(), json!(tools));
+        }
+
+        // --- skill_summary: inline SKILL.md first N chars ---
+        if let Some(skill_slug) = obj.get("selected_skill").and_then(Value::as_str) {
+            if !skill_slug.is_empty() && skill_slug != "none" {
+                if let Ok(path) = skill_body_path(repo_root, skill_slug) {
+                    if let Ok(content) = std::fs::read_to_string(&path) {
+                        let preview: String = content.chars().take(600).collect();
+                        let truncated = content.chars().count() > 600;
+                        obj.insert("skill_summary".to_string(), json!({
+                            "preview": preview,
+                            "truncated": truncated,
+                            "full_path": format!("{}", path.display()),
+                        }));
+                    }
+                }
+            }
         }
     }
 

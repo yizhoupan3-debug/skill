@@ -48,7 +48,7 @@
     {
       "slug": "skill_route",
       "display_name": "技能路由",
-      "description": "自然语言查询 → skill 路由",
+      "description": "自然语言查询 → 路由到最佳匹配 skill。响应包含 selected_skill（命中 skill）、recommended_tools（同域工具列表，top-3）、skill_summary（SKILL.md 摘要）。Agent 收到后优先读 recommended_tools + skill_summary，无需额外调用 skill_read。",
       "layer": "builtin",
       "dispatch_domain": "domain:framework",
       "owner": "framework",
@@ -75,7 +75,7 @@
     {
       "slug": "skill_search",
       "display_name": "技能搜索",
-      "description": "搜索 skill 目录",
+      "description": "自然语言模糊搜索 → 返回 top-k 匹配的 skill 候选人（含 score、matched_terms）。与 skill_route 不同：无精确路由决策，用于探索「有什么 skill 可用」。返回排序列表而非单个决策。",
       "layer": "builtin",
       "dispatch_domain": "domain:framework",
       "owner": "framework",
@@ -278,7 +278,7 @@
     {
       "slug": "task_create",
       "display_name": "任务创建",
-      "description": "创建新 task（幂等）",
+      "description": "创建新 task（幂等）。task_id 格式建议: kebab-case（如 'fix-auth-bug'），最长 128 字符。同名 task_id 重复调用返回已存在的 task 而不报错。",
       "layer": "builtin",
       "dispatch_domain": "domain:framework",
       "owner": "framework",
@@ -361,7 +361,7 @@
     {
       "slug": "task_focus",
       "display_name": "任务切换焦点",
-      "description": "切换 focus 到指定 task",
+      "description": "切换 Agent focus 到指定 task。focus 语义：后续 tool call 和 evidence record 关联到此 task。之前 focus 的 task 自动失焦。如果 task 不存在返回错误。",
       "layer": "builtin",
       "dispatch_domain": "domain:framework",
       "owner": "framework",
@@ -411,7 +411,7 @@
     {
       "slug": "route_tool",
       "display_name": "工具路由",
-      "description": "自然语言查询 → 最佳匹配工具",
+      "description": "自然语言查询 → 路由到最佳匹配 MCP 工具。返回 McpToolDecision（含 selected_tool、score、reasons、dispatch_domain、fuzzy_match）。与 skill_route 不同：路由的是单个 MCP 工具而非 skill。当 Agent 明确需要某个工具时使用。",
       "layer": "builtin",
       "dispatch_domain": "domain:framework",
       "owner": "framework",
@@ -1303,7 +1303,7 @@
     {
       "slug": "record_evidence",
       "display_name": "记录证据",
-      "description": "追加一条 evidence 记录到当前 task",
+      "description": "追加一条 evidence 记录到当前 focus task。evidence 结构: { claim, evidence (自由文本), source (来源文件/工具), confidence (0.0-1.0 可选) }。每次调用追加一条，不可编辑或删除。",
       "layer": "builtin",
       "dispatch_domain": "domain:framework",
       "owner": "framework",
@@ -1318,7 +1318,7 @@
     {
       "slug": "session_checkpoint",
       "display_name": "会话快照",
-      "description": "保存当前会话进度的 checkpoint 快照",
+      "description": "保存当前会话进度的 checkpoint 快照。快照范围：激活的 task 状态、evidence 索引、goal 状态、agent 上下文。恢复通过宿主重启时自动载入最近的 checkpoint。",
       "layer": "builtin",
       "dispatch_domain": "domain:framework",
       "owner": "framework",

@@ -30,20 +30,102 @@
 
 ## Skill 目录
 
-| Skill | Layer | 说明 |
-|-------|-------|------|
-| `$research` | L2 | 统一科研前门 — 自动路由到 discovery（文献）、execution（实验）、paper-workbench（手稿）、research-workspace（工作区 CLI）|
-| `$good-question` | L2 | 选题尖锐化：模糊想法 → falsifiable 科研问题 |
-| `$good-story` | L2 | 故事线诊断：结果/数据 → Story Card |
-| `$deep-search` | L3 | 通用深度搜索引擎，多源覆盖+事实核查 |
-| `$paper-workbench` | L3 | 论文全流程：审稿/返修/rebuttal/写作/投稿 |
-| `$citation-management` | L3 | 引用格式核查与 BibTeX 管理 |
-| `$experiment-reproducibility` | L3 | 实验可复现性管理 |
-| `$math-derivation` | L4 | 严格数学推导执行（退出专用）|
-| `$statistical-analysis` | L4 | 统计方法选型与解读 |
+全量活跃 skill 表（39 项），按场景分组。通过 `skill_route(query)` 路由到最佳匹配；详情通过 `skill_read(slug)` 读取。
 
-各 skill 详情通过 `skill_read` 加载，路由注册见 `skills/SKILL_ROUTING_RUNTIME.json`。
-- Goal state: 通过 `goal_state_read` / `goal_state_manage` 管理目标状态。
+### 📚 Research（9）
+
+| Skill | Layer | Gate | 说明 |
+|-------|-------|------|------|
+| `$research` | L2 | none | 统一科研前门 — 文献调研、实验设计、手稿审改 |
+| `$good-question` | L2 | none | 选题尖锐化：模糊想法 → falsifiable 科研问题 |
+| `$good-story` | L2 | none | 故事线诊断：证据 → 科学叙事 |
+| `$deep-search` | L3 | approve | 通用深度搜索引擎，多源覆盖+事实核查 |
+| `$paper-workbench` | L3 | none | 论文全流程：审稿/返修/rebuttal/写作/投稿 |
+| `$citation-management` | L3 | none | 引用格式核查与 BibTeX 管理 |
+| `$experiment-reproducibility` | L3 | none | 实验可复现性管理 |
+| `$statistical-analysis` | L4 | none | 统计方法选型与解读 |
+| `$math-derivation` | L4 | none | 严格数学推导执行 |
+
+### 💻 Code & Review（5）
+
+| Skill | Layer | Gate | 说明 |
+|-------|-------|------|------|
+| `$code-review-deep` | L2 | none | 对抗式代码审查，按严重性排序的 findings |
+| `$simplify` | L2 | none | 三维并行代码简化（reuse/quality/altitude） |
+| `$systematic-debugging` | L0 | evidence | 排查未知故障，根因分析后再修复 |
+| `$sentry` | L0 | source | 检查 Sentry 生产错误并分类 |
+| `$gh-fix-ci` | L0 | source | 排查修复 GitHub Actions PR check 失败 |
+
+### 🔧 Git & CI（3）
+
+| Skill | Layer | Gate | 说明 |
+|-------|-------|------|------|
+| `$gitx` | L2 | none | Git closeout 工作流：review → fix → commit → merge |
+| `$gh-address-comments` | L0 | source | 回复 GitHub PR review comments |
+| `$update` | L0 | none | 刷新 docs、git tracking 和 stale repo surfaces |
+
+### 📄 Documents & Office（4）
+
+| Skill | Layer | Gate | 说明 |
+|-------|-------|------|------|
+| `$doc` | L3 | artifact | 处理 Word .docx 创建、编辑和审查 |
+| `$pdf` | L3 | artifact | 布局感知的 PDF 阅读、编辑、修复 |
+| `$slides` | L3 | artifact | 创建和编辑 PPT/PPTX 幻灯片 |
+| `$spreadsheets` | L3 | artifact | 工作簿原生电子表格路由到合适通道 |
+
+### 🎨 Design & Figures（3）
+
+| Skill | Layer | Gate | 说明 |
+|-------|-------|------|------|
+| `$design-md` | L3 | artifact | 设计系统 contract 和 visual token 管理 |
+| `$visual-review` | L3 | evidence | 基于截图审查渲染页面和视觉元素 |
+| `$tikz-paper-figure` | L3 | none | AI/raster draft → 论文级 TikZ 独立插图 |
+
+### 🏗️ Infrastructure（6）
+
+| Skill | Layer | Gate | 说明 |
+|-------|-------|------|------|
+| `$research-workspace` | L3 | none | 研究工作区 CLI — claim/假设/实验记录 |
+| `$mcp-server-management` | L3 | none | 创建、配置、调试和注册 MCP server |
+| `$python-env-management` | L4 | none | macOS Python 治理（uv-only） |
+| `$plan-mode` | L1 | none | Plan 门控：证据先行、可验收 todo |
+| `$deepinterview` | L1 | none | 证据驱动的需求澄清与收敛 review |
+| `$goalx` | L1 | none | Goal 管理生命周期入口 |
+
+### ⚙️ Framework & Core（7）
+
+| Skill | Layer | Gate | 说明 |
+|-------|-------|------|------|
+| `$agent-swarm-orchestration` | L0 | delegation | 多 agent 编排决策：local / sidecar / team |
+| `$skill-framework-developer` | L0 | none | 跨宿主路由调优、框架行为配置 |
+| `$primary-runtime` | L0 | none | 框架运行时编排（仅供框架内部使用） |
+| `update` | L0 | none | 刷新 docs、git 和 repo 表面 |
+
+### ✅ Quality Gates（6）
+
+| Skill | Layer | Gate | 说明 |
+|-------|-------|------|------|
+| `$formal-verification` | L4 | none | CAS identity、SMT 一致性、量纲验证 |
+| `$literature-verification` | L4 | none | DOI 可达性、引用声明对齐 |
+| `$prose-verification` | L4 | none | 术语一致性、style guide、claim drift |
+| `$reproducibility-verification` | L4 | none | 实验可复现性：种子、环境、数据版本 |
+| `$statistical-verification` | L4 | none | 统计结果验证：p 值、GRIM、effect size |
+| `$structure-verification` | L4 | none | LaTeX 编译、交叉引用、格式合规 |
+
+### Routing 指引
+
+```
+选择合适的方法：
+- 我知道要做什么任务 → skill_route(query)
+  → 响应含 recommended_tools（同域工具列表）优先使用
+  → 响应含 skill_summary（SKILL.md 摘要）读完即用
+  → 否则调用 skill_read(SKILL.md) 获取完整指引
+- 我想搜索有什么可用 → skill_search(query, limit)
+- 我需要单个 MCP 工具 → route_tool(query)
+- 我想探索工具生态 → search_tools(query, top_k)
+```
+
+工具注册表见 `configs/framework/MCP_TOOL_REGISTRY.json`。
 
 ## Structured Task Output（TASK_OUTPUT.json）
 
