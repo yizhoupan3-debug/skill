@@ -19,7 +19,6 @@ use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use crate::compat;
 use crate::scheduler::{advance_dag, is_chain_complete, load_condition_task_outputs, with_chain_lock, write_chain_file};
 use crate::tracker::process_post_tick;
 
@@ -110,7 +109,7 @@ fn poll_tick(repo_root: &Path, path: &Path) -> Result<bool, FrameworkError> {
             return Err(FrameworkError::not_found("TASK_CHAIN.json not found".to_string()));
         }
 
-        let mut root = compat::load_chain_file(path)?;
+        let mut root = crate::load_chain_from_path(path)?;
 
         // Check if paused
         if root.paused {
@@ -233,7 +232,7 @@ mod tests {
         assert!(!complete, "chain should not be complete after first tick");
 
         // Verify 'a' was transitioned to running
-        let root = compat::load_chain_file(&chain_path).unwrap();
+        let root = crate::load_chain_from_path(&chain_path).unwrap();
         assert_eq!(root.tasks[0].status, TaskStatus::Running);
 
         let _ = fs::remove_dir_all(&repo);

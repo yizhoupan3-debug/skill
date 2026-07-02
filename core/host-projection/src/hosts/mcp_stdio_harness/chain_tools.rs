@@ -164,7 +164,7 @@ pub(crate) fn tool_chain_dag_tick(
         ));
     }
 
-    let mut root = chain_engine::compat::load_chain_file(&path)?;
+    let mut root = chain_engine::load_chain_from_path(&path)?;
 
     if root.mode != ChainMode::Dag {
         return Err(FrameworkError::validation(
@@ -223,7 +223,7 @@ pub(crate) fn tool_chain_dag_status(
         ));
     }
 
-    let root = chain_engine::compat::load_chain_file(&path)?;
+    let root = chain_engine::load_chain_from_path(&path)?;
     let counts = root.status_counts();
 
     let tasks_summary: Vec<Value> = root
@@ -286,7 +286,7 @@ pub(crate) fn tool_chain_dag_retry(
     }
 
     let path = chain_engine::chain_file_path(repo_root);
-    let mut root = chain_engine::compat::load_chain_file(&path)?;
+    let mut root = chain_engine::load_chain_from_path(&path)?;
 
     let task = root.task_by_id_mut(task_id).ok_or_else(|| {
         FrameworkError::not_found(format!("task '{task_id}' not found in chain"))
@@ -334,7 +334,7 @@ pub(crate) fn tool_chain_dag_skip(
     }
 
     let path = chain_engine::chain_file_path(repo_root);
-    let mut root = chain_engine::compat::load_chain_file(&path)?;
+    let mut root = chain_engine::load_chain_from_path(&path)?;
 
     let task = root.task_by_id_mut(task_id).ok_or_else(|| {
         FrameworkError::not_found(format!("task '{task_id}' not found in chain"))
@@ -372,7 +372,7 @@ pub(crate) fn tool_chain_dag_resume(
         ));
     }
 
-    let mut root = chain_engine::compat::load_chain_file(&path)?;
+    let mut root = chain_engine::load_chain_from_path(&path)?;
 
     if root.mode != chain_engine::types::ChainMode::Dag {
         return Err(FrameworkError::validation(

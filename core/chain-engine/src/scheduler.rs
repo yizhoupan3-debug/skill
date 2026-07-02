@@ -10,7 +10,6 @@ use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::{Mutex, OnceLock};
 
-use crate::compat;
 use crate::types::{
     ChainDagRoot, ChainMode, ConditionOperator, ConditionType, DagCondition, DagTaskEntry, TaskStatus,
 };
@@ -527,7 +526,7 @@ fn compare_values(actual: &Value, expected: &Value, op: &ConditionOperator) -> b
 /// Returns the list of task IDs that were transitioned to running.
 pub fn load_advance_write(repo_root: &Path) -> Result<Vec<String>, FrameworkError> {
     let path = crate::chain_file_path(repo_root);
-    let mut root = compat::load_chain_file(&path)?;
+    let mut root = crate::load_chain_from_path(&path)?;
     let task_outputs = load_condition_task_outputs(repo_root, &root)?;
     let ready = advance_dag(&mut root, &task_outputs);
     // Only write if there were actual transitions (dirty check).
