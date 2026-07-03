@@ -162,6 +162,7 @@ trigger_hints:
 | 级数展开 | `math_sympy_series` | 局部近似（可指定阶数） |
 | 极限计算 | `math_sympy_limit` | 边界行为 |
 | 量纲分析 | `research_verification_formal(check="dimensional")` | 物理量纲 |
+| 量纲传播推演 | `math_sympy_dimension_propagate` | 符号表达式未知量纲推导 |
 | 渐近估计 | `math_asymptotic_estimate` | 主导增长阶 |
 | 微积分行为 | `math_sympy_differentiate` / `math_sympy_integrate` | 单调性/凹凸性/积分形式 |
 | 方程求解（根） | `math_sympy_solve` | 零点/不动点结构 |
@@ -209,6 +210,8 @@ trigger_hints:
 | **单调性/凹凸性** | 微分符号不变 | ① 计算一/二阶导数 → ② 验证符号恒定性 → ③ 推广到高维 | `math_sympy_differentiate` / `math_sympy_solve` |
 | **推广猜想** | 特例成立，参数受限 | ① 枚举更多特例 → ② 猜测参数化形式 → ③ 验证扩展参数范围 | `math_witness_consistency` |
 | **恒等式链** | 两个步骤间存在代换关系 | ① 猜测中间代换 → ② SymPy 验证链传递性 | `math_identity_chain` / `math_sympy_verify` |
+| **自动定理证明** | 探索中发现具有潜在可证性的命题 | 用 Z3 自动证明命题（支持蕴含断言和循环证明） | `math_auto_prove` |
+| **上下界收紧** | 探索到粗略不等式界需要收紧 | 用 Z3/SymPy 自动收紧数值不等式边界 | `math_tighten_bounds` |
 | **同态保持** | 两个结构间有映射关系 | ① 计算映射结构 → ② 猜测同态形式 → ③ Z3 验证满足 | `math_check_homomorphism` |
 
 **猜想置信度标记**：

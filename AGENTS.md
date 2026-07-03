@@ -51,7 +51,7 @@ slash command 对应的 skill 如果同时存在于 `~/.claude/skills/`（原生
 
 ## Skill 目录
 
-全量活跃 skill 表（39 项），按场景分组。通过 `skill_route(query)` 路由到最佳匹配；详情通过 `skill_read(slug)` 读取。
+全量活跃 skill 表（40 项），按场景分组。通过 `skill_route(query)` 路由到最佳匹配；详情通过 `skill_read(slug)` 读取。
 
 ### 📚 Research（11）
 
@@ -67,6 +67,7 @@ slash command 对应的 skill 如果同时存在于 `~/.claude/skills/`（原生
 | `$statistical-analysis` | L4 | none | 统计方法选型与解读 |
 | `$math-verify` | L4 | none | 对抗式数学推理验证：审查既有推导的正确性 |
 | `$math-explore` | L4 | none | 数学性质探索发现：数值实验、模式识别、猜想生成 |
+| `$math-modeling` | L4 | none | 物理/工程/生物系统的数学建模全流程：问题形式化、先验调研、控制方程构建、无量纲化、模型简化求解、验证与输出 |
 
 ### 💻 Code & Review（5）
 

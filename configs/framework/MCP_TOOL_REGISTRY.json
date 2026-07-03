@@ -1,9 +1,9 @@
 {
   "schema_version": "mcp-tool-registry-v2",
   "scope": {
-    "total_count": 96,
+    "total_count": 107,
     "builtin_count": 22,
-    "research_count": 40,
+    "research_count": 51,
     "independent_count": 15,
     "external_count": 19,
     "_comment": "auto-generated — update via tools when adding/removing tools. This is the SOLE source of truth for all tool routing."
@@ -1002,7 +1002,16 @@
       "mcp_server": "router-rs-framework",
       "tool_flags": [
         "readonly"
-      ]
+      ],
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "description": "任务 ID（可选，默认解析 active/focus 指针）"
+          }
+        }
+      }
     },
     {
       "slug": "closeout_record_write",
@@ -1039,7 +1048,19 @@
       "mcp_server": "research-harness",
       "tool_flags": [
         "readonly"
-      ]
+      ],
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "language": {
+            "type": "string",
+            "enum": [
+              "en",
+              "zh"
+            ]
+          }
+        }
+      }
     },
     {
       "slug": "research_claim_drift",
@@ -1059,7 +1080,16 @@
       "mcp_server": "research-harness",
       "tool_flags": [
         "readonly"
-      ]
+      ],
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "manuscript": {
+            "type": "string",
+            "description": "手稿路径"
+          }
+        }
+      }
     },
     {
       "slug": "research_review_loop",
@@ -1074,7 +1104,18 @@
         "对抗"
       ],
       "mcp_server": "research-harness",
-      "tool_flags": []
+      "tool_flags": [],
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "max_rounds": {
+            "type": "integer"
+          },
+          "focus": {
+            "type": "string"
+          }
+        }
+      }
     },
     {
       "slug": "math_asymptotic_estimate",
@@ -1095,7 +1136,28 @@
       "mcp_server": "research-harness",
       "tool_flags": [
         "readonly"
-      ]
+      ],
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "expression",
+          "regime"
+        ],
+        "properties": {
+          "expression": {
+            "type": "string",
+            "description": "表达式"
+          },
+          "regime": {
+            "type": "string",
+            "description": "渐近区域"
+          },
+          "variable": {
+            "type": "string",
+            "description": "自变量"
+          }
+        }
+      }
     },
     {
       "slug": "math_proof_dag_init",
@@ -1110,7 +1172,26 @@
         "证明"
       ],
       "mcp_server": "research-harness",
-      "tool_flags": []
+      "tool_flags": [],
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "goal"
+        ],
+        "properties": {
+          "goal": {
+            "type": "string",
+            "description": "证明目标"
+          },
+          "assumptions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "假设"
+          }
+        }
+      }
     },
     {
       "slug": "math_proof_dag_decompose",
@@ -1125,7 +1206,26 @@
         "子目标"
       ],
       "mcp_server": "research-harness",
-      "tool_flags": []
+      "tool_flags": [],
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "node_id"
+        ],
+        "properties": {
+          "node_id": {
+            "type": "string",
+            "description": "节点 ID"
+          },
+          "subgoals": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "子目标"
+          }
+        }
+      }
     },
     {
       "slug": "math_proof_dag_verify",
@@ -1142,7 +1242,20 @@
       "mcp_server": "research-harness",
       "tool_flags": [
         "readonly"
-      ]
+      ],
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "dag_id": {
+            "type": "string",
+            "description": "DAG ID"
+          },
+          "deep": {
+            "type": "boolean",
+            "description": "是否深入验证"
+          }
+        }
+      }
     },
     {
       "slug": "math_proof_dag_status",
@@ -1159,7 +1272,16 @@
       "mcp_server": "research-harness",
       "tool_flags": [
         "readonly"
-      ]
+      ],
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "dag_id": {
+            "type": "string",
+            "description": "DAG ID"
+          }
+        }
+      }
     },
     {
       "slug": "math_sympy_verify",
@@ -1178,7 +1300,19 @@
       "mcp_server": "research-harness",
       "tool_flags": [
         "readonly"
-      ]
+      ],
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "expression"
+        ],
+        "properties": {
+          "expression": {
+            "type": "string",
+            "description": "代数恒等式"
+          }
+        }
+      }
     },
     {
       "slug": "math_sympy_simplify",
@@ -1197,7 +1331,19 @@
       "mcp_server": "research-harness",
       "tool_flags": [
         "readonly"
-      ]
+      ],
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "expression"
+        ],
+        "properties": {
+          "expression": {
+            "type": "string",
+            "description": "待化简表达式"
+          }
+        }
+      }
     },
     {
       "slug": "codegraph_search",
@@ -1391,7 +1537,26 @@
       "mcp_server": "research-harness",
       "tool_flags": [
         "readonly"
-      ]
+      ],
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "expression"
+        ],
+        "properties": {
+          "expression": {
+            "type": "string",
+            "description": "不等式表达式"
+          },
+          "assumptions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "假设"
+          }
+        }
+      }
     },
     {
       "slug": "math_asymptotic_chain",
@@ -1408,7 +1573,22 @@
       "mcp_server": "research-harness",
       "tool_flags": [
         "readonly"
-      ]
+      ],
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "steps"
+        ],
+        "properties": {
+          "steps": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "渐近关系链"
+          }
+        }
+      }
     },
     {
       "slug": "math_backend_available",
@@ -1427,7 +1607,21 @@
       "mcp_server": "research-harness",
       "tool_flags": [
         "readonly"
-      ]
+      ],
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "backend": {
+            "type": "string",
+            "enum": [
+              "z3",
+              "sympy",
+              "lean",
+              "all"
+            ]
+          }
+        }
+      }
     },
     {
       "slug": "math_lean_verify",
@@ -1445,7 +1639,19 @@
       "mcp_server": "research-harness",
       "tool_flags": [
         "readonly"
-      ]
+      ],
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "code"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "Lean 代码"
+          }
+        }
+      }
     },
     {
       "slug": "research_smoke",
@@ -1462,7 +1668,20 @@
       "mcp_server": "research-harness",
       "tool_flags": [
         "readonly"
-      ]
+      ],
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": "string",
+            "enum": [
+              "arxiv",
+              "semantic-scholar",
+              "all"
+            ]
+          }
+        }
+      }
     },
     {
       "slug": "loop_pause",
@@ -1936,7 +2155,9 @@
           "check": {
             "type": "string",
             "enum": [
-              "dimensional"
+              "dimensional",
+              "witness",
+              "step_dependency"
             ],
             "description": "验证类型：dimensional=量纲一致性"
           },
@@ -1965,7 +2186,18 @@
         "合并 sin cos",
         "三角恒等式"
       ],
-      "input_schema": null
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "expression"
+        ],
+        "properties": {
+          "expression": {
+            "type": "string",
+            "description": "待化简的三角表达式"
+          }
+        }
+      }
     },
     {
       "slug": "math_sympy_subs",
@@ -1985,7 +2217,27 @@
         "替换变量",
         "数值代入"
       ],
-      "input_schema": null
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "expression",
+          "substitutions"
+        ],
+        "properties": {
+          "expression": {
+            "type": "string",
+            "description": "待代入的符号表达式"
+          },
+          "substitutions": {
+            "type": "object",
+            "description": "替换映射 {变量: 值}"
+          },
+          "simultaneous": {
+            "type": "boolean",
+            "description": "是否同时替换"
+          }
+        }
+      }
     },
     {
       "slug": "math_sympy_limit",
@@ -2005,7 +2257,36 @@
         "lim",
         "无穷极限"
       ],
-      "input_schema": null
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "expression",
+          "variable",
+          "value"
+        ],
+        "properties": {
+          "expression": {
+            "type": "string",
+            "description": "表达式"
+          },
+          "variable": {
+            "type": "string",
+            "description": "自变量"
+          },
+          "value": {
+            "type": "string",
+            "description": "极限值"
+          },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "+",
+              "-"
+            ],
+            "description": "方向"
+          }
+        }
+      }
     },
     {
       "slug": "math_sympy_lambdify",
@@ -2024,7 +2305,26 @@
         "符号函数化",
         "数值求值"
       ],
-      "input_schema": null
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "expression",
+          "variables"
+        ],
+        "properties": {
+          "expression": {
+            "type": "string",
+            "description": "符号表达式"
+          },
+          "variables": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "变量列表"
+          }
+        }
+      }
     },
     {
       "slug": "math_sympy_expand",
@@ -2043,7 +2343,18 @@
         "代数展开",
         "多项式展开"
       ],
-      "input_schema": null
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "expression"
+        ],
+        "properties": {
+          "expression": {
+            "type": "string",
+            "description": "待展开表达式"
+          }
+        }
+      }
     },
     {
       "slug": "math_sympy_factor",
@@ -2062,7 +2373,22 @@
         "因式",
         "多项式分解"
       ],
-      "input_schema": null
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "expression"
+        ],
+        "properties": {
+          "expression": {
+            "type": "string",
+            "description": "待分解表达式"
+          },
+          "modulus": {
+            "type": "integer",
+            "description": "模数域分解（可选）"
+          }
+        }
+      }
     },
     {
       "slug": "math_sympy_series",
@@ -2083,7 +2409,31 @@
         "幂级数",
         "展开到n阶"
       ],
-      "input_schema": null
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "expression",
+          "variable"
+        ],
+        "properties": {
+          "expression": {
+            "type": "string",
+            "description": "表达式"
+          },
+          "variable": {
+            "type": "string",
+            "description": "展开变量"
+          },
+          "point": {
+            "type": "string",
+            "description": "展开点"
+          },
+          "order": {
+            "type": "integer",
+            "description": "展开阶数"
+          }
+        }
+      }
     },
     {
       "slug": "math_sympy_differentiate",
@@ -2104,7 +2454,27 @@
         "偏导",
         "高阶导数"
       ],
-      "input_schema": null
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "expression",
+          "variable"
+        ],
+        "properties": {
+          "expression": {
+            "type": "string",
+            "description": "表达式"
+          },
+          "variable": {
+            "type": "string",
+            "description": "求导变量"
+          },
+          "order": {
+            "type": "integer",
+            "description": "导数阶数"
+          }
+        }
+      }
     },
     {
       "slug": "math_sympy_integrate",
@@ -2124,7 +2494,30 @@
         "定积分",
         "integration"
       ],
-      "input_schema": null
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "expression",
+          "variable"
+        ],
+        "properties": {
+          "expression": {
+            "type": "string",
+            "description": "表达式"
+          },
+          "variable": {
+            "type": "string",
+            "description": "积分变量"
+          },
+          "limits": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "积分限"
+          }
+        }
+      }
     },
     {
       "slug": "math_sympy_solve",
@@ -2145,7 +2538,23 @@
         "解方程",
         "方程组"
       ],
-      "input_schema": null
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "expression",
+          "variable"
+        ],
+        "properties": {
+          "expression": {
+            "type": "string",
+            "description": "方程表达式"
+          },
+          "variable": {
+            "type": "string",
+            "description": "求解变量"
+          }
+        }
+      }
     },
     {
       "slug": "math_sympy_dimension_propagate",
@@ -2165,7 +2574,23 @@
         "量纲分析",
         "量纲传播"
       ],
-      "input_schema": null
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "expression",
+          "mapping"
+        ],
+        "properties": {
+          "expression": {
+            "type": "string",
+            "description": "待分析的符号表达式"
+          },
+          "mapping": {
+            "type": "object",
+            "description": "变量→量纲映射"
+          }
+        }
+      }
     },
     {
       "slug": "math_auto_prove",
@@ -2185,7 +2610,25 @@
         "SMT证明",
         "命题证明"
       ],
-      "input_schema": null
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "goal"
+        ],
+        "properties": {
+          "goal": {
+            "type": "string",
+            "description": "待证明目标"
+          },
+          "assumptions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "已知假设"
+          }
+        }
+      }
     },
     {
       "slug": "math_identity_chain",
@@ -2205,7 +2648,21 @@
         "恒等式验证",
         "等式推导"
       ],
-      "input_schema": null
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "steps"
+        ],
+        "properties": {
+          "steps": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "恒等式链"
+          }
+        }
+      }
     },
     {
       "slug": "math_tighten_bounds",
@@ -2225,7 +2682,30 @@
         "不等式边界",
         "bound tightening"
       ],
-      "input_schema": null
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "expression",
+          "variable"
+        ],
+        "properties": {
+          "expression": {
+            "type": "string",
+            "description": "表达式"
+          },
+          "variable": {
+            "type": "string",
+            "description": "变量"
+          },
+          "constraints": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "额外约束"
+          }
+        }
+      }
     },
     {
       "slug": "math_witness_consistency",
@@ -2245,7 +2725,25 @@
         "条件验证",
         "关键点"
       ],
-      "input_schema": null
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "expression"
+        ],
+        "properties": {
+          "expression": {
+            "type": "string",
+            "description": "验证表达式"
+          },
+          "witnesses": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "witness 值"
+          }
+        }
+      }
     },
     {
       "slug": "math_check_homomorphism",
@@ -2265,7 +2763,28 @@
         "映射保持",
         "结构保持"
       ],
-      "input_schema": null
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "source",
+          "target",
+          "mapping"
+        ],
+        "properties": {
+          "source": {
+            "type": "string",
+            "description": "源结构"
+          },
+          "target": {
+            "type": "string",
+            "description": "目标结构"
+          },
+          "mapping": {
+            "type": "string",
+            "description": "映射定义"
+          }
+        }
+      }
     },
     {
       "slug": "math_proof_trace_record",
@@ -2285,7 +2804,358 @@
         "证明日志",
         "步骤记录"
       ],
-      "input_schema": null
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "step_id",
+          "claim"
+        ],
+        "properties": {
+          "step_id": {
+            "type": "string",
+            "description": "步骤 ID"
+          },
+          "claim": {
+            "type": "string",
+            "description": "声明"
+          },
+          "evidence": {
+            "type": "string",
+            "description": "证据"
+          }
+        }
+      }
+    },
+    {
+      "slug": "math_perturbation_expand",
+      "display_name": "摄动展开",
+      "description": "正则摄动展开：将微分方程按小参数展开为幂级数形式 u = u0 + ε·u1 + ε²·u2 + ...，逐阶求解",
+      "layer": "research",
+      "dispatch_domain": "domain:research",
+      "owner": "research",
+      "mcp_server": "research-harness",
+      "tool_flags": [
+        "readonly"
+      ],
+      "trigger_hints": [
+        "摄动",
+        "perturbation",
+        "正则摄动",
+        "微扰",
+        "小参数",
+        "渐进展开",
+        "弱非线性"
+      ],
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "equation",
+          "variable"
+        ],
+        "properties": {
+          "equation": {
+            "type": "string",
+            "description": "含小参数的方程表达式"
+          },
+          "variable": {
+            "type": "string",
+            "description": "自变量名"
+          },
+          "parameter": {
+            "type": "string",
+            "description": "小参数名（默认 epsilon）"
+          },
+          "order": {
+            "type": "integer",
+            "description": "展开阶数（1-5，默认 2）"
+          },
+          "boundary_conditions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "边界条件"
+          }
+        }
+      }
+    },
+    {
+      "slug": "math_z3_prove",
+      "display_name": "Z3 SMT 逻辑证明",
+      "description": "Z3 SMT 验证逻辑表达式（含量词、非线性算术）",
+      "layer": "research",
+      "dispatch_domain": "domain:research",
+      "owner": "research",
+      "mcp_server": "research-harness",
+      "tool_flags": [
+        "readonly"
+      ],
+      "trigger_hints": [
+        "z3 prove",
+        "Z3证明",
+        "SMT验证"
+      ],
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "expression"
+        ],
+        "properties": {
+          "expression": {
+            "type": "string",
+            "description": "待验证的逻辑表达式"
+          }
+        }
+      }
+    },
+    {
+      "slug": "math_z3_solver_push",
+      "display_name": "Z3 求解器 push",
+      "description": "创建 Z3 求解器上下文快照",
+      "layer": "research",
+      "dispatch_domain": "domain:research",
+      "owner": "research",
+      "mcp_server": "research-harness",
+      "tool_flags": [],
+      "trigger_hints": [
+        "z3 push",
+        "求解器快照"
+      ],
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "n": {
+            "type": "integer",
+            "description": "推入层数（默认 1）"
+          }
+        }
+      }
+    },
+    {
+      "slug": "math_z3_solver_pop",
+      "display_name": "Z3 求解器 pop",
+      "description": "恢复 Z3 求解器上下文快照",
+      "layer": "research",
+      "dispatch_domain": "domain:research",
+      "owner": "research",
+      "mcp_server": "research-harness",
+      "tool_flags": [],
+      "trigger_hints": [
+        "z3 pop",
+        "求解器恢复"
+      ],
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "n": {
+            "type": "integer",
+            "description": "弹出层数（默认 1）"
+          }
+        }
+      }
+    },
+    {
+      "slug": "math_z3_solver_add",
+      "display_name": "Z3 求解器添加约束",
+      "description": "向 Z3 求解器添加约束表达式",
+      "layer": "research",
+      "dispatch_domain": "domain:research",
+      "owner": "research",
+      "mcp_server": "research-harness",
+      "tool_flags": [],
+      "trigger_hints": [
+        "z3 add",
+        "添加约束"
+      ],
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "expression"
+        ],
+        "properties": {
+          "expression": {
+            "type": "string",
+            "description": "约束表达式"
+          }
+        }
+      }
+    },
+    {
+      "slug": "math_z3_solver_check",
+      "display_name": "Z3 可满足性检查",
+      "description": "检查当前 Z3 求解器上下文的可满足性",
+      "layer": "research",
+      "dispatch_domain": "domain:research",
+      "owner": "research",
+      "mcp_server": "research-harness",
+      "tool_flags": [
+        "readonly"
+      ],
+      "trigger_hints": [
+        "z3 check",
+        "可满足性"
+      ],
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "timeout_ms": {
+            "type": "integer",
+            "description": "超时毫秒数"
+          }
+        }
+      }
+    },
+    {
+      "slug": "math_z3_solver_reset",
+      "display_name": "Z3 求解器重置",
+      "description": "重置 Z3 求解器状态（清空全部约束）",
+      "layer": "research",
+      "dispatch_domain": "domain:research",
+      "owner": "research",
+      "mcp_server": "research-harness",
+      "tool_flags": [],
+      "trigger_hints": [
+        "z3 reset",
+        "求解器重置"
+      ],
+      "input_schema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "slug": "math_z3_solver_batch",
+      "display_name": "Z3 批量操作",
+      "description": "批量执行 Z3 求解器操作",
+      "layer": "research",
+      "dispatch_domain": "domain:research",
+      "owner": "research",
+      "mcp_server": "research-harness",
+      "tool_flags": [],
+      "trigger_hints": [
+        "z3 batch",
+        "Z3批量"
+      ],
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "steps"
+        ],
+        "properties": {
+          "steps": {
+            "type": "array",
+            "description": "步骤列表",
+            "items": {
+              "type": "object",
+              "properties": {
+                "action": {
+                  "type": "string",
+                  "enum": [
+                    "push",
+                    "pop",
+                    "add",
+                    "check",
+                    "reset"
+                  ],
+                  "description": "操作类型"
+                },
+                "n": {
+                  "type": "integer"
+                },
+                "expression": {
+                  "type": "string"
+                },
+                "timeout_ms": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "action"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "slug": "math_z3_optimize",
+      "display_name": "Z3 约束优化",
+      "description": "Z3 约束优化：max/min 目标函数，支持多约束",
+      "layer": "research",
+      "dispatch_domain": "domain:research",
+      "owner": "research",
+      "mcp_server": "research-harness",
+      "tool_flags": [
+        "readonly"
+      ],
+      "trigger_hints": [
+        "z3 optimize",
+        "Z3优化",
+        "约束优化"
+      ],
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "objective",
+          "constraints"
+        ],
+        "properties": {
+          "objective": {
+            "type": "string",
+            "description": "目标函数表达式"
+          },
+          "constraints": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "约束表达式列表"
+          },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "minimize",
+              "maximize"
+            ],
+            "description": "优化方向"
+          }
+        }
+      }
+    },
+    {
+      "slug": "math_z3_check_system",
+      "display_name": "Z3 多约束系统检查",
+      "description": "Z3 多约束系统可满足性检查",
+      "layer": "research",
+      "dispatch_domain": "domain:research",
+      "owner": "research",
+      "mcp_server": "research-harness",
+      "tool_flags": [
+        "readonly"
+      ],
+      "trigger_hints": [
+        "z3 check system",
+        "多约束检查"
+      ],
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "constraints"
+        ],
+        "properties": {
+          "constraints": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "约束表达式列表"
+          },
+          "timeout_ms": {
+            "type": "integer",
+            "description": "超时毫秒数"
+          }
+        }
+      }
     }
   ]
 }

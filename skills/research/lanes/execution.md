@@ -18,6 +18,7 @@
 - 用户有手稿对象 → route to `$research` paper-workbench lane
 - 用户只问统计检验 → `$statistical-analysis`
 - 用户只需要纯数学验证/探索 → `$math-verify` 或 `$math-explore`
+- 用户需要系统化的数学建模（控制方程/无量纲化/regime chart）→ `$math-modeling`（L4）
 - 用户只需要引用格式 → `$citation-management`
 - 用户只需要可重复性管理 → `$experiment-reproducibility`
 - 普通代码实现（无研究级证据闸门）→ 当前 coding context
@@ -29,7 +30,7 @@
 | `experiment_design` | 变量/对照/ablation/baseline/metrics/sample size/failure criteria | experiment plan |
 | `experiment_forensics` | 失败复盘：哪些假设/变量导致失败，下一假设 | forensics report |
 | `math_verification` | 推导审核 + checker 选项 | witness list + checker result |
-| `math_modeling` | 建模型：变量/方程/闭合/无量纲/regime chart | model_spec |
+| `math_modeling` | 建模型：变量/方程/闭合/无量纲/regime chart → 委托 `$math-modeling`（L4） | model_spec（源自 `$math-modeling` 输出） |
 | `code_verification` | 代码审计 + 测试 + 确定性复现 | test results + repro commands |
 | `reproducibility` | 委托给 `$experiment-reproducibility`（执行）+ `$reproducibility-verification`（审计）| reproducibility record |
 | `workspace management` | 研究初始化/claim/假设/日志/run record，调用 research-harness CLI | CLI output |
@@ -68,6 +69,37 @@
 - 所有数学验证必须附带 witness + checker（或 blocker）
 - 失败复盘后如发现 discovery 阶段未覆盖的新未知 → **必须 loop-back** 到 discovery lane
 
+## Lane handoff 协议
+
+### execution lane → `$math-modeling`
+
+当 `math_modeling` sub-lane 委托到 `$math-modeling`（L4）时，传递以下结构化上下文：
+
+```yaml
+handoff: $math-modeling
+context:
+  system_description: "<物理/工程系统描述>"
+  known_assumptions:
+    - "<假设 1>"
+    - "<假设 2>"
+  user_goal: "<解析解 | 数值解 | regime map | 量级估计>"
+  discovery_prior_art:   # 仅当经 discovery lane 调研后进入
+    - "<prior art 引用或 NO_PRIOR_ART>"
+  modeling_brief_incomplete: true/false  # 是否需要 (S) 阶段补充形式化
+```
+
+当 `$math-modeling` 完成时，接收回传：
+
+```yaml
+handoff: execution lane (from $math-modeling)
+context:
+  model_spec: "<model specification>"
+  verification_report: "<验证结论: PASS / FAIL / WARN>"
+  unresolved_items:
+    - "<未解决项 1>"
+  iteration_count: <1 或 2 或 3>
+```
+
 ## 相关资源
 
 - 链路协议：详见 [`../references/research-lane-routing.md`](../references/research-lane-routing.md)
@@ -75,5 +107,6 @@
 - 研究工作区 CLI：详见 [`../research-harness/SKILL.md`](../research-harness/SKILL.md)
 - Quality gates（退出门）：
   - `math_verification` / `math_modeling` → `$formal-verification`
+  - math_modeling 必须经过 (A) 先验调研和 (E) 验证阶段方可称完成，见 `$math-modeling` SKILL.md
   - `reproducibility` → `$reproducibility-verification`
   - `code_verification` → `$code-review-deep`

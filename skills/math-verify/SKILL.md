@@ -92,6 +92,8 @@ trigger_hints:
    | 代数恒等式（等式推导） | SymPy | `math_sympy_verify` |
    | 代数化简验证 | SymPy | `math_sympy_simplify` |
    | 不等式约束一致性 | Z3/minilp | `math_prove_inequality` |
+   | 数值 witness 验证 | SymPy | `math_sympy_lambdify` |
+   | 不等式边界收紧 | Z3/SymPy | `math_tighten_bounds` |
    | 渐近关系/链 | 纯 Rust | `math_asymptotic_estimate` / `math_asymptotic_chain` |
    | 符号微分/积分 | SymPy | `math_sympy_differentiate` / `math_sympy_integrate` |
    | 方程求解回溯 | SymPy | `math_sympy_solve` |
@@ -99,6 +101,7 @@ trigger_hints:
    | 级数展开 | SymPy | `math_sympy_series` |
    | 极限计算 | SymPy | `math_sympy_limit` |
    | 物理量纲一致性 | SymPy/Rust | `research_verification_formal(check="dimensional")` |
+   | 量纲传播分析 | SymPy | `math_sympy_dimension_propagate` |
    | 步骤依赖完整性 | Rust | `research_verification_formal(check="step_dependency")` |
    | Witness 验证 | SymPy/Z3 | `math_witness_consistency` |
    | 多步 AND-OR 分解 | Proof DAG | `math_proof_dag_init` → `math_proof_dag_decompose` → `math_proof_dag_verify` |
