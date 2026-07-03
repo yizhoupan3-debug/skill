@@ -20,13 +20,13 @@ metadata:
   risk: medium
   routing_layer: L0
   source: runtime
-  version: '3.1.0'
+  version: '3.2.0'
 name: update
 routing_gate: none
 routing_owner: owner
 routing_priority: P1
 session_start: n/a
-short_description: 仓库知识状态维护：文档刷新 → git 跟踪审计 → 旧代码/旧文档清理。
+short_description: 仓库知识状态维护：文档刷新，git 跟踪审计，旧代码/旧文档清理。
 trigger_hints:
 - /update
 - 更新文档
@@ -45,70 +45,58 @@ trigger_hints:
 
 ## Quick Start
 
-```markdown
-# 在任意 git 仓库根目录键入：
+```
 /update
 
-# 你会看到 3 阶段输出：
-▸ 阶段 1：扫描 — README、AGENTS、docs/、研究目录、未跟踪文件、死代码标记
-▸ 阶段 2：核查 — 引用搜索 / 编译 / 测试交叉验证
-▸ 阶段 3：清理 — 展示发现，逐项确认后执行
+阶段 1: 扫描 -- README, AGENTS, docs/, 研究目录, 未跟踪文件, 死代码标记
+阶段 2: 核查 + 清理 -- 交叉验证，确认的直接执行，不确定的写入报告
+阶段 3: 汇总 -- 展示执行结果和待人工处理项
 ```
 
 ---
 
-## 执行模型（3 阶段）
+## 执行模型（3 阶段，全自动驱动）
 
-每一阶段标注交互模式：
+`/update` 设计为**端到端自驱**：启动后不停顿等待确认，主动执行有证据的操作，把不确定性收敛到最终报告。
 
-| 标记 | 含义 |
-|------|------|
-| ✅ auto | 自动执行，不暂停 |
-| ⚠️ confirm | 展示给用户，确认后才执行 |
-| 📋 report-only | 只报告，不执行 |
+### 阶段 1：扫描
 
-### 阶段 1：扫描发现（✅ auto）
-
-扫描仓库关键知识面：
+扫描仓库的关键知识面并列出候选清单。不做判断，不修改文件。
 
 - **关键文档**：README、AGENTS.md、docs 索引、计划/研究目录、实验记录、artifact 指针
-- **git 跟踪面**：未跟踪文件、误跟踪的生成物/缓存、.gitignore 漂移、应纳管的 tracked Markdown
+- **git 跟踪面**：未跟踪文件、误跟踪的生成物/缓存、.gitignore 漂移、应纳管的 Markdown
 - **旧代码/旧文件/旧文档**：疑似死代码、死文件、过期文档、重复入口、历史残留
 - **科研材料**：论文草稿、rebuttal、cover letter、实验数据、研究计划、文献综述、引用库、环境/复现说明、结果表、figure/table 说明、状态 ledger
 
-不推测，不做判断——只列出候选。
+### 阶段 2：核查 + 分类处理
 
-### 阶段 2：证据核查与分类（⚠️ confirm / 📋 report-only）
+对候选清单做交叉验证：引用搜索、编译/测试、文档索引、git 修改历史、命名线索。验证后分三类自动处理：
 
-对阶段 1 的候选列表做**交叉确认**——用引用搜索、编译/测试结果、文档索引、git 修改历史、文件命名线索来验证每一种猜测。
+| 分类 | 条件 | 行为 |
+|------|------|------|
+| **可清理** | 明确无引用、已被替代、测试确认不再需要的代码/文件/文档 | 直接执行清理（删除或移动），不留待办 |
+| **待确认** | 证据不足，或涉及科研材料 | 写入 `update-report.md`，附证据缺口说明，不做操作 |
+| **科研材料** | 原始数据、手稿、引用库、实验记录、中间结论 | 标注状态或归档到 `archive/`，不删除 |
 
-核查后将发现归入三类：
+> 科研材料默认保守：无法确定价值的原始数据、手稿、引用库不删除。优先归档或标注 `[状态：待定]`。
 
-| 类别 | 处理方式 | 交互 |
-|------|----------|------|
-| **可清理** | 有明确证据：无引用、已被替代、测试确认不再需要 | ⚠️ 逐项确认后执行 |
-| **待确认** | 证据不足，无法判定 | 📋 写入待确认清单，说明证据缺口 |
-| **科研材料（不可删除）** | 无法证明废弃的原始数据、手稿、引用库、实验记录、中间结论 | 📋 归档或标注状态，不删除 |
+### 阶段 3：汇总
 
-> **科研材料默认更保守**。无法确定价值的原始数据、手稿、引用库不删除——优先归档到 `archive/` 或标注 `(状态：待定)`。
+操作完成后输出一条摘要，包含：
 
-### 阶段 3：清理与验证（⚠️ confirm）
+- 清理了多少项、分别是什么
+- 归档/标注了多少科研材料
+- 有多少项待确认（列出概要，指向 `update-report.md`）
+- git 跟踪面建议（应纳管/应忽略/应迁移）
+- 可选的验证证据：测试通过、编译通过、diff 状态
 
-只执行阶段 2 中确认为「可清理」的项目。
-
-收口必须提供至少一项作为验证证据：
-
-- 测试或 `cargo test` 通过
-- 编译通过
-- `git diff` / `git status` 变化清晰
-- 生成物系统状态 `ok: true`
-- 明确的 blocker 说明
+**`update-report.md`** 写入仓库根目录 `.update/` 下，记录待确认项的详细信息。每次 `/update` 覆盖上一份报告。
 
 ---
 
 ## When to use
 
-- 用户显式调用 **`/update`**
+- 用户显式调用 `/update`
 - 需要刷新关键文档、docs 索引、计划状态、研究状态或 artifact 索引
 - 需要检查 git 跟踪面：未跟踪文件、误跟踪生成物、ignore 漂移
 - 需要定位并清理旧代码、旧文件、旧文档、重复入口或历史残留
@@ -122,9 +110,7 @@ trigger_hints:
 
 ---
 
-## 参考
-
-### Rust 审计入口（框架仓库可用）
+## 参考：Rust 审计入口（框架仓库）
 
 `update-audit` 是 dry-run 清单入口，只读审计，不删除、不改文件：
 
@@ -138,30 +124,4 @@ cargo run --manifest-path core/router-rs/Cargo.toml -- framework maint update-au
 
 ```bash
 cargo run --manifest-path /abs/path/to/framework/Cargo.toml -- framework maint update-audit --repo-root /abs/path/to/repo
-```
-
-### 框架仓库一条龙验证
-
-```bash
-cargo run --manifest-path core/router-rs/Cargo.toml -- framework maint update-one-shot
-```
-
-等价于：`refresh-host-projections` → `framework skills refresh --write` → 离线契约测试 → 生成物 drift-gate → 可选 host skill publish。
-
-日常快检：
-
-```bash
-cargo run --manifest-path core/router-rs/Cargo.toml -- framework doctor --repo-root "$PWD"
-```
-
-可选外网套件：
-
-```bash
-ROUTER_RS_UPDATE_RUN_AUTORESEARCH_CLI_TESTS=1 cargo run --manifest-path core/router-rs/Cargo.toml -- framework maint update-one-shot
-```
-
-可选宿主投影发布：
-
-```bash
-ROUTER_RS_UPDATE_PUBLISH_HOST_SKILLS=1 cargo run --manifest-path core/router-rs/Cargo.toml -- framework maint update-one-shot
 ```

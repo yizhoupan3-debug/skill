@@ -55,7 +55,7 @@ L3  citation-management, deep-search, design-md, doc,
     experiment-reproducibility, mcp-server-management, pdf,
     research-workspace (原 autoresearch), slides, spreadsheets,
     tikz-paper-figure, visual-review
-L4  quality-gates/formal-verification, quality-gates/literature-verification, math-derivation,
+L4  quality-gates/formal-verification, quality-gates/literature-verification, math-verify, math-explore,
     quality-gates/prose-verification, python-env-management, quality-gates/reproducibility-verification,
     statistical-analysis, quality-gates/statistical-verification, quality-gates/structure-verification
 Runtime lanes  planning, execution/code, language/framework, platform/integration,

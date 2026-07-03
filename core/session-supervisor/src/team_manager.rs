@@ -362,7 +362,14 @@ pub fn send_message(
 
     // Validate team, update counters, AND write message file under the same
     // lock so the entire validation-and-write sequence is atomic.
-    let msg_id = format!("{now}-{safe_from}");
+    // Use nanoseconds as a collision-safe nonce within the same second.
+    // now_iso() is seconds-precision (framework_core::time::now_iso), so
+    // format!("{now}-{safe_from}") would collide for same-second sends.
+    let nonce = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    let msg_id = format!("{now}-{safe_from}-{nonce}");
     let safe_msg_id: String = msg_id
         .chars()
         .filter(|&c| c.is_ascii_alphanumeric() || c == '-' || c == '_')

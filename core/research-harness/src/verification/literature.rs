@@ -56,7 +56,7 @@ pub fn verify_claim_coverage(claims: &[String], references: &[String]) -> Result
     for claim in claims {
         let claim_words = extract_content_words(claim);
         if claim_words.is_empty() {
-            covered += 1; // 空 claim 自动覆盖
+            // No content words → cannot be matched to any reference, treat as uncovered.
             continue;
         }
         // 要求至少 2 个词重叠或 30% 以上重叠，避免单高频词假阳性
@@ -104,6 +104,33 @@ mod tests {
     fn empty_claims_full_coverage() {
         let coverage = verify_claim_coverage(&[], &["anything".into()]).unwrap();
         assert!((coverage - 1.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn stopword_only_claim_not_covered() {
+        // A claim with only stopwords/short words produces no content words
+        // and should NOT be auto-counted as covered.
+        let coverage = verify_claim_coverage(
+            &["to be or not to be".into()],
+            &["full research paper about relevant topic".into()],
+        )
+        .unwrap();
+        assert!((coverage - 0.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn partly_contentless_claims_partial_coverage() {
+        // Mix of substantive and vacuous claims.
+        let coverage = verify_claim_coverage(
+            &[
+                "transformer improves accuracy".into(),
+                "to be or not to be".into(),
+            ],
+            &["transformer model achieves state-of-the-art accuracy".into()],
+        )
+        .unwrap();
+        // 1/2 = 0.5 — first claim covered, second not.
+        assert!((coverage - 0.5).abs() < 0.01);
     }
 
     #[test]

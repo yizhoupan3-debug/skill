@@ -11,7 +11,7 @@
 
 | 领域 | 本合约覆盖 | 不在本合约范围 |
 |------|-----------|---------------|
-| Math 分工 | candidate theorem vs proof strategy | 纯推导执行（归 `$math-derivation`） |
+| Math 分工 | candidate theorem vs proof strategy | 纯数学验证/探索（归 `$math-verify` / `$math-explore`） |
 | Novelty | 判断归属和 handoff | 非科研场景的 novelty（不适用） |
 | Dataset | identification vs selection | 数据集构建/标注（归数据工程） |
 | Experiment forensics | 失败复盘归属和流程 | 代码单步调试（归当前 coding context） |
@@ -48,7 +48,7 @@
 |------|-------|------|------|
 | 候选定理识别 | discovery lane → `math_background_inquiry` | candidate theorem list × 每条 `applies_when` / `fails_when` + cross-domain bridges（theorem 级别） | **不许写推导路线图**、不许声称"某定理在此条件下可证" |
 | 推导策略 | execution lane → `math_verification` | `proof_strategy_hints`（推导路线图） + 定理/引理依赖链 + checker 选项 | 在 discovery 给出 candidate theorems 后产出 |
-| 推导执行 | `$math-derivation` | formal proof / 符号推导 / 数值验证 | — |
+| 推导验证与发现 | `$math-verify` / `$math-explore` | formal proof 验证 / 符号推导 / 探索发现 | — |
 | 验证 | `$formal-verification` (退出门) | Z3 / SymPy / Lean 验证结果 | — |
 
 **关键不可逾越规则**：
@@ -144,7 +144,7 @@ blocker:
 | 用户问题 | 第一步路由 | 第二步 | 第三步 |
 |----------|-----------|--------|--------|
 | "这个领域该用什么 metric / metric 设计" | discovery lane → `external_research`（有哪些 metric） | execution lane → `experiment_design`（设计验证协议） | — |
-| "该用什么数学理论来分析这个系统" | discovery lane → `math_background_inquiry`（候选定理） | execution lane → `math_modeling`（建数学模型） | `$math-derivation` → 推导执行 |
+| "该用什么数学理论来分析这个系统" | discovery lane → `math_background_inquiry`（候选定理） | execution lane → `math_modeling`（建数学模型） | `$math-verify` → 推导验证 或 `$math-explore` → 探索发现 |
 | "这个实验失败了，为什么" | execution lane → `experiment_forensics`（检查假设/变量/条件） | 如果发现 discovery 的定理覆盖不足 → loop-back 到 discovery lane | — |
 | "这个方向有个 idea，能做吗（可行性）" | discovery lane → `research_question` + 初步 `external_research`（prior art） | execution lane → `experiment_design`（实验方案）| loop back 进一步 refine |
 | "这个领域目前谁做得怎么样（综述）" | discovery lane → `external_research` | — | — |

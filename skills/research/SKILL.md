@@ -86,7 +86,8 @@ trigger_hints:
 - `$experiment-reproducibility` — 可复现性管理（L3）
 - `$deep-search` (gate=approve) — 通用 Web 深度调研（L3）
 - `$statistical-analysis` — 统计方法选型与解读（L4）
-- `$math-derivation` — 严格数学推导执行（L4）
+- `$math-verify` — 对抗式数学推导验证（L4）
+- `$math-explore` — 数学性质探索发现（L4）
 
 上游 skill（选题/澄清）：
 

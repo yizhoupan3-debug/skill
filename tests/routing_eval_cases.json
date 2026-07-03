@@ -469,17 +469,6 @@
       "notes": "预注册边界与偏离记录优先路由 experiment-reproducibility"
     },
     {
-      "id": "route-013-math-derivation-proof",
-      "category": "should-trigger",
-      "task": "请给出严格的数学推导与证明：证明柯西-施瓦茨不等式，每一步都要可检验。",
-      "focus_skill": "math-derivation",
-      "expected_owner": "math-derivation",
-      "expected_overlay": null,
-      "expected_layer": "L4",
-      "first_turn": true,
-      "notes": "纯定理证明/数学推导优先 math-derivation，不与 research 抢路由"
-    },
-    {
       "id": "route-015-research-execution-ablation",
       "category": "should-trigger",
       "task": "帮我设计实验：两组 ablation 怎么做，baseline 和控制变量怎么定。",

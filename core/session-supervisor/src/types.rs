@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::str::FromStr;
 
 pub const SESSION_SUPERVISOR_SCHEMA_VERSION: &str = "router-rs-session-supervisor-response-v1";
 pub const SESSION_SUPERVISOR_STORE_SCHEMA_VERSION: &str = "router-rs-session-supervisor-store-v1";
@@ -7,6 +8,95 @@ pub const SESSION_SUPERVISOR_AUTHORITY: &str = "rust-session-supervisor";
 pub(crate) const DEFAULT_BACKOFF_SECONDS: i64 = 300;
 /// Workers without a live process that stay in active statuses longer than this are reaped on `list`.
 pub(crate) const DEFAULT_WORKER_STALE_AFTER_SECS: i64 = 60;
+
+/// Typed spawn origin for agent health tracking.
+///
+/// Serializes as a plain string for backward compatibility with existing
+/// health-store JSON files.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AgentSpawnOrigin {
+    Agent,
+    Task,
+    Workflow,
+    TeamMember,
+    Other(String),
+}
+
+impl AgentSpawnOrigin {
+    pub fn as_str(&self) -> &str {
+        match self {
+            Self::Agent => "agent",
+            Self::Task => "task",
+            Self::Workflow => "workflow",
+            Self::TeamMember => "team_member",
+            Self::Other(s) => s.as_str(),
+        }
+    }
+}
+
+impl std::fmt::Display for AgentSpawnOrigin {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl FromStr for AgentSpawnOrigin {
+    type Err = std::convert::Infallible;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s {
+            "agent" => Self::Agent,
+            "task" => Self::Task,
+            "workflow" => Self::Workflow,
+            "team_member" => Self::TeamMember,
+            other => Self::Other(other.to_string()),
+        })
+    }
+}
+
+impl From<String> for AgentSpawnOrigin {
+    fn from(s: String) -> Self {
+        s.parse().expect("Infallible")
+    }
+}
+
+impl From<AgentSpawnOrigin> for String {
+    fn from(origin: AgentSpawnOrigin) -> Self {
+        origin.to_string()
+    }
+}
+
+impl From<&str> for AgentSpawnOrigin {
+    fn from(s: &str) -> Self {
+        // FromStr is infallible (error type is Infallible), branch directly
+        // to avoid unwrap/expect which conflict with deny-level clippy lints.
+        match s {
+            "agent" => Self::Agent,
+            "task" => Self::Task,
+            "workflow" => Self::Workflow,
+            "team_member" => Self::TeamMember,
+            other => Self::Other(other.to_string()),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for AgentSpawnOrigin {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        Ok(AgentSpawnOrigin::from(s))
+    }
+}
+
+impl Serialize for AgentSpawnOrigin {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(self.as_str())
+    }
+}
 
 /// Agent health tracking entry: records subagent lifecycle.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -17,7 +107,7 @@ pub struct AgentHealthEntry {
     pub spawned_at: String,
     pub completed_at: Option<String>,
     pub error: Option<String>,
-    pub spawned_by_tool: String, // "agent" | "task" | "workflow"
+    pub spawned_by_tool: AgentSpawnOrigin,
 }
 
 impl AgentHealthEntry {

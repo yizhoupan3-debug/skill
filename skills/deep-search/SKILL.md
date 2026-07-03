@@ -58,7 +58,7 @@ scoping, experiment design, or manuscript work.
 - The user wants to **design experiments, ablations, benchmarks, or math modeling** (execution phase) → use `$research` (execution lane).
 - The object is a **manuscript, submission, reviewer response, paper structure, or "能不能投" decision** → use `$research` (paper-workbench lane).
 - The user only asks which **statistical test** to use → use `$statistical-analysis`.
-- The user only asks for a **formal proof, derivation, or pure-math task** (数学推导、定理证明、公式推导、不等式证明) with no research orchestration → use `$math-derivation`.
+- The user only asks for a **formal proof, derivation, or pure-math task** (数学推导、定理证明、公式推导、不等式证明) with no research orchestration → use `$math-verify` (for verification/checking) or `$math-explore` (for exploration/discovery).
 - The user only asks for **citation metadata cleanup** or BibTeX formatting → use `$citation-management`.
 - The user only asks for **reproducibility hygiene** → use `$experiment-reproducibility`.
 - The user asks for **ordinary code implementation** without research-grade evidence gates → answer in the current coding context.
@@ -168,7 +168,8 @@ Return:
 - `$research` (execution lane): when the task needs experiment design, code/math verification, or reproducibility checks.
 - `$research` (paper-workbench lane): when the object is a manuscript, submission, or paper review.
 - `$statistical-analysis`: when the task narrows to statistical test choice or uncertainty reporting.
-- `$math-derivation`: when the task narrows to formal proof or derivation.
+- `$math-verify`: when the task narrows to formal proof verification or derivation checking.
+- `$math-explore`: when the task is mathematical exploration, pattern discovery, or conjecture generation.
 - `$citation-management`: when the task narrows to citation metadata cleanup.
 
 ## Cross-references

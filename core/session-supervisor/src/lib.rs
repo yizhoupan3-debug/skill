@@ -7,7 +7,6 @@ use serde_json::{Value, json};
 use tracing::{debug, instrument};
 
 mod driver;
-mod idle_observer;
 mod process;
 mod runtime;
 pub mod team_manager;
@@ -25,7 +24,6 @@ pub use types::WorkerSessionRecord;
 pub use types::{SESSION_SUPERVISOR_AUTHORITY, SESSION_SUPERVISOR_SCHEMA_VERSION};
 pub use worker::classify_rate_limit_block;
 
-use idle_observer::maybe_trigger_idle_observation;
 use process::reconcile_process_state;
 use runtime::{
     load_store, now_from_payload, optional_bool, required_non_empty_string, resolve_state_path,
@@ -36,17 +34,6 @@ use worker::{
     launch_worker, mark_worker_blocked, reap_stale_workers, resume_worker, terminate_worker,
     worker_ready_for_resume,
 };
-
-fn idle_observation_side_effect(payload: &Value, workers: &[types::WorkerSessionRecord]) -> Value {
-    let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
-    let dry_run = optional_bool(payload, "dry_run").unwrap_or(false);
-    let force = optional_bool(payload, "force_idle_observation").unwrap_or(false);
-    let result = maybe_trigger_idle_observation(&cwd, workers, dry_run, force);
-    json!({
-        "triggered": result.triggered,
-        "status": result.status,
-    })
-}
 
 #[instrument(level = "info", skip_all, fields(operation))]
 pub fn handle_session_supervisor_operation(payload: Value) -> Result<Value, FrameworkError> {
@@ -135,7 +122,6 @@ pub fn handle_session_supervisor_operation(payload: Value) -> Result<Value, Fram
             }
             // Side-effect: clean up orphaned worker log files
             observability_core::cleanup_stale_logs(&state_path, &store.workers.iter().map(|w| w.worker_id.clone()).collect::<Vec<_>>());
-            let idle_observation = idle_observation_side_effect(&payload, &store.workers);
             Ok(json!({
                 "schema_version": SESSION_SUPERVISOR_SCHEMA_VERSION,
                 "authority": SESSION_SUPERVISOR_AUTHORITY,
@@ -143,7 +129,6 @@ pub fn handle_session_supervisor_operation(payload: Value) -> Result<Value, Fram
                 "state_path": state_path.display().to_string(),
                 "changed": true,
                 "workers": store.workers,
-                "observation_idle": idle_observation,
             }))
         }
         "terminate" => {
@@ -162,6 +147,7 @@ pub fn handle_session_supervisor_operation(payload: Value) -> Result<Value, Fram
                 let terminated = terminate_worker(worker, dry_run, &now)?;
                 (worker.clone(), terminated)
             };
+            runtime::compact_terminated_workers(&mut store.workers, &now);
             save_store(&state_path, &store)?;
             Ok(json!({
                 "schema_version": SESSION_SUPERVISOR_SCHEMA_VERSION,
@@ -190,6 +176,7 @@ pub fn handle_session_supervisor_operation(payload: Value) -> Result<Value, Fram
                 let classification = mark_worker_blocked(worker, &payload, &now)?;
                 (worker.clone(), classification)
             };
+            runtime::compact_terminated_workers(&mut store.workers, &now);
             save_store(&state_path, &store)?;
             Ok(json!({
                 "schema_version": SESSION_SUPERVISOR_SCHEMA_VERSION,
@@ -204,10 +191,38 @@ pub fn handle_session_supervisor_operation(payload: Value) -> Result<Value, Fram
         "resume_due" => {
             let mut resumed_workers = Vec::new();
             let mut failed_workers = Vec::new();
-            for worker in &mut store.workers {
-                if !worker_ready_for_resume(worker, &now)? {
-                    continue;
-                }
+
+            // Phase 1: identify due workers under the outer lock.
+            let due_ids: Vec<String> = store
+                .workers
+                .iter()
+                .filter_map(|w| {
+                    worker_ready_for_resume(w, &now)
+                        .ok()
+                        .filter(|&ready| ready)
+                        .map(|_| w.worker_id.clone())
+                })
+                .collect();
+
+            // Release the outer lock before process spawning.
+            // resume_worker → launch_process calls fork+exec, which would
+            // block all other supervisor operations if held. Each worker
+            // gets its own short lock transaction.
+            drop(_store_lock);
+            drop(store);
+
+            for worker_id in &due_ids {
+                let _lock = acquire_runtime_path_lock(&state_path)?;
+                let mut store = load_store(&state_path)?;
+
+                let Some(worker) = store
+                    .workers
+                    .iter_mut()
+                    .find(|w| w.worker_id == *worker_id)
+                else {
+                    continue; // removed concurrently — skip
+                };
+
                 match resume_worker(worker, &state_path, dry_run, &now) {
                     Ok(action) => resumed_workers.push(json!({
                         "worker_id": worker.worker_id,
@@ -234,9 +249,19 @@ pub fn handle_session_supervisor_operation(payload: Value) -> Result<Value, Fram
                         }));
                     }
                 }
+                save_store(&state_path, &store)?;
+                // _lock dropped — per-worker transaction released
             }
-            save_store(&state_path, &store)?;
-            let idle_observation = idle_observation_side_effect(&payload, &store.workers);
+
+            // Final compact pass: clean up terminated workers that accumulated
+            // during the per-worker processing.
+            {
+                let _lock = acquire_runtime_path_lock(&state_path)?;
+                let mut store = load_store(&state_path)?;
+                runtime::compact_terminated_workers(&mut store.workers, &now);
+                save_store(&state_path, &store)?;
+            }
+
             Ok(json!({
                 "schema_version": SESSION_SUPERVISOR_SCHEMA_VERSION,
                 "authority": SESSION_SUPERVISOR_AUTHORITY,
@@ -246,7 +271,6 @@ pub fn handle_session_supervisor_operation(payload: Value) -> Result<Value, Fram
                 "dry_run": dry_run,
                 "resumed_workers": resumed_workers,
                 "failed_workers": failed_workers,
-                "observation_idle": idle_observation,
             }))
         }
 

@@ -377,6 +377,11 @@ fn detect_rate_limit(evidence_text: &str, patterns: &[Regex]) -> Option<BlockCla
     None
 }
 
+/// Return a compiled duration pattern regex.
+///
+/// # Panics
+/// Panics if the duration regex literal is invalid — this is a compile-time
+/// invariant enforced by tests; a malformed literal is a programming error.
 fn duration_pattern() -> &'static Regex {
     static DURATION: OnceLock<Regex> = OnceLock::new();
     DURATION.get_or_init(|| {
@@ -400,6 +405,11 @@ fn parse_duration_caps(caps: &regex::Captures<'_>) -> Option<i64> {
 /// Universal rate-limit patterns that work across all hosts.
 /// Matches common HTTP 429 / rate-limit vocabulary shared by all LLM APIs.
 /// New hosts automatically get coverage without code changes.
+///
+/// # Panics
+/// Panics if any regex literal in the pattern list is invalid — these are
+/// compile-time invariants enforced by tests; malformed literals are
+/// programming errors.
 fn rate_limit_patterns() -> &'static [Regex] {
     static PATTERNS: OnceLock<Vec<Regex>> = OnceLock::new();
     PATTERNS

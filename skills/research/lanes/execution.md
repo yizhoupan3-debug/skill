@@ -17,7 +17,7 @@
 - 用户需要文献调研/理论背景 → route to `$research` discovery lane
 - 用户有手稿对象 → route to `$research` paper-workbench lane
 - 用户只问统计检验 → `$statistical-analysis`
-- 用户只需要纯数学推导 → `$math-derivation`
+- 用户只需要纯数学验证/探索 → `$math-verify` 或 `$math-explore`
 - 用户只需要引用格式 → `$citation-management`
 - 用户只需要可重复性管理 → `$experiment-reproducibility`
 - 普通代码实现（无研究级证据闸门）→ 当前 coding context

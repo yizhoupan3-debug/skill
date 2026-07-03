@@ -12,8 +12,7 @@
 use core_errors::FrameworkError;
 use serde_json::Value;
 use std::io::Write;
-use std::sync::mpsc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 /// Poll interval for `try_wait` loop. 50ms is negligible vs 15s default timeout.
 const POLL_INTERVAL_MS: u64 = 50;
@@ -48,14 +47,8 @@ pub fn run_uv_module_with_timeout(
         stdin.write_all(input_str.as_bytes())?;
     }
 
-    // Background thread: fires a signal once the deadline passes.
-    // Used instead of polling `Instant::now()` to avoid time-warp issues and
-    // keep the hot path simple (just check channel emptiness).
-    let (deadline_tx, deadline_rx) = mpsc::channel::<()>();
-    std::thread::spawn(move || {
-        std::thread::sleep(Duration::from_millis(timeout_ms));
-        let _ = deadline_tx.send(());
-    });
+    // Track deadline via Instant (uses CLOCK_MONOTONIC, immune to time-warp).
+    let deadline = Instant::now() + Duration::from_millis(timeout_ms);
 
     // Poll loop using `try_wait` (non-blocking, no unsafe).
     // On process exit: collect buffered stdout/stderr via `wait_with_output`.
@@ -63,7 +56,7 @@ pub fn run_uv_module_with_timeout(
     loop {
         match child.try_wait() {
             Ok(Some(status)) => {
-                // Process exited — collect remaining pipe data.
+// Process exited — collect remaining pipe data.
                 let output = child.wait_with_output()?;
 
                 let stderr = String::from_utf8_lossy(&output.stderr).to_string();
@@ -94,7 +87,7 @@ pub fn run_uv_module_with_timeout(
             }
             Ok(None) => {
                 // Child still running — check deadline.
-                if deadline_rx.try_recv().is_ok() {
+                if Instant::now() >= deadline {
                     // Timeout: kill safely via libstd (cross-platform, no unsafe).
                     let _ = child.kill();
                     // Reap zombie.

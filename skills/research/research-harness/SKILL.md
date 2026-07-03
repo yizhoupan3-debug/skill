@@ -83,7 +83,8 @@ systematic research and returns candidates.
 - The user wants to **design experiments, ablations, benchmarks, or math modeling** (execution phase) → use `$research` (execution lane).
 - The object is a **manuscript, submission, reviewer response** → use `$research` (paper-workbench lane).
 - The user only asks which **statistical test** to use → use `$statistical-analysis`.
-- The user only asks for a **formal proof, derivation, or pure-math task** → use `$math-derivation`.
+- The user only asks for a **formal proof verification or derivation checking** → use `$math-verify`.
+- The user only asks for **mathematical exploration, pattern discovery, or conjecture generation** → use `$math-explore`.
 - The user only asks for **citation metadata cleanup** → use `$citation-management`.
 - The user asks for **ordinary coding** → answer in the current coding context.
 

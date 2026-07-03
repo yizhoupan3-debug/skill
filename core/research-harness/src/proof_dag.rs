@@ -124,24 +124,8 @@ impl VerificationResultExt {
     /// Helper: set detail and record current timestamp.
     pub fn with_detail(mut self, detail: impl Into<String>) -> Self {
         self.detail = detail.into();
-        self.verified_at = Self::now_iso();
+        self.verified_at = framework_core::time::now_iso();
         self
-    }
-
-    fn now_iso() -> String {
-        let secs = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs())
-            .unwrap_or(0);
-        // Simple ISO-like format: "2026-07-01T12:34:56Z"
-        let days = secs / 86400;
-        let time_secs = secs % 86400;
-        let hours = time_secs / 3600;
-        let minutes = (time_secs % 3600) / 60;
-        let seconds = time_secs % 60;
-        // Use a fixed epoch-based date approximation
-        let year = 1970 + (days as f64 / 365.25) as u64;
-        format!("{year}-{hours:02}:{minutes:02}:{seconds:02}Z")
     }
 
     pub fn stale(&mut self) {
@@ -781,7 +765,25 @@ fn attempt_sympy_verify(bp: &Blueprint, node_id: &str) -> (VerificationStatus, S
     if claim.is_empty() {
         return (VerificationStatus::Skip, "sympy: empty claim".into());
     }
-    if let Some(eq_pos) = claim.find('=') {
+    if let Some(eq_pos) = claim.find("==") {
+        // Proper equality operator (==)
+        let lhs = claim[..eq_pos].trim();
+        let rhs = claim[eq_pos + 2..].trim();
+        let result = crate::verification::sympy_bridge::verify_identity(lhs, rhs);
+        let detail = format!("sympy_verify: {}", result.details);
+        match result.status {
+            VerificationStatus::Pass => (VerificationStatus::Pass, detail),
+            VerificationStatus::Fail => (VerificationStatus::Fail, detail),
+            _ => (VerificationStatus::Warn, detail),
+        }
+    } else if claim.contains(">=") || claim.contains("<=") || claim.contains("!=") {
+        // Compound relational operators are NOT identity claims.
+        // Fall through to single-expression simplification path.
+        let result = crate::verification::sympy_bridge::simplify_expression(&claim);
+        let detail = format!("sympy: relational expression '{}' cannot be verified as identity — simplified to: {}", claim, result.details);
+        (VerificationStatus::Warn, detail)
+    } else if let Some(eq_pos) = claim.find('=') {
+        // Single = as equality separator (legacy form: "lhs = rhs")
         let lhs = claim[..eq_pos].trim();
         let rhs = claim[eq_pos + 1..].trim();
         let result = crate::verification::sympy_bridge::verify_identity(lhs, rhs);
@@ -830,12 +832,9 @@ fn attempt_asymptotic_verify(bp: &Blueprint, node_id: &str) -> (VerificationStat
         return (VerificationStatus::Skip, "asymptotic: empty claim".into());
     }
 
-    // Extract variables from the claim — reuses the same regex pattern
-    // used in inequality.rs for variable detection.
-    let known_keywords = [
-        "sin", "cos", "tan", "sqrt", "abs", "exp", "log", "ln",
-        "And", "Or", "Not", "Implies", "True", "False", "pi", "e",
-    ];
+    // Extract variables from the claim — uses the canonical keyword set
+    // from symbolic.rs so all verification modules stay in sync.
+    let known_keywords = crate::verification::symbolic::MATH_KEYWORDS;
     let re_vars = Regex::new(r"[a-zA-Z_][a-zA-Z0-9_]*").expect("valid regex");
     let var = re_vars
         .find_iter(&claim)

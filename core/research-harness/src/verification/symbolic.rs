@@ -8,6 +8,26 @@ use crate::verification::asymptotic::OrderRelation;
 use core_errors::FrameworkError;
 use std::collections::HashMap;
 
+/// Canonical set of known math function/constant keywords used for variable
+/// extraction across verification modules. Kept here as the single source of
+/// truth — all call sites MUST reference this instead of inlining their own.
+pub const MATH_KEYWORDS: &[&str] = &[
+    // Basic trig
+    "sin", "cos", "tan",
+    // Hyperbolic
+    "sinh", "cosh", "tanh",
+    // Inverse trig
+    "asin", "acos", "atan", "atan2",
+    // Misc math
+    "sqrt", "abs", "exp", "log", "ln", "log2", "log10",
+    "erf", "gamma", "ceil", "floor", "round", "sign", "sgn",
+    "min", "max", "pow", "mod", "rem",
+    // Constants
+    "pi", "e",
+    // Logical (Z3)
+    "And", "Or", "Not", "Implies", "True", "False",
+];
+
 // ════════════════════════════════════════════════════════════════════════════
 // Expression AST
 // ════════════════════════════════════════════════════════════════════════════

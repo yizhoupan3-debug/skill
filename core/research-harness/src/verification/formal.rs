@@ -450,10 +450,14 @@ fn negate_dimension(dim: &str) -> String {
 }
 
 /// Normalize a dimension string for comparison (canonical form).
+///
+/// Splits on `*`, sorts component strings (e.g. `"L"`, `"L^2"`, `"T^-2"`),
+/// and rejoins with `*`. This ensures dimensions like `"L*M*T^-2"` and
+/// `"M*L*T^-2"` compare equal, while correctly handling exponent notation.
 fn normalize_dim_string(dim: &str) -> String {
-    let mut chars: Vec<char> = dim.chars().collect();
-    chars.sort();
-    chars.iter().collect()
+    let mut parts: Vec<&str> = dim.split('*').map(|s| s.trim()).filter(|s| !s.is_empty()).collect();
+    parts.sort();
+    parts.join("*")
 }
 
 /// 检查方程在特例值（witness）下是否一致。

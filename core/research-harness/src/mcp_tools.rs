@@ -50,6 +50,7 @@
 //! exhaustion from oversized payloads received through the MCP tool interface.
 
 use core_errors::FrameworkError;
+use std::path::PathBuf;
 use std::sync::OnceLock;
 use serde_json::{Value, json};
 use std::collections::HashMap;
@@ -1587,7 +1588,7 @@ fn tool_math_witness_consistency(arguments: &Value) -> Result<String, FrameworkE
     let all_vars: Vec<String> = {
         let raw = lhs.to_string() + " " + rhs;
         let re = regex::Regex::new(r"[a-zA-Z_][a-zA-Z0-9_]*").expect("valid regex");
-        let keywords = ["sin", "cos", "tan", "sqrt", "abs", "exp", "log", "ln", "pi", "e"];
+        let keywords = crate::verification::symbolic::MATH_KEYWORDS;
         let mut v: Vec<String> = re.find_iter(&raw)
             .map(|m| m.as_str().to_string())
             .filter(|s| !keywords.contains(&s.as_str()))
@@ -1706,6 +1707,23 @@ fn tool_math_proof_trace_record(arguments: &Value) -> Result<String, FrameworkEr
     .map_err(FrameworkError::Json)
 }
 
+/// Resolve the framework project root by walking up from CWD.
+/// Returns the first ancestor that contains `templates/` or `.git`,
+/// falling back to an absolute CWD.
+fn resolve_repo_root() -> PathBuf {
+    if let Ok(cwd) = std::env::current_dir() {
+        let mut dir = Some(cwd.as_path());
+        while let Some(d) = dir {
+            if d.join("templates").exists() || d.join(".git").exists() {
+                return d.to_path_buf();
+            }
+            dir = d.parent();
+        }
+    }
+    // Ultimate fallback: absolute CWD
+    std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
+}
+
 // ── Research smoke test tool (general-purpose experiment runner) ──
 
 fn tool_research_smoke(arguments: &Value) -> Result<String, FrameworkError> {
@@ -1717,7 +1735,8 @@ fn tool_research_smoke(arguments: &Value) -> Result<String, FrameworkError> {
              templates/ 目录下存放可执行实验模板。",
         ));
     }
-    crate::smoke::run_smoke_tests(&std::path::Path::new("."), arguments)
+    let repo_root = resolve_repo_root();
+    crate::smoke::run_smoke_tests(&repo_root, arguments)
 }
 
 // ── Literature verification tool ──

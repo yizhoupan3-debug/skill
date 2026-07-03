@@ -1,4 +1,4 @@
-use chrono::{DateTime, Duration, Utc};
+use chrono::{DateTime, TimeDelta, Utc};
 use serde_json::{Value, json};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -100,7 +100,7 @@ pub fn now_from_payload(payload: &Value) -> Result<String, FrameworkError> {
 
 pub fn add_seconds_rfc3339(now: &str, seconds: i64) -> Result<String, FrameworkError> {
     let dt = parse_rfc3339(now)?;
-    Ok((dt + Duration::seconds(seconds)).to_rfc3339())
+    Ok((dt + TimeDelta::seconds(seconds)).to_rfc3339())
 }
 
 pub fn parse_rfc3339(value: &str) -> Result<DateTime<Utc>, FrameworkError> {

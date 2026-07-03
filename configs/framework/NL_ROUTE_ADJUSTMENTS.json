@@ -525,7 +525,7 @@
       },
       "action": {
         "type": "suppress",
-        "reason": "Suppressed: pure math proof/derivation review should route to math-derivation, not paper-workbench."
+        "reason": "Suppressed: pure math proof/derivation review should route to math-verify / math-explore, not paper-workbench."
       },
       "record": {
         "slug": "paper-workbench"

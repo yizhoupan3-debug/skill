@@ -103,7 +103,8 @@ math_backend_available(backend="all")                           # 多后端可�
 
 ## References
 
-- math-derivation skill：[`../../skills/math-derivation/SKILL.md`](../../skills/math-derivation/SKILL.md)
+- math-verify skill：[`../../skills/math-verify/SKILL.md`](../../skills/math-verify/SKILL.md)
+- math-explore skill：[`../../skills/math-explore/SKILL.md`](../../skills/math-explore/SKILL.md)
 - Python backend：`core/research-harness/python/math_backend/`
 - framework formal_toolchain（令牌检测）：`core/framework-core/src/formal_toolchain.rs`
 
@@ -114,6 +115,9 @@ math_backend_available(backend="all")                           # 多后端可�
 | Caller | When | Blocking | Call mode |
 |--------|------|----------|-----------|
 | `$research` (execution lane) | math_verification / math_modeling lane completes, before conclusion | Yes (FAIL blocks math conclusion) | Inline + MCP tool |
+| `$math-verify` | derivation verification after input | Yes (FAIL blocks PASS verdict) | MCP tool calls |
+| `$math-verify` | per-step adversarial verification | Yes (FAIL blocks PASS verdict) | MCP tool calls |
+| `$math-explore` | conjecture evaluation / falsification | No (WARN annotated, not blocking) | MCP tool calls |
 
 ### Input
 

@@ -35,7 +35,7 @@
 |------|-------|------|------|
 | 候选定理识别 | discovery lane | candidate theorem list × applies_when/fails_when | **不许写推导路线图**、不许声称可证 |
 | 推导策略 | execution lane | proof_strategy_hints + 定理依赖链 | 在 discovery 给出 candidates 后产出 |
-| 推导执行 | `$math-derivation` (L4) | formal proof / 符号推导 | — |
+| 推导验证与发现 | `$math-verify` (L4) / `$math-explore` (L4) | formal proof 验证 / 符号推导 / 发现探索 | — |
 | 验证 | `$formal-verification` (退出门) | Z3/SymPy/Lean 验证结果 | — |
 
 ## Lane handoffs（来自统一前门协议）

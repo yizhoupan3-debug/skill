@@ -170,7 +170,7 @@ overrides heuristics: `audit_depth: exhaustive` | `audit_depth: compact`).
 Optional sidecars during exhaustive review:
 
 - PDF / rendered figures → `$visual-review`
-- Formal theorem blocks → read-only `$math-derivation` witness
+- Formal theorem blocks → read-only `$math-verify` witness
 - Rubric / Bonus text present → [`rubric-audit-bridge.md`](references/rubric-audit-bridge.md)
 
 ## Default front-door behavior

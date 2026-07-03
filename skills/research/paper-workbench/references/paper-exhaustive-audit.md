@@ -120,7 +120,7 @@ Do not modify toolchain; witness only.
 - **Each main-text equation / theorem**: tag derivation as **sufficient**, **necessary**,
   **both**, or **neither (overmath / gap)** with location.
 - If the manuscript contains formal theorem blocks: **mandatory** read-only witness via
-  **`$math-derivation`** for proof gaps (does not replace paper-level logic mode).
+  **`$math-verify`** for proof gaps (does not replace paper-level logic mode).
 
 ---
 

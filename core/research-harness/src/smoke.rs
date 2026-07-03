@@ -431,13 +431,8 @@ fn execute_single(run: &ExperimentRun, timeout_ms: u64) -> ExperimentResult {
         let _ = err_tx.send(buf);
     });
 
-    // Timeout watcher via mpsc channel
-    let (deadline_tx, deadline_rx) = std::sync::mpsc::channel::<()>();
-    std::thread::spawn(move || {
-        std::thread::sleep(Duration::from_millis(timeout_ms));
-        let _ = deadline_tx.send(());
-    });
-
+    // Track timeout via Instant — no detached thread needed.
+    let deadline = Instant::now() + Duration::from_millis(timeout_ms);
     let mut timed_out = false;
 
     // Poll loop
@@ -487,7 +482,7 @@ fn execute_single(run: &ExperimentRun, timeout_ms: u64) -> ExperimentResult {
                 };
             }
             Ok(None) => {
-                if deadline_rx.try_recv().is_ok() {
+                if Instant::now() >= deadline {
                     timed_out = true;
                     #[cfg(unix)]
                     unsafe {

@@ -9,7 +9,7 @@ use core_errors::FrameworkError;
 use core_state_utils::atomic_write::write_atomic_text;
 use framework_runtime::process_utils;
 
-use crate::types::{AgentHealthEntry, AgentHealthStore, DriverCommandSpec, WorkerSessionRecord};
+use crate::types::{AgentHealthEntry, AgentHealthStore, AgentSpawnOrigin, DriverCommandSpec, WorkerSessionRecord};
 
 pub struct ProcessLaunchResult {
     pub pid: u32,
@@ -132,7 +132,8 @@ pub fn terminate_process(pid: u32) -> Result<(), FrameworkError> {
         // Phase 1: SIGTERM with 500ms budget (5 × 100ms)
         send_signal_to_pgrp(pid, libc::SIGTERM)?;
         for _ in 0..5 {
-            if (!kill_pid_alive(pid) || reap_child_if_exited(pid)) && !kill_pid_alive(pid) {
+            let _ = reap_child_if_exited(pid);
+            if !kill_pid_alive(pid) {
                 return Ok(());
             }
             thread::sleep(Duration::from_millis(100));
@@ -143,12 +144,13 @@ pub fn terminate_process(pid: u32) -> Result<(), FrameworkError> {
         // Phase 2: SIGKILL with 1.5s budget (15 × 100ms)
         send_signal_to_pgrp(pid, libc::SIGKILL)?;
         for _ in 0..15 {
-            if (!kill_pid_alive(pid) || reap_child_if_exited(pid)) && !kill_pid_alive(pid) {
+            let _ = reap_child_if_exited(pid);
+            if !kill_pid_alive(pid) {
                 return Ok(());
             }
             thread::sleep(Duration::from_millis(100));
         }
-        // Last resort: non-blocking reap attempt so kill(0) won't see a zombie.
+        // Last resort: non-blocking reap so kill(0) won't see a zombie.
         let _ = wait_for_child(pid, false);
         Ok(())
     }
@@ -292,7 +294,7 @@ pub fn register_agent_alive(
             spawned_at: now.to_string(),
             completed_at: None,
             error: None,
-            spawned_by_tool: spawned_by_tool.to_string(),
+            spawned_by_tool: AgentSpawnOrigin::from(spawned_by_tool),
         });
         Ok(())
     })
@@ -325,7 +327,7 @@ pub fn unregister_agent(
                 spawned_at: String::new(),
                 completed_at: Some(now.to_string()),
                 error: error.map(String::from),
-                spawned_by_tool: "unmanaged".to_string(),
+                spawned_by_tool: AgentSpawnOrigin::from("unmanaged"),
             });
         }
         Ok(())

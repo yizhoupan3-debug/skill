@@ -520,11 +520,7 @@ fn check_inequality_z3(expr: &str) -> VerificationResult {
     // Extract variable names from the expression
     let re_vars = regex::Regex::new(r"[a-zA-Z_][a-zA-Z0-9_]*")
         .expect("valid regex");
-    let known_keywords = [
-        "sin", "cos", "tan", "sqrt", "abs", "exp", "log", "ln",
-        "And", "Or", "Not", "Implies", "True", "False",
-        "pi", "e",
-    ];
+    let known_keywords = crate::verification::symbolic::MATH_KEYWORDS;
     let mut vars: Vec<String> = re_vars
         .find_iter(expr)
         .map(|m| m.as_str().to_string())

@@ -490,7 +490,7 @@ pub fn has_research_context(query_text: &str, query_token_list: &[String]) -> bo
 }
 
 /// True when the query is about reviewing/checking a mathematical proof or derivation,
-/// without a full-paper/manuscript context. Helps route pure math-review to `math-derivation`
+/// without a full-paper/manuscript context. Helps route pure math-review to `math-verify`
 /// instead of `paper-reviewer`.
 pub fn has_ci_failure_context(query_text: &str, query_token_list: &[String]) -> bool {
     let phrase_match = [

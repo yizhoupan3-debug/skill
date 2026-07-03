@@ -17,26 +17,30 @@ pub fn resolve_worktree_cwd(
     if let Some(path) = worktree_path {
         let p = std::path::Path::new(path);
         if p.is_absolute() {
-            // Resolve symlinks via canonicalize before checking for path
-            // traversal. If canonicalize fails, fall back to the original
-            // path for the ParentDir check.
-            let check = std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
-            if check
+            // Check for path traversal in the ORIGINAL path BEFORE canonicalize,
+            // which resolves ParentDir components away and renders the check useless.
+            if p
                 .components()
                 .any(|c| matches!(c, std::path::Component::ParentDir))
             {
                 return cwd.to_string();
             }
-            return path.to_string();
+            // Resolve symlinks; if canonicalize fails, use the original path
+            // (which already passed the ParentDir check above).
+            let resolved =
+                std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
+            return resolved.to_string_lossy().to_string();
         }
-        let resolved = std::path::Path::new(cwd).join(p);
-        let check = std::fs::canonicalize(&resolved).unwrap_or_else(|_| resolved.clone());
-        if check
+        let raw = std::path::Path::new(cwd).join(p);
+        // Check for ParentDir before canonicalize resolves it away.
+        if raw
             .components()
             .any(|c| matches!(c, std::path::Component::ParentDir))
         {
             return cwd.to_string();
         }
+        let resolved =
+            std::fs::canonicalize(&raw).unwrap_or_else(|_| raw);
         return resolved.to_string_lossy().to_string();
     }
     if let Some(name) = worktree_name {
