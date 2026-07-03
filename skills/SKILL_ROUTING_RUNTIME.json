@@ -452,65 +452,6 @@
       null
     ],
     [
-      "deepinterview",
-      "L1",
-      "owner",
-      "none",
-      "P2",
-      "Native repo deep-interview workflow for evidence-first clarification and convergence review.",
-      "n/a",
-      [
-        "/deepinterview",
-        "先问清楚",
-        "深度采访",
-        "澄清需求",
-        "需求分析",
-        "需求澄清",
-        "clarify requirements",
-        "访谈",
-        "深入理解"
-      ],
-      "runtime",
-      "skills/deepinterview/SKILL.md",
-      null,
-      "framework_command",
-      [
-        "behavior:low_score_override:20.0"
-      ],
-      "Evidence-first requirement clarification and convergence review",
-      [
-        "deepinterview",
-        "review",
-        "alias",
-        "convergence"
-      ],
-      null,
-      null,
-      {
-        "platforms": [
-          "supported"
-        ],
-        "tags": [
-          "deepinterview",
-          "review",
-          "alias",
-          "convergence"
-        ],
-        "version": "1.0.0"
-      },
-      "low",
-      [
-        "shell",
-        "git",
-        "python"
-      ],
-      null,
-      "local",
-      [],
-      "general",
-      null
-    ],
-    [
       "design-md",
       "L3",
       "owner",
@@ -930,71 +871,6 @@
         "git push"
       ],
       "code_review",
-      null
-    ],
-    [
-      "gitx",
-      "L2",
-      "owner",
-      "none",
-      "P1",
-      "Run the safe Git review-fix-tidy-commit-branch-merge workflow end to end (no default push).",
-      "n/a",
-      [
-        "/gitx",
-        "gitx",
-        "提交代码",
-        "代码提交",
-        "commit",
-        "git commit",
-        "代码推送",
-        "push",
-        "合并",
-        "merge",
-        "提交"
-      ],
-      "runtime",
-      "skills/gitx/SKILL.md",
-      null,
-      "framework_command",
-      [],
-      "Run the Git closeout workflow with deep review on the substantive diff before commit/merge (no default push).",
-      [
-        "git",
-        "git-closeout",
-        "review",
-        "commit",
-        "worktree",
-        "push"
-      ],
-      null,
-      null,
-      {
-        "platforms": [
-          "supported"
-        ],
-        "tags": [
-          "git",
-          "git-closeout",
-          "review",
-          "commit",
-          "worktree",
-          "push"
-        ],
-        "version": "1.0.3"
-      },
-      "medium",
-      [
-        "shell",
-        "git",
-        "python"
-      ],
-      null,
-      "conditional",
-      [
-        "git push"
-      ],
-      "general",
       null
     ],
     [
@@ -2409,75 +2285,6 @@
       null
     ],
     [
-      "update",
-      "L0",
-      "owner",
-      "none",
-      "P1",
-      "Refresh key docs, git tracking, and stale/dead repo surfaces; includes framework generated-artifact checks when applicable.",
-      "n/a",
-      [
-        "/update",
-        "dead code",
-        "git tracking",
-        "git 跟踪文件",
-        "registry 更新",
-        "stale files",
-        "一口气更新",
-        "刷新文档",
-        "同步投影",
-        "扫描文档",
-        "旧文档清理",
-        "更新关键文档",
-        "死代码清理",
-        "科研文档更新"
-      ],
-      "runtime",
-      "skills/update/SKILL.md",
-      null,
-      "framework_command",
-      [],
-      "Refresh key docs, git tracking, and stale/dead repo surfaces; framework checks when applicable.",
-      [
-        "maintenance",
-        "docs",
-        "research-docs",
-        "git-tracking",
-        "cleanup",
-        "contracts",
-        "router-rs"
-      ],
-      null,
-      null,
-      {
-        "platforms": [
-          "supported"
-        ],
-        "tags": [
-          "maintenance",
-          "docs",
-          "research-docs",
-          "git-tracking",
-          "cleanup",
-          "contracts",
-          "router-rs"
-        ],
-        "version": "3.0.0"
-      },
-      "medium",
-      [
-        "shell",
-        "git"
-      ],
-      null,
-      "local",
-      [
-        "git push"
-      ],
-      "general",
-      null
-    ],
-    [
       "visual-review",
       "L3",
       "owner",
@@ -2724,63 +2531,6 @@
       "conditional",
       null,
       "research",
-      null
-    ],
-    [
-      "goalx",
-      "L1",
-      "owner",
-      "none",
-      "P1",
-      "Guaranteed entry point for Goal management — create, checkpoint, amend, resume goals.",
-      "n/a",
-      [
-        "/goalx",
-        "goalx",
-        "goal:",
-        "Goal:",
-        "目标：",
-        "目标:",
-        "goal management",
-        "goal 管理",
-        "goal 模式",
-        "进入 goal"
-      ],
-      "runtime",
-      "skills/goalx/SKILL.md",
-      null,
-      "framework_command",
-      [],
-      "Guaranteed entry point for Goal management lifecycle",
-      [
-        "goal",
-        "goalx",
-        "goal-management",
-        "framework-command"
-      ],
-      null,
-      null,
-      {
-        "platforms": [
-          "supported"
-        ],
-        "tags": [
-          "goal",
-          "goalx",
-          "goal-management",
-          "framework-command"
-        ],
-        "version": "1.0.0"
-      },
-      "low",
-      [
-        "shell",
-        "git"
-      ],
-      null,
-      "local",
-      [],
-      "general",
       null
     ],
     [

@@ -492,152 +492,7 @@
       "loop_capable": true
     }
   },
-  "framework_commands": {
-    "deepinterview": {
-      "canonical_owner": "deepinterview",
-      "skill_path": "skills/deepinterview/SKILL.md",
-      "official_workflow": {
-        "loop_rules": [
-          "one-question-at-a-time",
-          "target-weakest-clarity-dimension",
-          "score-ambiguity-after-each-answer",
-          "handoff-to-execution-only-below-threshold"
-        ]
-      },
-      "implementation_bar": [
-        "root-cause-first-when-unknown",
-        "findings-first-with-severity-order",
-        "verification-evidence-required",
-        "fix-verify-loop-until-bounded-scope-clean"
-      ],
-      "local_adaptations": [
-        "store interview progress in continuity artifacts and task-local bootstrap outputs",
-        "use live repo evidence first for brownfield clarification before asking the user",
-        "handoff into execution skill via `framework_goal_drive` after clarity is sufficient"
-      ],
-      "review_lanes": [
-        "deepinterview",
-        "visual-review",
-        "gh-address-comments",
-        "gh-fix-ci",
-        "sentry"
-      ],
-      "host_entrypoints": {
-        "cursor": "/deepinterview",
-        "opencode": "/deepinterview",
-        "codex": "/deepinterview",
-        "claude": "/deepinterview"
-      },
-      "interaction_invariants": {
-        "requires_explicit_entrypoint": true,
-        "explicit_entrypoints": [
-          "/deepinterview"
-        ],
-        "implicit_route_policy": "never"
-      },
-      "lineage": {
-        "source": "repo-native",
-        "description": "Native repo deep-interview workflow for evidence-first clarification and convergence review."
-      },
-      "trigger_hints": [
-        "/deepinterview",
-        "先问清楚",
-        "深度采访",
-        "澄清需求"
-      ]
-    },
-    "gitx": {
-      "canonical_owner": "gitx",
-      "skill_path": "skills/gitx/SKILL.md",
-      "host_entrypoints": {
-        "cursor": "/gitx",
-        "opencode": "/gitx",
-        "codex": "/gitx",
-        "claude": "/gitx"
-      },
-      "interaction_invariants": {
-        "requires_explicit_entrypoint": true,
-        "explicit_entrypoints": [
-          "/gitx",
-          "gitx"
-        ],
-        "implicit_route_policy": "never"
-      },
-      "lineage": {
-        "source": "repo-native",
-        "description": "Run the safe Git review-fix-tidy-commit-branch-merge-push workflow end to end."
-      },
-      "trigger_hints": [
-        "/gitx",
-        "gitx"
-      ]
-    },
-    "update": {
-      "canonical_owner": "update",
-      "skill_path": "skills/update/SKILL.md",
-      "host_entrypoints": {
-        "cursor": "/update",
-        "opencode": "/update",
-        "codex": "/update",
-        "claude": "/update"
-      },
-      "interaction_invariants": {
-        "requires_explicit_entrypoint": true,
-        "explicit_entrypoints": [
-          "/update"
-        ],
-        "implicit_route_policy": "never"
-      },
-      "lineage": {
-        "source": "repo-native",
-        "description": "Refresh key docs, git tracking, and stale/dead repo surfaces; includes framework generated-artifact checks when applicable."
-      },
-      "trigger_hints": [
-        "/update",
-        "更新关键文档",
-        "科研文档更新",
-        "git 跟踪文件",
-        "死代码清理",
-        "旧文档清理",
-        "stale files",
-        "dead code"
-      ]
-    },
-    "goalx": {
-      "canonical_owner": "goalx",
-      "skill_path": "skills/goalx/SKILL.md",
-      "host_entrypoints": {
-        "cursor": "/goalx",
-        "opencode": "/goalx",
-        "codex": "/goalx",
-        "claude": "/goalx"
-      },
-      "interaction_invariants": {
-        "requires_explicit_entrypoint": true,
-        "explicit_entrypoints": [
-          "/goalx",
-          "goalx"
-        ],
-        "implicit_route_policy": "never"
-      },
-      "lineage": {
-        "source": "repo-native",
-        "description": "Guaranteed entry point for Goal management with goal_state_manage."
-      },
-      "trigger_hints": [
-        "/goalx",
-        "goalx",
-        "goal:",
-        "Goal:",
-        "目标：",
-        "目标:",
-        "goal management",
-        "goal 管理",
-        "goal 模式",
-        "进入 goal"
-      ]
-    }
-  },
+  "framework_commands": {},
   "managed_mcp_servers": {
     "router-rs-framework": {
       "server_id": "router-rs-framework",
@@ -645,14 +500,14 @@
       "binary": "router-rs-cli",
       "crate": "router-rs",
       "tools": [
-	        "closeout_gate",
-	        "closeout_record_write",
-	        "goal_state_manage",
-	        "goal_state_read",
-	        "record_evidence",
-	        "route_tool",
-	        "search_tools",
-	        "session_checkpoint",
+        "closeout_gate",
+        "closeout_record_write",
+        "goal_state_manage",
+        "goal_state_read",
+        "record_evidence",
+        "route_tool",
+        "search_tools",
+        "session_checkpoint",
         "skill_read",
         "skill_route",
         "skill_route_status",
@@ -1276,23 +1131,108 @@
   "quality_gate_checkers": {
     "schema_version": "1",
     "registrations": [
-      {"scene": "general",     "checker_type": "EvidenceChecker",       "checker_module": "checkers::evidence_checker",       "crate": "runtime-core"},
-      {"scene": "general",     "checker_type": "AdversarialChecker",     "checker_module": "checkers::adversarial_checker",    "crate": "runtime-core"},
-      {"scene": "research",    "checker_type": "AdversarialChecker",     "checker_module": "checkers::adversarial_checker",    "crate": "runtime-core"},
-      {"scene": "code_review", "checker_type": "CorrectnessChecker",     "checker_module": "checkers::correctness_checker",    "crate": "runtime-core"},
-      {"scene": "code_review", "checker_type": "SecurityChecker",       "checker_module": "checkers::security_checker",      "crate": "runtime-core"},
-      {"scene": "visual",      "checker_type": "ScreenshotLayoutChecker", "checker_module": "checkers::screenshot_layout_checker", "crate": "runtime-core"},
-      {"scene": "slides",      "checker_type": "OverflowChecker",        "checker_module": "checkers::overflow_checker",       "crate": "runtime-core"},
-      {"scene": "research",    "checker_type": "Asymptotic",            "checker_module": "verification::asymptotic_gate",      "crate": "research-harness"},
-      {"scene": "research",    "checker_type": "DimensionalConsistency","checker_module": "verification::formal_gate",         "crate": "research-harness"},
-      {"scene": "research",    "checker_type": "Inequality",           "checker_module": "verification::inequality_gate",      "crate": "research-harness"},
-      {"scene": "research",    "checker_type": "Literature",           "checker_module": "verification::literature_gate",      "crate": "research-harness"},
-      {"scene": "research",    "checker_type": "ProseQCChecker",       "checker_module": "verification::prose_qc_gate",        "crate": "research-harness"},
-      {"scene": "research",    "checker_type": "Reproducibility",      "checker_module": "verification::reproducibility_gate",  "crate": "research-harness"},
-      {"scene": "research",    "checker_type": "StatisticalChecker",    "checker_module": "verification::statistical_gate",     "crate": "research-harness"},
-      {"scene": "research",    "checker_type": "Structure",            "checker_module": "verification::structure_gate",       "crate": "research-harness"},
-      {"scene": "research",    "checker_type": "Symbolic",             "checker_module": "verification::symbolic_gate",        "crate": "research-harness"},
-      {"scene": "research",    "checker_type": "SympyBridge",          "checker_module": "verification::sympy_bridge_gate",    "crate": "research-harness"}
+      {
+        "scene": "general",
+        "checker_type": "EvidenceChecker",
+        "checker_module": "checkers::evidence_checker",
+        "crate": "runtime-core"
+      },
+      {
+        "scene": "general",
+        "checker_type": "AdversarialChecker",
+        "checker_module": "checkers::adversarial_checker",
+        "crate": "runtime-core"
+      },
+      {
+        "scene": "research",
+        "checker_type": "AdversarialChecker",
+        "checker_module": "checkers::adversarial_checker",
+        "crate": "runtime-core"
+      },
+      {
+        "scene": "code_review",
+        "checker_type": "CorrectnessChecker",
+        "checker_module": "checkers::correctness_checker",
+        "crate": "runtime-core"
+      },
+      {
+        "scene": "code_review",
+        "checker_type": "SecurityChecker",
+        "checker_module": "checkers::security_checker",
+        "crate": "runtime-core"
+      },
+      {
+        "scene": "visual",
+        "checker_type": "ScreenshotLayoutChecker",
+        "checker_module": "checkers::screenshot_layout_checker",
+        "crate": "runtime-core"
+      },
+      {
+        "scene": "slides",
+        "checker_type": "OverflowChecker",
+        "checker_module": "checkers::overflow_checker",
+        "crate": "runtime-core"
+      },
+      {
+        "scene": "research",
+        "checker_type": "Asymptotic",
+        "checker_module": "verification::asymptotic_gate",
+        "crate": "research-harness"
+      },
+      {
+        "scene": "research",
+        "checker_type": "DimensionalConsistency",
+        "checker_module": "verification::formal_gate",
+        "crate": "research-harness"
+      },
+      {
+        "scene": "research",
+        "checker_type": "Inequality",
+        "checker_module": "verification::inequality_gate",
+        "crate": "research-harness"
+      },
+      {
+        "scene": "research",
+        "checker_type": "Literature",
+        "checker_module": "verification::literature_gate",
+        "crate": "research-harness"
+      },
+      {
+        "scene": "research",
+        "checker_type": "ProseQCChecker",
+        "checker_module": "verification::prose_qc_gate",
+        "crate": "research-harness"
+      },
+      {
+        "scene": "research",
+        "checker_type": "Reproducibility",
+        "checker_module": "verification::reproducibility_gate",
+        "crate": "research-harness"
+      },
+      {
+        "scene": "research",
+        "checker_type": "StatisticalChecker",
+        "checker_module": "verification::statistical_gate",
+        "crate": "research-harness"
+      },
+      {
+        "scene": "research",
+        "checker_type": "Structure",
+        "checker_module": "verification::structure_gate",
+        "crate": "research-harness"
+      },
+      {
+        "scene": "research",
+        "checker_type": "Symbolic",
+        "checker_module": "verification::symbolic_gate",
+        "crate": "research-harness"
+      },
+      {
+        "scene": "research",
+        "checker_type": "SympyBridge",
+        "checker_module": "verification::sympy_bridge_gate",
+        "crate": "research-harness"
+      }
     ]
   }
 }

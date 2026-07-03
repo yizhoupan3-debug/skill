@@ -28,6 +28,27 @@
   - Agent 优先用 `skill_route` 定位 skill，然后参考 `recommended_tools` + 读 SKILL.md 进行后续操作。
   - 工具注册表见 `configs/framework/MCP_TOOL_REGISTRY.json`。
 
+## 路由规则（防回归）
+
+**Slash commands (`/name`) 与自然语言搜索的路由分离**，避免 MCP 路由层截获原生 command：
+
+| 输入类型 | 分辨率 | 路由路径 |
+|----------|--------|----------|
+| `/gitx`、`/goalx` 等显式 slash command | `~/.claude/skills/<name>/SKILL.md` (Claude 原生) | 不经过 `skill_route` MCP 工具 |
+| 自然语言：「帮我提交代码」「检查 goal 状态」 | `skill_route` MCP 工具 | 经 `SKILL_ROUTING_RUNTIME.json` 匹配 |
+
+slash command 对应的 skill 如果同时存在于 `~/.claude/skills/`（原生）和 `RUNTIME_REGISTRY.json` 的 `framework_commands` 中，会导致路由双注册 → MCP dispatch 失败 → `/router-rs-framework:<name> isn't a recognized command`。修复方案：
+
+1. **`~/.claude/skills/<name>/SKILL.md`** → 负责 slash command（唯一注册位）
+2. **`RUNTIME_REGISTRY.json`** `framework_commands` → 只保留从未用于原生 slash command 的框架入口
+3. **`SKILL_ROUTING_RUNTIME.json`** → 只保留自然语言意图匹配，如需要
+
+**新增 personal level command 的 checklist：**
+- [ ] 创建 `~/.claude/skills/<name>/SKILL.md`
+- [ ] 检查 `RUNTIME_REGISTRY.json` 的 `framework_commands` 无同名条目
+- [ ] 检查 `SKILL_ROUTING_RUNTIME.json` 的 `skills` 无同名条目（除非需要 NL 路由）
+- [ ] `framework.md` 路由提示确认 slash command 走原生解析
+
 ## Skill 目录
 
 全量活跃 skill 表（39 项），按场景分组。通过 `skill_route(query)` 路由到最佳匹配；详情通过 `skill_read(slug)` 读取。
