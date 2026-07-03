@@ -534,6 +534,7 @@ pub fn simplify(expr: &Expr) -> Expr {
                     return match name.as_str() {
                         "sin" => Expr::Const(c.sin()),
                         "cos" => Expr::Const(c.cos()),
+                        "tan" => Expr::Const(c.tan()),
                         _ => Expr::Fn(name.clone(), sargs),
                     };
                 }
@@ -796,7 +797,32 @@ pub fn trig_simplify(expr: &Expr) -> Expr {
             simplify(&make_add(result))
         }
         Expr::Sub(a, b) => {
-            Expr::Sub(Box::new(trig_simplify(a)), Box::new(trig_simplify(b)))
+            let ta = trig_simplify(a);
+            let tb = trig_simplify(b);
+
+            // 1 - sin(x)^2 → cos(x)^2
+            if matches!(&ta, Expr::Const(c) if *c == 1.0) {
+                if let Some(inner) = extract_sin_sq_inner(&tb) {
+                    let cos_sq = Expr::Pow(
+                        Box::new(Expr::Fn("cos".to_string(), vec![inner.clone()])),
+                        Box::new(Expr::Const(2.0)),
+                    );
+                    return trig_simplify(&cos_sq);
+                }
+            }
+
+            // 1 - cos(x)^2 → sin(x)^2
+            if matches!(&ta, Expr::Const(c) if *c == 1.0) {
+                if let Some(inner) = extract_cos_sq_inner(&tb) {
+                    let sin_sq = Expr::Pow(
+                        Box::new(Expr::Fn("sin".to_string(), vec![inner.clone()])),
+                        Box::new(Expr::Const(2.0)),
+                    );
+                    return trig_simplify(&sin_sq);
+                }
+            }
+
+            Expr::Sub(Box::new(ta), Box::new(tb))
         }
         Expr::Mul(a, b) => {
             Expr::Mul(Box::new(trig_simplify(a)), Box::new(trig_simplify(b)))
@@ -809,7 +835,33 @@ pub fn trig_simplify(expr: &Expr) -> Expr {
         }
         Expr::Neg(x) => Expr::Neg(Box::new(trig_simplify(x))),
         Expr::Fn(name, args) => {
-            Expr::Fn(name.clone(), args.iter().map(|a| trig_simplify(a)).collect())
+            let sargs: Vec<Expr> = args.iter().map(|a| trig_simplify(a)).collect();
+
+            // sin(2*x) → 2*sin(x)*cos(x)
+            if name == "sin" && sargs.len() == 1 {
+                if let Expr::Mul(a, b) = &sargs[0] {
+                    if let Expr::Const(c) = a.as_ref() {
+                        if (*c - 2.0).abs() < 1e-12 {
+                            let inner = trig_simplify(b);
+                            let sin_term = Expr::Fn("sin".to_string(), vec![inner.clone()]);
+                            let cos_term = Expr::Fn("cos".to_string(), vec![inner]);
+                            return Expr::Mul(
+                                Box::new(Expr::Const(2.0)),
+                                Box::new(Expr::Mul(Box::new(sin_term), Box::new(cos_term))),
+                            );
+                        }
+                    }
+                }
+            }
+
+            // tan constant folding
+            if name == "tan" && sargs.len() == 1 {
+                if let Expr::Const(c) = &sargs[0] {
+                    return Expr::Const(c.tan());
+                }
+            }
+
+            Expr::Fn(name.clone(), sargs)
         }
         _ => expr.clone(),
     }
@@ -841,6 +893,40 @@ fn is_cos_sq(expr: &Expr) -> Option<String> {
             if let Expr::Fn(name, args) = base.as_ref() {
                 if name == "cos" && args.len() == 1 {
                     return Some(display(&args[0]));
+                }
+            }
+            None
+        }
+        _ => None,
+    }
+}
+
+/// Extract the inner expression from sin(arg)^2, for identity rewriting.
+fn extract_sin_sq_inner(expr: &Expr) -> Option<&Expr> {
+    match expr {
+        Expr::Pow(base, exp)
+            if matches!(exp.as_ref(), Expr::Const(c) if (*c - 2.0).abs() < 1e-12) =>
+        {
+            if let Expr::Fn(name, args) = base.as_ref() {
+                if name == "sin" && args.len() == 1 {
+                    return Some(&args[0]);
+                }
+            }
+            None
+        }
+        _ => None,
+    }
+}
+
+/// Extract the inner expression from cos(arg)^2, for identity rewriting.
+fn extract_cos_sq_inner(expr: &Expr) -> Option<&Expr> {
+    match expr {
+        Expr::Pow(base, exp)
+            if matches!(exp.as_ref(), Expr::Const(c) if (*c - 2.0).abs() < 1e-12) =>
+        {
+            if let Expr::Fn(name, args) = base.as_ref() {
+                if name == "cos" && args.len() == 1 {
+                    return Some(&args[0]);
                 }
             }
             None
@@ -2098,6 +2184,225 @@ pub fn differentiate(expr: &Expr, var: &str) -> Expr {
             }
             _ => Expr::Const(0.0), // unknown function derivative
         },
+    }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// Substitution — variable/expression replacement in AST
+// ════════════════════════════════════════════════════════════════════════════
+
+/// Replace every occurrence of `var` with `replacement` in the expression tree.
+pub fn substitute(expr: &Expr, var: &str, replacement: &Expr) -> Expr {
+    match expr {
+        Expr::Var(v) if v == var => replacement.clone(),
+        Expr::Const(_) | Expr::Var(_) => expr.clone(),
+        Expr::Neg(x) => Expr::Neg(Box::new(substitute(x, var, replacement))),
+        Expr::Add(a, b) => Expr::Add(
+            Box::new(substitute(a, var, replacement)),
+            Box::new(substitute(b, var, replacement)),
+        ),
+        Expr::Sub(a, b) => Expr::Sub(
+            Box::new(substitute(a, var, replacement)),
+            Box::new(substitute(b, var, replacement)),
+        ),
+        Expr::Mul(a, b) => Expr::Mul(
+            Box::new(substitute(a, var, replacement)),
+            Box::new(substitute(b, var, replacement)),
+        ),
+        Expr::Div(a, b) => Expr::Div(
+            Box::new(substitute(a, var, replacement)),
+            Box::new(substitute(b, var, replacement)),
+        ),
+        Expr::Pow(a, b) => Expr::Pow(
+            Box::new(substitute(a, var, replacement)),
+            Box::new(substitute(b, var, replacement)),
+        ),
+        Expr::Fn(name, args) => {
+            Expr::Fn(name.clone(), args.iter().map(|a| substitute(a, var, replacement)).collect())
+        }
+    }
+}
+
+/// Apply multiple substitutions from a mapping, then simplify.
+///
+/// Each variable in the mapping is replaced with its corresponding expression.
+pub fn substitute_all(expr: &Expr, mapping: &HashMap<String, Expr>) -> Expr {
+    let mut result = expr.clone();
+    for (var, replacement) in mapping {
+        result = substitute(&result, var, replacement);
+    }
+    simplify(&result)
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// Series expansion via Taylor series
+// ════════════════════════════════════════════════════════════════════════════
+
+/// Compute the Taylor series expansion of `expr` around `point` to the given `order`.
+///
+/// Uses repeated differentiation:
+///   f(x) = Σ f^(n)(a)/n! * (x-a)^n,  n=0..order-1
+pub fn series(expr: &Expr, var: &str, point: f64, order: u32) -> Expr {
+    let mut terms: Vec<Expr> = Vec::new();
+
+    // n=0: f(a) — eval at point
+    {
+        let mut vars = HashMap::new();
+        vars.insert(var.to_string(), point);
+        if let Ok(val) = eval(expr, &vars) {
+            if val.abs() > 1e-15 {
+                terms.push(Expr::Const(val));
+            }
+        }
+    }
+
+    // n=1..order-1: f^(n)(a) / n! * (x-a)^n
+    let mut current = expr.clone();
+    let mut fact = 1.0_f64;
+    for n in 1..order {
+        current = differentiate(&current, var);
+        // Check if derivative is identically zero (early stop)
+        let simplified = simplify(&current);
+        if matches!(&simplified, Expr::Const(c) if c.abs() < 1e-15) {
+            break;
+        }
+
+        // Evaluate derivative at point
+        let mut vars = HashMap::new();
+        vars.insert(var.to_string(), point);
+        match eval(&simplified, &vars) {
+            Ok(deriv_val) if deriv_val.abs() > 1e-15 => {
+                fact *= n as f64; // n!
+                let coeff = deriv_val / fact;
+                let x_minus_a = Expr::Sub(
+                    Box::new(Expr::Var(var.to_string())),
+                    Box::new(Expr::Const(point)),
+                );
+                let pow_term = if n == 1 {
+                    x_minus_a
+                } else {
+                    Expr::Pow(Box::new(x_minus_a), Box::new(Expr::Const(n as f64)))
+                };
+                terms.push(Expr::Mul(Box::new(Expr::Const(coeff)), Box::new(pow_term)));
+            }
+            Ok(_) => {}
+            Err(_) => break,
+        }
+    }
+
+    if terms.is_empty() {
+        return Expr::Const(0.0);
+    }
+    simplify(&make_add(terms))
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// Limit evaluation
+// ════════════════════════════════════════════════════════════════════════════
+
+/// Compute the limit of `expr` as `var` approaches `point`.
+///
+/// Strategy:
+/// - Finite point: try direct eval; if division by zero, use series expansion.
+/// - Infinity: evaluate at large magnitude values.
+/// - Directional limits (+/-): support via `direction` parameter.
+pub fn limit(expr: &Expr, var: &str, point: &str, direction: Option<&str>) -> Result<Expr, String> {
+    if let Ok(pt) = point.parse::<f64>() {
+        // Finite point — try direct evaluation
+        let mut vars = HashMap::new();
+        vars.insert(var.to_string(), pt);
+        match eval(expr, &vars) {
+            Ok(val) if val.is_finite() => return Ok(Expr::Const(val)),
+            Ok(_) => return Err(format!("limit diverges at {point}")),
+            Err(_) => {
+                // Division by zero or other singularity — try series expansion
+                let series_expr = series(expr, var, pt, 4);
+                let simplified = simplify(&series_expr);
+
+                // If series is constant, that's the limit
+                if let Expr::Const(c) = &simplified {
+                    if c.is_finite() {
+                        return Ok(Expr::Const(*c));
+                    }
+                }
+
+                // Try evaluating the original expression near the point
+                let epsilon = 1e-12;
+                let sign = match direction {
+                    Some("+") => 1.0,
+                    Some("-") => -1.0,
+                    _ => 1.0,
+                };
+                vars.insert(var.to_string(), pt + sign * epsilon);
+                match eval(expr, &vars) {
+                    Ok(val) if val.is_finite() => return Ok(Expr::Const(val)),
+                    Ok(val) if val.is_infinite() => {
+                        if val.is_sign_positive() {
+                            return Ok(Expr::Const(f64::INFINITY));
+                        } else {
+                            return Ok(Expr::Const(f64::NEG_INFINITY));
+                        }
+                    }
+                    _ => {}
+                }
+
+                // Try the series near the point
+                match eval(&simplified, &vars) {
+                    Ok(val) if val.is_finite() => return Ok(Expr::Const(val)),
+                    _ => {}
+                }
+
+                Err(format!("cannot determine limit at {point}"))
+            }
+        }
+    } else if ["oo", "inf", "+oo", "+inf"].contains(&point) {
+        // Limit at +infinity — evaluate at very large x
+        let mut vars = HashMap::new();
+        vars.insert(var.to_string(), 1e30);
+        match eval(expr, &vars) {
+            Ok(val) if val == 0.0 => Ok(Expr::Const(0.0)),
+            Ok(val) if val.is_finite() => {
+                // Cross-check at 1e15
+                vars.insert(var.to_string(), 1e15);
+                if let Ok(val2) = eval(expr, &vars) {
+                    if (val - val2).abs() < 1e-6 * val.abs().max(1.0) {
+                        return Ok(Expr::Const(val));
+                    }
+                }
+                // Try even larger
+                vars.insert(var.to_string(), 1e50);
+                match eval(expr, &vars) {
+                    Ok(val3) if val3.is_finite() => Ok(Expr::Const(val3)),
+                    _ => Err(format!("cannot determine limit at {point}")),
+                }
+            }
+            Ok(val) if val.is_infinite() => Ok(Expr::Const(val)),
+            _ => Err(format!("cannot determine limit at {point}")),
+        }
+    } else if ["-oo", "-inf"].contains(&point) {
+        // Limit at -infinity — evaluate at very negative x
+        let mut vars = HashMap::new();
+        vars.insert(var.to_string(), -1e30);
+        match eval(expr, &vars) {
+            Ok(val) if val == 0.0 => Ok(Expr::Const(0.0)),
+            Ok(val) if val.is_finite() => {
+                vars.insert(var.to_string(), -1e15);
+                if let Ok(val2) = eval(expr, &vars) {
+                    if (val - val2).abs() < 1e-6 * val.abs().max(1.0) {
+                        return Ok(Expr::Const(val));
+                    }
+                }
+                vars.insert(var.to_string(), -1e50);
+                match eval(expr, &vars) {
+                    Ok(val3) if val3.is_finite() => Ok(Expr::Const(val3)),
+                    _ => Err(format!("cannot determine limit at {point}")),
+                }
+            }
+            Ok(val) if val.is_infinite() => Ok(Expr::Const(val)),
+            _ => Err(format!("cannot determine limit at {point}")),
+        }
+    } else {
+        Err(format!("unknown point: {point}"))
     }
 }
 

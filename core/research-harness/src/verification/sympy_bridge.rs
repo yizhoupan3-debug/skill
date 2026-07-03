@@ -130,26 +130,38 @@ pub fn simplify_expression_with_assumptions(
 
 /// Simplify a trigonometric expression using `sp.trigsimp()`.
 pub fn trig_simplify_expression(expr: &str) -> VerificationResult {
-    if !python_bridge::sympy_available() {
-        return VerificationResult {
-            check_name: "math_sympy_trig_simplify".into(),
-            status: VerificationStatus::Fail,
-            details: format!("trig_simplify({expr}) — SymPy not available (requires Python backend)"),
-            evidence_path: None,
-        };
+    // Try real SymPy first
+    if python_bridge::sympy_available() {
+        let params = json!({"expression": expr});
+        match python_bridge::call_math_backend("sympy_trig_simplify", params) {
+            Ok(result) => {
+                let simplified = result
+                    .get("result")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or(expr);
+                return VerificationResult {
+                    check_name: "math_sympy_trig_simplify".into(),
+                    status: VerificationStatus::Pass,
+                    details: format!("trig_simplify({expr}) → {simplified} (SymPy)"),
+                    evidence_path: None,
+                };
+            }
+            Err(e) => {
+                tracing::debug!("[sympy_bridge] real SymPy trig_simplify failed, falling back: {e}");
+                // Fall through to pure Rust
+            }
+        }
     }
 
-    let params = json!({"expression": expr});
-    match python_bridge::call_math_backend("sympy_trig_simplify", params) {
-        Ok(result) => {
-            let simplified = result
-                .get("result")
-                .and_then(|v| v.as_str())
-                .unwrap_or(expr);
+    // Fallback: pure Rust trig simplification
+    match crate::verification::symbolic::parse(expr) {
+        Ok(parsed) => {
+            let simplified = crate::verification::symbolic::trig_simplify(&parsed);
+            let result = crate::verification::symbolic::display(&simplified);
             VerificationResult {
                 check_name: "math_sympy_trig_simplify".into(),
                 status: VerificationStatus::Pass,
-                details: format!("trig_simplify({expr}) → {simplified} (SymPy)"),
+                details: format!("trig_simplify({expr}) → {result} (pure Rust fallback)"),
                 evidence_path: None,
             }
         }
@@ -164,33 +176,72 @@ pub fn trig_simplify_expression(expr: &str) -> VerificationResult {
 
 /// Substitute variables/expressions in a symbolic expression.
 pub fn subs_expression(expr: &str, substitutions: &serde_json::Value) -> VerificationResult {
-    if !python_bridge::sympy_available() {
-        return VerificationResult {
-            check_name: "math_sympy_subs".into(),
-            status: VerificationStatus::Fail,
-            details: format!("subs({expr}) — SymPy not available (requires Python backend)"),
-            evidence_path: None,
-        };
+    // Try real SymPy first
+    if python_bridge::sympy_available() {
+        let mut subs_params = json!({
+            "expression": expr,
+            "substitutions": substitutions,
+        });
+        // Optional simultaneous flag — pass through if present in the original call context
+        if let Some(sim) = substitutions.get("simultaneous") {
+            subs_params["simultaneous"] = sim.clone();
+        }
+        match python_bridge::call_math_backend("sympy_subs", subs_params) {
+            Ok(result) => {
+                let substituted = result
+                    .get("result")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or(expr);
+                return VerificationResult {
+                    check_name: "math_sympy_subs".into(),
+                    status: VerificationStatus::Pass,
+                    details: format!("subs({expr}) → {substituted} (SymPy)"),
+                    evidence_path: None,
+                };
+            }
+            Err(e) => {
+                tracing::debug!("[sympy_bridge] real SymPy subs failed, falling back: {e}");
+                // Fall through to pure Rust
+            }
+        }
     }
 
-    let mut subs_params = json!({
-        "expression": expr,
-        "substitutions": substitutions,
-    });
-    // Optional simultaneous flag — pass through if present in the original call context
-    if let Some(sim) = substitutions.get("simultaneous") {
-        subs_params["simultaneous"] = sim.clone();
-    }
-    match python_bridge::call_math_backend("sympy_subs", subs_params) {
-        Ok(result) => {
-            let substituted = result
-                .get("result")
-                .and_then(|v| v.as_str())
-                .unwrap_or(expr);
+    // Fallback: pure Rust substitution for simple {var: num} or {var: "expr"} mappings
+    match crate::verification::symbolic::parse(expr) {
+        Ok(parsed) => {
+            let mut mapping: std::collections::HashMap<String, crate::verification::symbolic::Expr> =
+                std::collections::HashMap::new();
+            if let Some(obj) = substitutions.as_object() {
+                for (key, val) in obj {
+                    // Skip the special simultaneous flag
+                    if key == "simultaneous" {
+                        continue;
+                    }
+                    if let Some(num) = val.as_f64() {
+                        mapping.insert(key.clone(), crate::verification::symbolic::Expr::Const(num));
+                    } else if let Some(s) = val.as_str() {
+                        if let Ok(sub_expr) = crate::verification::symbolic::parse(s) {
+                            mapping.insert(key.clone(), sub_expr);
+                        }
+                    }
+                }
+            }
+
+            if mapping.is_empty() {
+                return VerificationResult {
+                    check_name: "math_sympy_subs".into(),
+                    status: VerificationStatus::Fail,
+                    details: format!("subs({expr}) — no valid substitutions in fallback"),
+                    evidence_path: None,
+                };
+            }
+
+            let result = crate::verification::symbolic::substitute_all(&parsed, &mapping);
+            let result_str = crate::verification::symbolic::display(&result);
             VerificationResult {
                 check_name: "math_sympy_subs".into(),
                 status: VerificationStatus::Pass,
-                details: format!("subs({expr}) → {substituted} (SymPy)"),
+                details: format!("subs({expr}) → {result_str} (pure Rust fallback)"),
                 evidence_path: None,
             }
         }
@@ -210,40 +261,61 @@ pub fn limit_expression(
     point: &str,
     direction: Option<&str>,
 ) -> VerificationResult {
-    if !python_bridge::sympy_available() {
-        return VerificationResult {
-            check_name: "math_sympy_limit".into(),
-            status: VerificationStatus::Fail,
-            details: format!("limit({expr}, {variable}→{point}) — SymPy not available (requires Python backend)"),
-            evidence_path: None,
-        };
+    // Try real SymPy first
+    if python_bridge::sympy_available() {
+        let mut params = json!({
+            "expression": expr,
+            "variable": variable,
+            "point": point,
+        });
+        if let Some(dir) = direction {
+            params["direction"] = json!(dir);
+        }
+        match python_bridge::call_math_backend("sympy_limit", params) {
+            Ok(result) => {
+                let limit_val = result
+                    .get("result")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("?");
+                return VerificationResult {
+                    check_name: "math_sympy_limit".into(),
+                    status: VerificationStatus::Pass,
+                    details: format!("limit({expr}, {variable}→{point}) = {limit_val} (SymPy)"),
+                    evidence_path: None,
+                };
+            }
+            Err(e) => {
+                tracing::debug!("[sympy_bridge] real SymPy limit failed, falling back: {e}");
+                // Fall through to pure Rust
+            }
+        }
     }
 
-    let mut params = json!({
-        "expression": expr,
-        "variable": variable,
-        "point": point,
-    });
-    if let Some(dir) = direction {
-        params["direction"] = json!(dir);
-    }
-    match python_bridge::call_math_backend("sympy_limit", params) {
-        Ok(result) => {
-            let limit_val = result
-                .get("result")
-                .and_then(|v| v.as_str())
-                .unwrap_or("?");
-            VerificationResult {
-                check_name: "math_sympy_limit".into(),
-                status: VerificationStatus::Pass,
-                details: format!("limit({expr}, {variable}→{point}) = {limit_val} (SymPy)"),
-                evidence_path: None,
+    // Fallback: pure Rust limit evaluation
+    match crate::verification::symbolic::parse(expr) {
+        Ok(parsed) => {
+            match crate::verification::symbolic::limit(&parsed, variable, point, direction) {
+                Ok(limit_expr) => {
+                    let limit_val = crate::verification::symbolic::display(&limit_expr);
+                    VerificationResult {
+                        check_name: "math_sympy_limit".into(),
+                        status: VerificationStatus::Pass,
+                        details: format!("limit({expr}, {variable}→{point}) = {limit_val} (pure Rust fallback)"),
+                        evidence_path: None,
+                    }
+                }
+                Err(e) => VerificationResult {
+                    check_name: "math_sympy_limit".into(),
+                    status: VerificationStatus::Fail,
+                    details: format!("limit({expr}, {variable}→{point}) failed: {e}"),
+                    evidence_path: None,
+                },
             }
         }
         Err(e) => VerificationResult {
             check_name: "math_sympy_limit".into(),
             status: VerificationStatus::Fail,
-            details: format!("limit({expr}, {variable}→{point}) failed: {e}"),
+            details: format!("limit({expr}) failed: {e}"),
             evidence_path: None,
         },
     }
@@ -255,32 +327,61 @@ pub fn lambdify_expression(
     variables: &[String],
     values: Option<&[f64]>,
 ) -> VerificationResult {
-    if !python_bridge::sympy_available() {
-        return VerificationResult {
-            check_name: "math_sympy_lambdify".into(),
-            status: VerificationStatus::Fail,
-            details: format!("lambdify({expr}) — SymPy not available (requires Python backend)"),
-            evidence_path: None,
-        };
+    // Try real SymPy first
+    if python_bridge::sympy_available() {
+        let mut params = json!({
+            "expression": expr,
+            "variables": variables,
+        });
+        if let Some(vals) = values {
+            params["values"] = json!(vals);
+        }
+        match python_bridge::call_math_backend("sympy_lambdify", params) {
+            Ok(result) => {
+                let result_str = result
+                    .get("result")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or(expr);
+                let evaluated = result.get("evaluated").and_then(|v| v.as_f64());
+                let mut details = format!("lambdify({expr}) = {result_str} (SymPy)");
+                if let Some(eval_val) = evaluated {
+                    details.push_str(&format!(", evaluated={eval_val}"));
+                }
+                return VerificationResult {
+                    check_name: "math_sympy_lambdify".into(),
+                    status: VerificationStatus::Pass,
+                    details,
+                    evidence_path: None,
+                };
+            }
+            Err(e) => {
+                tracing::debug!("[sympy_bridge] real SymPy lambdify failed, falling back: {e}");
+                // Fall through to pure Rust
+            }
+        }
     }
 
-    let mut params = json!({
-        "expression": expr,
-        "variables": variables,
-    });
-    if let Some(vals) = values {
-        params["values"] = json!(vals);
-    }
-    match python_bridge::call_math_backend("sympy_lambdify", params) {
-        Ok(result) => {
-            let result_str = result
-                .get("result")
-                .and_then(|v| v.as_str())
-                .unwrap_or(expr);
-            let evaluated = result.get("evaluated").and_then(|v| v.as_f64());
-            let mut details = format!("lambdify({expr}) = {result_str} (SymPy)");
-            if let Some(eval_val) = evaluated {
-                details.push_str(&format!(", evaluated={eval_val}"));
+    // Fallback: pure Rust eval fallback
+    match crate::verification::symbolic::parse(expr) {
+        Ok(parsed) => {
+            let mut details = format!("lambdify({expr}) = {expr} (pure Rust eval fallback)");
+            if let Some(vals) = values {
+                if variables.len() == vals.len() {
+                    let mut vars_map = std::collections::HashMap::new();
+                    for (v, val) in variables.iter().zip(vals.iter()) {
+                        vars_map.insert(v.clone(), *val);
+                    }
+                    match crate::verification::symbolic::eval(&parsed, &vars_map) {
+                        Ok(eval_val) => {
+                            details = format!("lambdify({expr}) = {expr} (pure Rust eval fallback), evaluated={eval_val}");
+                        }
+                        Err(e) => {
+                            details = format!("lambdify({expr}) = {expr} (pure Rust eval fallback), eval error: {e}");
+                        }
+                    }
+                } else {
+                    details = format!("lambdify({expr}) = {expr} (pure Rust eval fallback), variable count mismatch");
+                }
             }
             VerificationResult {
                 check_name: "math_sympy_lambdify".into(),
@@ -374,35 +475,47 @@ pub fn factor_expression(expr: &str) -> VerificationResult {
 
 /// Compute series expansion of an expression using SymPy.
 pub fn series_expression(expr: &str, variable: &str, point: f64, order: u32) -> VerificationResult {
-    if !python_bridge::sympy_available() {
-        return VerificationResult {
-            check_name: "math_sympy_series".into(),
-            status: VerificationStatus::Fail,
-            details: format!("series({expr}) — SymPy not available (requires Python backend)"),
-            evidence_path: None,
-        };
+    // Try real SymPy first
+    if python_bridge::sympy_available() {
+        let params = json!({
+            "expression": expr,
+            "variable": variable,
+            "point": point,
+            "order": order,
+        });
+        match python_bridge::call_math_backend("sympy_series", params) {
+            Ok(result) => {
+                let series_str = result
+                    .get("result")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or(expr);
+                let leading = result
+                    .get("leading")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+                return VerificationResult {
+                    check_name: "math_sympy_series".into(),
+                    status: VerificationStatus::Pass,
+                    details: format!("series({expr}, {variable}, {point}, order={order}) → {series_str} (SymPy, leading: {leading})"),
+                    evidence_path: None,
+                };
+            }
+            Err(e) => {
+                tracing::debug!("[sympy_bridge] real SymPy series failed, falling back: {e}");
+                // Fall through to pure Rust
+            }
+        }
     }
 
-    let params = json!({
-        "expression": expr,
-        "variable": variable,
-        "point": point,
-        "order": order,
-    });
-    match python_bridge::call_math_backend("sympy_series", params) {
-        Ok(result) => {
-            let series_str = result
-                .get("result")
-                .and_then(|v| v.as_str())
-                .unwrap_or(expr);
-            let leading = result
-                .get("leading")
-                .and_then(|v| v.as_str())
-                .unwrap_or("");
+    // Fallback: pure Rust series expansion via Taylor series
+    match crate::verification::symbolic::parse(expr) {
+        Ok(parsed) => {
+            let series_expr = crate::verification::symbolic::series(&parsed, variable, point, order);
+            let result_str = crate::verification::symbolic::display(&series_expr);
             VerificationResult {
                 check_name: "math_sympy_series".into(),
                 status: VerificationStatus::Pass,
-                details: format!("series({expr}, {variable}, {point}, order={order}) → {series_str} (SymPy, leading: {leading})"),
+                details: format!("series({expr}, {variable}, {point}, order={order}) → {result_str} (pure Rust fallback)"),
                 evidence_path: None,
             }
         }
@@ -417,30 +530,45 @@ pub fn series_expression(expr: &str, variable: &str, point: f64, order: u32) -> 
 
 /// Differentiate a symbolic expression using SymPy.
 pub fn differentiate_expression(expr: &str, variable: &str, order: u32) -> VerificationResult {
-    if !python_bridge::sympy_available() {
-        return VerificationResult {
-            check_name: "math_sympy_differentiate".into(),
-            status: VerificationStatus::Fail,
-            details: format!("differentiate({expr}) — SymPy not available (requires Python backend)"),
-            evidence_path: None,
-        };
+    // Try real SymPy first
+    if python_bridge::sympy_available() {
+        let params = json!({
+            "expression": expr,
+            "variable": variable,
+            "order": order,
+        });
+        match python_bridge::call_math_backend("sympy_differentiate", params) {
+            Ok(result) => {
+                let diffed = result
+                    .get("result")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or(expr);
+                return VerificationResult {
+                    check_name: "math_sympy_differentiate".into(),
+                    status: VerificationStatus::Pass,
+                    details: format!("differentiate({expr}, {variable}, order={order}) → {diffed} (SymPy)"),
+                    evidence_path: None,
+                };
+            }
+            Err(e) => {
+                tracing::debug!("[sympy_bridge] real SymPy differentiate failed, falling back: {e}");
+                // Fall through to pure Rust
+            }
+        }
     }
 
-    let params = json!({
-        "expression": expr,
-        "variable": variable,
-        "order": order,
-    });
-    match python_bridge::call_math_backend("sympy_differentiate", params) {
-        Ok(result) => {
-            let diffed = result
-                .get("result")
-                .and_then(|v| v.as_str())
-                .unwrap_or(expr);
+    // Fallback: pure Rust symbolic differentiation
+    match crate::verification::symbolic::parse(expr) {
+        Ok(parsed) => {
+            let mut result = parsed;
+            for _ in 0..order {
+                result = crate::verification::symbolic::differentiate(&result, variable);
+            }
+            let diffed = crate::verification::symbolic::display(&result);
             VerificationResult {
                 check_name: "math_sympy_differentiate".into(),
                 status: VerificationStatus::Pass,
-                details: format!("differentiate({expr}, {variable}, order={order}) → {diffed} (SymPy)"),
+                details: format!("differentiate({expr}, {variable}, order={order}) → {diffed} (pure Rust fallback)"),
                 evidence_path: None,
             }
         }
