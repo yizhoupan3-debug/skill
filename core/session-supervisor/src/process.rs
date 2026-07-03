@@ -362,6 +362,7 @@ pub fn reap_stale_agents(
 }
 
 /// List all currently running agents.
+#[cfg(test)]
 pub fn list_running_agents(repo_root: &Path) -> Result<Vec<AgentHealthEntry>, FrameworkError> {
     with_agent_health(repo_root, |store| {
         let mut running: Vec<_> = store

@@ -179,26 +179,6 @@ pub fn payload_exit_code(payload: &Value) -> Option<i64> {
     find_numeric_key(payload, &["exit_code", "exitCode", "exit_status"])
 }
 
-/// Check if a tool name suggests a subagent/subprocess.
-pub fn subagent_tool(payload: &Value) -> bool {
-    let name = payload
-        .get("tool_name")
-        .or_else(|| payload.get("tool"))
-        .and_then(Value::as_str)
-        .unwrap_or("");
-    tool_name_implies_subagent(name)
-}
-
-/// Check if a tool name implies subagent execution.
-pub fn tool_name_implies_subagent(name: &str) -> bool {
-    let lower = name.to_ascii_lowercase();
-    lower.contains("subagent")
-        || lower.contains("spawn")
-        || lower.contains("dispatch")
-        || lower == "task"
-        || lower.contains("sub_process")
-}
-
 /// Extract a summary of tool output for evidence tracking.
 pub fn extract_output_summary(payload: &Value, max_chars: usize) -> Option<String> {
     let text = payload
@@ -249,7 +229,7 @@ pub fn payload_looks_like_foreign_hook_stdin(payload: &Value) -> bool {
 }
 
 pub(crate) fn extract_subagent_id_from_payload(payload: &Value) -> Option<String> {
-    for key in &["agent_id", "subagent_id", "task_id", "id"] {
+    for key in &["agent_id", "subagent_id", "id"] {
         if let Some(s) = payload
             .get(*key)
             .and_then(Value::as_str)

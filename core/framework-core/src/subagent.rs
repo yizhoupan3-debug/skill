@@ -6,6 +6,7 @@ pub const SUBAGENT_TOOL_NAMES: &[&str] = &[
     "functions.spawn_agent",
     "subagent",
     "spawn_agent",
+    "dispatch_agent",
 ];
 
 /// Check if a normalized tool name indicates a subagent operation.

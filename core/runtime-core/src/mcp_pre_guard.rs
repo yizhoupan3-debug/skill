@@ -100,7 +100,10 @@ mod tests {
             &serde_json::json!({"workerId": "w1"}),
             &repo(),
         );
-        assert!(verdict.blocked, "{verdict:?}");
+        // Now a confirmation-gate (soft gate), not a hard block.
+        assert!(!verdict.blocked, "{verdict:?}");
+        let reason = verdict.reason.as_deref().expect("should have confirmation reason");
+        assert!(reason.starts_with("confirmation-gate:"), "{reason}");
     }
 
     #[test]
@@ -183,12 +186,12 @@ mod tests {
 
     #[test]
     fn existing_hard_blocks_not_affected_by_confirmation_gates() {
-        // Ensure existing hard blocks still work
+        // Ensure existing hard blocks still work (preview_start is hard-blocked)
         let verdict = evaluate_mcp_pre_guard_safe(
-            "session_resume_due",
-            &serde_json::json!({"workerId": "w1"}),
+            "preview_start",
+            &serde_json::json!({}),
             &repo(),
         );
-        assert!(verdict.blocked, "session_resume_due should still be hard-blocked");
+        assert!(verdict.blocked, "preview_start should still be hard-blocked");
     }
 }

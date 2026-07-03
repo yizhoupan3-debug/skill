@@ -177,19 +177,15 @@ pub trait HostHookDispatcher: HostHookConfig {
         crate::hosts::host_state::auto_record_research_activity(event.repo_root, event.payload);
 
         // Auto-register subagent in health registry when a subagent tool is called.
-        // This covers hosts (like Claude) that don't fire SubagentStart/SubagentStop events.
-        if framework_core::subagent::is_subagent_tool(&normalized) {
+        // For hosts that fire SubagentStart/SubagentStop events (cursor, opencode, claude),
+        // registration happens in handle_subagent_start — skip here to avoid double-write.
+        // For hosts without SubagentStart (codex), register via PostToolUse instead.
+        if !self.supports_subagent_start() && framework_core::subagent::is_subagent_tool(&normalized) {
             let agent_id = extract_subagent_id_from_payload(event.payload).unwrap_or_else(|| {
-                format!(
-                    "agent-{}",
-                    std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .unwrap_or_default()
-                        .as_nanos()
-                )
+                generate_agent_id()
             });
-            // TODO: agent_register payload construction — session-supervisor integration pending
-            let _ = agent_id; // suppress unused warning until integration is implemented
+            let host_id = self.host_id();
+            agent_health_register(&agent_id, host_id);
         }
 
         // Auto-checkpoint: if there's an active goal and the tool call succeeded,
@@ -270,22 +266,17 @@ pub trait HostHookDispatcher: HostHookConfig {
 
     /// SubagentStart: register agent in session-supervisor health registry.
     fn handle_subagent_start(&self, event: &HookEvent) -> Option<HookOutput> {
-        let _agent_id = extract_subagent_id_from_payload(event.payload).unwrap_or_else(|| {
-            format!(
-                "agent-{}",
-                std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_nanos()
-            )
+        let agent_id = extract_subagent_id_from_payload(event.payload).unwrap_or_else(|| {
+            generate_agent_id()
         });
-        // TODO: agent_register payload construction — session-supervisor integration pending
+        let host_id = self.host_id();
+        agent_health_register(&agent_id, host_id);
         None
     }
 
     /// SubagentStop: unregister agent in session-supervisor health registry.
     fn handle_subagent_stop(&self, event: &HookEvent) -> Option<HookOutput> {
-        let Some(_agent_id) = extract_subagent_id_from_payload(event.payload) else {
+        let Some(agent_id) = extract_subagent_id_from_payload(event.payload) else {
             debug!("SubagentStop: no agent_id in payload, skipping unregister");
             return None;
         };
@@ -294,9 +285,9 @@ pub trait HostHookDispatcher: HostHookConfig {
         } else {
             "completed"
         };
-        let _error = extract_subagent_error_from_payload(event.payload);
-        // TODO: agent_unregister payload construction — session-supervisor integration pending
-        let _ = terminal_status;
+        let error = extract_subagent_error_from_payload(event.payload);
+        let host_id = self.host_id();
+        agent_health_unregister(&agent_id, host_id, terminal_status, error.as_deref());
         None
     }
 
@@ -384,6 +375,60 @@ fn build_task_list_summary_context(repo_root: &Path) -> Option<String> {
         );
     }
     Some(out)
+}
+
+// ── Agent health helpers (session-supervisor integration via hooks) ──
+
+/// Register an agent as alive in the session-supervisor health registry.
+/// Best-effort: failures log a warning and are otherwise ignored.
+fn agent_health_register(agent_id: &str, host_id: &str) {
+    if let Some(hooks) = framework_core::runtime_hooks::try_hooks() {
+        let payload = serde_json::json!({
+            "operation": "agent_register",
+            "agent_id": agent_id,
+            "host_id": host_id,
+            "tool_type": "agent",
+        });
+        if let Err(e) = hooks.handle_orchestrator_operation(payload) {
+            tracing::warn!(
+                "agent_health_register failed for {agent_id}: {e}"
+            );
+        }
+    }
+}
+
+
+/// Generate a unique agent ID using the current timestamp in nanoseconds.
+/// Used as fallback when no agent_id is available from the payload.
+fn generate_agent_id() -> String {
+    format!(
+        "agent-{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos()
+    )
+}
+
+/// Unregister an agent from the session-supervisor health registry.
+/// Best-effort: failures log a warning and are otherwise ignored.
+fn agent_health_unregister(agent_id: &str, host_id: &str, terminal_status: &str, error: Option<&str>) {
+    if let Some(hooks) = framework_core::runtime_hooks::try_hooks() {
+        let mut payload = serde_json::json!({
+            "operation": "agent_unregister",
+            "agent_id": agent_id,
+            "host_id": host_id,
+            "terminal_status": terminal_status,
+        });
+        if let Some(err) = error {
+            payload["error"] = serde_json::Value::String(err.to_string());
+        }
+        if let Err(e) = hooks.handle_orchestrator_operation(payload) {
+            tracing::warn!(
+                "agent_health_unregister failed for {agent_id}: {e}"
+            );
+        }
+    }
 }
 
 // ── Re-exports from sub-modules (backward compat) ──

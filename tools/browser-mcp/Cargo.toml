@@ -11,6 +11,7 @@ name = "browser_mcp"
 path = "src/lib.rs"
 
 [dependencies]
+session-supervisor = { path = "../../core/session-supervisor" }
 mcp-tool-registry = { path = "../../core/mcp-tool-registry" }
 core-errors = { path = "../../core/core-errors" }
 core-state-utils = { path = "../../core/core-state-utils" }

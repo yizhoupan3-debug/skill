@@ -609,18 +609,6 @@ const HIGH_RISK_MCP_TOOLS: &[(&str, &str)] = &[
         "session_launch can execute arbitrary remote code via prompt injection.",
     ),
     (
-        r"^session_resume_due$",
-        "session_resume_due may re-trigger blocked workers with stale state.",
-    ),
-    (
-        r"^session_terminate$",
-        "session_terminate can forcibly terminate running session workers, equivalent to process-level kill.",
-    ),
-    (
-        r"^background_terminate$",
-        "background_terminate can interrupt background jobs in durable state.",
-    ),
-    (
         r"^preview_eval$",
         "preview_eval executes arbitrary JavaScript in the preview page — RCE risk if expression is untrusted.",
     ),
@@ -635,6 +623,14 @@ const HIGH_RISK_MCP_TOOLS: &[(&str, &str)] = &[
 /// than hard-blocking the call. The prefix "confirmation-gate:" in the
 /// reason string distinguishes these from hard-block reasons.
 const CONFIRMATION_GATE_MCP_TOOLS: &[(&str, &str)] = &[
+    (
+        "session_terminate",
+        "confirmation-gate: terminates a running worker process and all its children",
+    ),
+    (
+        "session_resume_due",
+        "confirmation-gate: resumes all workers whose rate-limit backoff has expired",
+    ),
     (
         "goal_state_manage",
         "confirmation-gate: modifies task lifecycle state (create/complete/pause/resume)",

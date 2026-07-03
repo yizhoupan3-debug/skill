@@ -61,9 +61,9 @@ pub fn resolve_worktree_cwd(
 pub fn build_driver_command(
     host: &str,
     cwd: &str,
-    _prompt: Option<String>,
-    _resume_target: Option<String>,
-    _resume_mode: &str,
+    prompt: Option<String>,
+    resume_target: Option<String>,
+    resume_mode: &str,
     resume_only: bool,
     worktree_name: Option<String>,
     worktree_path: Option<String>,
@@ -71,10 +71,68 @@ pub fn build_driver_command(
     let _effective_cwd =
         resolve_worktree_cwd(cwd, worktree_name.as_deref(), worktree_path.as_deref());
 
-    // Try trait-based dispatch via host provider registry (via hooks).
-    // Fallback: smoke-shell test host (not in provider registry).
+    // Host-specific driver command building.
     let lowered = host.trim().to_ascii_lowercase();
-    match lowered.as_str() {
+    let (binary, args, driver_id, supports_resume) = match lowered.as_str() {
+        "codex" => {
+            let mut args: Vec<String> = Vec::new();
+            if resume_only {
+                args.push("exec".to_string());
+                args.push("resume".to_string());
+                args.push("--cd".to_string());
+                args.push(cwd.to_string());
+                match resume_target {
+                    Some(ref t) if resume_mode == "last" || t == "last" => {
+                        args.push("--last".to_string());
+                    }
+                    Some(ref t) => args.push(t.clone()),
+                    None => args.push("--last".to_string()),
+                }
+            } else if let Some(p) = prompt {
+                args.push("exec".to_string());
+                args.push("--cd".to_string());
+                args.push(cwd.to_string());
+                args.push(p);
+            }
+            ("codex".to_string(), args, "codex_driver".to_string(), true)
+        }
+        "claude" => {
+            let mut args = vec!["--print".to_string()];
+            if resume_only {
+                match resume_target {
+                    Some(ref t) if resume_mode == "last" || t == "last" => {
+                        args.push("--continue".to_string());
+                    }
+                    Some(ref t) => {
+                        args.push("--resume".to_string());
+                        args.push(t.clone());
+                    }
+                    None => args.push("--continue".to_string()),
+                }
+            } else if let Some(p) = prompt {
+                args.push("-p".to_string());
+                args.push(p);
+            }
+            ("claude".to_string(), args, "claude_driver".to_string(), true)
+        }
+        "opencode" => {
+            let mut args = vec!["run".to_string()];
+            if resume_only {
+                match resume_target {
+                    Some(ref t) if resume_mode == "last" || t == "last" => {
+                        args.push("-c".to_string());
+                    }
+                    Some(ref t) => {
+                        args.push("-s".to_string());
+                        args.push(t.clone());
+                    }
+                    None => args.push("-c".to_string()),
+                }
+            } else if let Some(p) = prompt {
+                args.push(p);
+            }
+            ("opencode".to_string(), args, "opencode_driver".to_string(), true)
+        }
         "smoke" | "smoke-shell" => {
             let shell = if cfg!(unix) {
                 "/bin/sh".to_string()
@@ -87,22 +145,22 @@ pub fn build_driver_command(
                 "while true; do sleep 1; done"
             };
             let args = vec!["-c".to_string(), script.to_string()];
-            Ok(DriverCommandSpec {
+            return Ok(DriverCommandSpec {
                 driver_id: "smoke_shell_driver".to_string(),
                 binary: shell.clone(),
-                shell_command: shell_join(&shell, &args),
+                shell_command: format!(
+                    "/bin/sh -c '{}'",
+                    script.replace('\'', "'\"'\"'")
+                ),
                 args,
                 supports_resume: false,
-            })
+            });
         }
         other => {
             tracing::warn!(
                 "Unknown session supervisor host: \"{other}\" — using placeholder driver spec. \
                  Check that the host provider is registered via hooks."
             );
-            // Placeholder spec so state management (launch/terminate/list) can proceed
-            // in tests and dry-run mode. Actual driver dispatch happens at the
-            // host projection layer via hooks.
             let shell = if cfg!(unix) {
                 "/bin/sh".to_string()
             } else {
@@ -114,15 +172,28 @@ pub fn build_driver_command(
                 "echo launch-placeholder"
             };
             let args = vec!["-c".to_string(), script.to_string()];
-            Ok(DriverCommandSpec {
+            return Ok(DriverCommandSpec {
                 driver_id: format!("{other}_driver"),
                 binary: shell.clone(),
                 shell_command: shell_join(&shell, &args),
                 args,
                 supports_resume: false,
-            })
+            });
         }
-    }
+    };
+
+    let shell_command = {
+        let mut parts = vec![binary.clone()];
+        parts.extend(args.iter().cloned());
+        parts.join(" ")
+    };
+    Ok(DriverCommandSpec {
+        driver_id,
+        binary,
+        shell_command,
+        args,
+        supports_resume,
+    })
 }
 
 pub fn driver_id_for_host(_host: &str) -> &'static str {

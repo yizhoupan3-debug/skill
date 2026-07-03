@@ -39,7 +39,7 @@ fn smoke_shell_driver_uses_short_sleep_command() {
 }
 
 #[test]
-fn codex_resume_command_uses_placeholder_spec() {
+fn codex_resume_command() {
     let command = build_driver_command(
         "codex",
         "/tmp/project",
@@ -51,9 +51,27 @@ fn codex_resume_command_uses_placeholder_spec() {
         None,
     )
     .expect("build codex resume command");
-    // Without hooks registered, unknown hosts get a placeholder spec
     assert_eq!(command.driver_id, "codex_driver");
-    assert!(command.binary == "sh" || command.binary == "/bin/sh");
+    assert_eq!(command.binary, "codex");
+    assert!(command.args.contains(&"--last".to_string()));
+}
+
+#[test]
+fn codex_launch_command() {
+    let command = build_driver_command(
+        "codex",
+        "/tmp/project",
+        Some("fix the bug".to_string()),
+        None,
+        "last",
+        false,
+        None,
+        None,
+    )
+    .expect("build codex launch command");
+    assert_eq!(command.driver_id, "codex_driver");
+    assert_eq!(command.binary, "codex");
+    assert!(command.args.contains(&"fix the bug".to_string()));
 }
 
 #[test]
@@ -255,7 +273,7 @@ fn resolve_worktree_cwd_path_overrides_name() {
 }
 
 #[test]
-fn claude_host_builds_placeholder_spec() {
+fn claude_host_launch_command() {
     let command = build_driver_command(
         "claude",
         "/tmp/project",
@@ -267,13 +285,14 @@ fn claude_host_builds_placeholder_spec() {
         None,
     )
     .expect("build claude command");
-    // Without hooks registered, real hosts get a placeholder spec
     assert_eq!(command.driver_id, "claude_driver");
-    assert!(command.binary == "sh" || command.binary == "/bin/sh");
+    assert_eq!(command.binary, "claude");
+    assert!(command.args.contains(&"-p".to_string()));
+    assert!(command.args.contains(&"hello world".to_string()));
 }
 
 #[test]
-fn claude_host_resume_placeholder_spec() {
+fn claude_host_resume_specific_command() {
     let command = build_driver_command(
         "claude",
         "/tmp/project",
@@ -286,11 +305,31 @@ fn claude_host_resume_placeholder_spec() {
     )
     .expect("build claude resume command");
     assert_eq!(command.driver_id, "claude_driver");
-    assert!(command.binary == "sh" || command.binary == "/bin/sh");
+    assert_eq!(command.binary, "claude");
+    assert!(command.args.contains(&"--resume".to_string()));
+    assert!(command.args.contains(&"session-123".to_string()));
 }
 
 #[test]
-fn claude_host_with_worktree_placeholder_spec() {
+fn claude_host_resume_last_command() {
+    let command = build_driver_command(
+        "claude",
+        "/repo",
+        Some("test".to_string()),
+        None,
+        "last",
+        true,
+        Some("my-branch".to_string()),
+        None,
+    )
+    .expect("build claude resume last");
+    assert_eq!(command.driver_id, "claude_driver");
+    assert_eq!(command.binary, "claude");
+    assert!(command.args.contains(&"--continue".to_string()));
+}
+
+#[test]
+fn claude_host_with_worktree_still_sets_correct_binary() {
     let command = build_driver_command(
         "claude",
         "/repo",
@@ -303,7 +342,9 @@ fn claude_host_with_worktree_placeholder_spec() {
     )
     .expect("build claude with worktree");
     assert_eq!(command.driver_id, "claude_driver");
-    assert!(command.binary == "sh" || command.binary == "/bin/sh");
+    assert_eq!(command.binary, "claude");
+    assert!(command.args.contains(&"-p".to_string()));
+    assert!(command.args.contains(&"test".to_string()));
 }
 
 #[test]

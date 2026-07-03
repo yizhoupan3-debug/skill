@@ -344,6 +344,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serial_test",
+ "session-supervisor",
  "tracing",
  "tungstenite",
 ]

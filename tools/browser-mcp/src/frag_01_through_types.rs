@@ -6,6 +6,7 @@ use framework_core::stdio_payload_types::TraceStreamInspectRequestPayload;
 // attach_runtime_event_transport / inspect_trace_stream: resolved via mcp_tool_registry::browser_dispatch::hooks()
 use rusqlite::Connection;
 use serde_json::{json, Map, Value};
+use session_supervisor::handle_session_supervisor_operation;
 use std::collections::{HashMap, VecDeque};
 use std::fs;
 use std::io::{self, BufRead, Write};
@@ -270,24 +271,45 @@ fn handle_tools_call(params: &Value, runtime: &mut BrowserRuntime) -> Result<Val
         "browser_save_session" => runtime.save_session(&arguments),
         "browser_restore_session" => runtime.restore_session(&arguments),
         "browser_diagnostics" => runtime.diagnostics(&arguments),
-        // Registered but not yet implemented — return clear NOT_IMPLEMENTED instead of UNKNOWN_TOOL
-        "browser_get_attached_runtime_events"
-        | "runtime_heartbeat"
-        | "session_launch"
-        | "session_list"
-        | "session_inspect"
-        | "session_terminate"
-        | "session_mark_blocked"
-        | "session_resume_due"
-        | "session_classify_block"
-        | "background_list"
-        | "background_inspect"
-        | "background_terminate" => Err(browser_error(
-            "NOT_IMPLEMENTED",
-            &format!("Tool {tool_name} is registered but not yet implemented in browser-mcp handler"),
-            &["check framework release notes for implementation status"],
-            true,
-        )),
+        // Session tools: forward to session-supervisor for worker process lifecycle management.
+        "session_launch" => session_result(handle_session_supervisor_operation(json!({
+            "operation": "launch",
+            "host": arguments.get("host").and_then(Value::as_str).unwrap_or("codex"),
+            "cwd": arguments.get("cwd").and_then(Value::as_str).unwrap_or("."),
+            "prompt": arguments.get("prompt").and_then(Value::as_str),
+        }))),
+        "session_list" => session_result(handle_session_supervisor_operation(json!({
+            "operation": "list",
+        }))),
+        "session_inspect" => {
+            let worker_id = require_string(&arguments, "worker_id")?;
+            session_result(handle_session_supervisor_operation(json!({
+                "operation": "inspect",
+                "worker_id": worker_id,
+            })))
+        }
+        "session_terminate" => {
+            let worker_id = require_string(&arguments, "worker_id")?;
+            session_result(handle_session_supervisor_operation(json!({
+                "operation": "terminate",
+                "worker_id": worker_id,
+            })))
+        }
+        "session_mark_blocked" => session_result(handle_session_supervisor_operation(json!({
+            "operation": "mark_blocked",
+            "worker_id": arguments.get("worker_id").and_then(Value::as_str),
+            "blocked_reason": arguments.get("blocked_reason").and_then(Value::as_str),
+            "evidence_text": arguments.get("evidence_text").and_then(Value::as_str),
+        }))),
+        "session_resume_due" => session_result(handle_session_supervisor_operation(json!({
+            "operation": "resume_due",
+        }))),
+        "session_classify_block" => session_result(handle_session_supervisor_operation(json!({
+            "operation": "classify_block",
+            "host": arguments.get("host").and_then(Value::as_str),
+            "evidence_text": arguments.get("evidence_text").and_then(Value::as_str),
+        }))),
+        // Background tools removed (were NOT_IMPLEMENTED stubs).
         _ => Err(browser_error(
             "UNKNOWN_TOOL",
             &format!("Unknown tool name: {tool_name}"),
@@ -314,6 +336,18 @@ fn tool_result(structured: Result<Value, Value>) -> Result<Value, Value> {
             }))
         }
     }
+}
+
+/// Convert a session-supervisor Result into the browser tool Result format.
+fn session_result(result: Result<Value, FrameworkError>) -> Result<Value, Value> {
+    result.map_err(|e| {
+        browser_error(
+            "SESSION_ERROR",
+            &e.to_string(),
+            &["check session-supervisor state"],
+            true,
+        )
+    })
 }
 
 fn tool_definitions(_repo_root: &Path) -> Vec<Value> {
@@ -418,87 +452,63 @@ fn tool_definitions(_repo_root: &Path) -> Vec<Value> {
             empty_output.clone(),
         ),
         tool_definition(
-            "browser_get_attached_runtime_events",
-            "Get Attached Runtime Events",
-            "获取浏览器运行时事件流",
-            json!({"type": "object", "properties": {}}),
-            empty_output.clone(),
-        ),
-        tool_definition(
-            "runtime_heartbeat",
-            "Runtime Heartbeat",
-            "返回运行时健康状态",
-            json!({"type": "object", "properties": {}}),
-            empty_output.clone(),
-        ),
-        tool_definition(
             "session_launch",
             "Session Launch",
-            "启动新浏览器会话",
-            json!({"type": "object", "properties": {"sessionId": {"type": "string"}}}),
+            "启动新 worker 进程",
+            json!({"type": "object", "properties": {
+                "host": {"type": "string", "description": "宿主名称 (codex/claude/opencode)"},
+                "cwd": {"type": "string", "description": "工作目录"},
+                "prompt": {"type": "string", "description": "初始 prompt"}
+            }, "required": ["host", "cwd"]}),
             empty_output.clone(),
         ),
         tool_definition(
             "session_list",
             "Session List",
-            "列出所有浏览器会话",
+            "列出所有 worker 进程",
             json!({"type": "object", "properties": {}}),
             empty_output.clone(),
         ),
         tool_definition(
             "session_inspect",
             "Session Inspect",
-            "检查浏览器会话详情",
-            json!({"type": "object", "properties": {"sessionId": {"type": "string"}}, "required": ["sessionId"]}),
+            "检查 worker 进程详情",
+            json!({"type": "object", "properties": {"worker_id": {"type": "string", "description": "worker ID"}}, "required": ["worker_id"]}),
             empty_output.clone(),
         ),
         tool_definition(
             "session_terminate",
             "Session Terminate",
-            "终止浏览器会话",
-            json!({"type": "object", "properties": {"sessionId": {"type": "string"}}, "required": ["sessionId"]}),
+            "终止 worker 进程",
+            json!({"type": "object", "properties": {"worker_id": {"type": "string", "description": "worker ID"}}, "required": ["worker_id"]}),
             empty_output.clone(),
         ),
         tool_definition(
             "session_mark_blocked",
             "Session Mark Blocked",
-            "标记浏览器会话为阻塞状态",
-            json!({"type": "object", "properties": {"sessionId": {"type": "string"}, "reason": {"type": "string"}}, "required": ["sessionId"]}),
+            "标记 worker 进程为阻塞状态",
+            json!({"type": "object", "properties": {
+                "worker_id": {"type": "string", "description": "worker ID"},
+                "blocked_reason": {"type": "string", "description": "阻塞原因"},
+                "evidence_text": {"type": "string", "description": "速率限制证据文本"}
+            }, "required": ["worker_id"]}),
             empty_output.clone(),
         ),
         tool_definition(
             "session_resume_due",
             "Session Resume Due",
-            "恢复到期浏览器会话",
-            json!({"type": "object", "properties": {"sessionId": {"type": "string"}}, "required": ["sessionId"]}),
+            "恢复所有到期的 worker 进程",
+            json!({"type": "object", "properties": {}}),
             empty_output.clone(),
         ),
         tool_definition(
             "session_classify_block",
             "Session Classify Block",
-            "对浏览器会话阻塞原因进行分类",
-            json!({"type": "object", "properties": {"sessionId": {"type": "string"}}, "required": ["sessionId"]}),
-            empty_output.clone(),
-        ),
-        tool_definition(
-            "background_list",
-            "Background Task List",
-            "列出所有后台浏览器任务",
-            json!({"type": "object", "properties": {}}),
-            empty_output.clone(),
-        ),
-        tool_definition(
-            "background_inspect",
-            "Background Task Inspect",
-            "检查后台浏览器任务详情",
-            json!({"type": "object", "properties": {"jobId": {"type": "string"}}, "required": ["jobId"]}),
-            empty_output.clone(),
-        ),
-        tool_definition(
-            "background_terminate",
-            "Background Task Terminate",
-            "终止后台浏览器任务",
-            json!({"type": "object", "properties": {"jobId": {"type": "string"}}, "required": ["jobId"]}),
+            "对阻塞原因进行分类",
+            json!({"type": "object", "properties": {
+                "host": {"type": "string", "description": "宿主名称"},
+                "evidence_text": {"type": "string", "description": "速率限制证据文本"}
+            }, "required": ["host", "evidence_text"]}),
             empty_output.clone(),
         ),
     ];

@@ -125,31 +125,33 @@
         ],
         "profile_id": "opencode_profile",
         "driver_binary": "opencode",
-        "driver_supports_resume": false,
+        "driver_supports_resume": true,
         "hook_telemetry_surface": "native-opencode",
         "observation_host_id": "opencode",
         "hooks_manifest_path": ".opencode/opencode.json",
         "registered_hook_events": [
-          "tool.execute.before",
-          "tool.execute.after",
-          "session.idle",
-          "session.created",
-          "session.deleted",
+          "file.edited",
           "permission.asked",
           "permission.replied",
-          "file.edited",
-          "shell.env"
+          "session.created",
+          "session.deleted",
+          "session.idle",
+          "shell.env",
+          "subagentStart",
+          "subagentStop",
+          "tool.execute.after",
+          "tool.execute.before"
         ],
         "mcp_config_key": "mcpServers",
         "config_path": ".opencode/opencode.json",
-        "override_build_driver_args": false,
+        "override_build_driver_args": true,
         "batch_execution": false,
         "cron_execution": false,
         "ci_runner": false,
         "non_interactive_entrypoint": false,
-        "external_session_supervisor": false,
+        "external_session_supervisor": true,
         "rate_limit_auto_resume": false,
-        "session_supervisor_driver": "unsupported",
+        "session_supervisor_driver": "opencode_driver",
         "context_file": "AGENTS.md",
         "dispatcher_type": "OpenCodeDispatcher",
         "hook_state_unreadable_tag": "OPENCODE_HOOK_STATE_UNREADABLE",
@@ -174,7 +176,10 @@
           "critical_events": "tool.execute.before|tool.execute.after|session.idle|session.created",
           "fail_msg": "router-rs binary unavailable for critical OpenCode hook; fail-closed instead of silently bypassing gate enforcement",
           "fail_json_template": "{\"decision\":\"block\",\"reason\":\"{{MSG}}\",\"suppressOutput\":true}"
-        }
+        },
+        "capabilities": [
+          "external_session_supervisor"
+        ]
       },
       "codex": {
         "display_name": "Codex",
@@ -269,8 +274,8 @@
         "pretool_entrypoint_hint": "codex install",
         "session_key_scan_tool_input": false,
         "session_start": false,
-        "subagent_start": false,
-        "subagent_stop": false,
+        "subagent_start": true,
+        "subagent_stop": true,
         "hook_launcher": {
           "root_env_var": "CODEX_PROJECT_ROOT",
           "root_fallback_cmd": "git rev-parse --show-toplevel 2>/dev/null || pwd",
@@ -312,10 +317,12 @@
         "observation_host_id": "claude",
         "hooks_manifest_path": ".claude/settings.json",
         "registered_hook_events": [
-          "pre-tool-use",
-          "user-prompt-submit",
           "post-tool-use",
-          "stop"
+          "pre-tool-use",
+          "stop",
+          "subagentStart",
+          "subagentStop",
+          "user-prompt-submit"
         ],
         "mcp_config_key": "",
         "config_path": ".claude/settings.json",
@@ -333,9 +340,9 @@
         "cron_execution": false,
         "ci_runner": false,
         "non_interactive_entrypoint": false,
-        "external_session_supervisor": false,
+        "external_session_supervisor": true,
         "rate_limit_auto_resume": false,
-        "session_supervisor_driver": "mcp_bridge",
+        "session_supervisor_driver": "claude_driver",
         "context_file": "AGENTS.md",
         "dispatcher_type": "ClaudeDispatcher",
         "hook_state_unreadable_tag": "CLAUDE_HOOK_STATE_UNREADABLE",
@@ -357,8 +364,8 @@
         "pretool_entrypoint_hint": "",
         "session_key_scan_tool_input": false,
         "session_start": false,
-        "subagent_start": false,
-        "subagent_stop": false,
+        "subagent_start": true,
+        "subagent_stop": true,
         "hook_launcher": {
           "root_env_var": "CLAUDE_PROJECT_ROOT",
           "root_fallback_cmd": "git rev-parse --show-toplevel 2>/dev/null || pwd",
@@ -367,7 +374,10 @@
           "fail_json_template": "{\"decision\":\"block\",\"reason\":\"{{MSG}}\",\"suppressOutput\":true}"
         },
         "entrypoint_subdir": "rules",
-        "entrypoint_filename": "framework.md"
+        "entrypoint_filename": "framework.md",
+        "capabilities": [
+          "external_session_supervisor"
+        ]
       }
     },
     "host_providers": {
@@ -939,11 +949,11 @@
           "relative": ".mcp.json"
         }
       ],
-      "session_supervisor_driver": "mcp_bridge",
+      "session_supervisor_driver": "claude_driver",
       "session_supervisor_status": {
         "supported": true,
         "bridge": "browser-mcp session tools (session_launch/session_list/session_inspect/session_terminate)",
-        "rationale": "Claude bridges session supervision through browser-mcp MCP tools. SubagentStart/Stop hooks provide native lifecycle events."
+        "rationale": "Claude hooks (subagentStart/subagentStop) route agent lifecycle events to session-supervisor for health tracking. Worker launch/resume is handled via browser-mcp session tools directly."
       },
       "resume_command_examples": [
         "Continue in Claude in this workspace"
@@ -1039,7 +1049,7 @@
       "runtime_observability_health_snapshot",
       "background_control",
       "background_state",
-      "orchestrator",
+      "session_supervisor",
       "describe_transport",
       "describe_handoff",
       "checkpoint_resume_manifest",

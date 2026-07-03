@@ -15,7 +15,7 @@ pub fn normalize_event_name(name: &str) -> std::borrow::Cow<'_, str> {
     let lower = name.to_lowercase();
     // Map common variants to canonical names
     match lower.as_str() {
-        "sessionstart" | "session-start" | "session.start" => {
+        "sessionstart" | "session-start" | "session.start" | "session.created" => {
             std::borrow::Cow::Borrowed("sessionstart")
         }
         "userpromptsubmit"

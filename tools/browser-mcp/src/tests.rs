@@ -60,8 +60,6 @@ fn browser_mcp_stdio_lists_full_tool_surface() {
             "browser_wait_for",
             "browser_save_session",
             "browser_restore_session",
-            "browser_get_attached_runtime_events",
-            "runtime_heartbeat",
             "session_launch",
             "session_list",
             "session_inspect",
@@ -69,9 +67,6 @@ fn browser_mcp_stdio_lists_full_tool_surface() {
             "session_mark_blocked",
             "session_resume_due",
             "session_classify_block",
-            "background_list",
-            "background_inspect",
-            "background_terminate",
             "browser_diagnostics",
         ]
     );
@@ -1530,7 +1525,7 @@ fn browser_mcp_tool_definitions_include_output_schema() {
 }
 
 #[test]
-fn browser_mcp_session_inspect_returns_not_implemented() {
+fn browser_mcp_session_inspect_missing_worker_id() {
     let repo_root = temp_root("inspect-no-id");
     let mut runtime = BrowserRuntime::new(repo_root.clone());
     let response = handle_browser_mcp_request(
@@ -1538,16 +1533,20 @@ fn browser_mcp_session_inspect_returns_not_implemented() {
         &mut runtime,
     )
     .expect("response");
-    assert_eq!(response["result"]["isError"], true);
+    // require_string? propagates Err directly, so response uses JSON-RPC error format.
     assert_eq!(
-        response["result"]["structuredContent"]["error"]["code"],
-        "NOT_IMPLEMENTED"
+        response["error"]["code"],
+        -32000
+    );
+    assert_eq!(
+        response["error"]["data"]["code"],
+        "INVALID_INPUT"
     );
     fs::remove_dir_all(repo_root).expect("cleanup");
 }
 
 #[test]
-fn browser_mcp_session_terminate_returns_not_implemented() {
+fn browser_mcp_session_terminate_missing_worker_id() {
     let repo_root = temp_root("terminate-no-id");
     let mut runtime = BrowserRuntime::new(repo_root.clone());
     let response = handle_browser_mcp_request(
@@ -1555,16 +1554,20 @@ fn browser_mcp_session_terminate_returns_not_implemented() {
         &mut runtime,
     )
     .expect("response");
-    assert_eq!(response["result"]["isError"], true);
+    // require_string? propagates Err directly, so response uses JSON-RPC error format.
     assert_eq!(
-        response["result"]["structuredContent"]["error"]["code"],
-        "NOT_IMPLEMENTED"
+        response["error"]["code"],
+        -32000
+    );
+    assert_eq!(
+        response["error"]["data"]["code"],
+        "INVALID_INPUT"
     );
     fs::remove_dir_all(repo_root).expect("cleanup");
 }
 
 #[test]
-fn browser_mcp_session_mark_blocked_returns_not_implemented() {
+fn browser_mcp_session_mark_blocked_missing_worker_id() {
     let repo_root = temp_root("mark-blocked");
     let mut runtime = BrowserRuntime::new(repo_root.clone());
     let response = handle_browser_mcp_request(
@@ -1572,44 +1575,11 @@ fn browser_mcp_session_mark_blocked_returns_not_implemented() {
         &mut runtime,
     )
     .expect("response");
+    // session_result wraps in tool_result's Ok format, so response has result.isError.
     assert_eq!(response["result"]["isError"], true);
     assert_eq!(
         response["result"]["structuredContent"]["error"]["code"],
-        "NOT_IMPLEMENTED"
-    );
-    fs::remove_dir_all(repo_root).expect("cleanup");
-}
-
-#[test]
-fn browser_mcp_background_inspect_returns_not_implemented() {
-    let repo_root = temp_root("bg-inspect-no-id");
-    let mut runtime = BrowserRuntime::new(repo_root.clone());
-    let response = handle_browser_mcp_request(
-        &json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "background_inspect", "arguments": {}}}),
-        &mut runtime,
-    )
-    .expect("response");
-    assert_eq!(response["result"]["isError"], true);
-    assert_eq!(
-        response["result"]["structuredContent"]["error"]["code"],
-        "NOT_IMPLEMENTED"
-    );
-    fs::remove_dir_all(repo_root).expect("cleanup");
-}
-
-#[test]
-fn browser_mcp_background_terminate_returns_not_implemented() {
-    let repo_root = temp_root("bg-terminate-no-id");
-    let mut runtime = BrowserRuntime::new(repo_root.clone());
-    let response = handle_browser_mcp_request(
-        &json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "background_terminate", "arguments": {}}}),
-        &mut runtime,
-    )
-    .expect("response");
-    assert_eq!(response["result"]["isError"], true);
-    assert_eq!(
-        response["result"]["structuredContent"]["error"]["code"],
-        "NOT_IMPLEMENTED"
+        "SESSION_ERROR"
     );
     fs::remove_dir_all(repo_root).expect("cleanup");
 }
