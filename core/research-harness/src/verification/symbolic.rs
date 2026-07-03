@@ -1144,6 +1144,241 @@ fn gcd_f64(a: f64, b: f64) -> f64 {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
+// Enhanced factoring — quadratic, difference of squares
+// ════════════════════════════════════════════════════════════════════════════
+
+/// Extract the variable name from a base expression (may be wrapped in Neg).
+fn extract_var_from_base(expr: &Expr) -> Option<&str> {
+    match expr {
+        Expr::Var(v) => Some(v.as_str()),
+        Expr::Neg(inner) => {
+            if let Expr::Var(v) = inner.as_ref() {
+                Some(v.as_str())
+            } else {
+                None
+            }
+        }
+        _ => None,
+    }
+}
+
+/// Extract (power, coefficient) from a single term in a polynomial sum.
+///
+/// Handles: `Var(x)`, `Const(c)`, `Neg(…)`, `Pow(Var(x), n)`,
+/// `Mul(c, Var(x))`, `Mul(c, Pow(Var(x), n))`, and parser-specific forms
+/// like `Pow(Neg(Var(x)), n)` (= (-x)^n).
+fn extract_power_and_coeff(term: &Expr, var: &str) -> Option<(u32, f64)> {
+    match term {
+        Expr::Var(v) if v == var => Some((1, 1.0)),
+        Expr::Const(c) => Some((0, *c)),
+        Expr::Neg(inner) => {
+            let (pow, coeff) = extract_power_and_coeff(inner, var)?;
+            Some((pow, -coeff))
+        }
+        Expr::Pow(base, exp) => {
+            if let Some(v) = extract_var_from_base(base) {
+                if v == var {
+                    if let Expr::Const(e) = exp.as_ref() {
+                        if e.fract() == 0.0 && *e >= 0.0 && *e <= f64::from(u32::MAX) {
+                            return Some((*e as u32, 1.0));
+                        }
+                    }
+                }
+            }
+            None
+        }
+        Expr::Mul(a, b) => {
+            if let Expr::Const(c) = a.as_ref() {
+                let (pow, coeff) = extract_power_and_coeff(b, var)?;
+                Some((pow, c * coeff))
+            } else {
+                None
+            }
+        }
+        _ => None,
+    }
+}
+
+/// Try to find the variable used in a quadratic term from a list of flattened-add terms.
+fn find_quadratic_var<'a>(terms: &[&'a Expr]) -> Option<&'a str> {
+    for term in terms {
+        let (base, exp) = match term {
+            Expr::Pow(b, e) => (Some(b.as_ref()), Some(e.as_ref())),
+            Expr::Mul(c, inner) if matches!(c.as_ref(), Expr::Const(_)) => match inner.as_ref() {
+                Expr::Pow(b, e) => (Some(b.as_ref()), Some(e.as_ref())),
+                Expr::Neg(nested) => {
+                    if let Expr::Pow(b, e) = nested.as_ref() {
+                        (Some(b.as_ref()), Some(e.as_ref()))
+                    } else {
+                        (None, None)
+                    }
+                }
+                _ => (None, None),
+            },
+            Expr::Neg(inner) => {
+                if let Expr::Pow(b, e) = inner.as_ref() {
+                    (Some(b.as_ref()), Some(e.as_ref()))
+                } else {
+                    (None, None)
+                }
+            }
+            _ => (None, None),
+        };
+        if let (Some(b), Some(e)) = (base, exp) {
+            if matches!(e, Expr::Const(c) if (*c - 2.0).abs() < 1e-12) {
+                if let Some(v) = extract_var_from_base(b) {
+                    return Some(v);
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Factor a quadratic expression of the form ax^2 + bx + c (with perfect-square discriminant).
+fn factor_quadratic(expr: &Expr) -> Option<Expr> {
+    let terms = flatten_add(expr);
+    let var = find_quadratic_var(&terms)?;
+
+    let mut a = 0.0_f64;
+    let mut b = 0.0_f64;
+    let mut c = 0.0_f64;
+
+    for term in &terms {
+        match extract_power_and_coeff(term, var) {
+            Some((pow, coeff)) => match pow {
+                2 => a += coeff,
+                1 => b += coeff,
+                0 => c += coeff,
+                _ => return None, // term of degree > 2
+            },
+            None => {
+                // Does it contain the variable? If so, can't handle it.
+                if contains_var(term, var) {
+                    return None;
+                }
+                // Otherwise, constant in other vars or numeric
+                if let Ok(val) = eval(term, &HashMap::new()) {
+                    c += val;
+                } else {
+                    return None;
+                }
+            }
+        }
+    }
+
+    if a.abs() < 1e-12 {
+        return None;
+    }
+
+    let disc = b * b - 4.0 * a * c;
+    if disc < -1e-12 {
+        return None; // Complex roots
+    }
+    let safe_disc = if disc < 0.0 { 0.0 } else { disc };
+    let sqrt_disc = safe_disc.sqrt();
+
+    // Discriminant must be a near-perfect square for nice factoring
+    if safe_disc > 1e-12 {
+        let rounded = sqrt_disc.round();
+        if (sqrt_disc - rounded).abs() > 1e-10 {
+            return None;
+        }
+    }
+
+    let sqrt_val = if safe_disc < 1e-12 {
+        0.0
+    } else {
+        sqrt_disc.round()
+    };
+    let x1 = (-b - sqrt_val) / (2.0 * a);
+    let x2 = (-b + sqrt_val) / (2.0 * a);
+
+    // Roots should be integers
+    let x1r = x1.round();
+    let x2r = x2.round();
+    if (x1 - x1r).abs() > 1e-10 || (x2 - x2r).abs() > 1e-10 {
+        return None;
+    }
+
+    let v = Expr::Var(var.to_string());
+    let factor1 = Expr::Sub(Box::new(v.clone()), Box::new(Expr::Const(x1r)));
+    let factor2 = Expr::Sub(Box::new(v), Box::new(Expr::Const(x2r)));
+
+    let mut result = Expr::Mul(Box::new(factor1), Box::new(factor2));
+    if (a - 1.0).abs() > 1e-12 {
+        result = simplify(&Expr::Mul(Box::new(Expr::Const(a)), Box::new(result)));
+    }
+
+    Some(result)
+}
+
+/// Check if an expression is `base^2` and return the base.
+fn is_pow2(expr: &Expr) -> Option<&Expr> {
+    match expr {
+        Expr::Pow(base, exp)
+            if matches!(exp.as_ref(), Expr::Const(c) if (*c - 2.0).abs() < 1e-12) =>
+        {
+            Some(base.as_ref())
+        }
+        _ => None,
+    }
+}
+
+/// Factor a difference-of-squares `a^2 - b^2` into `(a - b)*(a + b)`.
+fn factor_diff_squares(expr: &Expr) -> Option<Expr> {
+    let terms = flatten_add(expr);
+    if terms.len() != 2 {
+        return None;
+    }
+
+    // Try both orderings: positive then negative
+    for (first, second) in &[(terms[0], terms[1]), (terms[1], terms[0])] {
+        let pos_base = match first {
+            Expr::Pow(..) => is_pow2(first),
+            Expr::Mul(a, b) if matches!(a.as_ref(), Expr::Const(c) if *c > 0.0) => is_pow2(b),
+            _ => None,
+        };
+
+        let neg_base = match second {
+            Expr::Neg(inner) => is_pow2(inner),
+            Expr::Mul(a, b) if matches!(a.as_ref(), Expr::Const(c) if *c < 0.0) => is_pow2(b),
+            _ => None,
+        };
+
+        if let (Some(a), Some(b)) = (pos_base, neg_base) {
+            let a_expr = a.clone();
+            let b_expr = b.clone();
+            let a_minus_b = Expr::Sub(Box::new(a_expr.clone()), Box::new(b_expr.clone()));
+            let a_plus_b = Expr::Add(Box::new(a_expr), Box::new(b_expr));
+            return Some(simplify(&Expr::Mul(Box::new(a_minus_b), Box::new(a_plus_b))));
+        }
+    }
+
+    None
+}
+
+/// Factor an expression using multiple strategies:
+///
+/// 1. Common factor extraction (`factor_common`)
+/// 2. Quadratic factoring (`ax^2 + bx + c`, requires perfect-square discriminant)
+/// 3. Difference of squares (`a^2 - b^2`)
+pub fn factor(expr: &Expr) -> Expr {
+    let expr = simplify(expr);
+    let r1 = factor_common(&expr);
+    if !structural_equal(&r1, &expr, true) {
+        return r1;
+    }
+    if let Some(r2) = factor_quadratic(&expr) {
+        return r2;
+    }
+    if let Some(r3) = factor_diff_squares(&expr) {
+        return r3;
+    }
+    expr
+}
+
+// ════════════════════════════════════════════════════════════════════════════
 // Expansion (distribute multiplication over addition)
 // ════════════════════════════════════════════════════════════════════════════
 
@@ -2185,6 +2420,361 @@ pub fn differentiate(expr: &Expr, var: &str) -> Expr {
             _ => Expr::Const(0.0), // unknown function derivative
         },
     }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// Symbolic integration
+// ════════════════════════════════════════════════════════════════════════════
+
+/// Symbolically integrate an expression with respect to the given variable.
+///
+/// Supports basic indefinite integrals of polynomials, reciprocals,
+/// `sin`, `cos`, and `exp`. Does **not** add the `+ C` constant.
+///
+/// Rules:
+/// - `∫ c dx = c * x`
+/// - `∫ x^n dx = x^(n+1) / (n+1)`  (n ≠ -1)
+/// - `∫ x^(-1) dx = ln(x)`
+/// - `∫ sin(x) dx = -cos(x)`
+/// - `∫ cos(x) dx = sin(x)`
+/// - `∫ exp(x) dx = exp(x)`
+pub fn integrate(expr: &Expr, var: &str) -> Expr {
+    match expr {
+        Expr::Const(c) => simplify(&Expr::Mul(
+            Box::new(Expr::Const(*c)),
+            Box::new(Expr::Var(var.to_string())),
+        )),
+
+        Expr::Var(v) => {
+            if v == var {
+                // ∫ x dx = x^2 / 2
+                simplify(&Expr::Div(
+                    Box::new(Expr::Pow(
+                        Box::new(Expr::Var(var.to_string())),
+                        Box::new(Expr::Const(2.0)),
+                    )),
+                    Box::new(Expr::Const(2.0)),
+                ))
+            } else {
+                // Treat as constant: ∫ y dx = y * x
+                simplify(&Expr::Mul(
+                    Box::new(expr.clone()),
+                    Box::new(Expr::Var(var.to_string())),
+                ))
+            }
+        }
+
+        Expr::Neg(x) => simplify(&Expr::Neg(Box::new(integrate(x, var)))),
+
+        Expr::Add(a, b) => simplify(&Expr::Add(
+            Box::new(integrate(a, var)),
+            Box::new(integrate(b, var)),
+        )),
+
+        Expr::Sub(a, b) => simplify(&Expr::Sub(
+            Box::new(integrate(a, var)),
+            Box::new(integrate(b, var)),
+        )),
+
+        Expr::Mul(a, b) => {
+            if let Expr::Const(c) = a.as_ref() {
+                // ∫ c * f(x) dx = c * ∫ f(x) dx
+                return simplify(&Expr::Mul(
+                    Box::new(Expr::Const(*c)),
+                    Box::new(integrate(b, var)),
+                ));
+            }
+            if let Expr::Const(c) = b.as_ref() {
+                return simplify(&Expr::Mul(
+                    Box::new(Expr::Const(*c)),
+                    Box::new(integrate(a, var)),
+                ));
+            }
+            // General product not supported — return as-is
+            expr.clone()
+        }
+
+        Expr::Div(a, b) => {
+            // ∫ (1/x) dx = ln(x)
+            if let Expr::Const(c) = a.as_ref() {
+                if (*c - 1.0).abs() < 1e-12 {
+                    if let Expr::Var(v) = b.as_ref() {
+                        if v == var {
+                            return Expr::Fn("ln".to_string(), vec![Expr::Var(var.to_string())]);
+                        }
+                    }
+                }
+            }
+            // General division not supported — return as-is
+            expr.clone()
+        }
+
+        Expr::Pow(base, exp) => {
+            if let Expr::Var(v) = base.as_ref() {
+                if v == var {
+                    // Handle exponent that may be Const(n) or Neg(Const(n)) from parser
+                    let n = match exp.as_ref() {
+                        Expr::Const(c) => Some(*c),
+                        Expr::Neg(inner) => {
+                            if let Expr::Const(c) = inner.as_ref() {
+                                Some(-c)
+                            } else {
+                                None
+                            }
+                        }
+                        _ => None,
+                    };
+                    if let Some(n) = n {
+                        if (n + 1.0).abs() < 1e-12 {
+                            // ∫ x^(-1) dx = ln(x)
+                            return Expr::Fn("ln".to_string(), vec![Expr::Var(var.to_string())]);
+                        }
+                        // ∫ x^n dx = x^(n+1) / (n+1)
+                        return simplify(&Expr::Div(
+                            Box::new(Expr::Pow(
+                                Box::new(Expr::Var(var.to_string())),
+                                Box::new(Expr::Const(n + 1.0)),
+                            )),
+                            Box::new(Expr::Const(n + 1.0)),
+                        ));
+                    }
+                }
+            }
+            // Check for constant-base variable-exponent, e.g. e^x
+            if let Expr::Const(_) = base.as_ref() {
+                if contains_var(exp, var) {
+                    // ∫ c^x dx — keep as-is (chain rule not implemented)
+                    return expr.clone();
+                }
+            }
+            expr.clone()
+        }
+
+        Expr::Fn(name, args) => {
+            if args.len() == 1 {
+                match name.as_str() {
+                    "sin" => {
+                        if let Expr::Var(v) = &args[0] {
+                            if v == var {
+                                // ∫ sin(x) dx = -cos(x)
+                                return Expr::Neg(Box::new(Expr::Fn(
+                                    "cos".to_string(),
+                                    vec![Expr::Var(var.to_string())],
+                                )));
+                            }
+                        }
+                    }
+                    "cos" => {
+                        if let Expr::Var(v) = &args[0] {
+                            if v == var {
+                                // ∫ cos(x) dx = sin(x)
+                                return Expr::Fn(
+                                    "sin".to_string(),
+                                    vec![Expr::Var(var.to_string())],
+                                );
+                            }
+                        }
+                    }
+                    "exp" => {
+                        if let Expr::Var(v) = &args[0] {
+                            if v == var {
+                                // ∫ exp(x) dx = exp(x)
+                                return Expr::Fn(
+                                    "exp".to_string(),
+                                    vec![Expr::Var(var.to_string())],
+                                );
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            expr.clone()
+        }
+    }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// Equation solving
+// ════════════════════════════════════════════════════════════════════════════
+
+/// Recursively extract polynomial coefficients from a term, distributing
+/// `Neg` over `Add/Sub` when encountered.
+fn collect_term_coeffs(term: &Expr, var: &str, sign: f64, coeffs: &mut HashMap<u32, f64>) {
+    match term {
+        Expr::Neg(inner) => collect_term_coeffs(inner, var, -sign, coeffs),
+        Expr::Add(a, b) => {
+            collect_term_coeffs(a, var, sign, coeffs);
+            collect_term_coeffs(b, var, sign, coeffs);
+        }
+        Expr::Sub(a, b) => {
+            collect_term_coeffs(a, var, sign, coeffs);
+            collect_term_coeffs(b, var, -sign, coeffs);
+        }
+        Expr::Mul(a, b) if matches!(a.as_ref(), Expr::Const(c) if *c < 0.0) => {
+            // For a negative coefficient, distribute into Add/Sub if present
+            if let Expr::Add(..) | Expr::Sub(..) = b.as_ref() {
+                let neg = Expr::Neg(Box::new((**b).clone()));
+                collect_term_coeffs(&neg, var, sign, coeffs);
+            } else {
+                extract_simple_term(term, var, sign, coeffs);
+            }
+        }
+        other => {
+            extract_simple_term(other, var, sign, coeffs);
+        }
+    }
+}
+
+/// Extract coefficients from a simple (non-compound) term.
+fn extract_simple_term(term: &Expr, var: &str, sign: f64, coeffs: &mut HashMap<u32, f64>) {
+    if let Some((pow, coeff)) = extract_power_and_coeff(term, var) {
+        *coeffs.entry(pow).or_insert(0.0) += sign * coeff;
+    } else if !contains_var(term, var) {
+        if let Ok(val) = eval(term, &HashMap::new()) {
+            *coeffs.entry(0).or_insert(0.0) += sign * val;
+        }
+    }
+}
+
+/// Collect polynomial coefficients from an expression as a map of power → coefficient.
+///
+/// Only collects terms where the power of `var` is a non-negative integer.
+/// Non-polynomial terms containing `var` are silently skipped.
+/// Negation over `Add/Sub` is distributed to correctly handle forms like
+/// `-(x + 3)` (which after simplification stays as `Neg(Add(x, 3))`).
+pub fn collect_poly_coeffs(expr: &Expr, var: &str) -> HashMap<u32, f64> {
+    let terms = flatten_add(expr);
+    let mut coeffs: HashMap<u32, f64> = HashMap::new();
+
+    for term in &terms {
+        collect_term_coeffs(term, var, 1.0, &mut coeffs);
+    }
+
+    coeffs
+}
+
+/// Format a floating-point number as a clean human-readable string.
+///
+/// Integers are written without decimal point; floats are trimmed to 6 decimal
+/// places with trailing zeros removed.
+fn format_number(x: f64) -> String {
+    if x.is_nan() {
+        return "NaN".to_string();
+    }
+    if x.is_infinite() {
+        return if x.is_sign_positive() {
+            "Inf".to_string()
+        } else {
+            "-Inf".to_string()
+        };
+    }
+    if x.fract() == 0.0 && x >= i64::MIN as f64 && x <= i64::MAX as f64 {
+        format!("{}", x as i64)
+    } else {
+        let s = format!("{:.6}", x);
+        s.trim_end_matches('0')
+            .trim_end_matches('.')
+            .to_string()
+    }
+}
+
+/// Solve an equation string for a given variable.
+///
+/// Parses the equation (expected to contain exactly one `=` sign),
+/// brings all terms to one side, and classifies the result:
+///
+/// - **Linear**: `a*x + b = 0` → `x = -b/a`
+/// - **Quadratic**: `a*x^2 + b*x + c = 0` → `x = (-b ± sqrt(b^2 - 4ac))/(2a)`
+/// - **Pure power**: `x^n = c` → `x = c^(1/n)` (with `±` for even n)
+pub fn solve_equation(equation_str: &str, variable_str: &str) -> Result<Vec<String>, String> {
+    let parts: Vec<&str> = equation_str.split('=').collect();
+    if parts.len() != 2 {
+        return Err(format!(
+            "equation must contain exactly one '=' sign: {equation_str}"
+        ));
+    }
+
+    let lhs = parse(parts[0].trim()).map_err(|e| format!("parse error (lhs): {e}"))?;
+    let rhs = parse(parts[1].trim()).map_err(|e| format!("parse error (rhs): {e}"))?;
+
+    // Bring all terms to LHS
+    let expr = simplify(&Expr::Sub(Box::new(lhs), Box::new(rhs)));
+
+    let coeffs = collect_poly_coeffs(&expr, variable_str);
+
+    // Filter to non-zero coefficients only for structural decisions
+    let non_zero: Vec<(u32, f64)> = coeffs
+        .iter()
+        .filter(|&(_, v)| v.abs() > 1e-12)
+        .map(|(&k, &v)| (k, v))
+        .collect();
+    let has_var_term = non_zero.iter().any(|(k, _)| *k > 0);
+
+    let a = coeffs.get(&2).copied().unwrap_or(0.0);
+    let b = coeffs.get(&1).copied().unwrap_or(0.0);
+    let c = coeffs.get(&0).copied().unwrap_or(0.0);
+
+    let mut solutions: Vec<String> = Vec::new();
+
+    if a.abs() > 1e-12 {
+        // Quadratic: a*x^2 + b*x + c = 0
+        let disc = b * b - 4.0 * a * c;
+        if disc < -1e-12 {
+            // Complex roots — no real solutions
+            return Ok(solutions);
+        }
+        let safe_disc = if disc < 0.0 { 0.0 } else { disc };
+        let sqrt_disc = safe_disc.sqrt();
+
+        let x1 = (-b - sqrt_disc) / (2.0 * a);
+        let x2 = (-b + sqrt_disc) / (2.0 * a);
+
+        if (x1 - x2).abs() < 1e-12 {
+            solutions.push(format!("{} = {}", variable_str, format_number(x1)));
+        } else {
+            solutions.push(format!("{} = {}", variable_str, format_number(x1)));
+            solutions.push(format!("{} = {}", variable_str, format_number(x2)));
+        }
+    } else if b.abs() > 1e-12 {
+        // Linear: b*x + c = 0 → x = -c/b
+        let x = -c / b;
+        solutions.push(format!("{} = {}", variable_str, format_number(x)));
+    } else if has_var_term {
+        // Pure power: a*x^n + c = 0 → x^n = -c/a → x = (-c/a)^(1/n)
+        // Only one non-zero power (besides possible constant) is supported
+        let power_terms: Vec<_> = non_zero.iter().filter(|(k, _)| *k > 0).collect();
+        if power_terms.len() != 1 {
+            return Err(format!("mixed terms not supported"));
+        }
+        let (n, lead_coeff) = power_terms[0];
+        let const_term = non_zero
+            .iter()
+            .find(|(k, _)| *k == 0)
+            .map(|(_, v)| *v)
+            .unwrap_or(0.0);
+        let ratio = -const_term / *lead_coeff;
+
+        if ratio >= 0.0 || n % 2 == 1 {
+            let root = ratio.powf(1.0 / *n as f64);
+            solutions.push(format!("{} = {}", variable_str, format_number(root)));
+            // Even power with positive ratio gives ±
+            if n % 2 == 0 && ratio > 0.0 {
+                solutions.push(format!("{} = {}", variable_str, format_number(-root)));
+            }
+        }
+        if solutions.is_empty() {
+            // No real solutions (e.g. x^2 = -4)
+            return Ok(solutions);
+        }
+    } else if c.abs() < 1e-12 {
+        // 0 = 0: identity
+        solutions.push(format!("{} is any real number", variable_str));
+    } else {
+        return Err(format!("no solution: contradiction {c} ≠ 0"));
+    }
+
+    Ok(solutions)
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -3292,5 +3882,280 @@ mod tests {
         let val = eval(&d, &vars).unwrap();
         let expected = 2.0_f64.ln() * 2.0;
         assert!((val - expected).abs() < 1e-10, "expected {expected}, got {val}");
+    }
+
+    // ── Factor enhancement ──
+
+    #[test]
+    fn test_factor_quadratic() {
+        let e = parse("x^2 - 5*x + 6").unwrap();
+        let f = factor(&e);
+        let mut vars = HashMap::new();
+        vars.insert("x".into(), 7.0);
+        let orig = eval(&e, &vars).unwrap();
+        let factored = eval(&f, &vars).unwrap();
+        assert!(
+            (orig - factored).abs() < 1e-10,
+            "factor(x^2 - 5*x + 6) changed value at x=7"
+        );
+    }
+
+    #[test]
+    fn test_factor_quadratic_perfect_square() {
+        let e = parse("x^2 - 6*x + 9").unwrap();
+        let f = factor(&e);
+        let mut vars = HashMap::new();
+        vars.insert("x".into(), 5.0);
+        let orig = eval(&e, &vars).unwrap();
+        let factored = eval(&f, &vars).unwrap();
+        assert!(
+            (orig - factored).abs() < 1e-10,
+            "factor(x^2 - 6x + 9) changed value at x=5"
+        );
+        assert_eq!(display(&f), "(x - 3)*(x - 3)", "expected (x-3)^2, got {}", display(&f));
+    }
+
+    #[test]
+    fn test_factor_quadratic_leading_coeff() {
+        let e = parse("2*x^2 + 4*x + 2").unwrap();
+        let f = factor(&e);
+        let mut vars = HashMap::new();
+        vars.insert("x".into(), 3.0);
+        let orig = eval(&e, &vars).unwrap();
+        let factored = eval(&f, &vars).unwrap();
+        assert!(
+            (orig - factored).abs() < 1e-10,
+            "factor(2*x^2 + 4x + 2) changed value at x=3"
+        );
+    }
+
+    #[test]
+    fn test_factor_diff_squares() {
+        let e = parse("x^2 - 9").unwrap();
+        let f = factor(&e);
+        let mut vars = HashMap::new();
+        vars.insert("x".into(), 5.0);
+        let orig = eval(&e, &vars).unwrap();
+        let factored = eval(&f, &vars).unwrap();
+        assert!(
+            (orig - factored).abs() < 1e-10,
+            "factor(x^2 - 9) changed value at x=5"
+        );
+    }
+
+    #[test]
+    fn test_factor_noop() {
+        // No factoring possible — should return unchanged
+        let e = parse("x + y").unwrap();
+        let f = factor(&e);
+        assert_eq!(display(&f), "x + y");
+    }
+
+    #[test]
+    fn test_factor_already_factored() {
+        let e = parse("(x+1)*(x+2)").unwrap();
+        let f = factor(&e);
+        let mut vars = HashMap::new();
+        vars.insert("x".into(), 3.0);
+        let orig = eval(&e, &vars).unwrap();
+        let factored = eval(&f, &vars).unwrap();
+        assert!(
+            (orig - factored).abs() < 1e-10,
+            "factor((x+1)*(x+2)) changed value at x=3"
+        );
+    }
+
+    #[test]
+    fn test_factor_non_quadratic() {
+        // Cubic is not factored by any strategy — value preserved
+        let e = parse("x^3 - x").unwrap();
+        let f = factor(&e);
+        let mut vars = HashMap::new();
+        vars.insert("x".into(), 2.0);
+        let orig = eval(&e, &vars).unwrap();
+        let factored = eval(&f, &vars).unwrap();
+        assert!(
+            (orig - factored).abs() < 1e-10,
+            "factor(x^3 - x) changed value at x=2"
+        );
+    }
+
+    // ── Integration ──
+
+    #[test]
+    fn test_integrate_const() {
+        let e = parse("5").unwrap();
+        let i = integrate(&e, "x");
+        let mut vars = HashMap::new();
+        vars.insert("x".into(), 2.0);
+        let val = eval(&i, &vars).unwrap();
+        assert!((val - 10.0).abs() < 1e-10, "expected 10, got {val}");
+    }
+
+    #[test]
+    fn test_integrate_var() {
+        let e = parse("x").unwrap();
+        let i = integrate(&e, "x");
+        let mut vars = HashMap::new();
+        vars.insert("x".into(), 3.0);
+        let val = eval(&i, &vars).unwrap();
+        assert!((val - 4.5).abs() < 1e-10, "expected 4.5, got {val}");
+    }
+
+    #[test]
+    fn test_integrate_power() {
+        let e = parse("x^2").unwrap();
+        let i = integrate(&e, "x");
+        let mut vars = HashMap::new();
+        vars.insert("x".into(), 3.0);
+        let val = eval(&i, &vars).unwrap();
+        assert!((val - 9.0).abs() < 1e-10, "expected 9, got {val}");
+    }
+
+    #[test]
+    fn test_integrate_neg_power() {
+        let e = parse("x^(-2)").unwrap();
+        let i = integrate(&e, "x");
+        let mut vars = HashMap::new();
+        vars.insert("x".into(), 1.0);
+        let val = eval(&i, &vars).unwrap();
+        let expected = -1.0 / 1.0; // ∫ x^(-2) = -x^(-1), at x=1 → -1
+        assert!((val - expected).abs() < 1e-10, "expected {expected}, got {val}");
+    }
+
+    #[test]
+    fn test_integrate_reciprocal() {
+        let e = parse("1/x").unwrap();
+        let i = integrate(&e, "x");
+        let d = display(&i);
+        assert_eq!(d, "ln(x)", "expected ln(x), got {d}");
+    }
+
+    #[test]
+    fn test_integrate_neg() {
+        let e = parse("-x").unwrap();
+        let i = integrate(&e, "x");
+        let mut vars = HashMap::new();
+        vars.insert("x".into(), 2.0);
+        let val = eval(&i, &vars).unwrap();
+        assert!((val - (-2.0)).abs() < 1e-10, "expected -2.0, got {val}");
+    }
+
+    #[test]
+    fn test_integrate_add() {
+        let e = parse("x + 1").unwrap();
+        let i = integrate(&e, "x");
+        let mut vars = HashMap::new();
+        vars.insert("x".into(), 2.0);
+        let val = eval(&i, &vars).unwrap();
+        assert!((val - 4.0).abs() < 1e-10, "expected 4.0, got {val}");
+    }
+
+    #[test]
+    fn test_integrate_const_factor() {
+        let e = parse("3*x^2").unwrap();
+        let i = integrate(&e, "x");
+        let mut vars = HashMap::new();
+        vars.insert("x".into(), 2.0);
+        let val = eval(&i, &vars).unwrap();
+        // ∫ 3*x^2 dx = x^3, at x=2 → 8
+        assert!((val - 8.0).abs() < 1e-10, "expected 8, got {val}");
+    }
+
+    #[test]
+    fn test_integrate_sin() {
+        let e = parse("sin(x)").unwrap();
+        let i = integrate(&e, "x");
+        let mut vars = HashMap::new();
+        vars.insert("x".into(), 0.0);
+        let val = eval(&i, &vars).unwrap();
+        assert!((val - (-1.0)).abs() < 1e-10, "expected -1, got {val}");
+    }
+
+    #[test]
+    fn test_integrate_cos() {
+        let e = parse("cos(x)").unwrap();
+        let i = integrate(&e, "x");
+        let mut vars = HashMap::new();
+        vars.insert("x".into(), 0.0);
+        let val = eval(&i, &vars).unwrap();
+        assert!((val - 0.0).abs() < 1e-10, "expected 0, got {val}");
+    }
+
+    #[test]
+    fn test_integrate_exp() {
+        let e = parse("exp(x)").unwrap();
+        let i = integrate(&e, "x");
+        let mut vars = HashMap::new();
+        vars.insert("x".into(), 0.0);
+        let val = eval(&i, &vars).unwrap();
+        assert!((val - 1.0).abs() < 1e-10, "expected 1, got {val}");
+    }
+
+    #[test]
+    fn test_integrate_other_var_as_const() {
+        // ∫ y dx = y * x
+        let e = parse("y").unwrap();
+        let i = integrate(&e, "x");
+        let mut vars = HashMap::new();
+        vars.insert("x".into(), 3.0);
+        vars.insert("y".into(), 5.0);
+        let val = eval(&i, &vars).unwrap();
+        assert!((val - 15.0).abs() < 1e-10, "expected 15, got {val}");
+    }
+
+    // ── Equation solving ──
+
+    #[test]
+    fn test_solve_linear() {
+        let solutions = solve_equation("2*x + 4 = 0", "x").unwrap();
+        assert_eq!(solutions.len(), 1);
+        assert_eq!(solutions[0], "x = -2");
+    }
+
+    #[test]
+    fn test_solve_quadratic() {
+        let solutions = solve_equation("x^2 - 5*x + 6 = 0", "x").unwrap();
+        assert_eq!(solutions.len(), 2);
+        assert!(solutions.contains(&"x = 2".to_string()));
+        assert!(solutions.contains(&"x = 3".to_string()));
+    }
+
+    #[test]
+    fn test_solve_quadratic_double_root() {
+        let solutions = solve_equation("x^2 - 6*x + 9 = 0", "x").unwrap();
+        assert_eq!(solutions.len(), 1);
+        assert_eq!(solutions[0], "x = 3");
+    }
+
+    #[test]
+    fn test_solve_pure_power() {
+        let solutions = solve_equation("x^3 = 8", "x").unwrap();
+        assert_eq!(solutions.len(), 1);
+        // x^3 = 8 → x = 2
+        assert_eq!(solutions[0], "x = 2");
+    }
+
+    #[test]
+    fn test_solve_identity() {
+        let solutions = solve_equation("x + 2 = x + 2", "x").unwrap();
+        assert_eq!(solutions.len(), 1);
+        assert_eq!(solutions[0], "x is any real number");
+    }
+
+    #[test]
+    fn test_solve_contradiction() {
+        let result = solve_equation("x + 2 = x + 3", "x");
+        assert!(
+            result.is_err(),
+            "contradiction should produce error, got {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_solve_no_equals() {
+        let result = solve_equation("x^2", "x");
+        assert!(result.is_err(), "equation without '=' should produce error");
     }
 }

@@ -441,26 +441,38 @@ pub fn expand_expression(expr: &str) -> VerificationResult {
 
 /// Factor a symbolic expression using SymPy.
 pub fn factor_expression(expr: &str) -> VerificationResult {
-    if !python_bridge::sympy_available() {
-        return VerificationResult {
-            check_name: "math_sympy_factor".into(),
-            status: VerificationStatus::Fail,
-            details: format!("factor({expr}) — SymPy not available (requires Python backend)"),
-            evidence_path: None,
-        };
+    // Try real SymPy first
+    if python_bridge::sympy_available() {
+        let params = json!({"expression": expr});
+        match python_bridge::call_math_backend("sympy_factor", params) {
+            Ok(result) => {
+                let factored = result
+                    .get("result")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or(expr);
+                return VerificationResult {
+                    check_name: "math_sympy_factor".into(),
+                    status: VerificationStatus::Pass,
+                    details: format!("factor({expr}) → {factored} (SymPy)"),
+                    evidence_path: None,
+                };
+            }
+            Err(e) => {
+                tracing::debug!("[sympy_bridge] real SymPy factor failed, falling back: {e}");
+                // Fall through to pure Rust
+            }
+        }
     }
 
-    let params = json!({"expression": expr});
-    match python_bridge::call_math_backend("sympy_factor", params) {
-        Ok(result) => {
-            let factored = result
-                .get("result")
-                .and_then(|v| v.as_str())
-                .unwrap_or(expr);
+    // Fallback: pure Rust factoring
+    match crate::verification::symbolic::parse(expr) {
+        Ok(parsed) => {
+            let factored = crate::verification::symbolic::factor(&parsed);
+            let result = crate::verification::symbolic::display(&factored);
             VerificationResult {
                 check_name: "math_sympy_factor".into(),
                 status: VerificationStatus::Pass,
-                details: format!("factor({expr}) → {factored} (SymPy)"),
+                details: format!("factor({expr}) → {result} (pure Rust fallback)"),
                 evidence_path: None,
             }
         }
@@ -588,41 +600,90 @@ pub fn integrate_expression(
     lower: Option<f64>,
     upper: Option<f64>,
 ) -> VerificationResult {
-    if !python_bridge::sympy_available() {
-        return VerificationResult {
-            check_name: "math_sympy_integrate".into(),
-            status: VerificationStatus::Fail,
-            details: format!("integrate({expr}) — SymPy not available (requires Python backend)"),
-            evidence_path: None,
-        };
+    // Try real SymPy first
+    if python_bridge::sympy_available() {
+        let mut params = json!({
+            "expression": expr,
+            "variable": variable,
+        });
+        if let Some(l) = lower {
+            params["lower"] = json!(l);
+        }
+        if let Some(u) = upper {
+            params["upper"] = json!(u);
+        }
+
+        match python_bridge::call_math_backend("sympy_integrate", params) {
+            Ok(result) => {
+                let integrated = result
+                    .get("result")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or(expr);
+                let bounds = match (lower, upper) {
+                    (Some(l), Some(u)) => format!(" [{l}, {u}]"),
+                    _ => "".to_string(),
+                };
+                return VerificationResult {
+                    check_name: "math_sympy_integrate".into(),
+                    status: VerificationStatus::Pass,
+                    details: format!("integrate({expr}, {variable}{bounds}) → {integrated} (SymPy)"),
+                    evidence_path: None,
+                };
+            }
+            Err(e) => {
+                tracing::debug!("[sympy_bridge] real SymPy integrate failed, falling back: {e}");
+                // Fall through to pure Rust
+            }
+        }
     }
 
-    let mut params = json!({
-        "expression": expr,
-        "variable": variable,
-    });
-    if let Some(l) = lower {
-        params["lower"] = json!(l);
-    }
-    if let Some(u) = upper {
-        params["upper"] = json!(u);
-    }
+    // Fallback: pure Rust integration
+    match crate::verification::symbolic::parse(expr) {
+        Ok(parsed) => {
+            let integrated = crate::verification::symbolic::integrate(&parsed, variable);
+            let result_str = crate::verification::symbolic::display(&integrated);
 
-    match python_bridge::call_math_backend("sympy_integrate", params) {
-        Ok(result) => {
-            let integrated = result
-                .get("result")
-                .and_then(|v| v.as_str())
-                .unwrap_or(expr);
-            let bounds = match (lower, upper) {
-                (Some(l), Some(u)) => format!(" [{l}, {u}]"),
-                _ => "".to_string(),
-            };
-            VerificationResult {
-                check_name: "math_sympy_integrate".into(),
-                status: VerificationStatus::Pass,
-                details: format!("integrate({expr}, {variable}{bounds}) → {integrated} (SymPy)"),
-                evidence_path: None,
+            match (lower, upper) {
+                (Some(l), Some(u)) => {
+                    // Definite integral: evaluate F(u) - F(l)
+                    let mut upper_vars = std::collections::HashMap::new();
+                    upper_vars.insert(variable.to_string(), u);
+                    let mut lower_vars = std::collections::HashMap::new();
+                    lower_vars.insert(variable.to_string(), l);
+                    match (
+                        crate::verification::symbolic::eval(&integrated, &upper_vars),
+                        crate::verification::symbolic::eval(&integrated, &lower_vars),
+                    ) {
+                        (Ok(f_upper), Ok(f_lower)) => {
+                            let value = f_upper - f_lower;
+                            let bounds = format!(" [{l}, {u}]");
+                            VerificationResult {
+                                check_name: "math_sympy_integrate".into(),
+                                status: VerificationStatus::Pass,
+                                details: format!(
+                                    "integrate({expr}, {variable}{bounds}) → {result_str} = {value} (pure Rust fallback)"
+                                ),
+                                evidence_path: None,
+                            }
+                        }
+                        _ => VerificationResult {
+                            check_name: "math_sympy_integrate".into(),
+                            status: VerificationStatus::Fail,
+                            details: format!(
+                                "integrate({expr}, {variable}) → {result_str} (could not evaluate definite integral) (pure Rust fallback)"
+                            ),
+                            evidence_path: None,
+                        },
+                    }
+                }
+                _ => VerificationResult {
+                    check_name: "math_sympy_integrate".into(),
+                    status: VerificationStatus::Pass,
+                    details: format!(
+                        "integrate({expr}, {variable}) → {result_str} (pure Rust fallback)"
+                    ),
+                    evidence_path: None,
+                },
             }
         }
         Err(e) => VerificationResult {
@@ -636,41 +697,57 @@ pub fn integrate_expression(
 
 /// Solve an equation or system of equations using SymPy.
 pub fn solve_equation(equation: &str, variable: &str) -> VerificationResult {
-    if !python_bridge::sympy_available() {
-        return VerificationResult {
-            check_name: "math_sympy_solve".into(),
-            status: VerificationStatus::Fail,
-            details: format!("solve({equation}) — SymPy not available (requires Python backend)"),
-            evidence_path: None,
-        };
+    // Try real SymPy first
+    if python_bridge::sympy_available() {
+        let params = json!({
+            "equation": equation,
+            "variable": variable,
+        });
+        match python_bridge::call_math_backend("sympy_solve", params) {
+            Ok(result) => {
+                let solutions = result
+                    .get("solutions")
+                    .and_then(|v| v.as_array())
+                    .map(|arr| {
+                        arr.iter()
+                            .map(|v| {
+                                if let Some(s) = v.as_str() {
+                                    s.to_string()
+                                } else if let Some(obj) = v.as_object() {
+                                    obj.iter()
+                                        .map(|(k, v)| format!("{k}={v}"))
+                                        .collect::<Vec<_>>()
+                                        .join(", ")
+                                } else {
+                                    format!("{v}")
+                                }
+                            })
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_default();
+                let count = solutions.len();
+                let sol_str = if count == 0 {
+                    "no solutions".to_string()
+                } else {
+                    solutions.join("; ")
+                };
+                return VerificationResult {
+                    check_name: "math_sympy_solve".into(),
+                    status: VerificationStatus::Pass,
+                    details: format!("solve({equation}) → {sol_str} ({count} solutions, SymPy)"),
+                    evidence_path: None,
+                };
+            }
+            Err(e) => {
+                tracing::debug!("[sympy_bridge] real SymPy solve failed, falling back: {e}");
+                // Fall through to pure Rust
+            }
+        }
     }
 
-    let params = json!({
-        "equation": equation,
-        "variable": variable,
-    });
-    match python_bridge::call_math_backend("sympy_solve", params) {
-        Ok(result) => {
-            let solutions = result
-                .get("solutions")
-                .and_then(|v| v.as_array())
-                .map(|arr| {
-                    arr.iter()
-                        .map(|v| {
-                            if let Some(s) = v.as_str() {
-                                s.to_string()
-                            } else if let Some(obj) = v.as_object() {
-                                obj.iter()
-                                    .map(|(k, v)| format!("{k}={v}"))
-                                    .collect::<Vec<_>>()
-                                    .join(", ")
-                            } else {
-                                format!("{v}")
-                            }
-                        })
-                        .collect::<Vec<_>>()
-                })
-                .unwrap_or_default();
+    // Fallback: pure Rust equation solver
+    match crate::verification::symbolic::solve_equation(equation, variable) {
+        Ok(solutions) => {
             let count = solutions.len();
             let sol_str = if count == 0 {
                 "no solutions".to_string()
@@ -680,7 +757,7 @@ pub fn solve_equation(equation: &str, variable: &str) -> VerificationResult {
             VerificationResult {
                 check_name: "math_sympy_solve".into(),
                 status: VerificationStatus::Pass,
-                details: format!("solve({equation}) → {sol_str} ({count} solutions, SymPy)"),
+                details: format!("solve({equation}) → {sol_str} ({count} solutions, pure Rust fallback)"),
                 evidence_path: None,
             }
         }
