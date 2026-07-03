@@ -651,9 +651,21 @@ pub fn resolve_task_view_with_pointers(
         .map(|e| e.has_successful_verification)
         .unwrap_or(false);
 
+    // Read QUALITY_GATE_STATE.json so depth_compliance_aggregate can count QG
+    // rounds toward the depth score (C8: previously hardcoded None).
+    let qg_state: Option<Value> = {
+        let qg_path = repo_root
+            .join("artifacts/current")
+            .join(task_id.as_str())
+            .join("QUALITY_GATE_STATE.json");
+        std::fs::read_to_string(&qg_path)
+            .ok()
+            .and_then(|raw| serde_json::from_str(&raw).ok())
+    };
+
     let depth_compliance = Some(depth_compliance_aggregate(
         goal_state.as_ref(),
-        None,
+        qg_state.as_ref(),
         evidence_ok,
     ));
 

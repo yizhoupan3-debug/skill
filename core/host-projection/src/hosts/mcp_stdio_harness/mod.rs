@@ -53,6 +53,26 @@ fn mcp_host_display_label(host_id: &str) -> String {
 }
 
 fn list_known_task_ids(repo_root: &Path) -> Vec<String> {
+    // Prefer TASK_POINTERS.json tasks array (authoritative, O(n) vs O(directory_size)).
+    // Fall back to full directory scan when the pointers file is absent or has no tasks.
+    let pointers_path = repo_root.join("artifacts/current/TASK_POINTERS.json");
+    if let Ok(raw) = std::fs::read_to_string(&pointers_path) {
+        if let Ok(val) = serde_json::from_str::<serde_json::Value>(&raw) {
+            if let Some(tasks) = val.get("tasks").and_then(|v| v.as_array()) {
+                if !tasks.is_empty() {
+                    let mut ids: Vec<String> = tasks
+                        .iter()
+                        .filter_map(|t| t.get("task_id").and_then(|v| v.as_str()))
+                        .map(str::to_string)
+                        .collect();
+                    ids.sort();
+                    return ids;
+                }
+            }
+        }
+    }
+
+    // Fallback: directory scan for legacy / non-pointers workflows.
     let current = repo_root.join("artifacts/current");
     let Ok(entries) = fs::read_dir(&current) else {
         return Vec::new();

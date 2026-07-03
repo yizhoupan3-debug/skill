@@ -443,36 +443,8 @@ pub(crate) fn tool_task_chain_advance(
     // chain_advance calls from corrupting TASK_CHAIN.json.
     let repo_root_owned = repo_root.to_path_buf();
     let result = apply_task_ledger_mutation(repo_root, || {
-        // Loop-goal check moved inside the lock to prevent TOCTOU
-        // Verify that the active task is actually a loop goal (P2-004)
-        let (active, _) = core_state::state_manager::read_task_pointer_pair(&repo_root_owned);
-        if let Some(ref tid) = active {
-            let goal_path = repo_root_owned.join("artifacts/current").join(tid).join("GOAL_STATE.json");
-            let is_loop_goal = goal_path.is_file()
-                && std::fs::read_to_string(goal_path)
-                    .ok()
-                    .and_then(|raw| serde_json::from_str::<serde_json::Value>(&raw).ok())
-                    .and_then(|v| v.get("goal_type").and_then(|g| g.as_str()).map(|g| g == "loop"))
-                    .unwrap_or(false);
-            if is_loop_goal {
-                return Ok(json!({
-                    "ok": true,
-                    "status": "loop_goal_skipped",
-                    "message": "current task has loop semantics — task chain advance skipped",
-                    "task_id": tid,
-                })
-                .to_string());
-            } else {
-                return Ok(json!({
-                    "ok": true,
-                    "status": "active_task_exists",
-                    "message": "current task has an active goal — task chain advance skipped (non-loop)",
-                    "task_id": tid,
-                })
-                .to_string());
-            }
-        }
-
+        // Read TASK_CHAIN.json FIRST so we can check whether the active pointer
+        // matches the task at the chain's current_index.
         let raw =
             std::fs::read_to_string(&repo_root_owned.join("artifacts/current/TASK_CHAIN.json"))
                 .map_err(FrameworkError::Io)?;
@@ -510,6 +482,46 @@ pub(crate) fn tool_task_chain_advance(
             return Err(FrameworkError::validation(
                 "all tasks in chain are completed — no task to advance to",
             ));
+        }
+
+        // ── Active-pointer guard: only skip chain advance when the active
+        // task matches the chain's current_index task.
+        // (C6: check task_id match, not just "active exists".)
+        let chain_current_tid = chain["tasks"][current_index]
+            .get("task_id")
+            .and_then(Value::as_str)
+            .map(str::to_string);
+        if let Some(ref active_tid) =
+            core_state::state_manager::read_active_task_id(&repo_root_owned)
+        {
+            if chain_current_tid.as_deref() == Some(active_tid.as_str()) {
+                let goal_path = repo_root_owned
+                    .join("artifacts/current")
+                    .join(active_tid)
+                    .join("GOAL_STATE.json");
+                let is_loop_goal = goal_path.is_file()
+                    && std::fs::read_to_string(goal_path)
+                        .ok()
+                        .and_then(|raw| serde_json::from_str::<serde_json::Value>(&raw).ok())
+                        .and_then(|v| v.get("goal_type").and_then(|g| g.as_str()).map(|g| g == "loop"))
+                        .unwrap_or(false);
+                if is_loop_goal {
+                    return Ok(json!({
+                        "ok": true,
+                        "status": "loop_goal_skipped",
+                        "message": "current chain task has loop semantics — chain advance skipped",
+                        "task_id": active_tid,
+                    })
+                    .to_string());
+                }
+                return Ok(json!({
+                    "ok": true,
+                    "status": "active_task_exists",
+                    "message": "current chain task has an active goal — chain advance skipped",
+                    "task_id": active_tid,
+                })
+                .to_string());
+            }
         }
 
         // Extract next task info before any writes (avoids borrow conflicts)
@@ -1059,6 +1071,91 @@ mod tests {
         let result = tool_task_chain_advance(&json!({}), &repo).expect("chain advance");
         let v: Value = serde_json::from_str(&result).expect("parse");
         assert_eq!(v["status"], json!("loop_goal_skipped"));
+
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    #[test]
+    fn task_chain_advance_proceeds_when_loop_goal_differs_from_chain_task() {
+        // Regression test (C6): when the active pointer is a loop goal but the
+        // chain's current_index points to a different (non-loop) task, chain
+        // advance should NOT skip — it must advance the chain.
+        let repo = unique_test_dir("chain-loop-diff");
+        let rr = repo.display().to_string();
+
+        // Start a linear task and make it the chain's current task
+        core_state::state_manager::framework_goal_drive(json!({
+            "repo_root": rr.clone(),
+            "operation": "start",
+            "task_id": "chain-task",
+            "goal": "in chain",
+            "drive_until_done": false,
+        }))
+        .expect("start chain task");
+
+        // Start a loop goal (becomes active pointer since started second)
+        core_state::state_manager::framework_goal_drive(json!({
+            "repo_root": rr.clone(),
+            "operation": "start",
+            "task_id": "loop-other",
+            "goal": "separate loop",
+            "goal_type": "loop",
+            "drive_until_done": false,
+        }))
+        .expect("start loop other");
+
+        // Write chain where current_index=0 → "chain-task" (NOT "loop-other")
+        fs::write(
+            repo.join("artifacts/current/TASK_CHAIN.json"),
+            r#"{"tasks":[{"task_id":"chain-task","title":"Chain Task","status":"running"},{"task_id":"next-task","title":"Next","status":"pending"}],"current_index":0}"#,
+        )
+        .expect("write chain");
+
+        // chain-advance must proceed (not return loop_goal_skipped)
+        // 2 tasks: advancing from index 0 to index 1.
+        let result = tool_task_chain_advance(&json!({}), &repo).expect("chain advance");
+        let v: Value = serde_json::from_str(&result).expect("parse");
+        assert_eq!(v["next_task_id"], json!("next-task"), "chain should advance to next task, not skip: {result}");
+
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    #[test]
+    fn task_chain_advance_advances_to_next_when_active_loop_differs_from_chain() {
+        // Same setup as above but with 3 tasks so advance doesn't complete the chain.
+        let repo = unique_test_dir("chain-loop-advance");
+        let rr = repo.display().to_string();
+
+        core_state::state_manager::framework_goal_drive(json!({
+            "repo_root": rr.clone(),
+            "operation": "start",
+            "task_id": "chain-task",
+            "goal": "in chain",
+            "drive_until_done": false,
+        }))
+        .expect("start chain task");
+
+        core_state::state_manager::framework_goal_drive(json!({
+            "repo_root": rr.clone(),
+            "operation": "start",
+            "task_id": "loop-other",
+            "goal": "separate loop",
+            "goal_type": "loop",
+            "drive_until_done": false,
+        }))
+        .expect("start loop other");
+
+        fs::write(
+            repo.join("artifacts/current/TASK_CHAIN.json"),
+            r#"{"tasks":[{"task_id":"chain-task","title":"Chain Task","status":"running"},{"task_id":"next-task","title":"Next","status":"pending"},{"task_id":"third-task","title":"Third","status":"pending"}],"current_index":0}"#,
+        )
+        .expect("write chain");
+
+        // Must advance to next task in chain, not skip
+        let result = tool_task_chain_advance(&json!({}), &repo).expect("chain advance");
+        let v: Value = serde_json::from_str(&result).expect("parse");
+        assert_eq!(v["next_task_id"], json!("next-task"), "chain should advance to next task: {result}");
+        assert!(v["ok"].as_bool().unwrap_or(false));
 
         let _ = fs::remove_dir_all(&repo);
     }

@@ -134,6 +134,23 @@ pub(crate) fn closeout_record_write_dispatch(
         }
         core_state_utils::atomic_write::write_atomic_json(&record_path, &record_value)?;
 
+        // B5: Clean up any prior .failed.json for this task since closeout succeeded.
+        let cleanup_failed = {
+            let mut p = record_path.clone();
+            let name = p.file_stem().unwrap_or_default().to_string_lossy().to_string();
+            p.set_file_name(format!("{}.failed.json", name));
+            p
+        };
+        if cleanup_failed.is_file() {
+            if let Err(e) = std::fs::remove_file(&cleanup_failed) {
+                tracing::warn!(
+                    task_id = %task_id,
+                    error = %e,
+                    "closeout_record_write: failed to clean up .failed.json",
+                );
+            }
+        }
+
         // Sync TASK_OUTPUT.json with closeout data so aggregators (chain_aggregate,
         // task_output_read) see the completed status (adversarial audit fix F).
         if let Ok(closeout_record) = serde_json::from_value::<core_state::closeout_validation::CloseoutRecord>(
@@ -203,10 +220,29 @@ pub(crate) fn closeout_gate_evaluate(
     ));
 
     let goal_present = task_view.goal_state.is_some();
+    let goal_is_terminal = task_view
+        .goal_state
+        .as_ref()
+        .and_then(|gs| gs.get("status"))
+        .and_then(Value::as_str)
+        .map(|s| s == "failed" || s == "completed")
+        .unwrap_or(false);
+    let goal_status_str = task_view
+        .goal_state
+        .as_ref()
+        .and_then(|gs| gs.get("status"))
+        .and_then(Value::as_str)
+        .unwrap_or("unknown");
     if !goal_present {
         findings.push("goal_state: no GOAL_STATE.json".to_string());
+    } else if goal_is_terminal {
+        findings.push(format!(
+            "goal_state: present but status={goal_status_str} (terminal) — closeout may not apply",
+        ));
     } else {
-        findings.push("goal_state: present".to_string());
+        findings.push(format!(
+            "goal_state: present (status={goal_status_str})",
+        ));
     }
 
     let evidence_success = task_view
@@ -270,12 +306,12 @@ pub(crate) fn closeout_gate_evaluate(
     }
 
     let all_clear = compute_closeout_all_clear(
-        goal_present, evidence_success, has_summary,
+        goal_present, goal_is_terminal, evidence_success, has_summary,
         review_goal,
         has_review_evidence,
     );
     let checkpoint_only =
-        !all_clear && goal_present && evidence_success && (!review_goal || has_review_evidence);
+        !all_clear && goal_present && !goal_is_terminal && evidence_success && (!review_goal || has_review_evidence);
 
     let verdict_label = if all_clear {
         "PASS: all closeout gates satisfied"
@@ -342,10 +378,29 @@ pub(crate) fn evaluate_closeout_gate_hook(
     ));
 
     let goal_present = task_view.goal_state.is_some();
+    let goal_is_terminal = task_view
+        .goal_state
+        .as_ref()
+        .and_then(|gs| gs.get("status"))
+        .and_then(Value::as_str)
+        .map(|s| s == "failed" || s == "completed")
+        .unwrap_or(false);
+    let goal_status_str = task_view
+        .goal_state
+        .as_ref()
+        .and_then(|gs| gs.get("status"))
+        .and_then(Value::as_str)
+        .unwrap_or("unknown");
     if !goal_present {
         findings.push("goal_state: no GOAL_STATE.json".to_string());
+    } else if goal_is_terminal {
+        findings.push(format!(
+            "goal_state: present but status={goal_status_str} (terminal) — closeout may not apply",
+        ));
     } else {
-        findings.push("goal_state: present".to_string());
+        findings.push(format!(
+            "goal_state: present (status={goal_status_str})",
+        ));
     }
 
     let evidence_success = task_view
@@ -411,7 +466,7 @@ pub(crate) fn evaluate_closeout_gate_hook(
     }
 
     let all_clear = compute_closeout_all_clear(
-        goal_present, evidence_success, has_summary,
+        goal_present, goal_is_terminal, evidence_success, has_summary,
         review_goal,
         has_review_evidence,
     );
@@ -442,12 +497,13 @@ pub(crate) fn evaluate_closeout_gate_hook(
 /// Used by both the MCP tool path and the hook path.
 fn compute_closeout_all_clear(
     goal_present: bool,
+    goal_is_terminal: bool,
     evidence_success: bool,
     has_summary: bool,
     needs_review_evidence: bool,
     has_review_evidence: bool,
 ) -> bool {
-    if !goal_present || !evidence_success || !has_summary {
+    if !goal_present || goal_is_terminal || !evidence_success || !has_summary {
         return false;
     }
     if needs_review_evidence && !has_review_evidence {

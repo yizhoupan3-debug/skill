@@ -227,7 +227,7 @@ pub fn load_tool_records_cached(
             .map(|entry| entry.content_hash == content_hash)
             .unwrap_or(false);
         if should_rehash {
-            let records = guard.get(&path_buf).unwrap().records.clone();
+            let records = guard.get(&path_buf).map(|entry| entry.records.clone()).unwrap_or_default();
             guard.insert(
                 path_buf,
                 CacheEntry {

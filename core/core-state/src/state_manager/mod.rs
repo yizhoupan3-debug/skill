@@ -631,8 +631,8 @@ mod tests {
         assert_eq!(running["status"], json!("running"));
         assert_eq!(
             running["drive_until_done"],
-            json!(true),
-            "explicit resume should restore drive continuation by default"
+            json!(false),
+            "resume without explicit drive_until_done should preserve the pause-set value (A6 fix)"
         );
         assert_eq!(running[REQUIRES_COMPLETION_EVIDENCE_KEY], json!(true));
         let _ = fs::remove_dir_all(&repo);

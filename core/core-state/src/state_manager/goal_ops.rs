@@ -721,12 +721,34 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
                 })?;
             // Neutralize pointers since the goal is now terminal
             neutralize_task_pointers_for_task(&repo_root, &task_id)?;
-            Ok(json!({
+
+            // A5: Advisory warning when max_iterations reached but caller
+            // explicitly failed the goal (not a blocking guard — fail is user-intent).
+            let max_iter_warning = state
+                .get("max_iterations")
+                .and_then(Value::as_u64)
+                .map(|max| {
+                    let current = state.get("iteration_count").and_then(Value::as_u64).unwrap_or(0);
+                    if current + 1 >= max {
+                        Some(format!(
+                            "max_iterations ({max}) reached at iteration_count={current}; use 'retry' to continue or the goal will remain failed"
+                        ))
+                    } else {
+                        None
+                    }
+                })
+                .flatten();
+
+            let mut resp = json!({
                 "ok": true,
                 "operation": "fail",
                 "task_id": task_id,
                 "goal_state_path": path.display().to_string(),
-            }))
+            });
+            if let Some(ref warning) = max_iter_warning {
+                resp["warning"] = json!(warning);
+            }
+            Ok(resp)
         }
         "pause" => set_terminal_flags(
             &repo_root,
@@ -736,13 +758,24 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
             None,
         ),
         "resume" => {
-            let drive_until_done = payload
+            let task_id = resolve_task_id_strict(&payload)?;
+            crate::utils::path_guard::validate_task_id_component(&task_id)?;
+
+            // A6: When drive_until_done is not explicitly provided, preserve
+            // the existing value from GOAL_STATE instead of defaulting to true.
+            let path = goal_state_path_for_task(&repo_root, &task_id)?;
+            let existing_state = read_goal_state(&repo_root, Some(&task_id))?.unwrap_or_default();
+            let existing_drive = existing_state
                 .get("drive_until_done")
                 .and_then(Value::as_bool)
                 .unwrap_or(true);
+            let drive_until_done = payload
+                .get("drive_until_done")
+                .and_then(Value::as_bool)
+                .unwrap_or(existing_drive);
             resume_goal_running(
                 &repo_root,
-                Some(resolve_task_id_strict(&payload)?),
+                Some(task_id),
                 drive_until_done,
                 &payload,
             )
@@ -1898,7 +1931,7 @@ mod tests {
         }))
         .expect("pause");
 
-        // resume
+        // resume — preserves the pause-set drive_until_done value (A6 fix)
         let out = framework_goal_drive(json!({
             "repo_root": repo.display().to_string(),
             "operation": "resume",
@@ -1910,7 +1943,8 @@ mod tests {
         let raw = fs::read_to_string(repo.join("artifacts/current/t-pr/GOAL_STATE.json")).unwrap();
         let goal: Value = serde_json::from_str(&raw).unwrap();
         assert_eq!(goal["status"], json!("running"));
-        assert_eq!(goal["drive_until_done"], json!(true));
+        // A6: without explicit drive_until_done, resume preserves the paused value (false)
+        assert_eq!(goal["drive_until_done"], json!(false));
         let _ = fs::remove_dir_all(&repo);
     }
 
