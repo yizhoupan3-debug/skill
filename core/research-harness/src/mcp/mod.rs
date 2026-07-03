@@ -20,6 +20,19 @@ pub fn tool_definitions() -> Vec<Value> {
             }),
         ),
         tool_def(
+            "research_aigc_humanize",
+            "对文本执行句法改写和词汇替换,降低 AIGC 检测风险",
+            json!({
+                "type": "object",
+                "properties": {
+                    "text": {"type": "string", "description": "待降重文本"},
+                    "language": {"type": "string", "enum": ["en", "zh"], "description": "语言：en=英语, zh=中文(默认 en)"},
+                    "preserve_academic": {"type": "boolean", "description": "是否保持学术语气(默认 true)"}
+                },
+                "required": ["text"]
+            }),
+        ),
+        tool_def(
             "research_review_dimensions",
             "获取审稿维度 prompt",
             json!({

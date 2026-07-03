@@ -1,5 +1,5 @@
 ---
-last_verified: "2026-07-01"
+last_verified: "2026-07-03"
 ---
 
 # Math Reasoning Harness
@@ -45,6 +45,19 @@ last_verified: "2026-07-01"
 | `math_z3_solver_check` | Z3 (Python 后端) | Z3 求解器当前上下文检查 |
 | `math_z3_solver_reset` | Z3 (Python 后端) | Z3 求解器重置 |
 | `math_z3_solver_batch` | Z3 (Python 后端) | Z3 求解器批量操作（push/pop/add/check/reset） |
+| `math_sympy_expand` | SymPy (后端可用时) + 纯 Rust 降级 | 多项式展开 |
+| `math_sympy_factor` | SymPy (后端可用时) | 因式分解 |
+| `math_sympy_series` | SymPy (后端可用时) | 级数展开 |
+| `math_sympy_differentiate` | SymPy (后端可用时) | 符号微分 |
+| `math_sympy_integrate` | SymPy (后端可用时) | 符号积分 |
+| `math_sympy_solve` | SymPy (后端可用时) | 方程求解 |
+| `math_sympy_dimension_propagate` | SymPy (后端可用时) + Rust 降级 | 物理量纲传播验证 |
+| `math_auto_prove` | SymPy → Z3 → inequality 自动链 | 自动定理证明（返回统一结果 + 证明轨迹） |
+| `math_identity_chain` | SymPy | 恒等式链传递性验证 |
+| `math_tighten_bounds` | Z3 二分迭代 | 不等式边界逐步收紧 |
+| `math_witness_consistency` | SymPy/Z3 代入验证 | 见证一致性检查（支持随机批量生成） |
+| `math_check_homomorphism` | SymPy/Z3 | 表达式同态/同构关系检测 |
+| `math_proof_trace_record` | 组合 | 证明轨迹记录与回溯 |
 
 ### 架构图
 
@@ -287,12 +300,12 @@ Error → stdout:
 | `backend_status` | 综合 | 查询所有后端版本和可用性 | ✅ `math_backend_available` |
 | `sympy_simplify` | SymPy | 表达式化简（自动 trig/代数） | ✅ `math_sympy_simplify` |
 | `sympy_verify` | SymPy | 恒等式验证 | ✅ `math_sympy_verify` |
-| `sympy_expand` | SymPy | 多项式展开 | ❌ 仅 Python 层 API |
-| `sympy_factor` | SymPy | 因式分解 | ❌ 仅 Python 层 API |
-| `sympy_series` | SymPy | 级数展开 | ❌ 仅 Python 层 API |
-| `sympy_differentiate` | SymPy | 符号微分 | ❌ 仅 Python 层 API |
-| `sympy_integrate` | SymPy | 符号积分 | ❌ 仅 Python 层 API |
-| `sympy_solve` | SymPy | 方程求解 | ❌ 仅 Python 层 API |
+| `sympy_expand` | SymPy | 多项式展开 | ✅ `math_sympy_expand` |
+| `sympy_factor` | SymPy | 因式分解 | ✅ `math_sympy_factor` |
+| `sympy_series` | SymPy | 级数展开 | ✅ `math_sympy_series` |
+| `sympy_differentiate` | SymPy | 符号微分 | ✅ `math_sympy_differentiate` |
+| `sympy_integrate` | SymPy | 符号积分 | ✅ `math_sympy_integrate` |
+| `sympy_solve` | SymPy | 方程求解 | ✅ `math_sympy_solve` |
 | `sympy_trig_simplify` | SymPy | 三角恒等式化简 | ✅ `math_sympy_trig_simplify` |
 | `sympy_subs` | SymPy | 变量替换 | ✅ `math_sympy_subs` |
 | `sympy_limit` | SymPy | 极限计算 | ✅ `math_sympy_limit` |
