@@ -7,7 +7,6 @@
 //! The `compat` module has been inlined (2026-07-02): `load_chain_from_path`
 //! auto-detects old linear vs new DAG format.
 
-pub mod engine;
 pub mod scheduler;
 pub mod tracker;
 pub mod types;

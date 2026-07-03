@@ -18,7 +18,6 @@ test-support = []
 unicode-normalization = "0.1"
 core-state = { path = "../core-state" }
 core-state-utils = { path = "../core-state-utils" }
-chain-engine = { path = "../chain-engine" }
 core-errors = { path = "../core-errors" }
 framework-core = { path = "../framework-core" }
 chrono.workspace = true

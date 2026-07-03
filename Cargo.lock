@@ -1534,7 +1534,6 @@ dependencies = [
 name = "host-projection"
 version = "0.1.0"
 dependencies = [
- "chain-engine",
  "chrono",
  "clap",
  "core-errors",
