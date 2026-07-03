@@ -34,7 +34,7 @@ pub use framework_runtime::trace_attach::{
     attach_runtime_event_transport, subscribe_attached_runtime_events,
 };
 pub use framework_runtime::trace_stream_io::{
-    inspect_trace_stream, replay_trace_stream, write_trace_compaction_delta, write_trace_metadata,
+    inspect_trace_stream, replay_trace_stream, write_trace_metadata,
 };
 pub use framework_runtime::trace_transport::write_text_payload;
 pub use framework_runtime::types::FrameworkAliasBuildOptions;
@@ -59,7 +59,7 @@ pub use runtime_core::runtime_envelope_ids::{
     RUNTIME_OBSERVABILITY_METRIC_CATALOG_SCHEMA_VERSION,
     RUNTIME_OBSERVABILITY_METRIC_CATALOG_VERSION,
     RUNTIME_OBSERVABILITY_METRIC_RECORD_SCHEMA_VERSION, RUNTIME_STORAGE_AUTHORITY,
-    RUNTIME_STORAGE_SCHEMA_VERSION, TRACE_COMPACTION_DELTA_WRITE_SCHEMA_VERSION,
+    RUNTIME_STORAGE_SCHEMA_VERSION,
     TRACE_METADATA_WRITE_AUTHORITY, TRACE_METADATA_WRITE_SCHEMA_VERSION,
     TRACE_STREAM_INSPECT_SCHEMA_VERSION, TRACE_STREAM_IO_AUTHORITY,
     TRACE_STREAM_REPLAY_SCHEMA_VERSION,
@@ -69,14 +69,12 @@ pub use runtime_core::runtime_storage::{
     runtime_storage_operation,
 };
 pub use runtime_core::stdio_payload_types::{
-    ExecuteRequestPayload, TraceCompactionDeltaWriteRequestPayload,
-    TraceMetadataWriteRequestPayload,
+    ExecuteRequestPayload, TraceMetadataWriteRequestPayload,
 };
 pub use runtime_core::stdio_transport::{
     DEFAULT_ROUTER_STDIO_POOL_SIZE, MAX_ROUTER_STDIO_POOL_SIZE, handle_stdio_json_line,
 };
 pub use runtime_core::task_state::resolve_task_view;
-pub use runtime_core::trace_runtime::sha256_hex;
 pub use runtime_core::trace_runtime::{TraceRecordEventRequestPayload, record_trace_event};
 
 // observability/control-plane re-exports (from framework-extra)

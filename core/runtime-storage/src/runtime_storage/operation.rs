@@ -191,14 +191,10 @@ pub fn resolve_storage_backend(paths: &[PathBuf]) -> Option<ResolvedStorageBacke
             .and_then(|value| value.file_name())
             .and_then(|name| name.to_str());
         let grandparent = parent.and_then(Path::parent);
-        let grandparent_name = grandparent
-            .and_then(|value| value.file_name())
-            .and_then(|name| name.to_str());
 
         let file_name = path.file_name().and_then(|name| name.to_str());
 
         if parent_name == Some("runtime_event_transports")
-            || parent_name == Some("trace_compaction")
         {
             if let Some(root) = grandparent {
                 candidates.push(root.to_path_buf());
@@ -219,11 +215,6 @@ pub fn resolve_storage_backend(paths: &[PathBuf]) -> Option<ResolvedStorageBacke
             if let Some(root) = path.parent().and_then(Path::parent) {
                 candidates.push(root.to_path_buf());
             }
-        }
-        if grandparent_name == Some("trace_compaction")
-            && let Some(root) = grandparent.and_then(Path::parent)
-        {
-            candidates.push(root.to_path_buf());
         }
         if let Some(parent) = path.parent() {
             candidates.push(parent.to_path_buf());

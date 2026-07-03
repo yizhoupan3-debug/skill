@@ -55,7 +55,7 @@ use crate::runtime_storage::{
 };
 use crate::stdio_payload_types::{
     BackgroundControlRequestPayload, ExecuteRequestPayload,
-    TraceCompactionDeltaWriteRequestPayload, TraceMetadataWriteRequestPayload,
+    TraceMetadataWriteRequestPayload,
     TraceStreamInspectRequestPayload, TraceStreamReplayRequestPayload,
 };
 use crate::stdio_transport::{
@@ -63,15 +63,14 @@ use crate::stdio_transport::{
 };
 use crate::task_command;
 use crate::trace_runtime::{
-    TraceCompactRequestPayload, TraceRecordEventRequestPayload, compact_trace_stream,
-    record_trace_event,
+    TraceRecordEventRequestPayload, record_trace_event,
 };
 use fr_runtime::trace_attach::{
     attach_runtime_event_transport, cleanup_attached_runtime_event_transport,
     subscribe_attached_runtime_events,
 };
 use fr_runtime::trace_stream_io::{
-    inspect_trace_stream, replay_trace_stream, write_trace_compaction_delta, write_trace_metadata,
+    inspect_trace_stream, replay_trace_stream, write_trace_metadata,
 };
 use fr_runtime::trace_transport::{
     write_checkpoint_resume_manifest_payload, write_transport_binding_payload,
@@ -91,19 +90,15 @@ use fr_runtime::stdio_op_registry::{StdioOpDomain, classify_stdio_op};
 use fr_runtime::types::FrameworkAliasBuildOptions;
 use framework_extra::alias::build_framework_alias_envelope;
 use framework_extra::closeout::evaluate_closeout_record_file_for_task;
-use framework_extra::content_store::ContentStore;
 use framework_extra::contract_summary::build_framework_contract_summary_envelope;
 use framework_extra::evidence::framework_hook_evidence_append;
 use framework_extra::orchestration_controller::build_runtime_observability_health_snapshot;
-use framework_extra::prompt_compression::build_framework_prompt_compression_envelope;
-use framework_extra::prompt_resolver::PromptResolver;
 use framework_extra::session_artifacts::write_framework_session_artifacts;
 use framework_extra::snapshot::build_framework_runtime_snapshot_envelope_with_level;
 use framework_core::json_value::{
     optional_bool, optional_non_empty_string, required_non_empty_string,
 };
 use framework_core::repo_roots::resolve_repo_root_arg;
-use framework_core::runtime_registry::load_runtime_registry_payload;
 use quality_gate;
 
 pub fn dispatch_stdio_json_request_payload(
@@ -384,18 +379,6 @@ fn dispatch_trace_stdio_request(op: &str, payload: Value) -> Result<Value, Frame
             "trace stream inspect",
             |p| inspect_trace_stream(p),
         ),
-        "trace_compact" => {
-            parse_and_dispatch::<TraceCompactRequestPayload, _, _>(payload, "trace compact", |p| {
-                compact_trace_stream(p).map_err(|e| FrameworkError::validation(e.to_string()))
-            })
-        }
-        "write_trace_compaction_delta" => {
-            parse_and_dispatch::<TraceCompactionDeltaWriteRequestPayload, _, _>(
-                payload,
-                "trace compaction delta",
-                |p| write_trace_compaction_delta(p),
-            )
-        }
         "write_trace_metadata" => parse_and_dispatch::<TraceMetadataWriteRequestPayload, _, _>(
             payload,
             "trace metadata write",
@@ -411,21 +394,6 @@ fn dispatch_framework_stdio_request(op: &str, payload: Value) -> Result<Value, F
     match op {
         "framework_runtime_snapshot" => dispatch_stdio_framework_runtime_snapshot(payload),
         "framework_contract_summary" => dispatch_stdio_framework_contract_summary(payload),
-        "framework_prompt_compression" => {
-            let ctx_size = payload
-                .get("context_window_size")
-                .and_then(serde_json::Value::as_u64)
-                .map(|v| v as usize);
-            build_framework_prompt_compression_envelope(payload, ctx_size)
-        }
-        "framework_resolve_content" => {
-            let hash = required_non_empty_string(&payload, "hash", "framework_resolve_content")?;
-            let artifact_root = resolve_artifact_root(&payload)?;
-            let store = ContentStore::new(&artifact_root);
-            let resolver = PromptResolver::new(store);
-            let content = resolver.resolve_one(&hash)?;
-            Ok(serde_json::json!({ "content": content }))
-        }
         "framework_session_artifact_write" => {
             write_framework_session_artifacts(payload)
         }
@@ -533,37 +501,6 @@ fn resolve_tool_registry_path_from_payload(
         .unwrap_or(".");
     Ok(std::path::PathBuf::from(repo_root)
         .join(framework_core::constants::MCP_TOOL_REGISTRY_RELATIVE_PATH))
-}
-
-/// Resolve the artifact root directory from the payload or RUNTIME_REGISTRY.
-///
-/// Resolution order:
-/// 1. `artifact_root` field in the payload (caller-provided override)
-/// 2. `runtime_artifact_root` field in `RUNTIME_REGISTRY.json`
-/// 3. Error — no fallback, host-agnostic
-fn resolve_artifact_root(payload: &Value) -> Result<std::path::PathBuf, FrameworkError> {
-    if let Some(root) = payload.get("artifact_root").and_then(Value::as_str) {
-        if !root.is_empty() {
-            return Ok(std::path::PathBuf::from(root));
-        }
-    }
-    let repo_root = payload
-        .get("repo_root")
-        .and_then(Value::as_str)
-        .unwrap_or(".");
-    if let Ok(registry) = load_runtime_registry_payload(Path::new(repo_root)) {
-        if let Some(root) = registry
-            .get(fr_runtime::constants::ARTIFACT_ROOT_REGISTRY_FIELD)
-            .and_then(Value::as_str)
-        {
-            if !root.is_empty() {
-                return Ok(std::path::PathBuf::from(root));
-            }
-        }
-    }
-    Err(FrameworkError::validation(
-        "artifact_root is required — provide in payload or set RUNTIME_REGISTRY.json::runtime_artifact_root",
-    ))
 }
 
 fn dispatch_stdio_route(payload: Value) -> Result<Value, FrameworkError> {

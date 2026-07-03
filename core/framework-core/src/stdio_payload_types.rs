@@ -192,11 +192,6 @@ impl BackgroundControlResponsePayload {
 pub struct TraceStreamReplayRequestPayload {
     pub path: Option<String>,
     pub event_stream_text: Option<String>,
-    pub compaction_manifest_path: Option<String>,
-    pub compaction_manifest_text: Option<String>,
-    pub compaction_state_text: Option<String>,
-    pub compaction_artifact_index_text: Option<String>,
-    pub compaction_delta_text: Option<String>,
     pub session_id: Option<String>,
     pub job_id: Option<String>,
     pub stream_scope_fields: Option<Vec<String>>,
@@ -208,11 +203,6 @@ pub struct TraceStreamReplayRequestPayload {
 pub struct TraceStreamInspectRequestPayload {
     pub path: Option<String>,
     pub event_stream_text: Option<String>,
-    pub compaction_manifest_path: Option<String>,
-    pub compaction_manifest_text: Option<String>,
-    pub compaction_state_text: Option<String>,
-    pub compaction_artifact_index_text: Option<String>,
-    pub compaction_delta_text: Option<String>,
     pub session_id: Option<String>,
     pub job_id: Option<String>,
     pub stream_scope_fields: Option<Vec<String>>,
@@ -308,20 +298,6 @@ impl TraceStreamInspectResponsePayload {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TraceCompactionDeltaWriteRequestPayload {
-    pub path: String,
-    pub delta: Value,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TraceCompactionDeltaWriteResponsePayload {
-    pub schema_version: String,
-    pub authority: String,
-    pub path: String,
-    pub bytes_written: usize,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TraceMetadataWriteRequestPayload {
     pub output_path: String,
     #[serde(default)]
@@ -343,11 +319,6 @@ pub struct TraceMetadataWriteRequestPayload {
     pub job_id: Option<String>,
     pub event_stream_path: Option<String>,
     pub event_stream_text: Option<String>,
-    pub compaction_manifest_path: Option<String>,
-    pub compaction_manifest_text: Option<String>,
-    pub compaction_state_text: Option<String>,
-    pub compaction_artifact_index_text: Option<String>,
-    pub compaction_delta_text: Option<String>,
     pub stream_scope_fields: Option<Vec<String>>,
     pub framework_version: Option<String>,
     pub metadata_schema_version: Option<String>,

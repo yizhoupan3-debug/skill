@@ -129,7 +129,7 @@ scope: architecture-reference
 | `core-policy` | `core/core-policy` | L0 | Hook 策略、安全规则、环境标志、审查门 |
 | `runtime-storage` | `core/runtime-storage` | L1 | 存储后端（文件系统 + SQLite + 内存） |
 | `runtime-infra` | `core/runtime-infra` | B0 | kernel_bootstrap、stdio_transport |
-| `trace-runtime` | `core/trace-runtime` | L1 | 追踪记录：event record、compact、compress |
+| `trace-runtime` | `core/trace-runtime` | L1 | 追踪记录：event record、replay |
 | ~~`fr-utils`~~ | ~~`core/fr-utils`~~ | ~~L1~~ | ~~IO 工具、常量、类型~~ *(已合并到 runtime-core, 2026-07)* |
 | ~~`fr-contracts`~~ | ~~`core/fr-contracts`~~ | ~~L2~~ | ~~执行合约：PreExecutionGuard~~ *(已合并到 runtime-core, 2026-07)* |
 | ~~`fr-exec`~~ | ~~`core/fr-exec`~~ | ~~L3~~ | ~~执行引擎~~ *(已合并到 runtime-core, 2026-07)* |

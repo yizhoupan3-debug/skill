@@ -25,8 +25,6 @@ pub const RUNTIME_STORAGE_AUTHORITY: &str = "rust-runtime-storage";
 pub const ATTACHED_RUNTIME_EVENT_ATTACH_AUTHORITY: &str = "rust-runtime-attached-event-transport";
 pub const TRACE_STREAM_REPLAY_SCHEMA_VERSION: &str = "router-rs-trace-stream-replay-v1";
 pub const TRACE_STREAM_INSPECT_SCHEMA_VERSION: &str = "router-rs-trace-stream-inspect-v1";
-pub const TRACE_COMPACTION_DELTA_WRITE_SCHEMA_VERSION: &str =
-    "router-rs-trace-compaction-delta-write-v1";
 pub const TRACE_METADATA_WRITE_SCHEMA_VERSION: &str = "router-rs-trace-metadata-write-v1";
 pub const TRACE_STREAM_IO_AUTHORITY: &str = "rust-runtime-trace-io";
 pub const TRACE_METADATA_WRITE_AUTHORITY: &str = "rust-runtime-trace-metadata-writer";

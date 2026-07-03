@@ -9,13 +9,10 @@
 
 pub mod alias;
 pub mod closeout;
-pub mod content_store;
 pub mod contract_summary;
 pub mod evidence;
 pub mod framework_doctor;
 pub mod orchestration_controller;
-pub mod prompt_compression;
-pub mod prompt_resolver;
 pub mod route_manifest_fallback;
 pub mod session_artifacts;
 pub mod snapshot;

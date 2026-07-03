@@ -19,7 +19,7 @@ pub use framework_runtime::trace_attach::{
 };
 #[cfg(test)]
 pub use framework_runtime::trace_stream_io::{
-    inspect_trace_stream, replay_trace_stream, write_trace_compaction_delta, write_trace_metadata,
+    inspect_trace_stream, replay_trace_stream, write_trace_metadata,
 };
 #[cfg(test)]
 pub use runtime_core::trace_runtime::sha256_hex;

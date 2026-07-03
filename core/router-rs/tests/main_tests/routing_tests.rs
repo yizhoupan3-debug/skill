@@ -85,10 +85,8 @@ fn stdio_dispatch_domain_classification_covers_known_ops() {
     assert!(is_routing_stdio_op("pre_tool_use_guard"));
     assert!(is_runtime_stdio_op("runtime_storage"));
     assert!(is_trace_stdio_op("trace_stream_replay"));
-    assert!(is_framework_stdio_op("framework_prompt_compression"));
     assert!(is_framework_stdio_op("framework_hook_evidence_append"));
     assert!(is_framework_stdio_op("framework_goal_drive"));
-    assert!(!is_routing_stdio_op("framework_prompt_compression"));
     assert!(!is_runtime_stdio_op("trace_record_event"));
     assert!(matches!(
         classify_stdio_op("route_report"),
@@ -101,10 +99,6 @@ fn stdio_dispatch_domain_classification_covers_known_ops() {
     assert!(matches!(
         classify_stdio_op("trace_stream_replay"),
         Some(StdioOpDomain::Trace)
-    ));
-    assert!(matches!(
-        classify_stdio_op("framework_prompt_compression"),
-        Some(StdioOpDomain::Framework)
     ));
     assert!(matches!(
         classify_stdio_op("framework_goal_drive"),
@@ -124,14 +118,6 @@ fn stdio_request_routes_common_ops_to_expected_domains() {
         runtime_error
             .to_string()
             .contains("parse runtime storage input failed")
-    );
-
-    let trace_error = dispatch_stdio_json_request("trace_compact", json!({}))
-        .expect_err("trace op should parse trace compact payload");
-    assert!(
-        trace_error
-            .to_string()
-            .contains("parse trace compact input failed")
     );
 
     let framework_error = dispatch_stdio_json_request("framework_runtime_snapshot", json!({}))

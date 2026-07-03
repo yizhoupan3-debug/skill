@@ -2,8 +2,7 @@
 pub mod error;
 pub use error::TraceError;
 pub use trace_record::{
-    TraceCompactRequestPayload, TraceCompactResponsePayload, TraceRecordEventRequestPayload,
-    TraceRecordEventResponsePayload, TraceTextWrite, build_trace_cursor, compact_trace_stream,
+    TraceRecordEventRequestPayload, TraceRecordEventResponsePayload, build_trace_cursor,
     hydrate_trace_event, record_trace_event, sha256_hex, trace_event_object,
     trace_event_string_field, trace_event_usize_field,
 };

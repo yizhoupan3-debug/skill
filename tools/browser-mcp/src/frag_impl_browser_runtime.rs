@@ -772,11 +772,6 @@ impl BrowserRuntime {
             Ok(resolved) => match (mcp_tool_registry::browser_dispatch::hooks().inspect_trace_stream)(TraceStreamInspectRequestPayload {
                 path: Some(resolved.trace_stream_path),
                 event_stream_text: None,
-                compaction_manifest_path: None,
-                compaction_manifest_text: None,
-                compaction_state_text: None,
-                compaction_artifact_index_text: None,
-                compaction_delta_text: None,
                 session_id: None,
                 job_id: None,
                 stream_scope_fields: None,

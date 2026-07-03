@@ -23,12 +23,9 @@ pub const FRAMEWORK_CONTRACT_SUMMARY_SCHEMA_VERSION: &str =
 pub const FRAMEWORK_ALIAS_SCHEMA_VERSION: &str = "router-rs-framework-alias-v1";
 pub const FRAMEWORK_SESSION_ARTIFACT_WRITE_SCHEMA_VERSION: &str =
     "router-rs-framework-session-artifact-write-v1";
-pub const FRAMEWORK_PROMPT_COMPRESSION_SCHEMA_VERSION: &str =
-    "router-rs-framework-prompt-compression-v1";
 pub const FRAMEWORK_RUNTIME_AUTHORITY: &str = "rust-framework-runtime-read-model";
 pub const FRAMEWORK_SESSION_ARTIFACT_WRITE_AUTHORITY: &str =
     "rust-framework-session-artifact-writer";
-pub const FRAMEWORK_PROMPT_COMPRESSION_AUTHORITY: &str = "rust-framework-prompt-policy";
 
 pub const CURRENT_ARTIFACT_DIR: &str = "current";
 pub const TASK_POINTERS_FILENAME: &str = "TASK_POINTERS.json";
@@ -88,13 +85,6 @@ pub const TERMINAL_VERIFICATION_STATUSES: &[&str] = &[
     "failed",
 ];
 pub const STALE_STORY_STATES: &[&str] = &["stale", "expired", "invalid"];
-
-// ---------------------------------------------------------------------------
-// Content store constants
-// ---------------------------------------------------------------------------
-
-/// Subdirectory name within the artifact root for the content-addressed store.
-pub const CONTENT_STORE_DIR: &str = "content-store";
 
 /// Field name in RUNTIME_REGISTRY.json that specifies the artifact root.
 pub const ARTIFACT_ROOT_REGISTRY_FIELD: &str = "runtime_artifact_root";

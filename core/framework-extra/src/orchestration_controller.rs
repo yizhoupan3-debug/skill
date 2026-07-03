@@ -607,14 +607,6 @@ fn runtime_observability_metric_catalog() -> Vec<Value> {
             "base_dimensions": base_dimensions.clone(),
             "dashboard_derivation": "p50 / p95 / p99",
         }),
-        json!({
-            "intent": "compression offload rate",
-            "metric_name": "runtime.compression_offload_total",
-            "metric_type": "counter",
-            "unit": "1",
-            "base_dimensions": base_dimensions,
-            "dashboard_derivation": "rate(compression_offload_total) / rate(compression_candidate_total)",
-        }),
     ]
 }
 
@@ -728,12 +720,6 @@ pub fn runtime_observability_dashboard_schema() -> Value {
                 "metric": "runtime.interrupt_completion_latency_ms",
                 "visualization": "histogram",
                 "group_by": ["service.name", "service.version", "runtime.session_id"],
-            },
-            {
-                "name": "Compression offload rate",
-                "metric": "runtime.compression_offload_total",
-                "visualization": "timeseries",
-                "group_by": ["service.name", "service.version", "runtime.generation"],
             },
         ],
         "alerts": [

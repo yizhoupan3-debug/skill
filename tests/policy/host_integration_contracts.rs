@@ -86,10 +86,3 @@ fn sync_skills_uses_router_rs_directly() {
     assert!(sync_source.contains("HostEntrypointPayloadProvider"));
     // codex_hooks 模块已被统一 host projection 取代，不再有 provider 特定引用
 }
-
-#[test]
-fn prompt_policy_is_rust_owned() {
-    let root = project_root();
-    let compression = read_text(&root.join("core/framework-extra/src/prompt_compression.rs"));
-    assert!(compression.contains("prompt_policy_owner"));
-}

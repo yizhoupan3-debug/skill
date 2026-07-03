@@ -7,11 +7,10 @@ use std::path::Path;
 use std::sync::{Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use super::util::build_prefixed_id;
-use super::util::{build_trace_cursor, trace_event_string_field, trace_event_usize_field};
+use super::util::{build_prefixed_id, build_trace_cursor};
 use super::{
-    TRACE_COMPACTION_DELTA_SCHEMA_VERSION, TRACE_RECORD_EVENT_SCHEMA_VERSION,
-    TRACE_STREAM_IO_AUTHORITY, TraceRecordEventRequestPayload, TraceRecordEventResponsePayload,
+    TRACE_RECORD_EVENT_SCHEMA_VERSION, TRACE_STREAM_IO_AUTHORITY, TraceRecordEventRequestPayload,
+    TraceRecordEventResponsePayload,
 };
 
 #[tracing::instrument(level = "debug", skip_all)]
@@ -72,14 +71,7 @@ pub fn record_trace_event(
         }
     }
 
-    let (delta_path, delta_line, delta_bytes_written) = maybe_append_compaction_delta(
-        &event_value,
-        payload.compaction_manifest_path.as_deref(),
-        payload.compaction_manifest_text.as_deref(),
-        payload.write_outputs,
-    )?;
-
-    tracing::debug!(event_id = %event_id, kind = %payload.kind, bytes_written = %sink_line.len(), delta_bytes_written, "trace event recorded");
+    tracing::debug!(event_id = %event_id, kind = %payload.kind, bytes_written = %sink_line.len(), "trace event recorded");
 
     Ok(TraceRecordEventResponsePayload {
         schema_version: TRACE_RECORD_EVENT_SCHEMA_VERSION.to_string(),
@@ -88,88 +80,9 @@ pub fn record_trace_event(
         event: event_value,
         bytes_written: sink_line.len(),
         sink_line,
-        delta_path,
-        delta_line,
-        delta_bytes_written,
     })
 }
 
-fn maybe_append_compaction_delta(
-    event: &Value,
-    manifest_path: Option<&str>,
-    manifest_text: Option<&str>,
-    write_outputs: bool,
-) -> Result<(Option<String>, Option<String>, usize), TraceError> {
-    if manifest_path.is_none() && manifest_text.is_none() {
-        return Ok((None, None, 0));
-    }
-    let manifest_payload = manifest_text
-        .map(str::to_string)
-        .or_else(|| manifest_path.and_then(|path| fs::read_to_string(path).ok()))
-        .and_then(|raw| serde_json::from_str::<Value>(&raw).ok());
-    let Some(manifest) = manifest_payload.and_then(|value| value.as_object().cloned()) else {
-        return Ok((None, None, 0));
-    };
-    let active_generation = manifest
-        .get("active_generation")
-        .and_then(Value::as_u64)
-        .map(|value| value as usize)
-        .unwrap_or(0);
-    let event_object = event
-        .as_object()
-        .ok_or_else(|| TraceError::validation("trace event must be an object"))?;
-    let event_generation = trace_event_usize_field(event_object, "generation").unwrap_or(0);
-    let event_id = trace_event_string_field(event_object, "event_id").unwrap_or_default();
-    if event_generation != active_generation {
-        tracing::debug!(event_id = %event_id, event_generation, active_generation, "delta skipped: generation mismatch");
-        return Ok((None, None, 0));
-    }
-    let Some(parent_snapshot_id) = manifest
-        .get("active_parent_snapshot_id")
-        .and_then(Value::as_str)
-        .map(str::to_string)
-    else {
-        tracing::debug!(event_id = %event_id, "delta skipped: no active_parent_snapshot_id in manifest");
-        return Ok((None, None, 0));
-    };
-    let Some(delta_path) = manifest.get("delta_path").and_then(Value::as_str) else {
-        tracing::debug!(event_id = %event_id, "delta skipped: no delta_path in manifest");
-        return Ok((None, None, 0));
-    };
-    let delta = json!({
-        "schema_version": TRACE_COMPACTION_DELTA_SCHEMA_VERSION,
-        "generation": active_generation,
-        "delta_id": build_prefixed_id("delta", &event_id),
-        "parent_snapshot_id": parent_snapshot_id,
-        "seq": trace_event_usize_field(event_object, "seq").unwrap_or(0),
-        "ts": trace_event_string_field(event_object, "ts").unwrap_or_default(),
-        "kind": trace_event_string_field(event_object, "kind").unwrap_or_default(),
-        "payload": {
-            "event_id": event_id.clone(),
-            "page_token": trace_event_string_field(event_object, "page_token").unwrap_or_default(),
-            "stage": trace_event_string_field(event_object, "stage").unwrap_or_else(|| "background".to_string()),
-            "status": trace_event_string_field(event_object, "status").unwrap_or_else(|| "ok".to_string()),
-            "payload": event_object.get("payload").cloned().unwrap_or_else(|| json!({})),
-        },
-        "artifact_refs": [],
-        "applies_to": {
-            "run_id": trace_event_string_field(event_object, "run_id").or_else(|| trace_event_string_field(event_object, "session_id")).unwrap_or_default(),
-            "job_id": event_object.get("job_id").cloned().unwrap_or(Value::Null),
-        },
-    });
-    let delta_line = serde_json::to_string(&delta).map_err(|err| {
-        TraceError::validation(format!("serialize trace compaction delta failed: {err}"))
-    })? + "\n";
-    if write_outputs {
-        if let Err(err) = append_text(Path::new(delta_path), &delta_line) {
-            tracing::error!(event_id = %event_id, delta_path = %delta_path, "append compaction delta failed: {err}");
-            return Err(err);
-        }
-    }
-    let bytes = delta_line.len();
-    tracing::debug!(event_id = %event_id, delta_path = %delta_path, delta_bytes = bytes, "compaction delta appended");
-    Ok((Some(delta_path.to_string()), Some(delta_line), bytes))
-}
 
 fn build_event_id(seq: usize, run_id: &str, job_id: Option<&str>, kind: &str) -> String {
     let nanos = SystemTime::now()

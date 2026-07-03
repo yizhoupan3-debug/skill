@@ -211,7 +211,6 @@ pub enum FrameworkCommand {
     /// Host-neutral host-entrypoint materialization (use `--host-id` to select host; default: all supported).
     #[command(name = "sync-entrypoints", visible_alias = "sync_entrypoints")]
     SyncEntrypoints(SyncEntrypointsCommand),
-    PromptCompression(JsonInputCommand),
     Statusline(RepoRootCommand),
     SessionArtifactWrite(JsonInputCommand),
     /// 追加一条外部 hook 验证记录到 `EVIDENCE_INDEX.json`（需连续性已初始化）。
@@ -355,8 +354,6 @@ pub enum TraceCommand {
     RecordEvent(JsonInputCommand),
     StreamReplay(JsonInputCommand),
     StreamInspect(JsonInputCommand),
-    Compact(JsonInputCommand),
-    WriteCompactionDelta(JsonInputCommand),
     WriteMetadata(JsonInputCommand),
 }
 
@@ -1026,22 +1023,6 @@ mod tests {
                 assert_eq!(command.repo_root, Some(PathBuf::from("/tmp")));
             }
             other => panic!("expected Host::Agent, got {:?}", other),
-        }
-    }
-
-    // ── Trace command tests ──
-
-    #[test]
-    fn trace_compact_parses() {
-        let cli = Cli::try_parse_from(["router-rs-cli", "trace", "compact", "--input-json", "{}"])
-            .unwrap();
-        match cli.command {
-            Some(RouterCommand::Trace {
-                command: TraceCommand::Compact(cmd),
-            }) => {
-                assert_eq!(cmd.input_json, "{}");
-            }
-            other => panic!("expected Trace::Compact, got {:?}", other),
         }
     }
 

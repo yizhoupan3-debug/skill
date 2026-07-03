@@ -18,11 +18,6 @@ fn trace_stream_replay_unwraps_wrapped_events_and_supports_resume() {
     let replay = replay_trace_stream(TraceStreamReplayRequestPayload {
         path: Some(trace_path.display().to_string()),
         event_stream_text: None,
-        compaction_manifest_path: None,
-        compaction_manifest_text: None,
-        compaction_state_text: None,
-        compaction_artifact_index_text: None,
-        compaction_delta_text: None,
         session_id: None,
         job_id: None,
         stream_scope_fields: None,
@@ -69,11 +64,6 @@ fn trace_stream_inspect_reports_latest_event_metadata() {
     let summary = inspect_trace_stream(TraceStreamInspectRequestPayload {
         path: Some(trace_path.display().to_string()),
         event_stream_text: None,
-        compaction_manifest_path: None,
-        compaction_manifest_text: None,
-        compaction_state_text: None,
-        compaction_artifact_index_text: None,
-        compaction_delta_text: None,
         session_id: None,
         job_id: None,
         stream_scope_fields: None,
@@ -110,11 +100,6 @@ fn trace_stream_replay_filters_by_scope_and_hydrates_cursor_fields() {
     let replay = replay_trace_stream(TraceStreamReplayRequestPayload {
         path: Some(trace_path.display().to_string()),
         event_stream_text: None,
-        compaction_manifest_path: None,
-        compaction_manifest_text: None,
-        compaction_state_text: None,
-        compaction_artifact_index_text: None,
-        compaction_delta_text: None,
         session_id: Some("session-1".to_string()),
         job_id: Some("job-1".to_string()),
         stream_scope_fields: None,
@@ -132,7 +117,7 @@ fn trace_stream_replay_filters_by_scope_and_hydrates_cursor_fields() {
     assert_eq!(replay.events[0]["seq"], json!(1));
     assert_eq!(replay.events[0]["generation"], json!(0));
     assert_eq!(
-        replay.events[0]["cursor"],
+        replay.events[0]["page_token"],
         Value::String("g0:s1:evt-1".to_string())
     );
     assert_eq!(
@@ -302,11 +287,6 @@ fn attach_runtime_event_transport_reads_sqlite_resume_manifest_trace_stream() {
     let replay = replay_trace_stream(TraceStreamReplayRequestPayload {
         path: Some(trace_stream_path.display().to_string()),
         event_stream_text: None,
-        compaction_manifest_path: None,
-        compaction_manifest_text: None,
-        compaction_state_text: None,
-        compaction_artifact_index_text: None,
-        compaction_delta_text: None,
         session_id: None,
         job_id: None,
         stream_scope_fields: None,
@@ -321,276 +301,6 @@ fn attach_runtime_event_transport_reads_sqlite_resume_manifest_trace_stream() {
     );
 
     fs::remove_dir_all(root.parent().expect("fixture parent")).expect("cleanup sqlite fixture");
-}
-
-#[test]
-fn trace_compaction_inspect_and_replay_read_snapshot_plus_deltas() {
-    let temp_root = temp_trace_path("trace-compaction");
-    let trace_root = temp_root.parent().expect("temp root parent").join(
-        temp_root
-            .file_stem()
-            .expect("temp root stem")
-            .to_string_lossy()
-            .to_string(),
-    );
-    let manifest_path = trace_root.join("stream.manifest.json");
-    let delta_path = trace_root.join("stream.deltas.jsonl");
-    let artifact_dir = trace_root.join("artifacts");
-    let state_path = artifact_dir.join("stream.state.json");
-    let artifact_index_path = artifact_dir.join("stream.artifacts.json");
-    fs::create_dir_all(&artifact_dir).expect("create artifact dir");
-    let state_text = serde_json::to_string_pretty(&json!({
-        "session_id": "session-compact",
-        "job_id": "job-compact",
-        "latest_cursor": {
-            "schema_version": "runtime-trace-cursor-v1",
-            "session_id": "session-compact",
-            "job_id": "job-compact",
-            "generation": 0,
-            "seq": 2,
-            "event_id": "evt-snapshot",
-            "cursor": "g0:s2:evt-snapshot"
-        },
-        "latest_event": {
-            "event_id": "evt-snapshot",
-            "kind": "job.progress",
-            "stage": "background",
-            "status": "ok",
-            "ts": "2026-04-22T10:00:00.000Z"
-        }
-    }))
-    .expect("serialize state");
-    fs::write(&state_path, &state_text).expect("write state");
-    let state_digest = sha256_hex(state_text.as_bytes());
-    let artifact_index_text = serde_json::to_string_pretty(&json!([
-        {
-            "schema_version": "runtime-trace-artifact-ref-v1",
-            "artifact_id": "art-state",
-            "kind": "state_ref",
-            "uri": state_path.display().to_string(),
-            "digest": state_digest,
-            "size_bytes": state_text.len()
-        }
-    ]))
-    .expect("serialize artifact index");
-    fs::write(&artifact_index_path, &artifact_index_text).expect("write artifact index");
-    let artifact_index_digest = sha256_hex(artifact_index_text.as_bytes());
-    fs::write(
-            &delta_path,
-            concat!(
-                "{\"schema_version\":\"runtime-trace-compaction-delta-v1\",\"generation\":1,\"delta_id\":\"delta-1\",\"parent_snapshot_id\":\"snap-1\",\"seq\":1,\"ts\":\"2026-04-22T10:00:01.000Z\",\"kind\":\"job.resumed\",\"payload\":{\"event_id\":\"evt-1\",\"cursor\":\"g1:s1:evt-1\",\"stage\":\"background\",\"status\":\"ok\",\"payload\":{\"step\":3}},\"artifact_refs\":[],\"applies_to\":{\"session_id\":\"session-compact\",\"job_id\":\"job-compact\"}}\n",
-                "{\"schema_version\":\"runtime-trace-compaction-delta-v1\",\"generation\":1,\"delta_id\":\"delta-2\",\"parent_snapshot_id\":\"snap-1\",\"seq\":2,\"ts\":\"2026-04-22T10:00:02.000Z\",\"kind\":\"job.completed\",\"payload\":{\"event_id\":\"evt-2\",\"cursor\":\"g1:s2:evt-2\",\"stage\":\"background\",\"status\":\"ok\",\"payload\":{\"step\":4}},\"artifact_refs\":[],\"applies_to\":{\"session_id\":\"session-compact\",\"job_id\":\"job-compact\"}}\n"
-            ),
-        )
-        .expect("write deltas");
-    fs::write(
-        &manifest_path,
-        serde_json::to_string_pretty(&json!({
-            "schema_version": "runtime-trace-compaction-manifest-v1",
-            "session_id": "session-compact",
-            "job_id": "job-compact",
-            "backend_family": "filesystem",
-            "compaction_supported": true,
-            "snapshot_delta_supported": true,
-            "latest_stable_snapshot": {
-                "schema_version": "runtime-trace-compaction-snapshot-v1",
-                "generation": 0,
-                "snapshot_id": "snap-1",
-                "session_id": "session-compact",
-                "job_id": "job-compact",
-                "state_digest": "state-digest",
-                "artifact_index_ref": {
-                    "schema_version": "runtime-trace-artifact-ref-v1",
-                    "artifact_id": "art-index",
-                    "kind": "artifact_index_ref",
-                    "uri": artifact_index_path.display().to_string(),
-                    "digest": artifact_index_digest,
-                    "size_bytes": artifact_index_text.len()
-                },
-                "state_ref": {
-                    "schema_version": "runtime-trace-artifact-ref-v1",
-                    "artifact_id": "art-state",
-                    "kind": "state_ref",
-                    "uri": state_path.display().to_string(),
-                    "digest": state_digest,
-                    "size_bytes": state_text.len()
-                }
-            },
-            "active_generation": 1,
-            "active_parent_snapshot_id": "snap-1",
-            "manifest_path": manifest_path.display().to_string(),
-            "delta_path": delta_path.display().to_string(),
-            "artifact_index_path": artifact_index_path.display().to_string(),
-            "state_path": state_path.display().to_string()
-        }))
-        .expect("serialize manifest"),
-    )
-    .expect("write manifest");
-
-    let summary = inspect_trace_stream(TraceStreamInspectRequestPayload {
-        path: None,
-        event_stream_text: None,
-        compaction_manifest_path: Some(manifest_path.display().to_string()),
-        compaction_manifest_text: None,
-        compaction_state_text: None,
-        compaction_artifact_index_text: None,
-        compaction_delta_text: None,
-        session_id: Some("session-compact".to_string()),
-        job_id: Some("job-compact".to_string()),
-        stream_scope_fields: None,
-    })
-    .expect("inspect compaction manifest");
-    assert_eq!(summary.source_kind, "compaction_manifest");
-    assert_eq!(summary.event_count, 2);
-    assert_eq!(summary.latest_event_id.as_deref(), Some("evt-2"));
-    assert_eq!(
-        summary.recovery.expect("recovery")["latest_recoverable_generation"],
-        json!(1)
-    );
-
-    let replay = replay_trace_stream(TraceStreamReplayRequestPayload {
-        path: None,
-        event_stream_text: None,
-        compaction_manifest_path: Some(manifest_path.display().to_string()),
-        compaction_manifest_text: None,
-        compaction_state_text: None,
-        compaction_artifact_index_text: None,
-        compaction_delta_text: None,
-        session_id: Some("session-compact".to_string()),
-        job_id: Some("job-compact".to_string()),
-        stream_scope_fields: None,
-        after_event_id: Some("evt-1".to_string()),
-        limit: Some(10),
-    })
-    .expect("replay compaction manifest");
-    assert_eq!(replay.source_kind, "compaction_manifest");
-    assert_eq!(replay.events.len(), 1);
-    assert_eq!(
-        replay.events[0]["event_id"],
-        Value::String("evt-2".to_string())
-    );
-
-    fs::remove_dir_all(&trace_root).expect("cleanup compaction root");
-}
-
-#[test]
-fn trace_compaction_recovery_fails_closed_on_artifact_digest_mismatch() {
-    let temp_root = temp_trace_path("trace-compaction-digest-mismatch");
-    let trace_root = temp_root.parent().expect("temp root parent").join(
-        temp_root
-            .file_stem()
-            .expect("temp root stem")
-            .to_string_lossy()
-            .to_string(),
-    );
-    let manifest_path = trace_root.join("stream.manifest.json");
-    let artifact_dir = trace_root.join("artifacts");
-    let state_path = artifact_dir.join("stream.state.json");
-    let artifact_index_path = artifact_dir.join("stream.artifacts.json");
-    fs::create_dir_all(&artifact_dir).expect("create digest mismatch artifact dir");
-    let state_text = serde_json::to_string_pretty(&json!({
-        "session_id": "session-compact",
-        "job_id": "job-compact",
-        "latest_cursor": {
-            "schema_version": "runtime-trace-cursor-v1",
-            "session_id": "session-compact",
-            "job_id": "job-compact",
-            "generation": 0,
-            "seq": 1,
-            "event_id": "evt-snapshot",
-            "cursor": "g0:s1:evt-snapshot"
-        }
-    }))
-    .expect("serialize digest mismatch state");
-    fs::write(&state_path, &state_text).expect("write digest mismatch state");
-    let artifact_index_text = "[]";
-    fs::write(&artifact_index_path, artifact_index_text)
-        .expect("write digest mismatch artifact index");
-    fs::write(
-        &manifest_path,
-        serde_json::to_string_pretty(&json!({
-            "schema_version": "runtime-trace-compaction-manifest-v1",
-            "session_id": "session-compact",
-            "job_id": "job-compact",
-            "latest_stable_snapshot": {
-                "schema_version": "runtime-trace-compaction-snapshot-v1",
-                "generation": 0,
-                "snapshot_id": "snap-1",
-                "session_id": "session-compact",
-                "job_id": "job-compact",
-                "state_ref": {
-                    "schema_version": "runtime-trace-artifact-ref-v1",
-                    "artifact_id": "art-state",
-                    "kind": "state_ref",
-                    "uri": state_path.display().to_string(),
-                    "digest": "not-the-real-digest",
-                    "size_bytes": state_text.len()
-                },
-                "artifact_index_ref": {
-                    "schema_version": "runtime-trace-artifact-ref-v1",
-                    "artifact_id": "art-index",
-                    "kind": "artifact_index_ref",
-                    "uri": artifact_index_path.display().to_string(),
-                    "digest": sha256_hex(artifact_index_text.as_bytes()),
-                    "size_bytes": artifact_index_text.len()
-                }
-            },
-            "active_generation": 1,
-            "active_parent_snapshot_id": "snap-1",
-            "manifest_path": manifest_path.display().to_string(),
-            "artifact_index_path": artifact_index_path.display().to_string(),
-            "state_path": state_path.display().to_string()
-        }))
-        .expect("serialize digest mismatch manifest"),
-    )
-    .expect("write digest mismatch manifest");
-
-    let err = inspect_trace_stream(TraceStreamInspectRequestPayload {
-        path: None,
-        event_stream_text: None,
-        compaction_manifest_path: Some(manifest_path.display().to_string()),
-        compaction_manifest_text: None,
-        compaction_state_text: None,
-        compaction_artifact_index_text: None,
-        compaction_delta_text: None,
-        session_id: Some("session-compact".to_string()),
-        job_id: Some("job-compact".to_string()),
-        stream_scope_fields: None,
-    })
-    .expect_err("digest mismatch must fail closed");
-
-    assert!(
-        err.to_string().contains("artifact digest mismatched"),
-        "expected digest mismatch error, got: {err}"
-    );
-
-    fs::remove_dir_all(&trace_root).expect("cleanup digest mismatch compaction root");
-}
-
-#[test]
-fn write_trace_compaction_delta_appends_one_jsonl_line() {
-    let delta_path = temp_trace_path("trace-delta-write");
-    let response = write_trace_compaction_delta(TraceCompactionDeltaWriteRequestPayload {
-        path: delta_path.display().to_string(),
-        delta: json!({
-            "schema_version": "runtime-trace-compaction-delta-v1",
-            "delta_id": "delta-1",
-            "seq": 1
-        }),
-    })
-    .expect("write delta");
-
-    assert_eq!(
-        response.schema_version,
-        TRACE_COMPACTION_DELTA_WRITE_SCHEMA_VERSION
-    );
-    assert_eq!(response.authority, TRACE_STREAM_IO_AUTHORITY);
-    assert_eq!(response.path, delta_path.display().to_string());
-    assert!(response.bytes_written > 0);
-    let persisted = fs::read_to_string(&delta_path).expect("read delta");
-    assert!(persisted.contains("\"delta_id\":\"delta-1\""));
-
-    fs::remove_file(&delta_path).expect("cleanup delta path");
 }
 
 #[test]
@@ -613,8 +323,6 @@ fn trace_append_preserves_jsonl_records_under_concurrency() {
                 stage: "append".to_string(),
                 status: "ok".to_string(),
                 payload: Map::new(),
-                compaction_manifest_path: None,
-                compaction_manifest_text: None,
             })
             .expect("record trace event");
         }));
@@ -634,24 +342,6 @@ fn trace_append_preserves_jsonl_records_under_concurrency() {
     assert_eq!(seen.len(), 32);
 
     fs::remove_file(&trace_path).expect("cleanup trace path");
-}
-
-#[test]
-fn stdio_request_dispatches_write_trace_compaction_delta_payload() {
-    let delta_path = temp_trace_path("trace-delta-write-stdio");
-    let response = handle_stdio_json_line(&format!(
-        "{{\"id\":2,\"op\":\"write_trace_compaction_delta\",\"payload\":{{\"path\":\"{}\",\"delta\":{{\"schema_version\":\"runtime-trace-compaction-delta-v1\",\"delta_id\":\"delta-stdio\",\"seq\":2}}}}}}",
-        delta_path.display()
-    ));
-    assert!(response.ok);
-    assert_eq!(response.id, json!(2));
-    assert_eq!(
-        response.payload.expect("payload")["schema_version"],
-        json!(TRACE_COMPACTION_DELTA_WRITE_SCHEMA_VERSION)
-    );
-    let persisted = fs::read_to_string(&delta_path).expect("read stdio delta");
-    assert!(persisted.contains("\"delta_id\":\"delta-stdio\""));
-    fs::remove_file(&delta_path).expect("cleanup stdio delta path");
 }
 
 #[test]
@@ -680,11 +370,6 @@ fn write_trace_metadata_persists_primary_and_mirror_outputs() {
         job_id: None,
         event_stream_path: None,
         event_stream_text: None,
-        compaction_manifest_path: None,
-        compaction_manifest_text: None,
-        compaction_state_text: None,
-        compaction_artifact_index_text: None,
-        compaction_delta_text: None,
         stream_scope_fields: None,
         framework_version: Some("phase1".to_string()),
         metadata_schema_version: Some("trace-metadata-v2".to_string()),
@@ -730,7 +415,7 @@ fn stdio_request_dispatches_write_trace_metadata_payload() {
         "{{\"id\":3,\"op\":\"write_trace_metadata\",\"payload\":{{\"output_path\":\"{}\",\"task\":\"trace metadata stdio\",\"matched_skills\":[\"goal_drive\"],\"owner\":\"goal_drive\",\"gate\":\"none\",\"overlay\":null,\"reroute_count\":0,\"retry_count\":0,\"artifact_paths\":[],\"verification_status\":\"passed\",\"metadata_schema_version\":\"trace-metadata-v2\",\"routing_runtime_version\":11}}}}",
         output_path.display()
     ));
-    assert!(response.ok);
+    if !response.ok { eprintln!("ERROR: {:?}", response.error); panic!("{}", response.error.unwrap_or_default()); } else { assert!(response.ok); }
     assert_eq!(response.id, json!(3));
     assert_eq!(
         response.payload.expect("payload")["schema_version"],
@@ -762,11 +447,6 @@ fn write_trace_metadata_fails_closed_for_explicit_bad_trace_source() {
         job_id: None,
         event_stream_path: Some(missing_trace_path.display().to_string()),
         event_stream_text: None,
-        compaction_manifest_path: None,
-        compaction_manifest_text: None,
-        compaction_state_text: None,
-        compaction_artifact_index_text: None,
-        compaction_delta_text: None,
         stream_scope_fields: None,
         framework_version: None,
         metadata_schema_version: Some("trace-metadata-v2".to_string()),

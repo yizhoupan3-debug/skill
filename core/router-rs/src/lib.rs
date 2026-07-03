@@ -139,10 +139,6 @@ mod smoke_codegraph_four_host_install_projection_tests;
 mod smoke_codegraph_four_host_stdio_e2e_tests;
 
 #[cfg(test)]
-#[path = "../tests/smoke_p0_trace_runtime_compaction_tests.rs"]
-mod smoke_p0_trace_runtime_compaction_tests;
-
-#[cfg(test)]
 #[path = "../tests/smoke_p0_router_self_tests.rs"]
 mod smoke_p0_router_self_tests;
 

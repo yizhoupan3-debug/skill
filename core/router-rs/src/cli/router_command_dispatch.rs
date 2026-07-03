@@ -15,7 +15,7 @@ use core_state::closeout_validation::{
     evaluate_closeout_record_value_with_context,
 };
 use framework_runtime::trace_stream_io::{
-    inspect_trace_stream, replay_trace_stream, write_trace_compaction_delta, write_trace_metadata,
+    inspect_trace_stream, replay_trace_stream, write_trace_metadata,
 };
 use framework_runtime::json_io::{parse_json_input, print_json_value as raw_print_json_value};
 use framework_runtime::types::FrameworkAliasBuildOptions;
@@ -23,7 +23,6 @@ use framework_extra::alias::build_framework_alias_envelope;
 use framework_extra::contract_summary::build_framework_contract_summary_envelope;
 use framework_extra::evidence::framework_hook_evidence_append;
 use framework_extra::framework_doctor::run_framework_doctor;
-use framework_extra::prompt_compression::build_framework_prompt_compression_envelope;
 use framework_extra::session_artifacts::write_framework_session_artifacts;
 use framework_extra::snapshot::build_framework_runtime_snapshot_envelope_with_level;
 use framework_extra::statusline::build_framework_statusline;
@@ -49,8 +48,7 @@ use runtime_core::step_ledger::handle_step_ledger_operation;
 use runtime_core::task_command;
 use runtime_core::task_state;
 use runtime_core::trace_runtime::{
-    TraceCompactRequestPayload, TraceRecordEventRequestPayload, compact_trace_stream,
-    record_trace_event,
+    TraceRecordEventRequestPayload, record_trace_event,
 };
 
 use runtime_core::runtime_storage::RuntimeStorageRequestPayload;
@@ -164,19 +162,6 @@ pub fn dispatch_framework_command(command: FrameworkCommand) -> Result<(), Frame
             let provider =
                 resolve_host_entrypoint_provider(&repo_root, command.host_id.as_deref())?;
             print_json_value(&sync_host_entrypoints(&repo_root, true, provider)?)
-        }
-        FrameworkCommand::PromptCompression(command) => {
-            let payload =
-                parse_json_input::<Value>(&command.input_json, "framework prompt compression")?;
-            {
-                let ctx_size = payload
-                    .get("context_window_size")
-                    .and_then(serde_json::Value::as_u64)
-                    .map(|v| v as usize);
-                print_json_value(&build_framework_prompt_compression_envelope(
-                    payload, ctx_size,
-                )?)
-            }
         }
         FrameworkCommand::Statusline(command) => {
             let repo_root = resolve_repo_root_arg(command.repo_root.as_deref())?;
@@ -636,22 +621,6 @@ pub fn dispatch_trace_command(command: TraceCommand) -> Result<(), FrameworkErro
                 "trace stream inspect",
             )?;
             print_json_value(&inspect_trace_stream(payload)?)
-        }
-        TraceCommand::Compact(command) => {
-            let payload = parse_json_input::<TraceCompactRequestPayload>(
-                &command.input_json,
-                "trace compact",
-            )?;
-            print_json_value(
-                &compact_trace_stream(payload).map_err(|e| FrameworkError::hook(e.to_string()))?,
-            )
-        }
-        TraceCommand::WriteCompactionDelta(command) => {
-            let payload = parse_json_input::<TraceCompactionDeltaWriteRequestPayload>(
-                &command.input_json,
-                "trace compaction delta write",
-            )?;
-            print_json_value(&write_trace_compaction_delta(payload)?)
         }
         TraceCommand::WriteMetadata(command) => {
             let payload = parse_json_input::<TraceMetadataWriteRequestPayload>(

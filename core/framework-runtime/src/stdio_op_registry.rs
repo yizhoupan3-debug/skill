@@ -64,16 +64,12 @@ const TRACE_STDIO_OPS: &[&str] = &[
     "trace_record_event",
     "trace_stream_replay",
     "trace_stream_inspect",
-    "trace_compact",
-    "write_trace_compaction_delta",
     "write_trace_metadata",
 ];
 
 const FRAMEWORK_STDIO_OPS: &[&str] = &[
     "framework_runtime_snapshot",
     "framework_contract_summary",
-    "framework_prompt_compression",
-    "framework_resolve_content",
     "framework_session_artifact_write",
     "framework_hook_evidence_append",
     "framework_goal_drive",

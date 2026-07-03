@@ -1,0 +1,25 @@
+#!/bin/sh
+# Post-pull hook (tracked copy): sync framework global config after updates.
+#
+# To activate: symlink or copy to .git/hooks/post-merge:
+#   ln -sf ../../.githooks/post-merge .git/hooks/post-merge
+#
+# Or set core.hooksPath:
+#   git config core.hooksPath .githooks
+#
+# Triggered by: git pull, git merge.
+set -eu
+
+if [ ! -f ".mcp.json" ] || [ ! -d "core/router-rs" ]; then
+    exit 0
+fi
+
+FRAMEWORK_ROOT=$(cd "$(dirname "$0")/../" && pwd 2>/dev/null || true)
+SYNC_SCRIPT="${FRAMEWORK_ROOT}/scripts/sync-framework-global.sh"
+
+if [ -x "$SYNC_SCRIPT" ]; then
+    "$SYNC_SCRIPT" >/dev/null 2>&1 || {
+        echo "[post-merge] ⚠️  Framework global config sync failed. Run manually:"
+        echo "  $SYNC_SCRIPT"
+    }
+fi

@@ -38,8 +38,6 @@ pub struct TraceRecordEventRequestPayload {
     pub status: String,
     #[serde(default)]
     pub payload: Map<String, Value>,
-    pub compaction_manifest_path: Option<String>,
-    pub compaction_manifest_text: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -50,53 +48,4 @@ pub struct TraceRecordEventResponsePayload {
     pub event: Value,
     pub sink_line: String,
     pub bytes_written: usize,
-    pub delta_path: Option<String>,
-    pub delta_line: Option<String>,
-    pub delta_bytes_written: usize,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TraceCompactRequestPayload {
-    pub root_path: String,
-    pub event_stream_path: Option<String>,
-    pub output_path: Option<String>,
-    pub run_id: String,
-    pub job_id: Option<String>,
-    pub backend_family: Option<String>,
-    #[serde(default = "default_true")]
-    pub supports_compaction: bool,
-    #[serde(default = "default_true")]
-    pub supports_snapshot_delta: bool,
-    pub current_generation: usize,
-    #[serde(default)]
-    pub artifact_paths: Vec<String>,
-    pub event_stream_text: Option<String>,
-    pub output_text: Option<String>,
-    pub previous_manifest_text: Option<String>,
-    #[serde(default = "default_true")]
-    pub write_outputs: bool,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TraceCompactResponsePayload {
-    pub schema_version: String,
-    pub authority: String,
-    pub applied: bool,
-    pub status: String,
-    pub reason: Option<String>,
-    pub run_id: String,
-    pub job_id: Option<String>,
-    pub backend_family: Option<String>,
-    pub current_generation: usize,
-    pub next_generation: usize,
-    pub latest_stable_snapshot: Option<Value>,
-    pub manifest_path: Option<String>,
-    #[serde(default)]
-    pub writes: Vec<TraceTextWrite>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TraceTextWrite {
-    pub path: String,
-    pub payload_text: String,
 }

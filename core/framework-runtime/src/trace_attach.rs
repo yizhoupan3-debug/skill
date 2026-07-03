@@ -769,11 +769,6 @@ pub fn subscribe_attached_runtime_events(payload: Value) -> Result<Value, Framew
     let replay = replay_trace_stream(TraceStreamReplayRequestPayload {
         path: Some(trace_stream_path.to_string()),
         event_stream_text: None,
-        compaction_manifest_path: None,
-        compaction_manifest_text: None,
-        compaction_state_text: None,
-        compaction_artifact_index_text: None,
-        compaction_delta_text: None,
         session_id: Some(session_id.clone()),
         job_id: job_id.clone(),
         stream_scope_fields: None,
