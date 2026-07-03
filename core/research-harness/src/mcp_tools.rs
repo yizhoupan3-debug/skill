@@ -32,7 +32,8 @@
 //! ## Directly dispatched tools (in `handle_research_tool`)
 //!
 //! The following tools are dispatched directly (no sub-dispatcher):
-//! `research_aigc_check`, `research_review_dimensions`, `research_claim_drift`,
+//! `research_aigc_check`, `research_aigc_humanize`, `research_review_dimensions`,
+//! `research_claim_drift`,
 //! `research_review_loop`, `research_smoke`, `research_literature_search`.
 //!
 //! ## Individual tool functions
@@ -62,6 +63,7 @@ const MAX_ARRAY_ELEMENTS: usize = 10_000;
 pub fn handle_research_tool(name: &str, arguments: &Value) -> Result<String, FrameworkError> {
     match name {
         "research_aigc_check" => Ok(tool_research_aigc_check(arguments)?),
+        "research_aigc_humanize" => Ok(tool_research_aigc_humanize(arguments)?),
         "research_review_dimensions" => Ok(tool_research_review_dimensions(arguments)?),
         "research_claim_drift" => Ok(tool_research_claim_drift(arguments)?),
         "research_review_loop" => Ok(tool_research_review_loop(arguments)?),
@@ -701,6 +703,40 @@ fn tool_research_aigc_check(arguments: &Value) -> Result<String, FrameworkError>
         "ai_probability": score as f64 / 100.0,
         "segments_analyzed": results.len(),
         "results": results,
+    }))
+    .map_err(FrameworkError::Json)
+}
+
+/// AIGC humanization — reduce AIGC signals through lexical/syntactic rewriting.
+fn tool_research_aigc_humanize(arguments: &Value) -> Result<String, FrameworkError> {
+    let text = arguments
+        .get("text")
+        .and_then(Value::as_str)
+        .ok_or(FrameworkError::validation(
+            "research_aigc_humanize requires 'text' parameter",
+        ))?;
+    let language = match arguments.get("language").and_then(Value::as_str) {
+        Some("zh") | Some("zh-CN") | Some("chinese") => crate::aigc::Language::Chinese,
+        _ => crate::aigc::Language::English,
+    };
+    let preserve_academic = arguments
+        .get("preserve_academic")
+        .and_then(Value::as_bool)
+        .unwrap_or(true);
+
+    let config = crate::aigc::humanizer::HumanizeConfig {
+        language,
+        preserve_academic_tone: preserve_academic,
+        ..Default::default()
+    };
+    let result = crate::aigc::humanizer::humanize_with_config(text, &config)
+        .map_err(|e| FrameworkError::validation(format!("humanization failed: {e}")))?;
+
+    serde_json::to_string_pretty(&json!({
+        "original": result.original,
+        "rewritten": result.rewritten,
+        "strategies_applied": result.strategies_applied,
+        "estimated_score_improvement": result.estimated_score_improvement,
     }))
     .map_err(FrameworkError::Json)
 }

@@ -19,7 +19,7 @@ is lost when the front door is unified.
 This protocol enforces depth via **gate files + freeze/backjump + lane scope**
 on **manuscript artifacts** — `verify` here is gate-judgment + evidence anchors,
 **not** shell commands. It is **orthogonal** to the Quality Gate reasoning-depth
-contract ([docs/README.md](../../../docs/README.md)),
+contract ([docs/README.md](../../../../docs/README.md)),
 which enforces depth via **`verify_commands` + `EVIDENCE_INDEX` rows** on **code**.
 Do not conflate the two: Quality Gate's "PASS" requires executable command exit codes;
 PAPER_GATE's "pass" requires reviewer freeze + evidence-anchor coverage. Use the

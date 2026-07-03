@@ -59,7 +59,7 @@ Exposed through `host-projection`'s `mcp_stdio_harness`:
 - `research_verification_structure` — Structure checks: LaTeX compilation, figure reference consistency
 - `research_verification_reproducibility` — Reproducibility checks: seed, determinism, environment, data versioning
 - `research_verification_formal` — Formal verification: dimensional analysis
-- `research_aigc_humanize` — AIGC reduction (syntactic rewriting / lexical substitution). **Note: not yet implemented as an MCP tool.**
+- `research_aigc_humanize` — AIGC reduction (syntactic rewriting / lexical substitution). Accepts `text`, `language` (en/zh), and optional `preserve_academic` parameters.
 
 ### Math verification tools
 - `math_asymptotic_estimate` — Asymptotic magnitude estimation

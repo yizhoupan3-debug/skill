@@ -89,7 +89,7 @@ This skill is the one front door for paper work.
 
 与本立场冲突的捷径（降口径逃难、rebuttal-only、代码空诺、数学直觉化、`surgical` 全局乱改等）一律以 [`references/claim-evidence-ladder.md`](references/claim-evidence-ladder.md)、[`references/edit-scope-gate.md`](references/edit-scope-gate.md) 为硬闸。
 
-启用外研时，审稿/校准产出须满足 [`docs/architecture.md`](../../docs/routing/architecture.md) §A–B 的 **`Claims`**、**Contradiction sweep**、**Unknowns** 与可追溯 **retrieval_trace**（不能仅靠「读起来专业」的综述）；门面仍由本会话收口，细节上复用 **`@lane:reviewer`** 的 External lane shape 约定。
+启用外研时，审稿/校准产出须满足 [`docs/architecture.md`](../../../docs/routing/architecture.md) §A–B 的 **`Claims`**、**Contradiction sweep**、**Unknowns** 与可追溯 **retrieval_trace**（不能仅靠「读起来专业」的综述）；门面仍由本会话收口，细节上复用 **`@lane:reviewer`** 的 External lane shape 约定。
 
 **宿主 hook（L4 短码）**：`router-rs` 在宿主提交命中写作/润色语境时合并 **`PAPER_PROSE_QUALITY_HOOK`**（真源 `configs/framework/PAPER_PROSE_QUALITY_HOOK.txt`，**默认开**）；手稿审稿/改稿语境可另合并 **`PAPER_ADVERSARIAL_HOOK`**（opt-in）。受 `ROUTER_RS_OPERATOR_INJECT` 总闸约束。Prose 子开关：`ROUTER_RS_PAPER_PROSE_HOOK`（unset=开，`0`=关）。Adversarial：`ROUTER_RS_PAPER_ADVERSARIAL_HOOK=1` 启用。见 [`references/prose-chain-contract.md`](references/prose-chain-contract.md) §L4。
 
@@ -345,7 +345,7 @@ The Story Card (output of `$good-story`) provides structured input for paper-wor
 |----------|------|------|------|
 | `research_review_dimensions` | 获取审稿维度 prompt + checklist | `round: u64` | 该轮维度的审稿 prompt 和 checklist |
 | `research_aigc_check` | AIGC 检测 | `text: string` | 0-100 AI 概率评分 + 信号列表 |
-| `research_aigc_humanize (暂未实现)` | AIGC 降重（句法改写/词汇替换） | `text: string` | 重写后的文本 + 策略列表 |
+| `research_aigc_humanize` | AIGC 降重（句法改写/词汇替换） | `text: string` | 重写后的文本 + 策略列表 |
 | `research_review_loop` | 对抗审稿循环管理 | `operation: start/submit_round/status` | 收敛状态、下一轮维度 |
 | `research_claim_drift` | 声明漂移检测 | `original_claims: [], current_claims: []` | drift 分析结果列表 |
 
@@ -374,7 +374,7 @@ The Story Card (output of `$good-story`) provides structured input for paper-wor
 
 ### 降重策略
 
-调用 `research_aigc_humanize (暂未实现)` 对高风险文本执行以下策略：
+调用 `research_aigc_humanize` 对高风险文本执行以下策略：
 - **词汇替换**：AI 高频词汇 → 学术常用替代（Moreover → Additionally, Leverage → Use）
 - **句法改写**：主动/被动变换、从句重组
 - **句式多样化**：注入长短句交替，打破 AI 文本的均匀节奏

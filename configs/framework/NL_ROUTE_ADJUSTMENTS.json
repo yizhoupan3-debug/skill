@@ -1044,6 +1044,19 @@
     },
     {
       "when": {
+        "query_contains": "deep-research"
+      },
+      "action": {
+        "type": "boost",
+        "delta": 50.0,
+        "reason": "Deep-search boost: alias 'deep-research' matches slug 'deep-search'."
+      },
+      "record": {
+        "slug": "deep-search"
+      }
+    },
+    {
+      "when": {
         "query_contains": "联网查"
       },
       "action": {

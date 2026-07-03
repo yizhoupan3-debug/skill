@@ -84,7 +84,7 @@ trigger_hints:
 
 - `$citation-management` — 引用格式核查（L3）
 - `$experiment-reproducibility` — 可复现性管理（L3）
-- `$deep-search` — 通用 Web 深度调研（L3）
+- `$deep-search` (gate=approve) — 通用 Web 深度调研（L3）
 - `$statistical-analysis` — 统计方法选型与解读（L4）
 - `$math-derivation` — 严格数学推导执行（L4）
 

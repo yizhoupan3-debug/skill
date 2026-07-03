@@ -130,7 +130,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 #### 数据质量提升
 - 54 工具 `trigger_hints` 密度提升，每工具补充 2-3 条场景化同义词
 - `browser_*`/`codegraph_*` 系列增加去重叠独有 hint
-- `tool_flags` 审计标记（`research_aigc_humanize` → deprecated）
+- `tool_flags` 审计标记（`research_aigc_humanize` → removed-deprecated；已实现为 MCP 工具）
 - 短描述扩展（`skill_route_status`、`closeout_gate` 30+ 字符）
 
 #### 安全加固

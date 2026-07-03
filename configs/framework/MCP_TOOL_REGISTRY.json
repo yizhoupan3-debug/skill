@@ -540,6 +540,49 @@
       }
     },
     {
+      "slug": "research_aigc_humanize",
+      "display_name": "AIGC 降重",
+      "description": "对文本执行句法改写和词汇替换，降低 AIGC 检测风险",
+      "layer": "research",
+      "dispatch_domain": "domain:research",
+      "owner": "research",
+      "trigger_hints": [
+        "humanize",
+        "降重",
+        "改写",
+        "AIGC降重",
+        "AIGC reduction"
+      ],
+      "mcp_server": "research-harness",
+      "tool_flags": [
+        "readonly"
+      ],
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "text"
+        ],
+        "properties": {
+          "text": {
+            "type": "string",
+            "description": "待降重文本"
+          },
+          "language": {
+            "type": "string",
+            "enum": [
+              "en",
+              "zh"
+            ],
+            "description": "语言：en=英语, zh=中文（默认 en）"
+          },
+          "preserve_academic": {
+            "type": "boolean",
+            "description": "是否保持学术语气（默认 true）"
+          }
+        }
+      }
+    },
+    {
       "slug": "browser_tabs",
       "display_name": "浏览器标签页",
       "description": "管理标签页（列出/切换）",
