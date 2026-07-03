@@ -489,7 +489,16 @@ fn read_mcp_message<R: BufRead>(
                 "MCP Content-Length {content_length} exceeds max {MAX_MCP_CONTENT_LENGTH}"
             )));
         }
+        // Limit header lines to prevent resource exhaustion
+        const MAX_HEADER_LINES: usize = 64;
+        let mut header_lines = 0_u64;
         loop {
+            header_lines += 1;
+            if header_lines > MAX_HEADER_LINES as u64 {
+                return Err(FrameworkError::from(format!(
+                    "MCP header exceeds {MAX_HEADER_LINES} line limit"
+                )));
+            }
             let mut header = String::new();
             let bytes = input
                 .read_line(&mut header)
@@ -844,13 +853,21 @@ fn handle_resources_list(id: Option<Value>, repo_root: &Path) -> Value {
             "description": "current active task pointer",
             "mimeType": "application/json",
         }),
-        json!({
+    ];
+
+    // Only advertise goal_state resource when there's an active goal.
+    if core_state::state_manager::read_goal_state(repo_root, None)
+        .ok()
+        .flatten()
+        .is_some()
+    {
+        resources.push(json!({
             "uri": "framework://goal_state",
             "name": "Goal State",
             "description": "goal state for current task",
             "mimeType": "application/json",
-        }),
-    ];
+        }));
+    }
 
     let evidence_count = task_view
         .evidence
