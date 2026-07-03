@@ -742,26 +742,6 @@ fn handle_prompts_list(id: Option<Value>) -> Value {
                     "description": "closeout checklist",
                     "arguments": [],
                 },
-                {
-                    "name": "goalx",
-                    "description": "Goal management: create, checkpoint, amend, resume, complete goals",
-                    "arguments": [],
-                },
-                {
-                    "name": "gitx",
-                    "description": "Git closeout workflow: review, fix, tidy, commit, merge",
-                    "arguments": [],
-                },
-                {
-                    "name": "deepinterview",
-                    "description": "Evidence-first requirement clarification and convergence review",
-                    "arguments": [],
-                },
-                {
-                    "name": "update",
-                    "description": "Refresh key docs, git tracking, and stale/dead repo surfaces",
-                    "arguments": [],
-                },
             ],
         },
     })
@@ -783,10 +763,6 @@ fn handle_prompts_get(
         "framework_routing" => "framework routing",
         "review_gate" => "review gate advisory",
         "closeout_checklist" => "closeout checklist",
-        "goalx" => "goal management — create, checkpoint, amend, resume, complete goals",
-        "gitx" => "git closeout workflow — review, fix, tidy, commit, merge",
-        "deepinterview" => "evidence-first requirement clarification and convergence review",
-        "update" => "refresh docs, git tracking, and stale repo surfaces",
         _ => "",
     };
 
@@ -837,26 +813,6 @@ fn handle_prompts_get(
              - [ ] Blockers in NEXT_ACTIONS\n\n\
              Call closeout_gate for machine-readable check."
             .to_string(),
-        "goalx" => {
-            "Use skill_route(query: \"/goalx\") to load the Goal management skill. \
-             Then follow SKILL.md: read goal state, create/checkpoint/amend/resume/complete as needed."
-                .to_string()
-        }
-        "gitx" => {
-            "Use skill_route(query: \"/gitx\") to load the Git closeout workflow skill. \
-             Then follow SKILL.md: review, fix, tidy, commit, merge."
-                .to_string()
-        }
-        "deepinterview" => {
-            "Use skill_route(query: \"/deepinterview\") to load the requirement clarification skill. \
-             Then follow SKILL.md for evidence-first convergence review."
-                .to_string()
-        }
-        "update" => {
-            "Use skill_route(query: \"/update\") to load the repo refresh skill. \
-             Then follow SKILL.md to update docs, git tracking, and stale surfaces."
-                .to_string()
-        }
         _ => format!("Unknown prompt: {prompt_name}"),
     };
 
@@ -1273,10 +1229,6 @@ mod tests {
         assert!(names.contains(&"framework_routing"));
         assert!(names.contains(&"review_gate"));
         assert!(names.contains(&"closeout_checklist"));
-        assert!(names.contains(&"goalx"));
-        assert!(names.contains(&"gitx"));
-        assert!(names.contains(&"deepinterview"));
-        assert!(names.contains(&"update"));
     }
 
     #[test]
