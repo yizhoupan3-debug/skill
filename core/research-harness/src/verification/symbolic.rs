@@ -505,7 +505,13 @@ pub fn simplify(expr: &Expr) -> Expr {
                 (_, Expr::Const(1.0)) => sa,
                 (Expr::Const(0.0), _) => Expr::Const(0.0),
                 (Expr::Const(c1), Expr::Const(c2)) if *c2 != 0.0 => Expr::Const(c1 / c2),
-                _ => Expr::Div(Box::new(sa), Box::new(sb)),
+                _ => {
+                    if sa == sb {
+                        Expr::Const(1.0)
+                    } else {
+                        Expr::Div(Box::new(sa), Box::new(sb))
+                    }
+                }
             }
         }
         Expr::Pow(a, b) => {
@@ -627,6 +633,63 @@ fn simplify_mul(items: Vec<Expr>) -> Expr {
     if const_prod.abs() < 1e-12 {
         return Expr::Const(0.0);
     }
+
+    // ── Same-base power merging (skip if any term contains Add/Sub at any depth) ──
+    // This check prevents breaking expand()'s distribution mechanism, which relies on
+    // simplify() preserving the Mul structure for Add/Sub-containing terms.
+    fn contains_sum(expr: &Expr) -> bool {
+        match expr {
+            Expr::Add(..) | Expr::Sub(..) => true,
+            Expr::Neg(x) => contains_sum(x),
+            Expr::Mul(a, b) | Expr::Div(a, b) | Expr::Pow(a, b) => {
+                contains_sum(a) || contains_sum(b)
+            }
+            Expr::Fn(_, args) => args.iter().any(|a| contains_sum(a)),
+            _ => false,
+        }
+    }
+    let has_sum = var_terms.iter().any(|t| contains_sum(t));
+    if !has_sum {
+        let mut base_map: HashMap<String, (Expr, f64)> = HashMap::new();
+        let mut unique_idx = 0u64;
+        for term in var_terms {
+            let (base, exp) = match &term {
+                Expr::Pow(b, e) => {
+                    if let Expr::Const(ce) = e.as_ref() {
+                        ((**b).clone(), *ce)
+                    } else {
+                        let unique_key = format!("\0{}_{}", display(&term), {
+                            let idx = unique_idx;
+                            unique_idx += 1;
+                            idx
+                        });
+                        base_map.entry(unique_key).or_insert((term, 1.0));
+                        continue;
+                    }
+                }
+                _ => (term.clone(), 1.0),
+            };
+            let key = display(&base);
+            base_map
+                .entry(key)
+                .and_modify(|(_, e)| *e += exp)
+                .or_insert((base, exp));
+        }
+        let mut merged: Vec<Expr> = Vec::new();
+        for (_, (base, exp)) in base_map.into_iter() {
+            if exp.abs() < 1e-12 {
+                continue;
+            }
+            if (exp - 1.0).abs() < 1e-12 {
+                merged.push(base);
+            } else {
+                merged.push(Expr::Pow(Box::new(base), Box::new(Expr::Const(exp))));
+            }
+        }
+        var_terms = merged;
+    }
+    // ── End of power merging ──
+
     if var_terms.is_empty() {
         return Expr::Const(const_prod);
     }
@@ -645,8 +708,12 @@ fn simplify_mul(items: Vec<Expr>) -> Expr {
         }));
     }
 
-    vars.insert(0, Expr::Const(const_prod));
-    make_mul(vars)
+    if (const_prod - 1.0).abs() < 1e-12 {
+        make_mul(vars)
+    } else {
+        vars.insert(0, Expr::Const(const_prod));
+        make_mul(vars)
+    }
 }
 
 /// Extract numeric coefficient from a Mul(Const, rest) or single expression.
@@ -1026,8 +1093,14 @@ pub fn expand(expr: &Expr) -> Expr {
                         result =
                             simplify(&Expr::Mul(Box::new(result.clone()), Box::new(base.clone())));
                     }
-                    // Re-expand the result
-                    return expand(&result);
+                    // Guard: if simplify collapsed Mul(base,base) back into Pow(base,n),
+                    // expand only the inner-base to avoid infinite recursion.
+                    return match &result {
+                        Expr::Pow(inner_base, _) => {
+                            Expr::Pow(Box::new(expand(inner_base)), Box::new(Expr::Const(n as f64)))
+                        }
+                        _ => expand(&result),
+                    };
                 }
             }
             expr
@@ -1808,6 +1881,227 @@ fn canonical_order(expr: &Expr) -> Expr {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
+// Symbolic differentiation
+// ════════════════════════════════════════════════════════════════════════════
+
+/// Symbolically differentiate an expression with respect to the given variable.
+///
+/// Returns a simplified derivative expression. Supports:
+/// - Constant, variable, sum, difference, product, quotient, power
+/// - All standard functions (sin, cos, tan, exp, ln, log2, log10, sqrt, abs, atan2)
+///
+/// Three power-rule cases:
+/// - `f(x)^n` (constant exponent) — power rule
+/// - `c^x` (constant base) — exponential rule
+/// - `f(x)^g(x)` — logarithmic differentiation
+pub fn differentiate(expr: &Expr, var: &str) -> Expr {
+    match expr {
+        Expr::Const(_) => Expr::Const(0.0),
+        Expr::Var(v) => {
+            if v == var {
+                Expr::Const(1.0)
+            } else {
+                Expr::Const(0.0)
+            }
+        }
+        Expr::Neg(x) => {
+            let dx = differentiate(x, var);
+            simplify(&Expr::Neg(Box::new(dx)))
+        }
+        Expr::Add(a, b) => {
+            let da = differentiate(a, var);
+            let db = differentiate(b, var);
+            simplify(&Expr::Add(Box::new(da), Box::new(db)))
+        }
+        Expr::Sub(a, b) => {
+            let da = differentiate(a, var);
+            let db = differentiate(b, var);
+            simplify(&Expr::Sub(Box::new(da), Box::new(db)))
+        }
+        Expr::Mul(a, b) => {
+            // Product rule: a'*b + a*b'
+            let da = differentiate(a, var);
+            let db = differentiate(b, var);
+            let term1 = Expr::Mul(Box::new(da), Box::new((**b).clone()));
+            let term2 = Expr::Mul(Box::new((**a).clone()), Box::new(db));
+            simplify(&Expr::Add(Box::new(term1), Box::new(term2)))
+        }
+        Expr::Div(a, b) => {
+            // Quotient rule: (a'*b - a*b') / b^2
+            let da = differentiate(a, var);
+            let db = differentiate(b, var);
+            let num1 = Expr::Mul(Box::new(da), Box::new((**b).clone()));
+            let num2 = Expr::Mul(Box::new((**a).clone()), Box::new(db));
+            let numerator = Expr::Sub(Box::new(num1), Box::new(num2));
+            let denominator = Expr::Pow(Box::new((**b).clone()), Box::new(Expr::Const(2.0)));
+            simplify(&Expr::Div(Box::new(numerator), Box::new(denominator)))
+        }
+        Expr::Pow(a, b) => {
+            let va = contains_var(a, var);
+            let vb = contains_var(b, var);
+            match (va, vb) {
+                (false, false) => Expr::Const(0.0), // constant^constant
+                (true, false) => {
+                    // Power rule: d/dx f(x)^n = n * f^(n-1) * f'
+                    if let Expr::Const(n) = b.as_ref() {
+                        let df = differentiate(a, var);
+                        let pow_minus_1 = Expr::Pow(
+                            Box::new((**a).clone()),
+                            Box::new(Expr::Const(*n - 1.0)),
+                        );
+                        simplify(&Expr::Mul(
+                            Box::new(Expr::Const(*n)),
+                            Box::new(Expr::Mul(
+                                Box::new(pow_minus_1),
+                                Box::new(df),
+                            )),
+                        ))
+                    } else {
+                        Expr::Const(0.0)
+                    }
+                }
+                (false, true) => {
+                    // Exponential rule: d/dx c^(g(x)) = c^(g(x)) * ln(c) * g'(x)
+                    let original = Expr::Pow(Box::new((**a).clone()), Box::new((**b).clone()));
+                    let db = differentiate(b, var);
+                    let ln_base = Expr::Fn("ln".to_string(), vec![(**a).clone()]);
+                    simplify(&Expr::Mul(
+                        Box::new(original),
+                        Box::new(Expr::Mul(Box::new(ln_base), Box::new(db))),
+                    ))
+                }
+                (true, true) => {
+                    // Logarithmic differentiation: d/dx f^g = f^g * (g'*ln(f) + g*f'/f)
+                    let original = Expr::Pow(Box::new((**a).clone()), Box::new((**b).clone()));
+                    let df = differentiate(a, var);
+                    let dg = differentiate(b, var);
+                    let ln_f = Expr::Fn("ln".to_string(), vec![(**a).clone()]);
+                    let term1 = Expr::Mul(Box::new(dg), Box::new(ln_f));
+                    let term2 = Expr::Div(
+                        Box::new(Expr::Mul(Box::new((**b).clone()), Box::new(df))),
+                        Box::new((**a).clone()),
+                    );
+                    let inner = Expr::Add(Box::new(term1), Box::new(term2));
+                    simplify(&Expr::Mul(Box::new(original), Box::new(inner)))
+                }
+            }
+        }
+        Expr::Fn(name, args) => match name.as_str() {
+            "sin" => {
+                if args.len() == 1 {
+                    let df = differentiate(&args[0], var);
+                    let cos_f = Expr::Fn("cos".to_string(), vec![args[0].clone()]);
+                    simplify(&Expr::Mul(Box::new(cos_f), Box::new(df)))
+                } else {
+                    Expr::Const(0.0)
+                }
+            }
+            "cos" => {
+                if args.len() == 1 {
+                    let df = differentiate(&args[0], var);
+                    let sin_f = Expr::Fn("sin".to_string(), vec![args[0].clone()]);
+                    let neg_sin = Expr::Neg(Box::new(sin_f));
+                    simplify(&Expr::Mul(Box::new(neg_sin), Box::new(df)))
+                } else {
+                    Expr::Const(0.0)
+                }
+            }
+            "tan" => {
+                if args.len() == 1 {
+                    let df = differentiate(&args[0], var);
+                    let cos_f = Expr::Fn("cos".to_string(), vec![args[0].clone()]);
+                    let cos_sq = Expr::Pow(Box::new(cos_f), Box::new(Expr::Const(2.0)));
+                    let sec_sq = Expr::Div(Box::new(Expr::Const(1.0)), Box::new(cos_sq));
+                    simplify(&Expr::Mul(Box::new(sec_sq), Box::new(df)))
+                } else {
+                    Expr::Const(0.0)
+                }
+            }
+            "exp" => {
+                if args.len() == 1 {
+                    let df = differentiate(&args[0], var);
+                    let exp_f = Expr::Fn("exp".to_string(), vec![args[0].clone()]);
+                    simplify(&Expr::Mul(Box::new(exp_f), Box::new(df)))
+                } else {
+                    Expr::Const(0.0)
+                }
+            }
+            "log" | "ln" => {
+                if args.len() == 1 {
+                    let df = differentiate(&args[0], var);
+                    simplify(&Expr::Div(Box::new(df), Box::new(args[0].clone())))
+                } else {
+                    Expr::Const(0.0)
+                }
+            }
+            "log2" => {
+                if args.len() == 1 {
+                    let df = differentiate(&args[0], var);
+                    let ln2 = Expr::Fn("ln".to_string(), vec![Expr::Const(2.0)]);
+                    let denom = Expr::Mul(Box::new(args[0].clone()), Box::new(ln2));
+                    simplify(&Expr::Div(Box::new(df), Box::new(denom)))
+                } else {
+                    Expr::Const(0.0)
+                }
+            }
+            "log10" => {
+                if args.len() == 1 {
+                    let df = differentiate(&args[0], var);
+                    let ln10 = Expr::Fn("ln".to_string(), vec![Expr::Const(10.0)]);
+                    let denom = Expr::Mul(Box::new(args[0].clone()), Box::new(ln10));
+                    simplify(&Expr::Div(Box::new(df), Box::new(denom)))
+                } else {
+                    Expr::Const(0.0)
+                }
+            }
+            "sqrt" => {
+                if args.len() == 1 {
+                    let df = differentiate(&args[0], var);
+                    let half = Expr::Const(0.5);
+                    let pow_neg_half = Expr::Pow(
+                        Box::new(args[0].clone()),
+                        Box::new(Expr::Const(-0.5)),
+                    );
+                    simplify(&Expr::Mul(
+                        Box::new(half),
+                        Box::new(Expr::Mul(Box::new(pow_neg_half), Box::new(df))),
+                    ))
+                } else {
+                    Expr::Const(0.0)
+                }
+            }
+            "abs" => {
+                if args.len() == 1 {
+                    let df = differentiate(&args[0], var);
+                    let abs_f = Expr::Fn("abs".to_string(), vec![args[0].clone()]);
+                    let sign = Expr::Div(Box::new(args[0].clone()), Box::new(abs_f));
+                    simplify(&Expr::Mul(Box::new(sign), Box::new(df)))
+                } else {
+                    Expr::Const(0.0)
+                }
+            }
+            "atan2" => {
+                if args.len() == 2 {
+                    let df = differentiate(&args[0], var);
+                    let dg = differentiate(&args[1], var);
+                    let num = Expr::Sub(
+                        Box::new(Expr::Mul(Box::new(df), Box::new(args[1].clone()))),
+                        Box::new(Expr::Mul(Box::new(args[0].clone()), Box::new(dg))),
+                    );
+                    let f_sq = Expr::Pow(Box::new(args[0].clone()), Box::new(Expr::Const(2.0)));
+                    let g_sq = Expr::Pow(Box::new(args[1].clone()), Box::new(Expr::Const(2.0)));
+                    let denom = Expr::Add(Box::new(f_sq), Box::new(g_sq));
+                    simplify(&Expr::Div(Box::new(num), Box::new(denom)))
+                } else {
+                    Expr::Const(0.0)
+                }
+            }
+            _ => Expr::Const(0.0), // unknown function derivative
+        },
+    }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
 // Tests
 // ════════════════════════════════════════════════════════════════════════════
 
@@ -2459,5 +2753,239 @@ mod tests {
     fn test_equivalent_adaptive_sampling_still_passes_trig() {
         // The adaptive sampling should still correctly handle trig identities
         assert!(equivalent("sin(x)^2 + cos(x)^2", "1"));
+    }
+
+    // ── Power merging in simplify_mul ──
+
+    #[test]
+    fn test_simplify_mul_power_merge_same_base() {
+        let e = parse("x * x").unwrap();
+        let s = simplify(&e);
+        assert_eq!(display(&s), "x^2");
+    }
+
+    #[test]
+    fn test_simplify_mul_power_merge_multiple() {
+        let e = parse("x^2 * x^3").unwrap();
+        let s = simplify(&e);
+        assert_eq!(display(&s), "x^5");
+    }
+
+    #[test]
+    fn test_simplify_mul_power_merge_diff_bases() {
+        // x * y * x should be x^2 * y (value preserved)
+        let e = parse("x * y * x").unwrap();
+        let s = simplify(&e);
+        let mut vars = HashMap::new();
+        vars.insert("x".into(), 2.0);
+        vars.insert("y".into(), 3.0);
+        let val = eval(&s, &vars).unwrap();
+        assert!((val - 12.0).abs() < 1e-10, "expected 12, got {val}");
+    }
+
+    #[test]
+    fn test_simplify_mul_power_merge_nested_base() {
+        // Power merging skips Add/Sub-containing bases to avoid breaking expand().
+        // The expression stays as (x+1)^2 * (x+1)^3, but value is preserved.
+        let e = parse("(x+1)^2 * (x+1)^3").unwrap();
+        let s = simplify(&e);
+        let mut vars = HashMap::new();
+        vars.insert("x".into(), 2.0);
+        let val = eval(&s, &vars).unwrap();
+        assert!((val - 243.0).abs() < 1e-10, "expected 243, got {val}");
+    }
+
+    #[test]
+    fn test_simplify_mul_power_cancel() {
+        let e = parse("x^2 * x^(-2)").unwrap();
+        let s = simplify(&e);
+        assert_eq!(display(&s), "1");
+    }
+
+    #[test]
+    fn test_simplify_mul_power_merge_reduces_one() {
+        // x * x^2 * x^(-1) → x^(1+2-1) = x^2
+        let e = parse("x * x^2 * x^(-1)").unwrap();
+        let s = simplify(&e);
+        assert_eq!(display(&s), "x^2");
+    }
+
+    // ── Differentiation ──
+
+    #[test]
+    fn test_diff_const() {
+        let e = parse("5").unwrap();
+        let d = differentiate(&e, "x");
+        let val = eval(&d, &HashMap::new()).unwrap();
+        assert!((val - 0.0).abs() < 1e-10, "expected 0, got {val}");
+    }
+
+    #[test]
+    fn test_diff_var_same() {
+        let e = parse("x").unwrap();
+        let d = differentiate(&e, "x");
+        let val = eval(&d, &HashMap::new()).unwrap();
+        assert!((val - 1.0).abs() < 1e-10, "expected 1, got {val}");
+    }
+
+    #[test]
+    fn test_diff_var_other() {
+        let e = parse("y").unwrap();
+        let d = differentiate(&e, "x");
+        let val = eval(&d, &HashMap::new()).unwrap();
+        assert!((val - 0.0).abs() < 1e-10, "expected 0, got {val}");
+    }
+
+    #[test]
+    fn test_diff_add() {
+        let e = parse("x + x^2").unwrap();
+        let d = differentiate(&e, "x");
+        // d/dx (x + x^2) = 1 + 2x, at x=3 gives 7
+        let mut vars = HashMap::new();
+        vars.insert("x".into(), 3.0);
+        let val = eval(&d, &vars).unwrap();
+        assert!((val - 7.0).abs() < 1e-10, "expected 7, got {val}");
+    }
+
+    #[test]
+    fn test_diff_product() {
+        let e = parse("x * x").unwrap();
+        let d = differentiate(&e, "x");
+        // d/dx x*x = 2x, at x=3 gives 6
+        let mut vars = HashMap::new();
+        vars.insert("x".into(), 3.0);
+        let val = eval(&d, &vars).unwrap();
+        assert!((val - 6.0).abs() < 1e-10, "expected 6, got {val}");
+    }
+
+    #[test]
+    fn test_diff_quotient() {
+        let e = parse("x / x").unwrap();
+        let d = differentiate(&e, "x");
+        // d/dx x/x = 0 (since x/x = 1)
+        let mut vars = HashMap::new();
+        vars.insert("x".into(), 5.0);
+        let val = eval(&d, &vars).unwrap();
+        assert!((val - 0.0).abs() < 1e-10, "expected 0, got {val}");
+    }
+
+    #[test]
+    fn test_diff_power_rule() {
+        let e = parse("x^3").unwrap();
+        let d = differentiate(&e, "x");
+        // d/dx x^3 = 3x^2, at x=2 gives 12
+        let mut vars = HashMap::new();
+        vars.insert("x".into(), 2.0);
+        let val = eval(&d, &vars).unwrap();
+        assert!((val - 12.0).abs() < 1e-10, "expected 12, got {val}");
+    }
+
+    #[test]
+    fn test_diff_sin() {
+        let e = parse("sin(x)").unwrap();
+        let d = differentiate(&e, "x");
+        // d/dx sin(x) = cos(x), at x=0 gives 1
+        let mut vars = HashMap::new();
+        vars.insert("x".into(), 0.0);
+        let val = eval(&d, &vars).unwrap();
+        assert!((val - 1.0).abs() < 1e-10, "expected 1, got {val}");
+    }
+
+    #[test]
+    fn test_diff_cos() {
+        let e = parse("cos(x)").unwrap();
+        let d = differentiate(&e, "x");
+        // d/dx cos(x) = -sin(x), at x=0 gives 0
+        let mut vars = HashMap::new();
+        vars.insert("x".into(), 0.0);
+        let val = eval(&d, &vars).unwrap();
+        assert!((val - 0.0).abs() < 1e-10, "expected 0, got {val}");
+    }
+
+    #[test]
+    fn test_diff_exp() {
+        let e = parse("exp(x)").unwrap();
+        let d = differentiate(&e, "x");
+        // d/dx exp(x) = exp(x), at x=0 gives 1
+        let mut vars = HashMap::new();
+        vars.insert("x".into(), 0.0);
+        let val = eval(&d, &vars).unwrap();
+        assert!((val - 1.0).abs() < 1e-10, "expected 1, got {val}");
+    }
+
+    #[test]
+    fn test_diff_ln() {
+        let e = parse("ln(x)").unwrap();
+        let d = differentiate(&e, "x");
+        // d/dx ln(x) = 1/x, at x=2 gives 0.5
+        let mut vars = HashMap::new();
+        vars.insert("x".into(), 2.0);
+        let val = eval(&d, &vars).unwrap();
+        assert!((val - 0.5).abs() < 1e-10, "expected 0.5, got {val}");
+    }
+
+    #[test]
+    fn test_diff_sqrt() {
+        let e = parse("sqrt(x)").unwrap();
+        let d = differentiate(&e, "x");
+        // d/dx sqrt(x) = 1/(2*sqrt(x)), at x=4 gives 0.25
+        let mut vars = HashMap::new();
+        vars.insert("x".into(), 4.0);
+        let val = eval(&d, &vars).unwrap();
+        assert!((val - 0.25).abs() < 1e-10, "expected 0.25, got {val}");
+    }
+
+    #[test]
+    fn test_diff_tan() {
+        let e = parse("tan(x)").unwrap();
+        let d = differentiate(&e, "x");
+        // d/dx tan(x) = sec^2(x) = 1/cos^2(x), at x=pi/4 gives 2
+        let mut vars = HashMap::new();
+        vars.insert("x".into(), std::f64::consts::FRAC_PI_4);
+        let val = eval(&d, &vars).unwrap();
+        assert!((val - 2.0).abs() < 1e-10, "expected 2, got {val}");
+    }
+
+    #[test]
+    fn test_diff_neg() {
+        let e = parse("-x").unwrap();
+        let d = differentiate(&e, "x");
+        let val = eval(&d, &HashMap::new()).unwrap();
+        assert!((val + 1.0).abs() < 1e-10, "expected -1, got {val}");
+    }
+
+    #[test]
+    fn test_diff_sub() {
+        let e = parse("x^2 - x").unwrap();
+        let d = differentiate(&e, "x");
+        // d/dx (x^2 - x) = 2x - 1, at x=3 gives 5
+        let mut vars = HashMap::new();
+        vars.insert("x".into(), 3.0);
+        let val = eval(&d, &vars).unwrap();
+        assert!((val - 5.0).abs() < 1e-10, "expected 5, got {val}");
+    }
+
+    #[test]
+    fn test_diff_chain_rule() {
+        // d/dx sin(x^2) = cos(x^2) * 2x, at x=2
+        let e = parse("sin(x^2)").unwrap();
+        let d = differentiate(&e, "x");
+        let mut vars = HashMap::new();
+        vars.insert("x".into(), 2.0);
+        let val = eval(&d, &vars).unwrap();
+        let expected = (4.0_f64).cos() * 4.0;
+        assert!((val - expected).abs() < 1e-10, "expected {expected}, got {val}");
+    }
+
+    #[test]
+    fn test_diff_exponential_const_base() {
+        // d/dx 2^x = 2^x * ln(2), at x=1 gives 2*ln(2) ≈ 1.386
+        let e = parse("2^x").unwrap();
+        let d = differentiate(&e, "x");
+        let mut vars = HashMap::new();
+        vars.insert("x".into(), 1.0);
+        let val = eval(&d, &vars).unwrap();
+        let expected = 2.0_f64.ln() * 2.0;
+        assert!((val - expected).abs() < 1e-10, "expected {expected}, got {val}");
     }
 }

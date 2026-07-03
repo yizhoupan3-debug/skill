@@ -120,6 +120,7 @@ fn math_tool_dispatch(name: &str, arguments: &Value) -> Result<String, Framework
         "math_witness_consistency" => tool_math_witness_consistency(arguments),
         "math_check_homomorphism" => tool_math_check_homomorphism(arguments),
         "math_proof_trace_record" => tool_math_proof_trace_record(arguments),
+        "math_perturbation_expand" => tool_math_perturbation_expand(arguments),
         _ => Err(FrameworkError::validation(format!(
             "unknown math tool: {name}"
         ))),
@@ -1703,6 +1704,54 @@ fn tool_math_proof_trace_record(arguments: &Value) -> Result<String, FrameworkEr
             "summary": trace.summary(),
             "description": trace.describe(),
         },
+    }))
+    .map_err(FrameworkError::Json)
+}
+
+// ── Perturbation expansion tool (added 2026-07-03) ──
+
+fn tool_math_perturbation_expand(arguments: &Value) -> Result<String, FrameworkError> {
+    let equation = arguments
+        .get("equation")
+        .and_then(Value::as_str)
+        .ok_or(FrameworkError::validation(
+            "math_perturbation_expand requires 'equation' (string)",
+        ))?;
+    let variable = arguments
+        .get("variable")
+        .and_then(Value::as_str)
+        .unwrap_or("x");
+    let parameter = arguments
+        .get("parameter")
+        .and_then(Value::as_str)
+        .ok_or(FrameworkError::validation(
+            "math_perturbation_expand requires 'parameter' (string) — e.g. 'eps', 'epsilon'",
+        ))?;
+    let order = arguments
+        .get("order")
+        .and_then(Value::as_u64)
+        .unwrap_or(2) as u32;
+    let bc = arguments.get("bc").and_then(Value::as_str);
+
+    let result = crate::verification::perturbation::regular_perturbation(
+        equation,
+        variable,
+        parameter,
+        order,
+        bc,
+    );
+
+    serde_json::to_string_pretty(&json!({
+        "check_name": result.check_name,
+        "status": format!("{:?}", result.status),
+        "details": result.details,
+        "equation": equation,
+        "variable": variable,
+        "parameter": parameter,
+        "order": order,
+        "bc": bc,
+        "orders": result.orders,
+        "full_solution": result.full_solution,
     }))
     .map_err(FrameworkError::Json)
 }

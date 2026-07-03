@@ -179,8 +179,41 @@ pub fn magnitude_estimate_with_name(
 ///
 /// - `"oo"` or `"inf"`: no transformation (x → ∞)
 /// - `"0"` or `"zero"`: substitute x → 1/x (then analyze x → ∞)
-/// - `"a"` or numeric: substitute x → x + a (then analyze x → ∞)
+/// - Numeric constant `"c"`: substitute x → x + c (then analyze x → ∞).
+///   This shifts the point of analysis to the finite non-zero location.
+/// - Other strings (variable-like): treated as unrecognized (no transformation),
+///   matching the existing fallback behavior.
 fn transform_regime(expr: &str, var: &str, regime: &str) -> String {
+    // Finite non-zero numeric constant: substitute var → var + c, then analyze n→0.
+    if let Ok(c) = regime.parse::<f64>() {
+        // "inf" parses as f64::INFINITY — skip to preserve existing "oo"|"inf" behavior.
+        if c.is_finite() && c != 0.0 {
+            // Substitute var → var + c
+            let mut result = String::with_capacity(expr.len() + 8);
+            let mut i = 0;
+            let chars: Vec<char> = expr.chars().collect();
+            while i < chars.len() {
+                if chars[i].is_alphabetic() || chars[i] == '_' {
+                    let start = i;
+                    while i < chars.len() && (chars[i].is_alphanumeric() || chars[i] == '_') {
+                        i += 1;
+                    }
+                    let name: String = chars[start..i].iter().collect();
+                    if name == var {
+                        result.push_str(&format!("({}+{})", var, c));
+                    } else {
+                        result.push_str(&name);
+                    }
+                } else {
+                    result.push(chars[i]);
+                    i += 1;
+                }
+            }
+            return result;
+        }
+        // c == 0.0 falls through to the "0" / "zero" handler below
+    }
+
     match regime {
         "0" | "zero" | "Zero" => {
             // Substitute var → 1/var
@@ -217,6 +250,109 @@ fn regime_description(regime: &str) -> String {
         "oo" | "inf" | "Inf" | "" => "→∞".to_string(),
         "0" | "zero" | "Zero" => "→0".to_string(),
         other => format!("→{other}"),
+    }
+}
+
+/// Check tilde equivalence: f ~ g as var → regime (i.e. f/g → 1).
+///
+/// Uses the symbolic engine to verify that f and g have the same growth
+/// class AND share the same leading term, which implies f/g → 1.
+pub fn check_tilde_equivalence(
+    f: &str,
+    g: &str,
+    var: &str,
+    regime: &str,
+) -> VerificationResult {
+    check_tilde_equivalence_with_name(f, g, var, regime, "math_asymptotic_claim")
+}
+
+/// Like `check_tilde_equivalence` with an explicit check name.
+pub fn check_tilde_equivalence_with_name(
+    f: &str,
+    g: &str,
+    var: &str,
+    regime: &str,
+    check_name: &str,
+) -> VerificationResult {
+    let tf = transform_regime(f, var, regime);
+    let tg = transform_regime(g, var, regime);
+    let regime_desc = regime_description(regime);
+
+    // Parse both expressions
+    let f_expr = match crate::verification::symbolic::parse(&tf) {
+        Ok(e) => e,
+        Err(e) => {
+            return VerificationResult {
+                check_name: check_name.to_string(),
+                status: VerificationStatus::Fail,
+                details: format!("parse f failed: {e}"),
+                evidence_path: None,
+            };
+        }
+    };
+    let g_expr = match crate::verification::symbolic::parse(&tg) {
+        Ok(e) => e,
+        Err(e) => {
+            return VerificationResult {
+                check_name: check_name.to_string(),
+                status: VerificationStatus::Fail,
+                details: format!("parse g failed: {e}"),
+                evidence_path: None,
+            };
+        }
+    };
+
+    let gf = crate::verification::symbolic::classify_growth(&f_expr, var);
+    let gg = crate::verification::symbolic::classify_growth(&g_expr, var);
+
+    // Step 1: Same growth class is necessary (f ≍ g).
+    // Step 2: Same leading term ensures f/g → 1 (not some other constant).
+    let holds = if gf == gg {
+        match (
+            crate::verification::symbolic::leading_term(&tf, var),
+            crate::verification::symbolic::leading_term(&tg, var),
+        ) {
+            (Ok((f_lead, _)), Ok((g_lead, _))) => f_lead == g_lead,
+            _ => false,
+        }
+    } else {
+        false
+    };
+
+    if holds {
+        VerificationResult {
+            check_name: check_name.to_string(),
+            status: VerificationStatus::Pass,
+            details: format!(
+                "{f} ~ {g} holds as {var}{regime_desc} (same growth class, same leading term)"
+            ),
+            evidence_path: None,
+        }
+    } else {
+        let reason = if gf != gg {
+            format!(
+                "different growth classes: {:?} vs {:?}",
+                gf, gg
+            )
+        } else {
+            match (
+                crate::verification::symbolic::leading_term(&tf, var),
+                crate::verification::symbolic::leading_term(&tg, var),
+            ) {
+                (Ok((f_lead, _)), Ok((g_lead, _))) => {
+                    format!("leading terms differ: {f_lead} vs {g_lead}")
+                }
+                _ => "cannot determine leading terms".to_string(),
+            }
+        };
+        VerificationResult {
+            check_name: check_name.to_string(),
+            status: VerificationStatus::Fail,
+            details: format!(
+                "{f} ~ {g} does NOT hold as {var}{regime_desc}: {reason}"
+            ),
+            evidence_path: None,
+        }
     }
 }
 
@@ -693,5 +829,87 @@ mod tests {
             vr.details
         );
         assert!(vr.details.contains("→0"), "details: {}", vr.details);
+    }
+
+    // ── transform_regime with finite non-zero constant ──
+
+    #[test]
+    fn test_transform_regime_finite_nonzero() {
+        // n^2 at n=1 → (n+1)^2, then analyze as n→0
+        let result = transform_regime("n^2", "n", "1");
+        assert_eq!(result, "(n+1)^2");
+    }
+
+    #[test]
+    fn test_transform_regime_finite_negative() {
+        let result = transform_regime("n", "n", "-2");
+        assert_eq!(result, "(n+-2)");
+    }
+
+    #[test]
+    fn test_transform_regime_finite_nonzero_var_not_present() {
+        let result = transform_regime("x", "n", "1");
+        assert_eq!(result, "x");
+    }
+
+    #[test]
+    fn test_transform_regime_finite_nonzero_mixed() {
+        // 2*n + c at n=3 → 2*(n+3) + c
+        let result = transform_regime("2*n + c", "n", "3");
+        assert_eq!(result, "2*(n+3) + c");
+    }
+
+    // ── check_tilde_equivalence ──
+
+    #[test]
+    fn test_check_tilde_identical() {
+        // f = g → f ~ g trivially holds
+        let vr = check_tilde_equivalence("n", "n", "n", "oo");
+        assert_eq!(
+            vr.status,
+            VerificationStatus::Pass,
+            "n ~ n should pass, got: {:?} ({})",
+            vr.status,
+            vr.details
+        );
+    }
+
+    #[test]
+    fn test_check_tilde_same_leading_coeff() {
+        // f = 2*n^2, g = 2*n^2 → ratio = 1
+        let vr = check_tilde_equivalence("2*n^2", "2*n^2", "n", "oo");
+        assert_eq!(
+            vr.status,
+            VerificationStatus::Pass,
+            "same leading term should hold: {:?} ({})",
+            vr.status,
+            vr.details
+        );
+    }
+
+    #[test]
+    fn test_check_tilde_different_growth_class() {
+        // n ≁ n^2
+        let vr = check_tilde_equivalence("n", "n^2", "n", "oo");
+        assert_eq!(
+            vr.status,
+            VerificationStatus::Fail,
+            "n ≁ n^2 should fail, got: {:?} ({})",
+            vr.status,
+            vr.details
+        );
+    }
+
+    #[test]
+    fn test_check_tilde_constant_diff() {
+        // f = 2n, g = n → f/g → 2 ≠ 1 (same growth class, but ratio ≠ 1)
+        let vr = check_tilde_equivalence("2*n", "n", "n", "oo");
+        assert_eq!(
+            vr.status,
+            VerificationStatus::Fail,
+            "2n ≁ n should fail (f/g → 2), got: {:?} ({})",
+            vr.status,
+            vr.details
+        );
     }
 }

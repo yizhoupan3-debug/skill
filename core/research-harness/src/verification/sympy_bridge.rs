@@ -173,11 +173,15 @@ pub fn subs_expression(expr: &str, substitutions: &serde_json::Value) -> Verific
         };
     }
 
-    let params = json!({
+    let mut subs_params = json!({
         "expression": expr,
         "substitutions": substitutions,
     });
-    match python_bridge::call_math_backend("sympy_subs", params) {
+    // Optional simultaneous flag — pass through if present in the original call context
+    if let Some(sim) = substitutions.get("simultaneous") {
+        subs_params["simultaneous"] = sim.clone();
+    }
+    match python_bridge::call_math_backend("sympy_subs", subs_params) {
         Ok(result) => {
             let substituted = result
                 .get("result")

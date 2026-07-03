@@ -664,6 +664,232 @@ def sympy_lambdify(params: dict) -> dict:
         return {"error": f"SymPy lambdify failed: {e}"}
 
 
+def sympy_perturbation_expand(params: dict) -> dict:
+    """Perform regular perturbation expansion on an ODE.
+
+    Given an ODE containing a small parameter, assumes a solution of the form
+    u = u0 + ε·u1 + ε²·u2 + ..., substitutes into the equation, collects
+    terms at each power of ε, and tries to solve each order's ODE.
+
+    Params:
+        equation (str): ODE expression (expression = 0), e.g.
+            "Derivative(u(t), t, 2) + u(t) + eps*u(t)**3"
+        variable (str): Independent variable (default: "x")
+        parameter (str): Small perturbation parameter (default: "eps")
+        order (int): Maximum expansion order (default: 2)
+        bc (str, optional): Boundary conditions for dsolve,
+            e.g. "u(0)=1, u'(0)=0"
+
+    Returns:
+        {"orders": [{order, equation, solution}, ...], "full_solution": "..."}
+    """
+    eq_str = _get_param(params, "equation")
+    var_str = params.get("variable", "x")
+    param_str = params.get("parameter", "eps")
+    max_order = int(params.get("order", 2))
+    bc_str = params.get("bc", None)
+
+    try:
+        _validate_expr_str(eq_str, "equation")
+        eps = sp.Symbol(param_str)
+        x = sp.Symbol(var_str)
+
+        eq = sp.sympify(eq_str)
+
+        # Normalise to expression = 0 form
+        if isinstance(eq, sp.Eq):
+            expr = eq.lhs - eq.rhs
+        else:
+            expr = eq
+
+        # Detect the user-defined dependent function (not Derivative/other builtins)
+        functions = list(expr.find(sp.Function))
+        if not functions:
+            return {"error": "No function found in equation — expected e.g. 'Derivative(u(t), t, 2) + u(t)'"}
+
+        # Deduplicate by Function class, exclude built-in Derivative etc.
+        func_classes = {f.func for f in functions if f.func != sp.Derivative}
+        if not func_classes:
+            return {"error": "Only built-in Derivative found — no user-defined function to perturb"}
+        f_class = list(func_classes)[0]
+        f_name = str(f_class)
+
+        # Build the perturbation series replacement
+        def make_series(*args):
+            result = sp.Function(f'{f_name}0')(*args)
+            for i in range(1, max_order + 1):
+                result += eps**i * sp.Function(f'{f_name}{i}')(*args)
+            return result
+
+        # Replace all occurrences of the function class with the series.
+        # SymPy handles the chain rule automatically inside Derivative.
+        expr_perturbed = expr.replace(f_class, make_series)
+
+        # Expand the full perturbed expression
+        expr_expanded = sp.expand(expr_perturbed)
+
+        # Collect terms order by order using series expansion in eps
+        # First try series(), fall back to manual coeff extraction
+        try:
+            series_expr = sp.series(expr_expanded, eps, 0, max_order + 1).removeO()
+        except Exception:
+            series_expr = expr_expanded
+
+        orders = []
+        for i in range(max_order + 1):
+            coeff = sp.simplify(sp.expand(series_expr.coeff(eps, i)))
+
+            if coeff == 0:
+                # No contribution at this order
+                orders.append({
+                    "order": i,
+                    "equation": "0 = 0",
+                    "solution": "0",
+                })
+                continue
+
+            # Set up the ODE for this order: coeff = 0
+            ode = sp.Eq(coeff, 0)
+
+            # Try to solve with dsolve
+            sol_str = ""
+            try:
+                # Parse BC if provided for this order
+                ics = None
+                if bc_str and i == 0:
+                    # Parse simple BC string like "u(0)=1, u'(0)=0"
+                    ics = _parse_bc(bc_str, f_name, x, f_class)
+                elif bc_str and i > 0:
+                    # Higher orders typically have homogeneous BCs:
+                    # u_i(0) = 0 for all i > 0
+                    ics = _parse_homogeneous_bc(bc_str, f_name, x, i)
+
+                if ics is not None:
+                    sol = sp.dsolve(ode, ics=ics)
+                else:
+                    sol = sp.dsolve(ode)
+
+                if isinstance(sol, list):
+                    solutions = []
+                    for s in sol:
+                        sol_repr = _clean_solution(s, eps, i)
+                        solutions.append(sol_repr)
+                    sol_str = "; ".join(solutions)
+                else:
+                    sol_str = _clean_solution(sol, eps, i)
+            except Exception as e:
+                sol_str = f"(dsolve for O(ε^{i}) failed: {{e}})"
+
+            orders.append({
+                "order": i,
+                "equation": str(ode),
+                "solution": sol_str if sol_str else "0",
+            })
+
+        # Build composite solution description
+        parts = []
+        for i in range(max_order + 1):
+            if i == 0:
+                parts.append(f"u0({var_str})")
+            else:
+                parts.append(f"ε^{i}·u{i}({var_str})")
+        full_solution = " + ".join(parts)
+
+        return {
+            "orders": orders,
+            "full_solution": full_solution,
+            "orders_count": len(orders),
+        }
+    except Exception as e:
+        return {"error": f"SymPy perturbation expansion failed: {e}"}
+
+
+def _parse_bc(bc_str: str, func_name: str, var: sp.Symbol, func_class) -> dict:
+    """Parse a simple BC string into a SymPy ics dict.
+
+    Supports format: ``"u(0)=1, u'(0)=0"``
+    Returns an ics dict for dsolve: ``{u(0): 1, Derivative(u(t), t).subs(t, 0): 0}``
+    """
+    ics = {}
+    parts = [p.strip() for p in bc_str.split(",")]
+    for part in parts:
+        if "=" not in part:
+            continue
+        lhs_str, rhs_str = part.split("=", 1)
+        lhs_str = lhs_str.strip()
+        rhs_val = sp.sympify(rhs_str.strip())
+
+        # Parse "u(0)" or "u'(0)" or "u''(0)"
+        lhs_clean = lhs_str.replace(" ", "")
+        # Count primes (derivative order)
+        prime_count = 0
+        while "'" in lhs_clean:
+            prime_count += 1
+            lhs_clean = lhs_clean.replace("'", "", 1)
+
+        # Extract the point from the argument, e.g. (0) in u(0)
+        import re as _re
+        m = _re.search(r'\(([^)]+)\)', lhs_clean)
+        if not m:
+            continue
+        point = sp.sympify(m.group(1))
+
+        if prime_count == 0:
+            ics[func_class(point)] = rhs_val
+        else:
+            from sympy import Derivative
+            ics[Derivative(func_class(var), (var, prime_count)).subs(var, point)] = rhs_val
+
+    return ics
+
+
+def _parse_homogeneous_bc(bc_str: str, func_name: str, var: sp.Symbol, order: int) -> dict:
+    """Parse BC string for order >0 (homogeneous version: all RHS = 0)."""
+    ics = {}
+    parts = [p.strip() for p in bc_str.split(",")]
+    for part in parts:
+        if "=" not in part:
+            continue
+        lhs_str = lhs_str = part.split("=", 1)[0].strip()
+
+        # Count primes
+        prime_count = 0
+        lhs_clean = lhs_str.replace(" ", "")
+        while "'" in lhs_clean:
+            prime_count += 1
+            lhs_clean = lhs_clean.replace("'", "", 1)
+
+        # Change u to u{order}
+        func_name_i = f"{func_name}{order}"
+        func_class_i = sp.Function(func_name_i)
+
+        import re as _re
+        m = _re.search(r'\(([^)]+)\)', lhs_clean)
+        if not m:
+            continue
+        point = sp.sympify(m.group(1))
+
+        if prime_count == 0:
+            ics[func_class_i(point)] = 0
+        else:
+            from sympy import Derivative
+            ics[Derivative(func_class_i(var), (var, prime_count)).subs(var, point)] = 0
+
+    return ics
+
+
+def _clean_solution(sol, eps, order):
+    """Convert a dsolve solution to a clean string representation."""
+    sol_str = str(sol)
+    # If solution is an Eq, extract the RHS
+    if isinstance(sol, sp.Eq):
+        sol_str = str(sol.rhs)
+    # Limit length
+    if len(sol_str) > 500:
+        sol_str = sol_str[:497] + "..."
+    return sol_str
+
+
 def _get_param(params: dict, key: str) -> str:
     """Get a required string parameter, raising on missing."""
     val = params.get(key)
@@ -696,6 +922,7 @@ OPERATIONS = {
     "sympy_limit": lambda p: _wrap("sympy_limit", p, sympy_limit),
     "sympy_lambdify": lambda p: _wrap("sympy_lambdify", p, sympy_lambdify),
     "sympy_dimension_propagate": lambda p: _wrap("sympy_dimension_propagate", p, sympy_dimension_propagate),
+    "sympy_perturbation_expand": lambda p: _wrap("sympy_perturbation_expand", p, sympy_perturbation_expand),
 }
 
 

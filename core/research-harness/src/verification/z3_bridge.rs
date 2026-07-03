@@ -326,6 +326,64 @@ pub fn solver_reset() -> VerificationResult {
     }
 }
 
+/// Optimize an objective function subject to constraints using Z3.
+///
+/// Calls Python z3_ops.z3_optimize to perform optimization.
+/// Supports both minimize and maximize with multiple constraints.
+pub fn optimize_formula(
+    objective: &str,
+    constraints: &[String],
+    variables: Option<&[String]>,
+    direction: &str,
+) -> Result<serde_json::Value, String> {
+    if !python_bridge::z3_available() {
+        return Err("Z3 not available (requires z3-solver)".into());
+    }
+
+    let mut params = json!({
+        "objective": objective,
+        "constraints": constraints,
+        "direction": direction,
+    });
+    if let Some(vars) = variables {
+        params["variables"] = json!(vars);
+    }
+
+    match python_bridge::call_math_backend("z3_optimize", params) {
+        Ok(result) => Ok(result),
+        Err(e) => Err(format!("z3_optimize failed: {e}")),
+    }
+}
+
+/// Check a system of constraints for satisfiability using Z3.
+///
+/// Calls Python z3_ops.z3_check_system to check multiple constraints together.
+/// Supports automatic variable detection and sort inference.
+pub fn check_system(
+    constraints: &[String],
+    variables: Option<&[String]>,
+    timeout_ms: Option<u64>,
+) -> Result<serde_json::Value, String> {
+    if !python_bridge::z3_available() {
+        return Err("Z3 not available (requires z3-solver)".into());
+    }
+
+    let mut params = json!({
+        "constraints": constraints,
+    });
+    if let Some(vars) = variables {
+        params["variables"] = json!(vars);
+    }
+    if let Some(timeout) = timeout_ms {
+        params["timeout_ms"] = json!(timeout);
+    }
+
+    match python_bridge::call_math_backend("z3_check_system", params) {
+        Ok(result) => Ok(result),
+        Err(e) => Err(format!("z3_check_system failed: {e}")),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

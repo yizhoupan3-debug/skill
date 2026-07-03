@@ -10,6 +10,7 @@ pub mod inequality_gate;
 pub mod lean_bridge;
 pub mod literature;
 pub mod literature_gate;
+pub mod perturbation;
 pub mod proof_trace;
 pub mod prose_qc;
 pub mod prose_qc_gate;

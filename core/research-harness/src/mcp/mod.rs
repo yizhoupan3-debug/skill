@@ -663,6 +663,37 @@ pub fn tool_definitions() -> Vec<Value> {
                 }
             }),
         ),
+        // ── Perturbation expansion tool (added 2026-07-03) ──
+        tool_def(
+            "math_perturbation_expand",
+            "正则摄动展开：将微分方程按小参数展开为幂级数形式 u = u0 + ε·u1 + ε²·u2 + ...，逐阶求解。适用于弱非线性振动、边界层问题等。",
+            json!({
+                "type": "object",
+                "required": ["equation", "parameter"],
+                "properties": {
+                    "equation": {
+                        "type": "string",
+                        "description": "含小参数的微分方程表达式（表达式=0），如 Derivative(u(t), t, 2) + u(t) + eps*u(t)**3"
+                    },
+                    "variable": {
+                        "type": "string",
+                        "description": "自变量名称（默认 x）"
+                    },
+                    "parameter": {
+                        "type": "string",
+                        "description": "小参数名称，如 eps, epsilon, ε"
+                    },
+                    "order": {
+                        "type": "integer",
+                        "description": "展开阶数（默认 2）。order=1 展开到 O(ε), order=2 到 O(ε²)"
+                    },
+                    "bc": {
+                        "type": "string",
+                        "description": "边界/初始条件，如 u(0)=1, u'(0)=0（可选）"
+                    }
+                }
+            }),
+        ),
         tool_literature_search(),
     ]
 }

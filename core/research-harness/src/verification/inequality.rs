@@ -93,11 +93,11 @@ impl FeasibilityResult {
 // LaTeX inequality string parsing (regex)
 // ===========================================================================
 
-pub fn parse_inequality_latex(expr: &str) -> Result<Inequality, FrameworkError> {
+pub fn parse_inequality_latex(expr: &str) -> Result<Vec<Inequality>, FrameworkError> {
     parse_via_regex(expr)
 }
 
-fn parse_via_regex(expr: &str) -> Result<Inequality, FrameworkError> {
+fn parse_via_regex(expr: &str) -> Result<Vec<Inequality>, FrameworkError> {
     let cleaned = expr
         .replace("\\leq", "<=")
         .replace("\\le", "<=")
@@ -107,6 +107,33 @@ fn parse_via_regex(expr: &str) -> Result<Inequality, FrameworkError> {
         .replace("\\gt", ">")
         .replace("\\cdot", "*")
         .replace(' ', "");
+
+    // ── Compound pattern: a <op> x <op> b (e.g. "a <= x <= b") ──
+    // Match three expressions separated by two sense operators.
+    // Groups: 1=LHS expr, 2=first sense, 3=middle expr, 4=second sense, 5=RHS expr.
+    let compound_re = regex::Regex::new(
+        r"^(.+?)\s*(<=|>=|<|>)\s*(.+?)\s*(<=|>=|<|>)\s*(.+)$",
+    )
+    .map_err(|e| FrameworkError::validation(format!("regex: {e}")))?;
+
+    if let Some(caps) = compound_re.captures(&cleaned) {
+        let left_str = caps.get(1).unwrap().as_str();
+        let sense1_str = caps.get(2).unwrap().as_str();
+        let mid_str = caps.get(3).unwrap().as_str();
+        let sense2_str = caps.get(4).unwrap().as_str();
+        let right_str = caps.get(5).unwrap().as_str();
+
+        // Reconstruct two simple inequalities and parse each recursively.
+        let left_expr = format!("{left_str} {sense1_str} {mid_str}");
+        let right_expr = format!("{mid_str} {sense2_str} {right_str}");
+
+        let mut results = Vec::new();
+        for sub_expr in [left_expr, right_expr] {
+            let sub_results = parse_via_regex(&sub_expr)?;
+            results.extend(sub_results);
+        }
+        return Ok(results);
+    }
 
     let re = regex::Regex::new(r"^(.+?)\s*(<=|>=|==|=|<|>)\s*(.+)$")
         .map_err(|e| FrameworkError::validation(format!("regex: {e}")))?;
@@ -160,7 +187,7 @@ fn parse_via_regex(expr: &str) -> Result<Inequality, FrameworkError> {
     // RHS net = r_const - l_const (bring LHS constants to RHS)
     let rhs_net = r_const - l_const;
 
-    Ok(Inequality::new(net_coeffs, all_vars, sense, rhs_net))
+    Ok(vec![Inequality::new(net_coeffs, all_vars, sense, rhs_net)])
 }
 
 fn parse_number(s: &str) -> Result<f64, FrameworkError> {
@@ -262,8 +289,15 @@ fn parse_one_term(t: &str) -> Option<(f64, Option<String>)> {
 // minilp solver (pure Rust LP feasibility)
 // ===========================================================================
 
-/// Solve a system of linear inequalities using minilp.
-pub fn solve_system(system: &InequalitySystem, timeout_ms: Option<u64>) -> FeasibilityResult {
+/// Solve a system of linear inequalities using minilp with optional optimization.
+///
+/// When `objective` is `Some`, the solver maximizes `∑ objective[var_name] * var`.
+/// When `objective` is `None`, it behaves as feasibility-only (dummy objective = 0).
+pub fn solve_optimization(
+    system: &InequalitySystem,
+    objective: Option<&HashMap<String, f64>>,
+    timeout_ms: Option<u64>,
+) -> FeasibilityResult {
     if system.is_empty() {
         return FeasibilityResult::Feasible {
             model: HashMap::new(),
@@ -272,8 +306,9 @@ pub fn solve_system(system: &InequalitySystem, timeout_ms: Option<u64>) -> Feasi
 
     let (tx, rx) = std::sync::mpsc::channel();
     let system_clone = system.clone();
+    let objective_clone = objective.map(|o| o.clone());
     std::thread::spawn(move || {
-        let _ = tx.send(solve_via_minilp(&system_clone));
+        let _ = tx.send(solve_via_minilp(&system_clone, objective_clone.as_ref()));
     });
 
     let result = match timeout_ms {
@@ -300,7 +335,15 @@ pub fn solve_system(system: &InequalitySystem, timeout_ms: Option<u64>) -> Feasi
     }
 }
 
-fn solve_via_minilp(system: &InequalitySystem) -> Result<HashMap<String, f64>, FrameworkError> {
+/// Solve a system of linear inequalities using minilp (feasibility-only, no objective).
+pub fn solve_system(system: &InequalitySystem, timeout_ms: Option<u64>) -> FeasibilityResult {
+    solve_optimization(system, None, timeout_ms)
+}
+
+fn solve_via_minilp(
+    system: &InequalitySystem,
+    objective: Option<&HashMap<String, f64>>,
+) -> Result<HashMap<String, f64>, FrameworkError> {
     use minilp::{ComparisonOp, OptimizationDirection, Problem};
 
     let mut prob = Problem::new(OptimizationDirection::Maximize);
@@ -338,10 +381,13 @@ fn solve_via_minilp(system: &InequalitySystem) -> Result<HashMap<String, f64>, F
     // Bounded variables help the simplex converge
     let large = 1e10;
 
-    // Create minilp variables (dummy objective = 0, wide bounds)
+    // Create minilp variables (objective from objective map or 0.0 for feasibility-only)
     let vars: Vec<minilp::Variable> = all_vars
         .iter()
-        .map(|_| prob.add_var(0.0, (-large, large)))
+        .map(|v| {
+            let obj_coeff = objective.and_then(|o| o.get(v)).copied().unwrap_or(0.0);
+            prob.add_var(obj_coeff, (-large, large))
+        })
         .collect();
 
     // Map from var name to index
@@ -603,7 +649,7 @@ pub fn check_inequality_with_name(
     }
 
     // Linear case: use existing minilp solver
-    let ineq = match parse_inequality_latex(expr) {
+    let ineqs = match parse_inequality_latex(expr) {
         Ok(i) => i,
         Err(e) => {
             return VerificationResult {
@@ -614,7 +660,7 @@ pub fn check_inequality_with_name(
             };
         }
     };
-    let system = InequalitySystem::new(vec![ineq]);
+    let system = InequalitySystem::new(ineqs);
     match solve_system(&system, timeout_ms) {
         FeasibilityResult::Feasible { model } => {
             let ms: Vec<String> = model.iter().map(|(k, v)| format!("{k}={v}")).collect();
@@ -669,33 +715,33 @@ mod tests {
 
     #[test]
     fn test_parse_lt() {
-        let ineq = parse_via_regex("x < 5").unwrap();
+        let ineq = parse_via_regex("x < 5").unwrap().remove(0);
         assert_eq!(ineq.sense, InequalitySense::Lt);
         assert!((ineq.rhs - 5.0).abs() < 1e-10);
     }
 
     #[test]
     fn test_parse_le() {
-        let ineq = parse_via_regex("x + y <= 10").unwrap();
+        let ineq = parse_via_regex("x + y <= 10").unwrap().remove(0);
         assert_eq!(ineq.sense, InequalitySense::Le);
     }
 
     #[test]
     fn test_parse_shift() {
-        let ineq = parse_via_regex("2*x + 5 <= 3*y").unwrap();
+        let ineq = parse_via_regex("2*x + 5 <= 3*y").unwrap().remove(0);
         assert!((ineq.rhs - (-5.0)).abs() < 1e-10);
     }
 
     #[test]
     #[allow(non_snake_case)]
     fn test_parse_laTeX() {
-        let ineq = parse_via_regex("x \\leq 2*y").unwrap();
+        let ineq = parse_via_regex("x \\leq 2*y").unwrap().remove(0);
         assert_eq!(ineq.sense, InequalitySense::Le);
     }
 
     #[test]
     fn test_parse_negative_coeff() {
-        let ineq = parse_via_regex("-x + 2*y < 5").unwrap();
+        let ineq = parse_via_regex("-x + 2*y < 5").unwrap().remove(0);
         assert!((ineq.coefficients[0] - (-1.0)).abs() < 1e-10);
     }
 
@@ -1064,5 +1110,140 @@ mod tests {
     fn test_is_linear_non_standard_operators() {
         // Division by constant → still linear if no other nonlinearity
         assert!(!is_nonlinear("x/2 <= 10"), "x/2 is linear");
+    }
+
+    // ── Compound inequality parsing ──
+
+    #[test]
+    fn test_parse_compound_leq() {
+        let ineqs = parse_via_regex("0 <= x <= 10").unwrap();
+        assert_eq!(ineqs.len(), 2);
+
+        // First: 0 <= x → after parsing: -x <= 0 (sense=Le, coeffs=[-1.0], rhs=0)
+        // Mathematically equivalent to x >= 0, but sense field preserves the original.
+        let first = &ineqs[0];
+        assert_eq!(first.sense, InequalitySense::Le);
+        assert!((first.rhs - 0.0).abs() < 1e-10);
+        assert!((first.coefficients[0] - (-1.0)).abs() < 1e-10);
+
+        // Second: x <= 10 (vars: ["x"], coeffs: [1.0], sense: Le, rhs: 10)
+        let second = &ineqs[1];
+        assert_eq!(second.sense, InequalitySense::Le);
+        assert!((second.rhs - 10.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_parse_compound_strict() {
+        let ineqs = parse_via_regex("0 < x < 10").unwrap();
+        assert_eq!(ineqs.len(), 2);
+        // 0 < x → -x < 0 → sense stays Lt
+        assert_eq!(ineqs[0].sense, InequalitySense::Lt);
+        // x < 10 → sense stays Lt
+        assert_eq!(ineqs[1].sense, InequalitySense::Lt);
+    }
+
+    #[test]
+    fn test_parse_compound_mixed_senses() {
+        // 5 <= 2*x < 20 → two inequalities
+        let ineqs = parse_via_regex("5 <= 2*x < 20").unwrap();
+        assert_eq!(ineqs.len(), 2);
+        // 5 <= 2x → sense stays Le (coeffs = [-2.0], rhs = -5.0)
+        assert_eq!(ineqs[0].sense, InequalitySense::Le);
+        // 2*x < 20 → sense stays Lt
+        assert_eq!(ineqs[1].sense, InequalitySense::Lt);
+    }
+
+    #[test]
+    fn test_compound_system_solve() {
+        // 0 <= x <= 10 should be feasible
+        let ineqs = parse_via_regex("0 <= x <= 10").unwrap();
+        let system = InequalitySystem::new(ineqs);
+        let result = solve_system(&system, Some(1000));
+        assert!(result.is_feasible(), "0 <= x <= 10 should be feasible");
+    }
+
+    #[test]
+    fn test_compound_system_contradiction() {
+        // 10 <= x <= 0 should be infeasible
+        let ineqs = parse_via_regex("10 <= x <= 0").unwrap();
+        let system = InequalitySystem::new(ineqs);
+        let result = solve_system(&system, Some(1000));
+        assert!(
+            result.is_infeasible(),
+            "10 <= x <= 0 should be infeasible"
+        );
+    }
+
+    // ── solve_optimization ──
+
+    #[test]
+    fn test_solve_optimization_simple() {
+        // System: x >= 0, x <= 10
+        // Objective: maximize x
+        let ineqs = parse_via_regex("0 <= x <= 10").unwrap();
+        let system = InequalitySystem::new(ineqs);
+        let mut obj = HashMap::new();
+        obj.insert("x".into(), 1.0);
+        let result = solve_optimization(&system, Some(&obj), Some(1000));
+        match result {
+            FeasibilityResult::Feasible { model } => {
+                let x = model.get("x").copied().unwrap_or(f64::NAN);
+                assert!(
+                    (x - 10.0).abs() < 1e-9,
+                    "expected x ≈ 10 (maximized), got x={x}"
+                );
+            }
+            other => panic!("expected Feasible, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_solve_optimization_minimize() {
+        // System: -x + y <= 5, x >= -10, y >= -10, x <= 10, y <= 10
+        // Objective: minimize x (= maximize -x)
+        let i1 = Inequality::new(vec![1.0, -1.0], vec!["x".into(), "y".into()], InequalitySense::Ge, -5.0);
+        let i2 = Inequality::new(vec![1.0], vec!["x".into()], InequalitySense::Ge, -10.0);
+        let i3 = Inequality::new(vec![1.0], vec!["y".into()], InequalitySense::Ge, -10.0);
+        let i4 = Inequality::new(vec![1.0], vec!["x".into()], InequalitySense::Le, 10.0);
+        let i5 = Inequality::new(vec![1.0], vec!["y".into()], InequalitySense::Le, 10.0);
+        let system = InequalitySystem::new(vec![i1, i2, i3, i4, i5]);
+        // Minimize x → objective = -1.0 for x (solver maximizes -x, pushing x to lower bound)
+        let mut obj = HashMap::new();
+        obj.insert("x".into(), -1.0);
+        let result = solve_optimization(&system, Some(&obj), Some(1000));
+        match result {
+            FeasibilityResult::Feasible { model } => {
+                let x = model.get("x").copied().unwrap_or(f64::NAN);
+                assert!(
+                    (x - (-10.0)).abs() < 1e-9,
+                    "expected x ≈ -10 (minimized, objective coeff -1), got x={x}"
+                );
+            }
+            other => panic!("expected Feasible, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_solve_optimization_none_is_feasibility() {
+        // solve_optimization with None objective should behave like solve_system
+        let ineq = Inequality::new(vec![1.0], vec!["x".into()], InequalitySense::Gt, 0.0);
+        let system = InequalitySystem::new(vec![ineq]);
+        let result = solve_optimization(&system, None, Some(1000));
+        assert!(result.is_feasible());
+    }
+
+    #[test]
+    fn test_solve_optimization_timeout() {
+        let ineq = Inequality::new(vec![1.0], vec!["x".into()], InequalitySense::Gt, 0.0);
+        let system = InequalitySystem::new(vec![ineq]);
+        let mut obj = HashMap::new();
+        obj.insert("x".into(), 1.0);
+        let result = solve_optimization(&system, Some(&obj), Some(0));
+        match result {
+            FeasibilityResult::Timeout { timeout_ms } => {
+                assert_eq!(timeout_ms, 0);
+            }
+            other => panic!("expected Timeout, got: {other:?}"),
+        }
     }
 }

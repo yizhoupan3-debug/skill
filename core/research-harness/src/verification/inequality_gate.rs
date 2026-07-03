@@ -93,7 +93,7 @@ impl GateChecker for Inequality {
                 continue;
             };
             match inequality::parse_inequality_latex(expr_str) {
-                Ok(ineq) => parsed.push(ineq),
+                Ok(ineqs) => parsed.extend(ineqs),
                 Err(e) => {
                     findings.push(Finding {
                         id: format!("inequality_parse_{i}"),

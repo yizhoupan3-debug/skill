@@ -39,6 +39,8 @@ pub struct AutoProverResult {
     pub trace: ProofTrace,
     /// Human-readable proof string
     pub proof_string: String,
+    /// Counterexample variable assignments if proof failed (lhs != rhs)
+    pub counterexample: Option<HashMap<String, f64>>,
 }
 
 // ===========================================================================
@@ -126,6 +128,101 @@ fn seed_random_values(seed: u64, count: usize, lo: f64, hi: f64) -> Vec<f64> {
     (0..count).map(|_| rng.next_range(lo, hi)).collect()
 }
 
+/// Attempt to find a counterexample where lhs != rhs.
+///
+/// Uses Z3 (if available) to find a model satisfying the inequality,
+/// falling back to random numerical sampling via the symbolic engine.
+fn find_counterexample(lhs: &str, rhs: &str) -> Option<HashMap<String, f64>> {
+    // Collect all variables from both expressions
+    let mut all_vars = extract_variables(lhs);
+    all_vars.extend(extract_variables(rhs));
+    all_vars.sort();
+    all_vars.dedup();
+
+    if all_vars.is_empty() {
+        return None;
+    }
+
+    // ── Strategy 1: Z3 counterexample model ──
+    if crate::verification::python_bridge::z3_available() {
+        let inequality = format!("abs({lhs} - {rhs}) > 1e-6");
+        let steps = vec![
+            crate::verification::z3_bridge::SolverBatchStep {
+                action: "reset".into(), n: None, expression: None, timeout_ms: None,
+            },
+            crate::verification::z3_bridge::SolverBatchStep {
+                action: "add".into(), n: None,
+                expression: Some(inequality),
+                timeout_ms: None,
+            },
+            crate::verification::z3_bridge::SolverBatchStep {
+                action: "check".into(), n: None, expression: None,
+                timeout_ms: Some(10000),
+            },
+        ];
+
+        if let Ok(result) = crate::verification::z3_bridge::solver_batch(&steps) {
+            if let Some(steps_arr) = result.get("steps").and_then(|v| v.as_array()) {
+                if steps_arr.len() >= 3 {
+                    if let Some(check_step) = steps_arr.get(2) {
+                        if check_step.get("result").and_then(|v| v.as_str()) == Some("sat") {
+                            let mut counterexample = HashMap::new();
+                            if let Some(model) = check_step.get("model").and_then(|v| v.as_object()) {
+                                for (var, val) in model {
+                                    let num = val.as_f64()
+                                        .or_else(|| val.as_i64().map(|i| i as f64))
+                                        .or_else(|| val.as_str().and_then(|s| s.parse::<f64>().ok()));
+                                    if let Some(n) = num {
+                                        counterexample.insert(var.clone(), n);
+                                    }
+                                }
+                            }
+                            if !counterexample.is_empty() {
+                                return Some(counterexample);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // ── Strategy 2: Random numerical sampling ──
+    let lhs_parsed = match crate::verification::symbolic::parse(lhs) {
+        Ok(e) => e,
+        Err(_) => return None,
+    };
+    let rhs_parsed = match crate::verification::symbolic::parse(rhs) {
+        Ok(e) => e,
+        Err(_) => return None,
+    };
+
+    let mut rng = crate::verification::symbolic::SimpleRng::new(42);
+    let mut trial = HashMap::new();
+
+    for _ in 0..100 {
+        trial.clear();
+        for v in &all_vars {
+            let (lo, hi) = match v.as_str() {
+                "n" | "m" | "k" | "i" | "j" | "N" | "M" => (1.0, 100.0),
+                _ => (-10.0, 10.0),
+            };
+            trial.insert(v.clone(), rng.next_range(lo, hi));
+        }
+
+        if let (Ok(l), Ok(r)) = (
+            crate::verification::symbolic::eval(&lhs_parsed, &trial),
+            crate::verification::symbolic::eval(&rhs_parsed, &trial),
+        ) {
+            if (l - r).abs() > 1e-6 {
+                return Some(trial.clone());
+            }
+        }
+    }
+
+    None
+}
+
 // ===========================================================================
 // 1. Auto Prover — try_prove
 // ===========================================================================
@@ -159,6 +256,7 @@ pub fn try_prove(lhs: &str, rhs: &str, timeout_ms: Option<u64>) -> AutoProverRes
                 verification_result: vr.clone(),
                 trace,
                 proof_string: format!("Proved by SymPy: {lhs} = {rhs}"),
+                counterexample: None,
             };
         }
     }
@@ -180,6 +278,7 @@ pub fn try_prove(lhs: &str, rhs: &str, timeout_ms: Option<u64>) -> AutoProverRes
                 verification_result: vr.clone(),
                 trace,
                 proof_string: format!("Proved by Z3: {lhs} = {rhs}"),
+                counterexample: None,
             };
         }
     }
@@ -201,12 +300,14 @@ pub fn try_prove(lhs: &str, rhs: &str, timeout_ms: Option<u64>) -> AutoProverRes
                 verification_result: vr.clone(),
                 trace,
                 proof_string: format!("Proved by inequality engine: {lhs} = {rhs}"),
+                counterexample: None,
             };
         }
         // If inequality returned Fail but the expression is provably false, report that
         if vr.status == VerificationStatus::Fail {
             let elapsed = start.elapsed().as_millis() as u64;
             trace.set_time_ms(elapsed);
+            let counterexample = find_counterexample(lhs, rhs);
             return AutoProverResult {
                 proved: false,
                 backend: UsedBackend::None,
@@ -221,6 +322,7 @@ pub fn try_prove(lhs: &str, rhs: &str, timeout_ms: Option<u64>) -> AutoProverRes
                 },
                 trace,
                 proof_string: format!("All backenders proved false: {lhs} ≠ {rhs}"),
+                counterexample,
             };
         }
     }
@@ -228,6 +330,7 @@ pub fn try_prove(lhs: &str, rhs: &str, timeout_ms: Option<u64>) -> AutoProverRes
     // ── All backends exhausted ──
     let elapsed = start.elapsed().as_millis() as u64;
     trace.set_time_ms(elapsed);
+    let counterexample = find_counterexample(lhs, rhs);
     AutoProverResult {
         proved: false,
         backend: UsedBackend::None,
@@ -239,6 +342,7 @@ pub fn try_prove(lhs: &str, rhs: &str, timeout_ms: Option<u64>) -> AutoProverRes
         },
         trace,
         proof_string: format!("Unable to prove or disprove: {lhs} = {rhs}"),
+        counterexample,
     }
 }
 
@@ -634,19 +738,48 @@ pub fn generate_random_witnesses(
 /// - `"shift"`: f(x) ≡ g(x + c)
 /// - `"scale"`: f(x) ≡ k * g(x)
 /// - `"scale_shift"`: f(x) ≡ k * g(x + c)
+/// - `"composition"`: f(x) ≡ f(g(x)) where g ∈ {1/x, x², √x}
 pub fn check_homomorphism(f: &str, g: &str) -> HomomorphismResult {
-    let transform_types = ["shift", "scale", "scale_shift"];
+    // Define transform parameter values
+    const SHIFT_VALUES: [f64; 15] = [
+        -10.0, -5.0, -3.0, -2.0, -1.0, -0.5, -0.25, 0.0,
+        0.25, 0.5, 1.0, 2.0, 3.0, 5.0, 10.0,
+    ];
+    const SCALE_VALUES: [f64; 15] = [
+        -10.0, -5.0, -3.0, -2.0, -1.0, -0.5, -0.25, 0.25,
+        0.5, 1.0, 2.0, 3.0, 4.0, 5.0, 10.0,
+    ];
+
+    // Calculate total combinations before enumerating.
+    // shift: 15, scale: 15, scale_shift: 15×15 = 225, composition: 3
+    let total_combinations = SHIFT_VALUES.len()
+        + SCALE_VALUES.len()
+        + SHIFT_VALUES.len() * SCALE_VALUES.len()
+        + 3;
+
+    if total_combinations > 1000 {
+        tracing::warn!(
+            "check_homomorphism: too many combinations ({total_combinations} > 1000), skipping"
+        );
+        return HomomorphismResult {
+            found: false,
+            transform_type: "skipped".into(),
+            parameters: HashMap::new(),
+            equation: "".into(),
+            details: format!(
+                "Skipped homomorphism check: {total_combinations} combinations exceeds limit of 1000"
+            ),
+        };
+    }
+
+    let var = extract_variables(f).first().cloned().unwrap_or_else(|| "x".to_string());
+    let transform_types = ["shift", "scale", "scale_shift", "composition"];
 
     for transform in &transform_types {
         match *transform {
             "shift" => {
-                // Try f(x) = g(x + c) for various c
-                for c in [-5.0, -2.0, -1.0, -0.5, 0.0, 0.5, 1.0, 2.0, 5.0] {
-                    let _g_shifted = format!("g({} + {})", extract_variables(g).first().map(|s| s.as_str()).unwrap_or("x"), c);
-                    // We can't call g directly; try numerically
-                    // Instead, substitute by rewriting the expression
-                    let var = extract_variables(f).first().cloned().unwrap_or_else(|| "x".to_string());
-                    let g_shifted_expr = g.replace(&var, &format!("({} + {})", var, c));
+                for &c in &SHIFT_VALUES {
+                    let g_shifted_expr = g.replace(&var, &format!("({var} + {c})"));
 
                     let (eq, _) = crate::verification::symbolic::verify_identity(f, &g_shifted_expr);
                     if eq {
@@ -661,13 +794,13 @@ pub fn check_homomorphism(f: &str, g: &str) -> HomomorphismResult {
                 }
             }
             "scale" => {
-                // Try f(x) = k * g(x)
-                for k in [-2.0, -1.0, -0.5, 0.5, 1.0, 2.0, 3.0, 5.0, 10.0] {
-                    let scaled = if k == 1.0 {
+                for &k in &SCALE_VALUES {
+                    let scaled = if (k - 1.0).abs() < 1e-12 {
                         g.to_string()
                     } else {
-                        format!("{}*({})", k, g)
+                        format!("{k}*({g})")
                     };
+
                     let (eq, _) = crate::verification::symbolic::verify_identity(f, &scaled);
                     if eq {
                         return HomomorphismResult {
@@ -681,12 +814,14 @@ pub fn check_homomorphism(f: &str, g: &str) -> HomomorphismResult {
                 }
             }
             "scale_shift" => {
-                // Try f(x) = k * g(x + c)
-                for k in [-2.0, -1.0, -0.5, 0.5, 1.0, 2.0, 3.0, 5.0] {
-                    for c in [-2.0, -1.0, -0.5, 0.0, 0.5, 1.0, 2.0] {
-                        let var = extract_variables(f).first().cloned().unwrap_or_else(|| "x".to_string());
-                        let g_shifted = g.replace(&var, &format!("({} + {})", var, c));
-                        let scaled = if k == 1.0 { g_shifted } else { format!("{}*({})", k, g_shifted) };
+                for &k in &SCALE_VALUES {
+                    for &c in &SHIFT_VALUES {
+                        let g_shifted = g.replace(&var, &format!("({var} + {c})"));
+                        let scaled = if (k - 1.0).abs() < 1e-12 {
+                            g_shifted
+                        } else {
+                            format!("{k}*({g_shifted})")
+                        };
 
                         let (eq, _) = crate::verification::symbolic::verify_identity(f, &scaled);
                         if eq {
@@ -701,6 +836,31 @@ pub fn check_homomorphism(f: &str, g: &str) -> HomomorphismResult {
                     }
                 }
             }
+            "composition" => {
+                let transforms = [
+                    format!("1/({var})"),
+                    format!("({var})^2"),
+                    format!("sqrt({var})"),
+                ];
+                for (idx, transform_str) in transforms.iter().enumerate() {
+                    let composed = f.replace(&var, &format!("({transform_str})"));
+                    let (eq, _) = crate::verification::symbolic::verify_identity(f, &composed);
+                    if eq {
+                        let g_type = match idx {
+                            0 => "1/x",
+                            1 => "x^2",
+                            _ => "sqrt(x)",
+                        };
+                        return HomomorphismResult {
+                            found: true,
+                            transform_type: "composition".into(),
+                            parameters: HashMap::new(),
+                            equation: format!("{f} = f({g_type})"),
+                            details: format!("f(x) is invariant under g(x) = {g_type}"),
+                        };
+                    }
+                }
+            }
             _ => {}
         }
     }
@@ -710,7 +870,7 @@ pub fn check_homomorphism(f: &str, g: &str) -> HomomorphismResult {
         transform_type: "none".into(),
         parameters: HashMap::new(),
         equation: "".into(),
-        details: format!("No homomorphism (shift/scale/scale_shift) found between {f} and {g}"),
+        details: format!("No homomorphism (shift/scale/scale_shift/composition) found between {f} and {g}"),
     }
 }
 
