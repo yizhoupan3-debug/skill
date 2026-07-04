@@ -75,8 +75,21 @@ pub fn resolve_state_path(payload: &Value) -> Result<PathBuf, FrameworkError> {
             cwd.join(&path)
         };
         let temp = std::env::temp_dir();
-        let under_cwd = candidate.strip_prefix(&cwd).is_ok();
-        let under_tmp = candidate.strip_prefix(&temp).is_ok();
+
+        // Security: verify the write target resolves within allowed directories.
+        // Canonicalize the parent directory (which must exist) to catch symlink
+        // escapes. On macOS /var → /private/var, so both sides need resolving.
+        let parent = candidate.parent().unwrap_or(&candidate);
+        let resolved_parent = std::fs::canonicalize(parent).unwrap_or_else(|_| parent.to_path_buf());
+        let resolved_cwd = std::fs::canonicalize(&cwd).unwrap_or_else(|_| cwd.clone());
+        let resolved_temp = std::fs::canonicalize(&temp).unwrap_or_else(|_| temp.clone());
+
+        let file_name = candidate
+            .file_name()
+            .map(|n| std::path::Path::new(n))
+            .unwrap_or(std::path::Path::new(""));
+        let under_cwd = resolved_parent.starts_with(&resolved_cwd);
+        let under_tmp = resolved_parent.starts_with(&resolved_temp);
         if !under_cwd && !under_tmp {
             return Err(FrameworkError::validation(format!(
                 "state_path must be under cwd {} or system temp {}",

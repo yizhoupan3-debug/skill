@@ -48,7 +48,14 @@ pub fn launch_process(
         // Rust's pre_exec contract guarantees it runs in a single-threaded child.
         unsafe {
             cmd.pre_exec(|| {
-                libc::setsid();
+                // setsid() creates a new session; on failure the child would
+                // remain attached to the parent terminal — log and abort to
+                // prevent a daemon-like worker from running in the wrong session.
+                if libc::setsid() < 0 {
+                    let err = std::io::Error::last_os_error();
+                    tracing::error!("setsid() failed in child: {err} — aborting worker");
+                    return Err(err);
+                }
                 process_utils::apply_subprocess_rlimits()?;
                 Ok(())
             });
@@ -152,6 +159,13 @@ pub fn terminate_process(pid: u32) -> Result<(), FrameworkError> {
         }
         // Last resort: non-blocking reap so kill(0) won't see a zombie.
         let _ = wait_for_child(pid, false);
+        // Verify the process is actually dead after SIGKILL + reap attempt.
+        if kill_pid_alive(pid) {
+            tracing::warn!(
+                "pid={pid} still alive after SIGKILL + waitpid — \
+                 may be in uninterruptible sleep (D state)"
+            );
+        }
         Ok(())
     }
     #[cfg(not(unix))]
@@ -168,18 +182,44 @@ pub fn terminate_process(pid: u32) -> Result<(), FrameworkError> {
     }
 }
 
-pub fn reconcile_process_state(worker: &mut WorkerSessionRecord) {
+pub fn reconcile_process_state(worker: &mut WorkerSessionRecord, now: &str) {
     let Some(pid) = worker.pid else {
         return;
     };
     if process_is_alive(pid) {
         if worker.status == "launching" || worker.status == "queued" {
             worker.status = "running".to_string();
+            crate::runtime::push_event(
+                worker,
+                "reconciled_running",
+                "running",
+                now,
+                Some(format!("pid {pid} alive, status reconciled to running")),
+            );
         }
-    } else if matches!(worker.status.as_str(), "running" | "launching" | "queued") {
+    } else if matches!(
+        worker.status.as_str(),
+        "running" | "launching" | "queued" | "resume_scheduled"
+    ) {
         worker.status = "completed".to_string();
+        crate::runtime::push_event(
+            worker,
+            "process_died",
+            "completed",
+            now,
+            Some(format!("pid {pid} no longer alive, reconciled to completed")),
+        );
     } else if matches!(worker.status.as_str(), "blocked_rate_limit") {
         worker.status = "interrupted".to_string();
+        crate::runtime::push_event(
+            worker,
+            "process_died",
+            "interrupted",
+            now,
+            Some(format!(
+                "pid {pid} no longer alive, blocked worker reconciled to interrupted"
+            )),
+        );
     }
 }
 
@@ -202,12 +242,20 @@ fn send_signal_to_pgrp(pid: u32, signal: i32) -> Result<(), FrameworkError> {
         return Ok(());
     }
     let err = io::Error::last_os_error();
-    if err.raw_os_error() == Some(libc::ESRCH) {
-        return Ok(());
+    match err.raw_os_error() {
+        Some(libc::ESRCH) => Ok(()),
+        Some(libc::EPERM) => {
+            tracing::warn!(
+                "kill(target={target}, signal={signal}): EPERM — \
+                 process exists but permission denied (container/sandbox?). \
+                 Treating as signal-sent."
+            );
+            Ok(())
+        }
+        _ => Err(FrameworkError::session(format!(
+            "kill(target={target}, signal={signal}) failed: {err}"
+        ))),
     }
-    Err(FrameworkError::session(format!(
-        "kill(target={target}, signal={signal}) failed: {err}"
-    )))
 }
 
 /// Reap a child that has exited (including zombie). Returns true when the pid is gone.

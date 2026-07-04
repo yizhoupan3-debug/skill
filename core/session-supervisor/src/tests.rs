@@ -143,7 +143,7 @@ fn dry_run_launch_and_resume_round_trip_persists_state() {
         "now": "2026-04-23T10:06:00Z",
     }))
     .expect("list workers");
-    assert_eq!(listed["workers"][0]["driver_id"], json!("unknown_driver"));
+    assert_eq!(listed["workers"][0]["driver_id"], json!("codex_driver"));
 
     let _ = fs::remove_file(state_path);
 }
@@ -1266,4 +1266,228 @@ fn resume_due_skips_worker_not_yet_due() {
     assert_eq!(resumed.len(), 0, "should not resume before backoff expires");
 
     let _ = fs::remove_file(state_path);
+}
+
+// ── P1-1: mark_worker_blocked terminal state guard ──────────────────
+
+#[test]
+fn mark_blocked_rejects_terminal_worker() {
+    let state_path = temp_state_path("mark-blocked-terminal");
+    let now = "2026-04-23T10:00:00Z";
+
+    // Launch → terminate → interrupted
+    let launch = handle_session_supervisor_operation(json!({
+        "operation": "launch",
+        "state_path": state_path,
+        "worker_id": "terminal-worker",
+        "host": "codex",
+        "cwd": "/tmp/project",
+        "dry_run": true,
+        "now": now,
+    }))
+    .expect("launch");
+    let worker_id = launch["worker"]["worker_id"]
+        .as_str()
+        .expect("worker_id")
+        .to_string();
+
+    handle_session_supervisor_operation(json!({
+        "operation": "terminate",
+        "state_path": state_path,
+        "worker_id": worker_id,
+        "dry_run": true,
+        "now": "2026-04-23T10:01:00Z",
+    }))
+    .expect("terminate");
+
+    // mark_blocked on interrupted worker should fail
+    let err = handle_session_supervisor_operation(json!({
+        "operation": "mark_blocked",
+        "state_path": state_path,
+        "worker_id": worker_id,
+        "evidence_text": "429 Too Many Requests",
+        "now": "2026-04-23T10:02:00Z",
+    }))
+    .expect_err("should reject mark_blocked on terminal worker");
+    assert!(
+        err.to_string().contains("terminal state"),
+        "error: {err}"
+    );
+
+    let _ = fs::remove_file(state_path);
+}
+
+// ── P1-6: team_manager lifecycle ────────────────────────────────────
+
+#[test]
+fn team_lifecycle_create_add_send_read_complete() {
+    use crate::team_manager::*;
+
+    let nonce = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("clock")
+        .as_nanos();
+    let repo_root = std::env::temp_dir().join(format!("team-lifecycle-{nonce}"));
+    let _ = fs::remove_dir_all(&repo_root);
+
+    let team_id = "test-team";
+    let agent_a = "agent-a";
+    let agent_b = "agent-b";
+    let now = framework_core::time::now_iso();
+
+    // Create team
+    let team = create_team(&repo_root, team_id, "Test Team", Some("supervisor"), &now)
+        .expect("create team");
+    assert_eq!(team.status, "active");
+    assert_eq!(team.team_id, team_id);
+
+    // Duplicate create should fail
+    let err = create_team(&repo_root, team_id, "Dup", None, &now).expect_err("dup");
+    assert!(err.to_string().contains("already exists"), "error: {err}");
+
+    // Add members
+    let member_a = add_team_member(&repo_root, team_id, agent_a, "worker", "claude", &now)
+        .expect("add member a");
+    assert_eq!(member_a.status, "running");
+
+    let member_b = add_team_member(&repo_root, team_id, agent_b, "reviewer", "codex", &now)
+        .expect("add member b");
+
+    // Duplicate member should fail
+    let err = add_team_member(&repo_root, team_id, agent_a, "dup", "claude", &now)
+        .expect_err("dup member");
+    assert!(err.to_string().contains("already in team"), "error: {err}");
+
+    // Send messages
+    let msg1 = send_message(
+        &repo_root,
+        team_id,
+        agent_a,
+        Some(agent_b),
+        "review_request",
+        serde_json::json!({"file": "main.rs"}),
+        &now,
+    )
+    .expect("send msg1");
+    assert!(!msg1.message_id.is_empty());
+
+    let msg2 = send_message(
+        &repo_root,
+        team_id,
+        agent_b,
+        None, // broadcast
+        "status_update",
+        serde_json::json!({"status": "reviewing"}),
+        &now,
+    )
+    .expect("send broadcast");
+
+    // Read messages
+    let msgs_a = read_my_messages(&repo_root, team_id, agent_a).expect("read a");
+    // agent_a sees: 1 broadcast (the direct a→b message is in agent_b's inbox)
+    assert_eq!(msgs_a.len(), 1, "agent_a should see 1 broadcast message");
+
+    let msgs_b = read_my_messages(&repo_root, team_id, agent_b).expect("read b");
+    // agent_b sees: 1 direct message (a→b) + 1 broadcast = 2
+    assert_eq!(msgs_b.len(), 2, "agent_b should see 2 messages");
+
+    // Verify messages are marked as read
+    for msg in &msgs_a {
+        assert!(msg.read, "message should be marked read: {}", msg.message_id);
+    }
+
+    // team_alive_members
+    let alive = team_alive_members(&repo_root, team_id).expect("alive");
+    assert_eq!(alive.len(), 2);
+
+    // Complete team
+    let complete_now = framework_core::time::now_iso();
+    let completed = complete_team(&repo_root, team_id, &complete_now)
+        .expect("complete team");
+    assert_eq!(completed.status, "completed");
+
+    // team_list
+    let teams = team_list(&repo_root, Some(team_id)).expect("list");
+    assert_eq!(teams.len(), 1);
+    assert_eq!(teams[0].status, "completed");
+
+    // reap stale teams with large retention → should not reap
+    let reaped = reap_stale_teams(&repo_root, 86400).expect("reap safe");
+    assert_eq!(reaped, 0, "recently completed team should not be reaped");
+
+    let _ = fs::remove_dir_all(&repo_root);
+}
+
+// ── P1-7: agent health register/unregister ──────────────────────────
+
+#[test]
+fn agent_register_unregister_lifecycle() {
+    use crate::process::{reap_stale_agents, register_agent_alive, unregister_agent};
+
+    let nonce = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("clock")
+        .as_nanos();
+    let repo_root = std::env::temp_dir().join(format!("agent-health-{nonce}"));
+    let _ = fs::remove_dir_all(&repo_root);
+    fs::create_dir_all(&repo_root).expect("mkdir");
+
+    let agent_id = "test-agent-001";
+    let now = framework_core::time::now_iso();
+
+    // Register
+    register_agent_alive(&repo_root, agent_id, "claude", "agent", &now).expect("register");
+
+    // Re-register (idempotent — should overwrite)
+    register_agent_alive(&repo_root, agent_id, "claude", "task", &now).expect("re-register");
+
+    // Unregister
+    unregister_agent(&repo_root, agent_id, "completed", None, &now).expect("unregister");
+
+    // Unregister again (fallback: creates a new terminal entry)
+    let now2 = framework_core::time::now_iso();
+    unregister_agent(
+        &repo_root,
+        agent_id,
+        "completed",
+        None,
+        &now2,
+    )
+    .expect("unregister again");
+
+    // Reap: agent completed_at is now, retention is large → should not reap
+    let reaped = reap_stale_agents(&repo_root, 86400).expect("reap");
+    assert_eq!(reaped, 0);
+
+    // Reap with 0 retention → should reap everything
+    let reaped = reap_stale_agents(&repo_root, 0).expect("reap all");
+    assert!(reaped >= 1, "should reap at least 1 agent entry");
+
+    let _ = fs::remove_dir_all(&repo_root);
+}
+
+// ── P2-8: reconcile_process_state event logging ─────────────────────
+
+#[test]
+fn reconcile_logs_events_for_process_died() {
+    use crate::process::reconcile_process_state;
+
+    let mut worker = crate::types::WorkerSessionRecord {
+        worker_id: "reconcile-events".to_string(),
+        host: "smoke".to_string(),
+        status: "running".to_string(),
+        pid: Some(99999999), // dead PID
+        ..Default::default()
+    };
+
+    reconcile_process_state(&mut worker, "2026-04-23T10:00:00Z");
+
+    assert_eq!(worker.status, "completed");
+    let events: Vec<_> = worker
+        .events
+        .iter()
+        .filter(|e| e.event == "process_died")
+        .collect();
+    assert_eq!(events.len(), 1, "should have process_died event");
+    assert_eq!(events[0].status, "completed");
 }

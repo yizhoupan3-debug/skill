@@ -14,10 +14,15 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use core_errors::FrameworkError;
 
 use crate::process::{register_agent_alive, unregister_agent};
+
+/// Monotonically increasing nonce to prevent message_id collisions within the
+/// same nanosecond when multiple `send_message` calls race.
+static MSG_NONCE: AtomicU64 = AtomicU64::new(0);
 
 pub const TEAM_SCHEMA_VERSION: &str = "v1";
 pub const TEAM_ARTIFACTS_DIR: &str = "artifacts/teams";
@@ -362,14 +367,15 @@ pub fn send_message(
 
     // Validate team, update counters, AND write message file under the same
     // lock so the entire validation-and-write sequence is atomic.
-    // Use nanoseconds as a collision-safe nonce within the same second.
-    // now_iso() is seconds-precision (framework_core::time::now_iso), so
-    // format!("{now}-{safe_from}") would collide for same-second sends.
-    let nonce = std::time::SystemTime::now()
+    // Combine nanosecond timestamp + PID + monotonic counter for collision-safe
+    // message IDs, even under concurrent send_message calls.
+    let nanos = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_nanos())
         .unwrap_or(0);
-    let msg_id = format!("{now}-{safe_from}-{nonce}");
+    let seq = MSG_NONCE.fetch_add(1, Ordering::Relaxed);
+    let pid = std::process::id();
+    let msg_id = format!("{now}-{safe_from}-{nanos}-{pid}-{seq}");
     let safe_msg_id: String = msg_id
         .chars()
         .filter(|&c| c.is_ascii_alphanumeric() || c == '-' || c == '_')

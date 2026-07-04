@@ -85,34 +85,40 @@ pub fn handle_session_supervisor_operation(payload: Value) -> Result<Value, Fram
             let worker_snapshot = {
                 let worker = store
                     .workers
-                    .iter_mut()
+                    .iter()
                     .find(|worker| worker.worker_id == worker_id)
                     .ok_or_else(|| {
                         FrameworkError::not_found(format!(
                             "Unknown supervisor worker_id: {worker_id}"
                         ))
                     })?;
-                reconcile_process_state(worker);
                 worker.clone()
             };
-            save_store(&state_path, &store)?;
+            // inspect is read-only — no save_store, no reconcile_process_state.
+            // Call `list` to trigger state reconciliation and cleanup.
             Ok(json!({
                 "schema_version": SESSION_SUPERVISOR_SCHEMA_VERSION,
                 "authority": SESSION_SUPERVISOR_AUTHORITY,
                 "operation": operation,
                 "state_path": state_path.display().to_string(),
-                "changed": true,
+                "changed": false,
                 "worker": worker_snapshot,
             }))
         }
+        // NOTE: `list` intentionally has write side effects — it reconciles
+        // process states, reaps stale workers/agents, compacts terminated
+        // records, and cleans up orphaned logs. This is by design: `list`
+        // is the primary housekeeping entry point.
         "list" => {
             let stale_after_secs = runtime::optional_i64(&payload, "stale_after_secs")
                 .unwrap_or(DEFAULT_WORKER_STALE_AFTER_SECS);
             reap_stale_workers(&mut store.workers, &now, stale_after_secs)?;
-            runtime::compact_terminated_workers(&mut store.workers, &now);
             for worker in &mut store.workers {
-                reconcile_process_state(worker);
+                reconcile_process_state(worker, &now);
             }
+            // Compact after reconcile so newly-terminated workers are cleaned up
+            // in the same pass.
+            runtime::compact_terminated_workers(&mut store.workers, &now);
             save_store(&state_path, &store)?;
             // Side-effect: reap stale agent health entries (use the stale-after
             // value as retention — agents terminal longer than the worker stale
@@ -176,6 +182,9 @@ pub fn handle_session_supervisor_operation(payload: Value) -> Result<Value, Fram
                 let classification = mark_worker_blocked(worker, &payload, &now)?;
                 (worker.clone(), classification)
             };
+            // Compact terminated workers opportunistically — the just-modified
+            // worker is blocked_rate_limit (not terminal), but other workers
+            // may have aged out.
             runtime::compact_terminated_workers(&mut store.workers, &now);
             save_store(&state_path, &store)?;
             Ok(json!({
@@ -222,6 +231,12 @@ pub fn handle_session_supervisor_operation(payload: Value) -> Result<Value, Fram
                 else {
                     continue; // removed concurrently — skip
                 };
+
+                // Re-check readiness under the per-worker lock to prevent
+                // double-resume from concurrent resume_due callers.
+                if !worker_ready_for_resume(worker, &now)? {
+                    continue;
+                }
 
                 match resume_worker(worker, &state_path, dry_run, &now) {
                     Ok(action) => resumed_workers.push(json!({

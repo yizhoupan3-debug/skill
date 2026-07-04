@@ -182,11 +182,7 @@ pub fn build_driver_command(
         }
     };
 
-    let shell_command = {
-        let mut parts = vec![binary.clone()];
-        parts.extend(args.iter().cloned());
-        parts.join(" ")
-    };
+    let shell_command = shell_join(&binary, &args);
     Ok(DriverCommandSpec {
         driver_id,
         binary,
@@ -196,8 +192,14 @@ pub fn build_driver_command(
     })
 }
 
-pub fn driver_id_for_host(_host: &str) -> &'static str {
-    "unknown_driver"
+pub fn driver_id_for_host(host: &str) -> &'static str {
+    match host.trim().to_ascii_lowercase().as_str() {
+        "codex" => "codex_driver",
+        "claude" => "claude_driver",
+        "opencode" => "opencode_driver",
+        "smoke" | "smoke-shell" => "smoke_shell_driver",
+        _ => "unknown_driver",
+    }
 }
 
 pub fn default_resume_mode(_host: &str) -> &'static str {

@@ -154,6 +154,16 @@ pub fn mark_worker_blocked(
     payload: &Value,
     now: &str,
 ) -> Result<BlockClassification, FrameworkError> {
+    // Guard: refuse to resurrect workers in terminal states.
+    if matches!(
+        worker.status.as_str(),
+        "completed" | "interrupted" | "failed"
+    ) {
+        return Err(FrameworkError::validation(format!(
+            "Cannot mark blocked: worker '{}' is in terminal state '{}'",
+            worker.worker_id, worker.status
+        )));
+    }
     let classification =
         if let Some(evidence_text) = optional_non_empty_string(payload, "evidence_text") {
             classify_rate_limit_block(&worker.host, &evidence_text)?
@@ -202,6 +212,16 @@ pub fn resume_worker(
     dry_run: bool,
     now: &str,
 ) -> Result<String, FrameworkError> {
+    // Guard: only blocked_rate_limit or resume_scheduled workers can be resumed.
+    if !matches!(
+        worker.status.as_str(),
+        "blocked_rate_limit" | "resume_scheduled"
+    ) {
+        return Err(FrameworkError::validation(format!(
+            "Cannot resume worker '{}' in status '{}'",
+            worker.worker_id, worker.status
+        )));
+    }
     let command = worker.resume_command.clone().ok_or_else(|| {
         FrameworkError::not_found(format!("Worker {} has no resume command", worker.worker_id))
     })?;
