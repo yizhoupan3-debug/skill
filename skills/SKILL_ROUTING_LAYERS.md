@@ -26,7 +26,7 @@
 
 - `skill-ci.yml`：push / PR 校验、生成物漂移拦截
 - `observer-audit.yml`：~~定时健康审计、同步 routing 产物、创建维护 issue~~（已在 v10 移除，observer-rs 已清理）
-- 宿主 automations（路径由 `RUNTIME_REGISTRY.json` 定义）：
+- 宿主 automations（路径由 `configs/framework/RUNTIME_REGISTRY.json` 定义）：
   异步收集维护任务、例行检查、产物刷新
 
 自动化输出会在后续回合以 **evidence/source artifact** 形式进入路由，

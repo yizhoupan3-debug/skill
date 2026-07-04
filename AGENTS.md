@@ -31,7 +31,7 @@
 | 自然语言任务 | `skill_route(query)` → 响应含 `recommended_tools` + `skill_summary` |
 | 查找 MCP 工具 | `route_tool(query)` / `search_tools(query, top_k)` |
 
-**新增 personal command checklist**: 创建 `~/.claude/skills/<name>/SKILL.md` → 确认 `RUNTIME_REGISTRY.json` 无同名 → 确认 `SKILL_ROUTING_RUNTIME.json` 无同名（除非需 NL 路由）。
+**新增 personal command checklist**: 创建 `~/.claude/skills/<name>/SKILL.md` → 确认 `configs/framework/RUNTIME_REGISTRY.json` 无同名 → 确认 `skills/SKILL_ROUTING_RUNTIME.json` 无同名（除非需 NL 路由）。
 
 工具注册表见 `configs/framework/MCP_TOOL_REGISTRY.json`。
 
