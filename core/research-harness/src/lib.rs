@@ -41,7 +41,6 @@ pub mod search;
 pub mod smoke;
 pub mod smoke_cache;
 pub mod state;
-pub mod subprocess;
 pub mod text;
 pub mod types;
 pub mod util;

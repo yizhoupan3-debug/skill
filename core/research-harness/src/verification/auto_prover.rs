@@ -1,8 +1,8 @@
-//! Automatic theorem proving pipeline combining SymPy, Z3, minilp, pure Rust.
+//! Automatic theorem proving pipeline combining pure Rust symbolic engine, Z3, minilp.
 //!
 //! # Capabilities
 //!
-//! 1. **Auto prover** (`try_prove`): chains SymPy → Z3 → inequality check, returns
+//! 1. **Auto prover** (`try_prove`): chains symbolic verify → Z3 prove → inequality check, returns
 //!    unified result with proof trace.
 //! 2. **Identity chain verification** (`verify_identity_chain`): transitivity check for
 //!    a = b = c = d chains.
@@ -241,9 +241,11 @@ pub fn try_prove(lhs: &str, rhs: &str, timeout_ms: Option<u64>) -> AutoProverRes
     let mut trace = ProofTrace::new(UsedBackend::None);
 
     // ── Strategy 1: SymPy verify ──
+    eprintln!("[try_prove] lhs={lhs}, rhs={rhs}");
     {
         trace = ProofTrace::new(UsedBackend::SymPy);
         let vr = crate::verification::sympy_bridge::verify_identity(lhs, rhs);
+        eprintln!("[try_prove] Strategy 1 (SymPy) result: {:?}, status={:?}", vr.status, vr.status);
         let elapsed = start.elapsed().as_millis() as u64;
         trace.set_time_ms(elapsed);
         trace.record_step("sympy_verify", lhs, rhs);
@@ -266,6 +268,7 @@ pub fn try_prove(lhs: &str, rhs: &str, timeout_ms: Option<u64>) -> AutoProverRes
         trace = ProofTrace::new(UsedBackend::Z3);
         let z3_expr = format!("{lhs} == {rhs}");
         let vr = crate::verification::z3_bridge::prove_formula(&z3_expr);
+        eprintln!("[try_prove] Strategy 2 (Z3) result: {:?}", vr.status);
         let elapsed = start.elapsed().as_millis() as u64;
         trace.set_time_ms(elapsed);
         trace.record_step("z3_prove", &z3_expr, "proved");
@@ -286,8 +289,9 @@ pub fn try_prove(lhs: &str, rhs: &str, timeout_ms: Option<u64>) -> AutoProverRes
     // ── Strategy 3: Inequality check (difference = 0) ──
     {
         trace = ProofTrace::new(UsedBackend::Minilp);
-        let diff_expr = format!("abs({lhs} - {rhs}) <= 1e-10");
+        let diff_expr = format!("abs(({lhs}) - ({rhs})) <= 1e-10");
         let vr = crate::verification::inequality::check_inequality(&diff_expr, timeout_ms);
+        eprintln!("[try_prove] Strategy 3 (inequality) result: {:?}, expr={}", vr.status, diff_expr);
         let elapsed = start.elapsed().as_millis() as u64;
         trace.set_time_ms(elapsed);
         trace.record_step("inequality_check", &diff_expr, "");
@@ -1060,11 +1064,10 @@ mod tests {
 
     #[test]
     fn test_homomorphism_not_found() {
-        // Unrelated expressions
-        let result = check_homomorphism("x^2", "sin(x)");
-        // Might or might not find — just check no panic
-        assert!(!result.found || result.found,
-            "x^2 and sin(x) are unlikely homomorphic, but no panic");
+        // x^3 and exp(x) are fundamentally different — no algebraic transform relates them
+        let result = check_homomorphism("x^3", "exp(x)");
+        assert!(!result.found,
+            "x^3 and exp(x) should not be homomorphic: {}", result.details);
     }
 
     // ── 6. ProofTrace wrapper tests ──

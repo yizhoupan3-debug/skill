@@ -546,10 +546,95 @@ fn word_boundary_match(text: &str, keyword: &str) -> bool {
     false
 }
 
-/// Route to Z3 backend for nonlinear inequalities.
+/// Route to Z3 backend for nonlinear inequalities, with numerical cross-check.
+///
+/// Splits the comparison expression, evaluates both sides numerically at test
+/// points, and overrides Z3's result if all evaluations contradict it.
 fn check_inequality_z3(expr: &str) -> VerificationResult {
     use crate::verification::z3_bridge;
-    z3_bridge::check_inequality(expr)
+
+    let z3_result = z3_bridge::check_inequality(expr);
+
+    // If Z3 says SAT, verify with numerical evaluation
+    if z3_result.status == crate::types::VerificationStatus::Pass {
+        // Parse the comparison: find the operator and split
+        if let Some((op, lhs_str, rhs_str)) = split_comparison(expr) {
+            if let (Ok(lhs_parsed), Ok(rhs_parsed)) = (
+                crate::verification::symbolic::parse(lhs_str.trim()),
+                crate::verification::symbolic::parse(rhs_str.trim()),
+            ) {
+                let test_points = [
+                    ("x", 0.0), ("x", 1.0), ("x", -1.0),
+                    ("x", 5.0), ("x", -5.0), ("x", 0.5),
+                ];
+
+                let mut all_fail = true;
+                for &(var, val) in &test_points {
+                    let mut vars = std::collections::HashMap::new();
+                    vars.insert(var.to_string(), val);
+                    for (v, vv) in [("y", 0.0), ("z", 0.0), ("t", 0.0)] {
+                        vars.insert(v.to_string(), vv);
+                    }
+                    if let (Ok(lv), Ok(rv)) = (
+                        crate::verification::symbolic::eval(&lhs_parsed, &vars),
+                        crate::verification::symbolic::eval(&rhs_parsed, &vars),
+                    ) {
+                        let holds = match op {
+                            "<=" => lv <= rv + 1e-12,
+                            "<" => lv < rv + 1e-12,
+                            ">=" => lv >= rv - 1e-12,
+                            ">" => lv > rv - 1e-12,
+                            "==" | "=" => (lv - rv).abs() < 1e-10,
+                            "!=" => (lv - rv).abs() >= 1e-10,
+                            _ => true,
+                        };
+                        if holds {
+                            all_fail = false;
+                            break;
+                        }
+                    }
+                }
+
+                if all_fail {
+                    return VerificationResult {
+                        check_name: z3_result.check_name,
+                        status: crate::types::VerificationStatus::Fail,
+                        details: format!(
+                            "{expr} — Z3 said SAT but numerical cross-check failed at all test points"
+                        ),
+                        evidence_path: None,
+                    };
+                }
+            }
+        }
+    }
+
+    z3_result
+}
+
+/// Split a comparison expression into (operator, lhs, rhs).
+fn split_comparison(expr: &str) -> Option<(&str, &str, &str)> {
+    let ops = [">=", "<=", "!=", "==", ">", "<", "="];
+    let mut depth = 0i32;
+    for (i, c) in expr.chars().enumerate() {
+        match c {
+            '(' => depth += 1,
+            ')' => depth -= 1,
+            _ => {}
+        }
+        if depth == 0 {
+            for op in &ops {
+                if expr[i..].starts_with(op) {
+                    let lhs = &expr[..i];
+                    let rhs = &expr[i + op.len()..];
+                    if !lhs.trim().is_empty() && !rhs.trim().is_empty() {
+                        return Some((op, lhs, rhs));
+                    }
+                }
+            }
+        }
+    }
+    None
 }
 
 pub fn check_inequality(expr: &str, timeout_ms: Option<u64>) -> VerificationResult {

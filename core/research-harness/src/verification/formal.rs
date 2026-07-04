@@ -1,7 +1,7 @@
-/// 形式验证 — 量纲一致性检查。
+/// 形式验证 — 量纲一致性检查（纯 Rust AST 引擎）。
 ///
-/// 基本的 SI 量纲一致性检查：在给定方程中检测左右两侧的量纲符号是否匹配。
-/// 支持量纲传播（通过 Python SymPy 后端或启发式本地传播）。
+/// 基于 AST 的量纲传播和一致性检查：通过符号引擎解析表达式，
+/// 在乘除中传播指数、超越函数要求无量纲输入、sqrt 半指数等。
 
 use anyhow::Result;
 use regex::Regex;
@@ -101,51 +101,18 @@ fn extract_dimension_tokens(text: &str) -> Vec<String> {
 // 量纲传播 — 通过已知变量量纲推断方程量纲一致性
 // ===========================================================================
 
-/// 传播维度并检查方程的维度一致性。
+/// 传播维度并检查方程的维度一致性 — 纯 Rust AST 引擎。
 ///
-/// 相比 `check_dimensional_consistency` 的简单集合比对，
-/// 此函数尝试通过已知维度的运算传播来确定方程两边是否有相同维度。
-///
-/// 优先使用 Python SymPy 后端（当可用时），回退到启发式本地分析。
-///
-/// `dimensions` 是一个从变量名到维度字符串的映射，例如：
-/// `{"F": "L*M*T^-2", "m": "M", "a": "L*T^-2"}`
-///
-/// 返回：
-/// ```json
-/// {
-///   "lhs_dim": "...",     // 左侧计算结果维度
-///   "rhs_dim": "...",     // 右侧计算结果维度
-///   "consistent": true,   // 是否一致
-///   "method": "sympy|heuristic|unknown"
-/// }
-/// ```
+/// 使用符号引擎的递归下降解析器构建表达式 AST，然后用维度代数遍历：
+/// 乘法→指数相加、超越函数→要求无量纲输入、等等。
 pub fn propagate_dimensions(equation: &str, dimensions: HashMap<String, String>) -> serde_json::Value {
-    // Try Python SymPy backend first
-    if crate::verification::python_bridge::sympy_available() {
-        match python_dimension_propagate(equation, &dimensions) {
-            Ok(result) => return result,
-            Err(e) => {
-                tracing::debug!("[formal] SymPy dimension propagate failed, falling back: {e}");
-            }
-        }
-    }
-
-    // Fallback: basic heuristic dimension propagation
-    heuristic_dimension_propagate(equation, &dimensions)
-}
-
-/// Call Python SymPy backend for dimension propagation.
-fn python_dimension_propagate(equation: &str, dims: &HashMap<String, String>) -> Result<serde_json::Value> {
-    let params = json!({
-        "equation": equation,
-        "dimensions": dims,
-    });
-    let response = crate::verification::python_bridge::call_math_backend(
-        "sympy_dimension_propagate",
-        params,
-    )?;
-    Ok(response)
+    let result = crate::verification::symbolic::propagate_dimensions_ast(equation, &dimensions);
+    json!({
+        "lhs_dim": result.lhs_dim,
+        "rhs_dim": result.rhs_dim,
+        "consistent": result.consistent,
+        "method": result.method,
+    })
 }
 
 /// Heuristic dimension propagation without SymPy.

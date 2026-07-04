@@ -1270,13 +1270,12 @@ fn tool_math_backend_available(arguments: &Value) -> Result<String, FrameworkErr
             }))
         }
         "sympy" => {
-            let available = crate::verification::python_bridge::sympy_available();
-            let version = if available { "via Python sympy" } else { "" };
+            // Pure Rust symbolic engine — always available
             serde_json::to_string_pretty(&json!({
-                "backend": "sympy", "available": available,
-                "version": version,
-                "description": "SymPy CAS (symbolic mathematics)",
-                "install_hint": "uv pip install sympy",
+                "backend": "sympy", "available": true,
+                "version": "pure Rust symbolic engine",
+                "description": "Symbolic mathematics (pure Rust, no Python dependency)",
+                "install_hint": "built-in",
             }))
         }
         "lean" => {

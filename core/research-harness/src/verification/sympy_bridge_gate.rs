@@ -1,7 +1,4 @@
-//! QG Route `GateChecker` adapter for `sympy_bridge`.
-//!
-//! Extracts expression data from `CheckContext::output_data` and calls the
-//! SymPy bridge for symbolic verification.
+//! QG Route `GateChecker` adapter for symbolic math bridge (pure Rust).
 //!
 //! Expected `output_data` JSON (all fields optional):
 //! ```json
@@ -25,7 +22,7 @@ impl GateChecker for SympyBridge {
     }
 
     fn description(&self) -> &'static str {
-        "SymPy symbolic verification: identity check, expression simplification"
+        "Symbolic math verification (pure Rust): identity check, expression simplification"
     }
 
     fn check(&self, ctx: &CheckContext) -> CheckResult {

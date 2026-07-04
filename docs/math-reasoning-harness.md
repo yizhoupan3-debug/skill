@@ -1,10 +1,10 @@
 ---
-last_verified: "2026-07-03"
+last_verified: "2026-07-04"
 ---
 
 # Math Reasoning Harness
 
-数学验证工具链 — ResearchHarness 的形式化验证后端。
+数学验证工具链 — ResearchHarness 的形式化验证后端。**纯 Rust 实现，无 Python 运行时依赖。**
 
 ## §A: 工具链总览
 
@@ -12,42 +12,53 @@ last_verified: "2026-07-03"
 
 | 层 | 位置 | 职责 |
 |----|------|------|
-| **Feature** | `core/research-harness/src/verification/*.rs` | 纯业务逻辑：类型、SymPy/Z3/Lean 调用、验证函数 |
+| **Feature** | `core/research-harness/src/verification/*.rs` | 纯业务逻辑：类型、Z3/符号引擎/Lean 调用、验证函数 |
 | **Gate** | `core/research-harness/src/verification/*_gate.rs` | Quality Gate `GateChecker` 适配层：从 `CheckContext` 提取参数，调用 Feature 层，包装结果为 `Finding` 列表 |
 | **Tool** | `core/research-harness/src/mcp_tools.rs` | MCP dispatch：JSON 参数提取 → feature/gate 层调用 → JSON 格式化 |
 | **Schema** | `core/research-harness/src/mcp/mod.rs` | MCP schema 定义（input schema、工具描述） |
 
 > **路径说明**：MCP 工具调用经 `mcp_tools.rs` 直接调用 Feature 层；Gate 层通过 Quality Gate 系统（`framework_quality_gate` stdio 命令/任务收尾）调用，注册于 `RUNTIME_REGISTRY.json` 中 scene=research。
 
+### 后端架构（2026-07-04 纯 Rust 迁移后）
+
+| 后端 | 实现 | 状态 |
+|------|------|------|
+| **Z3 SMT** | `z3` crate (v0.20, bundled C 库) — `z3_bridge.rs` | ✅ 纯 Rust，始终可用 |
+| **符号数学** | 纯 Rust 符号引擎 — `symbolic.rs` (~4500 行) | ✅ 纯 Rust，始终可用 |
+| **Lean 4** | 子进程调用系统 PATH — `lean_bridge.rs` | ✅ 纯 Rust（需系统安装 Lean） |
+| **不等式** | minilp (线性) + Z3 (非线性) — `inequality.rs` | ✅ 纯 Rust |
+
+> **无 Python 依赖**：所有 SymPy/Z3 Python 子进程已移除。`python_bridge.rs` 和 `python/` 目录已删除。
+
 ### 完整工具清单
 
 | 工具名 | 后端 | 用途 |
 |--------|------|------|
 | `math_prove_inequality` | Z3 (非线性/SMT) + minilp (线性, 自动降级) | 不等式可行性验证 |
-| `math_backend_available` | Python 探测 | 后端可用状态查询（Z3/SymPy/Lean） |
+| `math_backend_available` | 纯 Rust 探测 | 后端可用状态查询（Z3/符号引擎/Lean） |
 | `math_asymptotic_estimate` | 纯 Rust (分类) + regime 转换 | 渐近主导阶估算（支持 ∞ 和 →0） |
 | `math_asymptotic_chain` | 纯 Rust (传递性检查) | 渐近链传递性验证 |
 | `math_proof_dag_init` | 纯 Rust | 初始化 Blueprint-DAG |
 | `math_proof_dag_decompose` | 纯 Rust | 分解 DAG 节点为 AND/OR 子目标 |
-| `math_proof_dag_verify` | 真实后端调用 | 递归验证整个 DAG（调用 Z3/SymPy/Lean 后端） |
+| `math_proof_dag_verify` | 真实后端调用 | 递归验证整个 DAG（调用 Z3/符号引擎/Lean 后端） |
 | `math_proof_dag_status` | 纯 Rust | DAG 验证状态摘要 |
-| `math_sympy_verify` | SymPy (后端可用时) + 纯 Rust 降级 | 代数恒等式验证 |
-| `math_sympy_simplify` | SymPy (后端可用时) + 纯 Rust 降级 | 表达式化简 |
-| `math_sympy_trig_simplify` | SymPy (后端可用时) + 纯 Rust 降级 | 三角函数恒等式化简 |
-| `math_sympy_subs` | SymPy (后端可用时) + 纯 Rust 降级 | 符号表达式变量替换 |
-| `math_sympy_limit` | SymPy (后端可用时) + 纯 Rust 降级 | 符号表达式极限计算 |
-| `math_sympy_lambdify` | SymPy (后端可用时) + 纯 Rust 降级 | 符号表达式转数值函数 |
+| `math_sympy_verify` | 纯 Rust 符号引擎 | 代数恒等式验证 |
+| `math_sympy_simplify` | 纯 Rust 符号引擎 | 表达式化简 |
+| `math_sympy_trig_simplify` | 纯 Rust 符号引擎 | 三角函数恒等式化简 |
+| `math_sympy_subs` | 纯 Rust 符号引擎 | 符号表达式变量替换 |
+| `math_sympy_limit` | 纯 Rust 符号引擎 | 符号表达式极限计算 |
+| `math_sympy_lambdify` | 纯 Rust 符号引擎 | 符号表达式转数值函数 |
 | `math_lean_verify` | Lean 4 (系统 PATH) | Lean 定理证明 |
-| `math_z3_prove` | Z3 (Python 后端) | Z3 逻辑公式可满足性验证 |
-| `math_z3_solver_push` | Z3 (Python 后端) | Z3 求解器上下文推入 |
-| `math_z3_solver_pop` | Z3 (Python 后端) | Z3 求解器上下文弹出 |
-| `math_z3_solver_add` | Z3 (Python 后端) | Z3 求解器添加约束 |
-| `math_z3_solver_check` | Z3 (Python 后端) | Z3 求解器当前上下文检查 |
-| `math_z3_solver_reset` | Z3 (Python 后端) | Z3 求解器重置 |
-| `math_z3_solver_batch` | Z3 (Python 后端) | Z3 求解器批量操作（push/pop/add/check/reset） |
-| `math_sympy_expand` | SymPy (后端可用时) + 纯 Rust 降级 | 多项式展开 |
-| `math_sympy_factor` | SymPy (后端可用时) | 因式分解 |
-| `math_sympy_series` | SymPy (后端可用时) | 级数展开 |
+| `math_z3_prove` | Z3 (纯 Rust crate) | Z3 逻辑公式可满足性验证 |
+| `math_z3_solver_push` | Z3 (纯 Rust crate) | Z3 求解器上下文推入 |
+| `math_z3_solver_pop` | Z3 (纯 Rust crate) | Z3 求解器上下文弹出 |
+| `math_z3_solver_add` | Z3 (纯 Rust crate) | Z3 求解器添加约束 |
+| `math_z3_solver_check` | Z3 (纯 Rust crate) | Z3 求解器当前上下文检查 |
+| `math_z3_solver_reset` | Z3 (纯 Rust crate) | Z3 求解器重置 |
+| `math_z3_solver_batch` | Z3 (纯 Rust crate) | Z3 求解器批量操作（push/pop/add/check/reset） |
+| `math_sympy_expand` | 纯 Rust 符号引擎 | 多项式展开 |
+| `math_sympy_factor` | 纯 Rust 符号引擎 | 因式分解 |
+| `math_sympy_series` | 纯 Rust 符号引擎 | 级数展开 |
 | `math_sympy_differentiate` | SymPy (后端可用时) | 符号微分 |
 | `math_sympy_integrate` | SymPy (后端可用时) | 符号积分 |
 | `math_sympy_solve` | SymPy (后端可用时) | 方程求解 |
@@ -74,12 +85,11 @@ last_verified: "2026-07-03"
     │   │
     │   ├── "math_prove_inequality"     ─→ inequality.rs
     │   │    ├── 线性 → minilp (纯 Rust LP 求解器)
-    │   │    └── 非线性 → python_bridge → Z3 (Python 子进程)
+    │   │    └── 非线性 → z3_bridge → Z3 (纯 Rust crate)
     │   │
     │   ├── "math_sympy_*"             ─→ sympy_bridge.rs
     │   │    ├── verify/simplify/trig_simplify/subs/limit/lambdify
-    │   │    ├── SymPy 可用 → python_bridge → SymPy
-    │   │    └── SymPy 不可用 → symbolic.rs (纯 Rust 符号引擎)
+    │   │    └── symbolic.rs (纯 Rust 符号引擎) / sympy_bridge.rs (SymPy 可用时)
     │   │
     │   ├── "math_asymptotic_*"        ─→ asymptotic.rs
     │   │    ├── regime 转换 (oo → 恒等, 0 → x → 1/x)
@@ -88,8 +98,8 @@ last_verified: "2026-07-03"
     │   ├── "math_proof_dag_*"         ─→ proof_dag.rs
     │   │    └── verify() → 调用真实后端验证叶子节点
     │   │
-    │   ├── "math_backend_available"   ─→ python_bridge + lean_bridge
-    │   │    └── Python 子进程探测 → 缓存 30s
+    │   ├── "math_backend_available"   ─→ z3_bridge + symbolic + lean_bridge
+    │   │    └── 纯 Rust 探测 → 缓存 30s
     │   │
     │   ├── "math_lean_verify"         ─→ lean_bridge.rs
     │   │    └── 系统 PATH → lean 子进程
@@ -122,14 +132,15 @@ last_verified: "2026-07-03"
     │   └── symbolic_gate.rs         ─→ symbolic.rs         (research scene)
     │
     ▼
-Python 子进程 (uv run -m math_backend)
-    ├── SymPy → sympy_ops.py
+纯 Rust 后端
+    ├── 符号引擎 → symbolic.rs (~4500 行)
     │    └── simplify, verify, expand, factor, series,
     │        differentiate, integrate, solve, trig_simplify,
     │        dimension_propagate
-    └── Z3 → z3_ops.py
-         └── check (单不等式), check_system (多约束),
-             optimize (优化)
+    ├── Z3 → z3_bridge.rs (纯 Rust crate)
+    │    └── check (单不等式), check_system (多约束),
+    │        optimize (优化)
+    └── Lean → lean_bridge.rs (系统 PATH 子进程)
 ```
 
 > **注**：灰色行 `research_verification_*` 对应 `verification/` 中的特征模块，MCP 工具直接调用；Gate Checker 层通过 Quality Gate 系统（`framework_quality_gate` stdio 命令及任务收尾流程）统一评估。所有 Gate 均在 `RUNTIME_REGISTRY.json` 中以 `"scene": "research"` 注册，运行时由 `build.rs` 编译生成注册函数。
@@ -147,7 +158,7 @@ Python 子进程 (uv run -m math_backend)
     │   └── LaTeX 正则解析 → Inequality struct → minilp LP 求解器
     │
     └── 非线性 (含幂运算、三角等)
-        └── python_bridge → Z3 SMT 求解器 (JSON stdin/stdout)
+        └── z3_bridge → Z3 SMT 求解器 (纯 Rust crate)
             └── AST 解析 (支持 Reals, sin, cos, sqrt, abs, And/Or/Not)
 ```
 
@@ -172,7 +183,7 @@ math_prove_inequality(expression="x^2 + y^2 <= 1", timeout_ms=5000)
 
 ### 安全约束
 
-- **无 shell 注入**：用户输入仅通过 JSON stdin 传入 Python 子进程
+- **纯 Rust**：Z3 通过 `z3` crate 直接调用，无子进程开销
 - **超时保护**：默认 5s 超时，超时返回 Timeout 而非 panic
 - **降级路径**：Z3 不可用时返回 Warn（非线性不等式无法求解）
 
@@ -234,9 +245,6 @@ Blueprint
 ### 必需安装
 
 ```bash
-# Z3 + SymPy（不等式引擎和渐近分析）
-uv pip install z3-solver sympy
-
 # Lean 4（形式定理证明，可选）
 curl -L https://github.com/leanprover/elan/releases/download/v4.0.3/elan-x86_64-unknown-linux-gnu.tar.gz | tar xz
 ./elan-init
@@ -254,66 +262,52 @@ math_backend_available(backend="all")
 {
   "backends": {
     "lean": {"available": false, ...},
-    "sympy": {"available": true, "version": "1.14.0", ...},
-    "z3": {"available": true, "version": "4.16.0", ...},
-    "python_backend": true
+    "symbolic": {"available": true, ...},
+    "z3": {"available": true, "version": "4.16.0", ...}
   },
-  "summary": "SymPy: ✅ (v1.14.0), Z3: ✅ (v4.16.0), Lean: ❌, Python backend: ✅"
+  "summary": "Z3: ✅ (v4.16.0), Symbolic: ✅, Lean: ❌"
 }
 ```
 
 ### 环境要求
 
-- Python ≥ 3.12（通过 `uv` 管理）
-- `z3-solver` （用于非线性不等式求解）
-- `sympy` （用于 CAS 验证）
 - Rust toolchain（编译框架本身）
 - Lean 4（可选，仅 `math_lean_verify` 需要）
 
 ---
 
-## §F: Python 后端协议
+## §F: 后端协议（纯 Rust）
 
-> **说明**：本节文档记录 Python 子进程 (`uv run -m math_backend`) 的内部协议 API，包含所有后端支持的 14 项操作。其中部分操作通过 Rust 层的 MCP 工具直接暴露给用户；其余操作用现有的 MCP 工具内部间接调用，或仅作为 Python 层 API 保留（暂未通过 MCP 暴露）。下表的 **MCP 可用性** 列标注了各操作的对外暴露情况。
+> **说明**：本节文档记录纯 Rust 后端的内部接口。所有操作通过 Rust crate 直接调用，无子进程开销。
 
-### 通信格式
+### 后端调用方式
 
-Request → stdin:
-```json
-{"id": 1, "op": "sympy_simplify", "params": {"expression": "sin(x)**2 + cos(x)**2"}}
-```
+| 后端 | 调用方式 | 备注 |
+|------|----------|------|
+| **Z3** | `z3` crate (v0.20) 直接 FFI | 始终可用，bundled C 库 |
+| **符号引擎** | `symbolic.rs` (~4500 行) | 纯 Rust 实现，始终可用 |
+| **Lean 4** | 系统 PATH 子进程 | 需系统安装 Lean |
 
-Response → stdout:
-```json
-{"status": "ok", "result": {"result": "1"}, "id": 1}
-```
+### 操作对照表
 
-Error → stdout:
-```json
-{"id": 1, "status": "error", "error": "SymPy simplify failed: ..."}
-```
-
-### 支持操作
-
-| op | 模块 | 功能 | MCP 可用性 |
-|----|------|------|-----------|
-| `backend_status` | 综合 | 查询所有后端版本和可用性 | ✅ `math_backend_available` |
-| `sympy_simplify` | SymPy | 表达式化简（自动 trig/代数） | ✅ `math_sympy_simplify` |
-| `sympy_verify` | SymPy | 恒等式验证 | ✅ `math_sympy_verify` |
-| `sympy_expand` | SymPy | 多项式展开 | ✅ `math_sympy_expand` |
-| `sympy_factor` | SymPy | 因式分解 | ✅ `math_sympy_factor` |
-| `sympy_series` | SymPy | 级数展开 | ✅ `math_sympy_series` |
-| `sympy_differentiate` | SymPy | 符号微分 | ✅ `math_sympy_differentiate` |
-| `sympy_integrate` | SymPy | 符号积分 | ✅ `math_sympy_integrate` |
-| `sympy_solve` | SymPy | 方程求解 | ✅ `math_sympy_solve` |
-| `sympy_trig_simplify` | SymPy | 三角恒等式化简 | ✅ `math_sympy_trig_simplify` |
-| `sympy_subs` | SymPy | 变量替换 | ✅ `math_sympy_subs` |
-| `sympy_limit` | SymPy | 极限计算 | ✅ `math_sympy_limit` |
-| `sympy_lambdify` | SymPy | 转数值函数 | ✅ `math_sympy_lambdify` |
-| `sympy_dimension_propagate` | SymPy | 维度传播分析 | 🔹 `research_verification_formal`(dimensional) 内部调用 |
-| `z3_check` | Z3 | 单不等式 SMT 求解 | ✅ `math_prove_inequality` |
-| `z3_check_system` | Z3 | 多约束系统求解 | 🔹 `math_z3_solver_add` + `math_z3_solver_check` 组合 |
-| `z3_optimize` | Z3 | 带目标函数的优化 | ❌ 仅 Python 层 API |
+| MCP 工具 | 后端 | 功能 |
+|----------|------|------|
+| `math_sympy_simplify` | symbolic.rs | 表达式化简（自动 trig/代数） |
+| `math_sympy_verify` | symbolic.rs | 恒等式验证 |
+| `math_sympy_expand` | symbolic.rs | 多项式展开 |
+| `math_sympy_factor` | symbolic.rs | 因式分解 |
+| `math_sympy_series` | symbolic.rs | 级数展开 |
+| `math_sympy_differentiate` | symbolic.rs | 符号微分 |
+| `math_sympy_integrate` | symbolic.rs | 符号积分 |
+| `math_sympy_solve` | symbolic.rs | 方程求解 |
+| `math_sympy_trig_simplify` | symbolic.rs | 三角恒等式化简 |
+| `math_sympy_subs` | symbolic.rs | 变量替换 |
+| `math_sympy_limit` | symbolic.rs | 极限计算 |
+| `math_sympy_lambdify` | symbolic.rs | 转数值函数 |
+| `math_sympy_dimension_propagate` | symbolic.rs | 维度传播分析 |
+| `math_z3_prove` | z3 crate | 单不等式 SMT 求解 |
+| `math_z3_check_system` | z3 crate | 多约束系统求解 |
+| `math_z3_optimize` | z3 crate | 带目标函数的优化 |
 
 ---
 

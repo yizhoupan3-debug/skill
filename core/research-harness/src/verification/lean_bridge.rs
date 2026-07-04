@@ -235,9 +235,9 @@ fn theorem_name_pattern() -> &'static regex::Regex {
 // ===========================================================================
 // Enhanced backend capability checks
 //
-// IMPORTANT: Do NOT add `check_z3_available()` / `check_sympy_available()`
-// proxy functions here — call `crate::verification::z3_bridge::*` or
-// `crate::verification::python_bridge::*` directly at the call site.
+// IMPORTANT: Do NOT add proxy functions here — call
+// `crate::verification::z3_bridge::*` or `crate::verification::sympy_bridge::*`
+// directly at the call site.
 // See mcp_tools or z3_bridge for the canonical backend status probes.
 // ===========================================================================
 
@@ -249,7 +249,7 @@ pub fn check_z3_capability() -> BackendCapability {
             available: false,
             version: None,
             capabilities: vec![],
-            install_hint: Some("pip install z3-solver".into()),
+            install_hint: Some("bundled via z3 crate (no install needed)".into()),
         };
     }
 
@@ -276,18 +276,9 @@ pub fn z3_supports_nonlinear() -> bool {
         || result.status == crate::types::VerificationStatus::Fail
 }
 
-/// Get detailed capability info for the SymPy backend.
+/// Get detailed capability info for the SymPy backend (now pure Rust symbolic engine).
 pub fn check_sympy_capability() -> BackendCapability {
-    let available = crate::verification::python_bridge::sympy_available();
-    if !available {
-        return BackendCapability {
-            available: false,
-            version: None,
-            capabilities: vec![],
-            install_hint: Some("pip install sympy".into()),
-        };
-    }
-
+    // Pure Rust symbolic engine is always available
     BackendCapability {
         available: true,
         version: None,
@@ -304,6 +295,7 @@ pub fn check_sympy_capability() -> BackendCapability {
             "lambdify".into(),
             "trig_simplify".into(),
             "dimension_propagate".into(),
+            "perturbation_expand".into(),
         ],
         install_hint: None,
     }
@@ -577,9 +569,6 @@ pub fn check_lean_status() -> LeanStatus {
 
 /// Get a comprehensive backend status report with capabilities and hints.
 pub fn check_all_backends() -> serde_json::Value {
-    // Get Python backend status
-    let python_status = crate::verification::python_bridge::get_full_status_report();
-
     // Get Lean status separately (not via Python)
     let lean_status = check_lean_status();
     let (lean_available, lean_detail) = match &lean_status {
@@ -611,20 +600,20 @@ pub fn check_all_backends() -> serde_json::Value {
         },
         "sympy": {
             "available": sympy_cap.available,
-            "version": python_status.pointer("/sympy/version").and_then(|v| v.as_str()).unwrap_or(""),
-            "description": python_status.pointer("/sympy/description").and_then(|v| v.as_str()).unwrap_or("SymPy CAS"),
+            "version": "pure Rust symbolic engine",
+            "description": "Symbolic mathematics (pure Rust)",
             "capabilities": sympy_cap.capabilities,
             "install_hint": sympy_cap.install_hint,
         },
         "z3": {
             "available": z3_cap.available,
-            "version": python_status.pointer("/z3/version").and_then(|v| v.as_str()).unwrap_or(""),
-            "description": python_status.pointer("/z3/description").and_then(|v| v.as_str()).unwrap_or("Z3 SMT solver"),
+            "version": "native z3 crate (bundled)",
+            "description": "Z3 SMT solver",
             "capabilities": z3_cap.capabilities,
             "supports_nonlinear": z3_cap.available,
             "install_hint": z3_cap.install_hint,
         },
-        "python_backend": python_status.get("python_backend"),
+        "python_backend": false,
     })
 }
 
@@ -652,10 +641,7 @@ pub fn format_all_backends_status() -> String {
         .pointer("/lean/available")
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
-    let py_backend = status
-        .pointer("/python_backend")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false);
+    let py_backend = false; // Python backend removed — pure Rust only
 
     let toolchain_detail = status
         .pointer("/lean/toolchain/detail")
@@ -669,14 +655,13 @@ pub fn format_all_backends_status() -> String {
     };
 
     format!(
-        "SymPy: {} (v{}), Z3: {} (v{}), Lean: {}{}, Python backend: {}",
+        "SymPy: {} (v{}), Z3: {} (v{}), Lean: {}{}",
         if sympy { "available" } else { "unavailable" },
         sympy_ver,
         if z3 { "available" } else { "unavailable" },
         z3_ver,
         if lean { "available" } else { "unavailable" },
         toolchain_info,
-        if py_backend { "available" } else { "unavailable" },
     )
 }
 
@@ -933,8 +918,8 @@ pub fn try_prove_with_all_backends(statement: &str) -> VerificationResult {
         );
     }
 
-    // ── Step 2: SymPy verify ──
-    if crate::verification::python_bridge::sympy_available() {
+    // ── Step 2: SymPy verify (pure Rust symbolic engine) ──
+    {
         let (lhs, rhs) = if let Some(eq_pos) = trimmed.find('=') {
             if eq_pos > 0 {
                 let lhs = trimmed[..eq_pos].trim();
@@ -975,11 +960,7 @@ pub fn try_prove_with_all_backends(statement: &str) -> VerificationResult {
     } else {
         "unavailable"
     };
-    let sympy_status = if crate::verification::python_bridge::sympy_available() {
-        "tried"
-    } else {
-        "unavailable"
-    };
+    let sympy_status = "tried"; // pure Rust symbolic engine always available
     let lean_status = if check_lean_status().is_available() {
         "tried"
     } else {
@@ -1434,10 +1415,6 @@ theorem t2 (a : Nat) : a = a := rfl
         assert!(
             status.contains("Lean:"),
             "should mention Lean, got: {status}"
-        );
-        assert!(
-            status.contains("Python backend:"),
-            "should mention Python backend, got: {status}"
         );
     }
 

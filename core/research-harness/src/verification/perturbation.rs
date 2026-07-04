@@ -1,18 +1,18 @@
-//! Perturbation expansion verification.
+//! Perturbation expansion verification — pure Rust implementation.
 //!
 //! FEATURE layer only. MCP dispatch belongs in `mcp_tools.rs`.
 //!
-//! Supports regular perturbation expansion where the solution is expressed
-//! as a power series in a small parameter:
+//! Supports regular perturbation expansion for second-order constant-coefficient ODEs
+//! of the form u'' + ω²·u + ε·f(u) = 0.  Assumes a solution u = u₀ + ε·u₁ + ε²·u₂ + …
+//! and solves each order using characteristic equation methods.
 //!
-//!   u = u₀ + ε·u₁ + ε²·u₂ + ...
-//!
-//! Uses real SymPy via Python subprocess when available.
+//! **Current limitations**: only supports constant-coefficient linear operators;
+//! perturbation terms are handled symbolically for common patterns (Duffing u³);
+//! higher-order particular solutions may be approximate.
 
 use crate::types::VerificationStatus;
-use crate::verification::python_bridge;
+use crate::verification::symbolic;
 use serde::Serialize;
-use serde_json::json;
 
 /// Result of a single-order perturbation expansion.
 #[derive(Debug, Clone, Serialize)]
@@ -40,24 +40,20 @@ pub struct PerturbationResult {
     pub details: String,
 }
 
-/// Perform a regular perturbation expansion via the SymPy backend.
+/// Perform a regular perturbation expansion using the pure Rust engine.
 ///
 /// Given an ODE involving a small parameter `parameter`, assumes a solution
 /// of the form `u = u₀ + ε·u₁ + ε²·u₂ + ...` (where ε is the small parameter),
 /// substitutes into the equation, collects terms at each power of ε,
-/// and solves each order sequentially using SymPy's `dsolve`.
+/// and solves each order sequentially.
 ///
 /// # Parameters
 ///
-/// * `equation`  - The full differential equation string (e.g., `"u'' + u + eps*u^3 = 0"`).
-/// * `variable`  - The independent variable (e.g., `"x"`).
+/// * `equation`  - The full differential equation string (e.g., `"u'' + u + eps*u^3"`).
+/// * `variable`  - The independent variable (e.g., `"t"`).
 /// * `parameter` - The small perturbation parameter name (e.g., `"eps"` or `"epsilon"`).
 /// * `order`     - Maximum expansion order (1 = O(ε), 2 = O(ε²), etc.).
 /// * `bc`        - Optional boundary/initial conditions string (e.g., `"u(0)=1, u'(0)=0"`).
-///
-/// # Returns
-///
-/// A `PerturbationResult` with per-order equations and solutions.
 pub fn regular_perturbation(
     equation: &str,
     variable: &str,
@@ -65,103 +61,41 @@ pub fn regular_perturbation(
     order: u32,
     bc: Option<&str>,
 ) -> PerturbationResult {
-    if !python_bridge::sympy_available() {
-        let details = format!(
-            "regular_perturbation({equation}, ε={parameter}, order={order}) \
-             — SymPy not available (requires Python backend)"
-        );
-        return PerturbationResult {
-            check_name: "math_perturbation_expand".into(),
-            status: VerificationStatus::Fail,
-            orders: Vec::new(),
-            full_solution: String::new(),
-            details,
-        };
-    }
+    let expansion = symbolic::perturbation_expand(equation, variable, parameter, order, bc);
 
-    let mut params = json!({
-        "equation": equation,
-        "variable": variable,
-        "parameter": parameter,
-        "order": order,
-    });
-    if let Some(bc_str) = bc {
-        params["bc"] = json!(bc_str);
-    }
+    let orders: Vec<PerturbationOrder> = expansion
+        .orders
+        .into_iter()
+        .map(|o| PerturbationOrder {
+            order: o.order,
+            equation: o.equation,
+            solution: o.solution,
+        })
+        .collect();
 
-    match python_bridge::call_math_backend("sympy_perturbation_expand", params) {
-        Ok(result) => {
-            // Parse orders array from backend response
-            let orders: Vec<PerturbationOrder> = result
-                .get("orders")
-                .and_then(|v| v.as_array())
-                .map(|arr| {
-                    arr.iter()
-                        .filter_map(|o| {
-                            Some(PerturbationOrder {
-                                order: o.get("order").and_then(|v| v.as_u64()).unwrap_or(0) as u32,
-                                equation: o
-                                    .get("equation")
-                                    .and_then(|v| v.as_str())
-                                    .unwrap_or("")
-                                    .to_string(),
-                                solution: o
-                                    .get("solution")
-                                    .and_then(|v| v.as_str())
-                                    .unwrap_or("")
-                                    .to_string(),
-                            })
-                        })
-                        .collect()
-                })
-                .unwrap_or_default();
+    let status = if orders.is_empty() {
+        VerificationStatus::Fail
+    } else {
+        VerificationStatus::Pass
+    };
 
-            let full_solution = result
-                .get("full_solution")
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string();
+    let orders_count = orders.len();
+    let solved_count = orders
+        .iter()
+        .filter(|o| !o.solution.is_empty() && o.solution != "0")
+        .count();
 
-            let status = if orders.is_empty() {
-                VerificationStatus::Fail
-            } else {
-                VerificationStatus::Pass
-            };
+    let details = format!(
+        "regular_perturbation({equation}, ε={parameter}, order={order}) \
+         — {orders_count} orders collected, {solved_count} non-trivial solutions (pure Rust)"
+    );
 
-            let details = if status == VerificationStatus::Pass {
-                let orders_count = orders.len();
-                let solved_count = orders
-                    .iter()
-                    .filter(|o| !o.solution.is_empty() && o.solution != "0")
-                    .count();
-                format!(
-                    "regular_perturbation({equation}, ε={parameter}, order={order}) \
-                     — {orders_count} orders collected, {solved_count} non-trivial solutions (SymPy)"
-                )
-            } else {
-                format!(
-                    "regular_perturbation({equation}, ε={parameter}, order={order}) \
-                     — no orders produced (SymPy)"
-                )
-            };
-
-            PerturbationResult {
-                check_name: "math_perturbation_expand".into(),
-                status,
-                orders,
-                full_solution,
-                details,
-            }
-        }
-        Err(e) => PerturbationResult {
-            check_name: "math_perturbation_expand".into(),
-            status: VerificationStatus::Fail,
-            orders: Vec::new(),
-            full_solution: String::new(),
-            details: format!(
-                "regular_perturbation({equation}, ε={parameter}, order={order}) failed: {e}"
-            ),
-        },
+    PerturbationResult {
+        check_name: "math_perturbation_expand".into(),
+        status,
+        orders,
+        full_solution: expansion.full_solution,
+        details,
     }
 }
 
@@ -172,28 +106,24 @@ mod tests {
     #[test]
     fn test_perturbation_non_linear() {
         // Duffing oscillator: u'' + u + ε·u^3 = 0, expanded to O(ε)
-        // Expected: at O(1): u₀'' + u₀ = 0 → harmonic
         let result = regular_perturbation("u'' + u + eps*u^3", "t", "eps", 1, None);
-        assert!(
-            result.status == VerificationStatus::Pass
-                || result.status == VerificationStatus::Fail,
-            "perturbation should pass or fail, got {:?}: {}",
+        assert_eq!(
             result.status,
+            VerificationStatus::Pass,
+            "perturbation should pass: {}",
             result.details
+        );
+        assert!(
+            result.orders.len() >= 2,
+            "should have at least 2 orders (0 and 1)"
         );
     }
 
     #[test]
     fn test_perturbation_linear() {
-        // Linear: u'' + u + ε·u = 0 → u'' + (1+ε)u = 0
+        // Linear: u'' + u + ε·u = 0
         let result = regular_perturbation("u'' + u + eps*u", "t", "eps", 1, None);
-        assert!(
-            result.status == VerificationStatus::Pass
-                || result.status == VerificationStatus::Fail,
-            "perturbation should pass or fail, got {:?}: {}",
-            result.status,
-            result.details
-        );
+        assert_eq!(result.status, VerificationStatus::Pass);
     }
 
     #[test]
@@ -205,27 +135,29 @@ mod tests {
             1,
             Some("u(0)=1, u'(0)=0"),
         );
-        assert!(
-            result.status == VerificationStatus::Pass
-                || result.status == VerificationStatus::Fail,
-            "perturbation with bc should pass or fail, got {:?}: {}",
+        assert_eq!(
             result.status,
+            VerificationStatus::Pass,
+            "perturbation with BCs should pass: {}",
             result.details
         );
     }
 
     #[test]
-    fn test_no_sympy_fallback() {
-        // When SymPy is unavailable, the result should be Fail with a clear message
-        if !python_bridge::sympy_available() {
-            let result =
-                regular_perturbation("u'' + u + eps*u^3", "t", "eps", 1, None);
-            assert_eq!(result.status, VerificationStatus::Fail);
-            assert!(
-                result.details.contains("not available"),
-                "should mention backend unavailability, got: {}",
-                result.details
-            );
-        }
+    fn test_perturbation_always_available() {
+        // Pure Rust engine is always available — should never fail with "not available"
+        let result = regular_perturbation("u'' + u + eps*u^3", "t", "eps", 1, None);
+        assert!(
+            !result.details.contains("not available"),
+            "should never report 'not available': {}",
+            result.details
+        );
+    }
+
+    #[test]
+    fn test_perturbation_order_2() {
+        let result = regular_perturbation("u'' + u + eps*u^3", "t", "eps", 2, None);
+        assert_eq!(result.status, VerificationStatus::Pass);
+        assert!(result.orders.len() >= 3, "should have orders 0, 1, 2");
     }
 }

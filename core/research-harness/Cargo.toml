@@ -41,6 +41,7 @@ libc.workspace = true
 mcp-stdio-common = { path = "../../rust_tools/mcp-stdio-common" }
 minilp.workspace = true
 z3.workspace = true
+z3-sys.workspace = true
 
 # CLI (optional)
 clap = { workspace = true, optional = true }

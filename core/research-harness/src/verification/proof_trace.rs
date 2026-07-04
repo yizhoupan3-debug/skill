@@ -19,9 +19,9 @@ use std::time::Instant;
 /// Which backend was used for verification.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum UsedBackend {
-    /// Python subprocess SymPy backend
+    /// Pure Rust symbolic engine (formerly SymPy)
     SymPy,
-    /// Python subprocess Z3 backend
+    /// Z3 SMT solver (pure Rust z3 crate)
     Z3,
     /// Pure Rust minilp solver
     Minilp,

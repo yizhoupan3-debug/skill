@@ -14,7 +14,6 @@ pub mod perturbation;
 pub mod proof_trace;
 pub mod prose_qc;
 pub mod prose_qc_gate;
-pub mod python_bridge;
 pub mod reproducibility;
 pub mod reproducibility_gate;
 pub mod statistical;
