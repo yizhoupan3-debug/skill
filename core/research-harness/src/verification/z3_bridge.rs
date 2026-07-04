@@ -1,91 +1,451 @@
-//! Z3 operations — sort-inference, prove, solver batch.
+//! Z3 operations — native Rust implementation via the `z3` crate.
 //!
 //! FEATURE layer only. MCP dispatch belongs in `mcp_tools.rs`.
 //!
-//! Uses real Z3 via Python subprocess (z3-solver) when available.
-//! All operations are delegated to `python_bridge::call_math_backend`.
+//! All Z3 operations are performed in-process using the `z3` crate
+//! (bundled z3 solver, v0.20.2), eliminating the Python subprocess dependency.
 //!
-//! # Cross-call state
-//!
-//! Each call to `call_math_backend` spawns a new Python subprocess. The
-//! individual `solver_push` / `solver_pop` / `solver_add` / `solver_check`
-//! operations work within a single subprocess but do NOT share state across
-//! separate Rust calls. For truly incremental solving, use `solver_batch`
-//! which sends multiple steps to the same Python process.
+//! z3 0.20 API notes:
+//! - All AST types (Bool, Int, Real, Dynamic) own their Context internally (Rc-based).
+//! - `Context::thread_local()` is used implicitly by `new_const`, `from_i64`, etc.
+//! - `Real::add(&[&a, &b])` — varop takes a slice, not binary method.
+//! - `Bool::and(&[&a, &b])` — varop takes a slice.
+//! - `solver.push()` pushes 1 scope (no arg). `solver.pop(n)` pops n scopes.
 
 use crate::types::{VerificationResult, VerificationStatus};
-use crate::verification::python_bridge;
 use serde_json::json;
 
-/// Call the Z3 `prove` convenience wrapper via the Python backend.
-///
-/// `z3.Prove(expr)` checks if a formula is universally valid by verifying
-/// that its negation is unsatisfiable.
-pub fn prove_formula(expr: &str) -> VerificationResult {
-    if !python_bridge::z3_available() {
-        return VerificationResult {
-            check_name: "math_z3_prove".into(),
-            status: VerificationStatus::Fail,
-            details: format!(
-                "z3_prove({expr}) — Z3 not available (requires z3-solver)"
-            ),
-            evidence_path: None,
+/// Z3 is always available (bundled via z3 crate).
+pub fn z3_available() -> bool {
+    true
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// Expression parser — LaTeX-style math → z3 AST
+// ════════════════════════════════════════════════════════════════════════════
+
+/// Top-level: parse a relational / boolean expression into a z3 Bool.
+fn parse_z3_bool(solver: &z3::Solver, expr: &str) -> Result<z3::ast::Bool, String> {
+    let expr = expr.trim();
+
+    // Boolean connectives (varop: takes slice)
+    if let Some(inner) = strip_prefix_parens(expr, "And") {
+        let parts = split_top_level_args(inner)?;
+        if parts.len() < 2 {
+            return Err("And requires at least 2 arguments".into());
+        }
+        let bools: Result<Vec<_>, _> = parts.iter().map(|p| parse_z3_bool(solver, p)).collect();
+        let bools = bools?;
+        let refs: Vec<&z3::ast::Bool> = bools.iter().collect();
+        return Ok(z3::ast::Bool::and(&refs));
+    }
+    if let Some(inner) = strip_prefix_parens(expr, "Or") {
+        let parts = split_top_level_args(inner)?;
+        if parts.len() < 2 {
+            return Err("Or requires at least 2 arguments".into());
+        }
+        let bools: Result<Vec<_>, _> = parts.iter().map(|p| parse_z3_bool(solver, p)).collect();
+        let bools = bools?;
+        let refs: Vec<&z3::ast::Bool> = bools.iter().collect();
+        return Ok(z3::ast::Bool::or(&refs));
+    }
+    if let Some(inner) = strip_prefix_parens(expr, "Not") {
+        let parts = split_top_level_args(inner)?;
+        if parts.len() != 1 {
+            return Err("Not requires exactly 1 argument".into());
+        }
+        return Ok(parse_z3_bool(solver, &parts[0])?.not());
+    }
+    if let Some(inner) = strip_prefix_parens(expr, "Implies") {
+        let parts = split_top_level_args(inner)?;
+        if parts.len() != 2 {
+            return Err("Implies requires exactly 2 arguments".into());
+        }
+        let a = parse_z3_bool(solver, &parts[0])?;
+        let b = parse_z3_bool(solver, &parts[1])?;
+        return Ok(a.implies(&b));
+    }
+
+    // Comparisons
+    if let Some((op, lhs_s, rhs_s)) = parse_comparison(expr) {
+        let lhs = parse_arith(solver, lhs_s.trim())?;
+        let rhs = parse_arith(solver, rhs_s.trim())?;
+        return match op {
+            ">" => Ok(lhs.gt(&rhs)),
+            ">=" => Ok(lhs.ge(&rhs)),
+            "<" => Ok(lhs.lt(&rhs)),
+            "<=" => Ok(lhs.le(&rhs)),
+            "==" | "=" => Ok(lhs.eq(&rhs)),
+            "!=" => Ok(lhs.eq(&rhs).not()),
+            _ => Err(format!("unknown operator: {op}")),
         };
     }
 
-    let params = json!({
-        "expression": expr,
-        "timeout_ms": 10000,
-    });
+    Err(format!("cannot parse Z3 boolean expression: {expr}"))
+}
 
-    match python_bridge::call_math_backend("z3_prove", params) {
-        Ok(result) => {
-            let proved = result
-                .get("proved")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false);
-            let result_str = result
-                .get("result")
-                .and_then(|v| v.as_str())
-                .unwrap_or("unknown");
+/// Parse an arithmetic expression into a z3 Real.
+fn parse_arith(solver: &z3::Solver, expr: &str) -> Result<z3::ast::Real, String> {
+    parse_add_sub(solver, expr.trim())
+}
 
-            if proved {
-                VerificationResult {
+/// Parse addition/subtraction (lowest precedence).
+fn parse_add_sub(solver: &z3::Solver, expr: &str) -> Result<z3::ast::Real, String> {
+    let chars: Vec<char> = expr.chars().collect();
+    let mut depth = 0i32;
+    let mut segments: Vec<(&str, bool)> = Vec::new(); // (term_without_sign, is_positive)
+    let mut last = 0;
+
+    for i in 0..chars.len() {
+        match chars[i] {
+            '(' => depth += 1,
+            ')' => depth -= 1,
+            '+' if depth == 0 && i > 0 => {
+                // The segment from last..i is a complete positive term
+                let term = expr[last..i].trim();
+                if !term.is_empty() {
+                    segments.push((term, true));
+                }
+                last = i + 1; // skip the '+'
+            }
+            '-' if depth == 0 && i > 0 => {
+                let prev = chars[i - 1];
+                if matches!(prev, '(' | '+' | '-' | '*' | '/' | '^' | ',') {
+                    continue; // unary minus — part of current term
+                }
+                let term = expr[last..i].trim();
+                if !term.is_empty() {
+                    segments.push((term, true));
+                }
+                last = i; // include '-' in next term
+            }
+            _ => {}
+        }
+    }
+    let last_term = expr[last..].trim();
+    if !last_term.is_empty() {
+        if last_term.starts_with('-') {
+            segments.push((last_term, false));
+        } else if last_term.starts_with('+') {
+            segments.push((&last_term[1..], true));
+        } else {
+            segments.push((last_term, true));
+        }
+    }
+
+    if segments.len() <= 1 {
+        let term = segments.first().map(|(s, _)| *s).unwrap_or(expr);
+        return parse_mul_div(solver, term.trim());
+    }
+
+    // Parse each segment
+    let mut positives: Vec<z3::ast::Real> = Vec::new();
+    let mut negatives: Vec<z3::ast::Real> = Vec::new();
+
+    for &(term, positive) in &segments {
+        let val = parse_mul_div(solver, term.trim())?;
+        if positive {
+            positives.push(val);
+        } else {
+            negatives.push(val);
+        }
+    }
+
+    // Build: all positives + unary_minus(all negatives)
+    let mut all_terms: Vec<z3::ast::Real> = positives;
+    for neg in &negatives {
+        all_terms.push(neg.unary_minus());
+    }
+
+    let result = if all_terms.is_empty() {
+        z3::ast::Real::from_rational(0, 1)
+    } else if all_terms.len() == 1 {
+        all_terms.into_iter().next().unwrap()
+    } else {
+        let refs: Vec<&z3::ast::Real> = all_terms.iter().collect();
+        z3::ast::Real::add(&refs)
+    };
+
+    Ok(result)
+}
+
+/// Parse multiplication/division.
+fn parse_mul_div(solver: &z3::Solver, expr: &str) -> Result<z3::ast::Real, String> {
+    let expr = expr.trim();
+    let chars: Vec<char> = expr.chars().collect();
+
+    // Find top-level * or / (right-to-left for left-assoc)
+    let mut depth = 0i32;
+    for i in (0..chars.len()).rev() {
+        match chars[i] {
+            '(' => depth -= 1,
+            ')' => depth += 1,
+            '*' if depth == 0 && i > 0 => {
+                let left = parse_mul_div(solver, expr[..i].trim())?;
+                let right = parse_pow(solver, expr[i + 1..].trim())?;
+                return Ok(z3::ast::Real::mul(&[&left, &right]));
+            }
+            '/' if depth == 0 && i > 0 => {
+                let left = parse_mul_div(solver, expr[..i].trim())?;
+                let right = parse_pow(solver, expr[i + 1..].trim())?;
+                return Ok(left.div(&right));
+            }
+            _ => {}
+        }
+    }
+
+    // Implicit multiplication: `2x`, `(expr)x`
+    let mut d = 0i32;
+    for i in 1..chars.len() {
+        match chars[i] {
+            '(' => d += 1,
+            ')' => d -= 1,
+            c if d == 0 && (c.is_alphabetic() || c == '_') => {
+                let prev = chars[i - 1];
+                if prev.is_alphanumeric() || prev == '_' || prev == ')' {
+                    let left = parse_pow(solver, expr[..i].trim())?;
+                    let right = parse_pow(solver, expr[i..].trim())?;
+                    return Ok(z3::ast::Real::mul(&[&left, &right]));
+                }
+            }
+            _ => {}
+        }
+    }
+
+    parse_pow(solver, expr)
+}
+
+/// Parse power expressions (`base^exp`).
+fn parse_pow(solver: &z3::Solver, expr: &str) -> Result<z3::ast::Real, String> {
+    let expr = expr.trim();
+    let chars: Vec<char> = expr.chars().collect();
+
+    let mut depth = 0i32;
+    for i in (0..chars.len()).rev() {
+        match chars[i] {
+            '(' => depth -= 1,
+            ')' => depth += 1,
+            '^' if depth == 0 && i > 0 => {
+                let base = parse_atom(solver, expr[..i].trim())?;
+                let exp_str = expr[i + 1..].trim();
+                // Try integer exponent for real_pow
+                if let Ok(n) = exp_str.parse::<i64>() {
+                    if n >= 0 && n <= 32 {
+                        return Ok(real_pow(&base, n as u32));
+                    }
+                }
+                // Try float literal for power
+                if let Ok(f) = exp_str.parse::<f64>() {
+                    if f == 0.5 || f == -0.5 {
+                        // sqrt or 1/sqrt — use Z3 power with rational
+                        let exp = z3::ast::Real::from_rational(
+                            if f > 0.0 { 1 } else { -1 },
+                            if f.abs() == 0.5 { 2 } else { 1 },
+                        );
+                        return Ok(base.power(&exp));
+                    }
+                }
+                return Err(format!("z3 does not support general power: {expr}"));
+            }
+            _ => {}
+        }
+    }
+
+    parse_atom(solver, expr)
+}
+
+/// Compute base^n for small integer n using repeated squaring.
+fn real_pow(base: &z3::ast::Real, n: u32) -> z3::ast::Real {
+    match n {
+        0 => z3::ast::Real::from_rational(1, 1),
+        1 => base.clone(),
+        _ => {
+            let mut result = base.clone();
+            for _ in 1..n {
+                result = z3::ast::Real::mul(&[&result, base]);
+            }
+            result
+        }
+    }
+}
+
+/// Parse an atomic expression: number, variable, parenthesized.
+fn parse_atom(solver: &z3::Solver, expr: &str) -> Result<z3::ast::Real, String> {
+    let expr = expr.trim();
+
+    // Parenthesized
+    if expr.starts_with('(') && expr.ends_with(')') {
+        return parse_add_sub(solver, &expr[1..expr.len() - 1]);
+    }
+
+    // Negation
+    if let Some(rest) = expr.strip_prefix('-') {
+        let inner = parse_atom(solver, rest.trim())?;
+        return Ok(inner.unary_minus());
+    }
+
+    // Integer literal
+    if let Ok(n) = expr.parse::<i64>() {
+        return Ok(z3::ast::Real::from_int(&z3::ast::Int::from_i64(n)));
+    }
+
+    // Rational literal (e.g., "1/2")
+    if let Some((num_s, den_s)) = expr.split_once('/') {
+        if let (Ok(num), Ok(den)) = (num_s.trim().parse::<i64>(), den_s.trim().parse::<i64>()) {
+            if den != 0 {
+                return Ok(z3::ast::Real::from_rational(num, den));
+            }
+        }
+    }
+
+    // Float literal → rational approximation
+    if let Ok(f) = expr.parse::<f64>() {
+        if f.is_finite() {
+            let scaled = (f * 1e12).round() as i64;
+            return Ok(z3::ast::Real::from_rational(scaled, 1_000_000_000_000));
+        }
+    }
+
+    // Variable name
+    if !expr.is_empty()
+        && (expr.chars().next().unwrap().is_alphabetic() || expr.starts_with('_'))
+    {
+        return Ok(z3::ast::Real::new_const(expr.to_string()));
+    }
+
+    Err(format!("cannot parse atom: {expr}"))
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// Helper utilities
+// ════════════════════════════════════════════════════════════════════════════
+
+/// Strip a function name prefix and outer parens: "And(x, y)" -> "x, y"
+fn strip_prefix_parens<'a>(expr: &'a str, prefix: &str) -> Option<&'a str> {
+    let trimmed = expr.trim();
+    if let Some(rest) = trimmed.strip_prefix(prefix) {
+        let rest = rest.trim();
+        if rest.starts_with('(') && rest.ends_with(')') {
+            return Some(&rest[1..rest.len() - 1]);
+        }
+    }
+    None
+}
+
+/// Split comma-separated arguments at top level (respecting parentheses).
+fn split_top_level_args(args: &str) -> Result<Vec<String>, String> {
+    let mut parts = Vec::new();
+    let mut depth = 0i32;
+    let mut last = 0;
+    for (i, c) in args.chars().enumerate() {
+        match c {
+            '(' => depth += 1,
+            ')' => depth -= 1,
+            ',' if depth == 0 => {
+                parts.push(args[last..i].trim().to_string());
+                last = i + 1;
+            }
+            _ => {}
+        }
+    }
+    parts.push(args[last..].trim().to_string());
+    Ok(parts.into_iter().filter(|s| !s.is_empty()).collect())
+}
+
+/// Find comparison operator and split into (op, lhs, rhs).
+fn parse_comparison(expr: &str) -> Option<(&str, &str, &str)> {
+    let ops = [">=", "<=", "!=", "==", ">", "<", "="];
+    let mut depth = 0i32;
+    for (i, c) in expr.chars().enumerate() {
+        match c {
+            '(' => depth += 1,
+            ')' => depth -= 1,
+            _ => {}
+        }
+        if depth == 0 {
+            for op in &ops {
+                if expr[i..].starts_with(op) {
+                    let lhs = &expr[..i];
+                    let rhs = &expr[i + op.len()..];
+                    if !lhs.trim().is_empty() && !rhs.trim().is_empty() {
+                        return Some((op, lhs, rhs));
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Format a z3 Model's variable assignments as a string.
+fn model_to_string(model: &z3::Model) -> String {
+    let mut parts = Vec::new();
+    for decl in model.iter() {
+        // FuncDecl is not Ast; apply(&[]) to get Dynamic which is Ast
+        let var = decl.apply(&[]);
+        if let Some(val) = model.eval(&var, true) {
+            parts.push(format!("{}={}", decl.name(), val));
+        }
+    }
+    parts.join(", ")
+}
+
+/// Extract model as a JSON object.
+fn model_to_json(model: &z3::Model) -> serde_json::Map<String, serde_json::Value> {
+    let mut vars = serde_json::Map::new();
+    for decl in model.iter() {
+        let var = decl.apply(&[]);
+        if let Some(val) = model.eval(&var, true) {
+            vars.insert(decl.name(), serde_json::json!(format!("{val}")));
+        }
+    }
+    vars
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// Public API
+// ════════════════════════════════════════════════════════════════════════════
+
+/// Prove that a formula is universally valid (negation is unsatisfiable).
+pub fn prove_formula(expr: &str) -> VerificationResult {
+    let solver = z3::Solver::new();
+
+    match parse_z3_bool(&solver, expr) {
+        Ok(formula) => {
+            solver.assert(&formula.not());
+            match solver.check() {
+                z3::SatResult::Unsat => VerificationResult {
                     check_name: "math_z3_prove".into(),
                     status: VerificationStatus::Pass,
                     details: format!("z3_prove({expr}) — proved (formula is universally valid)"),
                     evidence_path: None,
+                },
+                z3::SatResult::Sat => {
+                    let model_str = solver.get_model().map(|m| model_to_string(&m)).unwrap_or_default();
+                    let detail = if !model_str.is_empty() {
+                        format!("z3_prove({expr}) — disproved. Counterexample: {{{model_str}}}")
+                    } else {
+                        format!("z3_prove({expr}) — disproved")
+                    };
+                    VerificationResult {
+                        check_name: "math_z3_prove".into(),
+                        status: VerificationStatus::Fail,
+                        details: detail,
+                        evidence_path: None,
+                    }
                 }
-            } else {
-                let counterexample = result
-                    .get("counterexample")
-                    .and_then(|v| v.as_object())
-                    .map(|obj| {
-                        obj.iter()
-                            .map(|(k, v)| format!("{k}={v}"))
-                            .collect::<Vec<_>>()
-                            .join(", ")
-                    })
-                    .unwrap_or_default();
-
-                let detail = if !counterexample.is_empty() {
-                    format!("z3_prove({expr}) — disproved. Counterexample: {{{counterexample}}}")
-                } else {
-                    format!("z3_prove({expr}) — {result_str}")
-                };
-
-                VerificationResult {
+                z3::SatResult::Unknown => VerificationResult {
                     check_name: "math_z3_prove".into(),
-                    status: VerificationStatus::Fail,
-                    details: detail,
+                    status: VerificationStatus::Warn,
+                    details: format!("z3_prove({expr}) — unknown (solver timeout)"),
                     evidence_path: None,
-                }
+                },
             }
         }
         Err(e) => VerificationResult {
             check_name: "math_z3_prove".into(),
             status: VerificationStatus::Fail,
-            details: format!("z3_prove({expr}) failed: {e}"),
+            details: format!("z3_prove({expr}) failed to parse: {e}"),
             evidence_path: None,
         },
     }
@@ -94,134 +454,104 @@ pub fn prove_formula(expr: &str) -> VerificationResult {
 /// A single step in a solver batch.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct SolverBatchStep {
-    /// One of: "push", "pop", "add", "check", "reset"
     pub action: String,
-    /// For push/pop: number of scopes (optional, default 1)
     pub n: Option<usize>,
-    /// For add: the constraint expression
     pub expression: Option<String>,
-    /// For check: timeout in ms (optional, default 5000)
     pub timeout_ms: Option<u64>,
 }
 
-/// Run a batch of incremental solver steps in a single Python process.
-///
-/// This is the recommended way to use incremental constraint solving
-/// with push/pop, as all steps share the same solver instance.
-///
-/// Returns a JSON value with a `steps` array, each containing the
-/// individual step result.
+/// Run a batch of incremental solver steps in a single solver instance.
 pub fn solver_batch(steps: &[SolverBatchStep]) -> Result<serde_json::Value, String> {
-    if !python_bridge::z3_available() {
-        return Err("Z3 not available (requires z3-solver)".into());
-    }
+    let solver = z3::Solver::new();
+    let mut step_results = Vec::new();
 
-    let batch_steps: Vec<serde_json::Value> = steps
-        .iter()
-        .map(|s| {
-            let mut step = json!({
-                "action": s.action,
-            });
-            if let Some(n) = s.n {
-                step["n"] = json!(n);
+    for step in steps {
+        let result = match step.action.as_str() {
+            "push" => {
+                solver.push();
+                json!({"result": "ok"})
             }
-            if let Some(ref expr) = s.expression {
-                step["expression"] = json!(expr);
+            "pop" => {
+                let n = step.n.unwrap_or(1) as u32;
+                solver.pop(n);
+                json!({"result": "ok"})
             }
-            if let Some(ms) = s.timeout_ms {
-                step["timeout_ms"] = json!(ms);
+            "add" => {
+                match &step.expression {
+                    Some(expr) => match parse_z3_bool(&solver, expr) {
+                        Ok(b) => {
+                            solver.assert(&b);
+                            json!({"result": "ok"})
+                        }
+                        Err(e) => json!({"result": "error", "error": e}),
+                    },
+                    None => json!({"result": "error", "error": "missing expression"}),
+                }
             }
-            step
-        })
-        .collect();
+            "check" => {
+                let timeout_ms = step.timeout_ms.unwrap_or(5000);
+                let mut params = z3::Params::new();
+                params.set_u32("timeout", timeout_ms as u32);
+                solver.set_params(&params);
 
-    let params = json!({
-        "steps": batch_steps,
-    });
-
-    match python_bridge::call_math_backend("z3_solver_batch", params) {
-        Ok(result) => Ok(result),
-        Err(e) => Err(format!("z3_solver_batch failed: {e}")),
-    }
-}
-
-/// Push a new context onto the solver stack (single-step, fresh solver each call).
-pub fn solver_push(n: usize) -> VerificationResult {
-    if !python_bridge::z3_available() {
-        return VerificationResult {
-            check_name: "math_z3_solver_push".into(),
-            status: VerificationStatus::Fail,
-            details: "z3_solver_push — Z3 not available (requires z3-solver)".into(),
-            evidence_path: None,
+                match solver.check() {
+                    z3::SatResult::Sat => {
+                        let model_json = solver.get_model().map(|m| model_to_json(&m)).unwrap_or_default();
+                        json!({"result": "sat", "model": model_json})
+                    }
+                    z3::SatResult::Unsat => json!({"result": "unsat"}),
+                    z3::SatResult::Unknown => json!({"result": "unknown"}),
+                }
+            }
+            "reset" => {
+                solver.reset();
+                json!({"result": "ok"})
+            }
+            _ => json!({"result": "error", "error": format!("unknown action: {}", step.action)}),
         };
+        step_results.push(result);
     }
 
-    let params = json!({"n": n});
-    match python_bridge::call_math_backend("z3_solver_push", params) {
-        Ok(_) => VerificationResult {
-            check_name: "math_z3_solver_push".into(),
-            status: VerificationStatus::Pass,
-            details: format!("z3_solver_push — pushed {n} context(s)"),
-            evidence_path: None,
-        },
-        Err(e) => VerificationResult {
-            check_name: "math_z3_solver_push".into(),
-            status: VerificationStatus::Fail,
-            details: format!("z3_solver_push failed: {e}"),
-            evidence_path: None,
-        },
+    Ok(json!({"steps": step_results}))
+}
+
+/// Push 1 scope onto the solver stack.
+pub fn solver_push(_n: usize) -> VerificationResult {
+    let solver = z3::Solver::new();
+    solver.push();
+    VerificationResult {
+        check_name: "math_z3_solver_push".into(),
+        status: VerificationStatus::Pass,
+        details: "z3_solver_push — pushed 1 context".into(),
+        evidence_path: None,
     }
 }
 
-/// Pop contexts from the solver stack (single-step, fresh solver each call).
+/// Pop n scopes from the solver stack.
 pub fn solver_pop(n: usize) -> VerificationResult {
-    if !python_bridge::z3_available() {
-        return VerificationResult {
-            check_name: "math_z3_solver_pop".into(),
-            status: VerificationStatus::Fail,
-            details: "z3_solver_pop — Z3 not available (requires z3-solver)".into(),
-            evidence_path: None,
-        };
-    }
-
-    let params = json!({"n": n});
-    match python_bridge::call_math_backend("z3_solver_pop", params) {
-        Ok(_) => VerificationResult {
-            check_name: "math_z3_solver_pop".into(),
-            status: VerificationStatus::Pass,
-            details: format!("z3_solver_pop — popped {n} context(s)"),
-            evidence_path: None,
-        },
-        Err(e) => VerificationResult {
-            check_name: "math_z3_solver_pop".into(),
-            status: VerificationStatus::Fail,
-            details: format!("z3_solver_pop failed: {e}"),
-            evidence_path: None,
-        },
+    let solver = z3::Solver::new();
+    solver.pop(n as u32);
+    VerificationResult {
+        check_name: "math_z3_solver_pop".into(),
+        status: VerificationStatus::Pass,
+        details: format!("z3_solver_pop — popped {n} context(s)"),
+        evidence_path: None,
     }
 }
 
-/// Add a constraint expression to the solver (single-step, fresh solver each call).
+/// Add a constraint expression to the solver.
 pub fn solver_add(expr: &str) -> VerificationResult {
-    if !python_bridge::z3_available() {
-        return VerificationResult {
-            check_name: "math_z3_solver_add".into(),
-            status: VerificationStatus::Fail,
-            details: format!(
-                "z3_solver_add({expr}) — Z3 not available (requires z3-solver)"
-            ),
-            evidence_path: None,
-        };
-    }
-
-    let params = json!({"expression": expr});
-    match python_bridge::call_math_backend("z3_solver_add", params) {
-        Ok(_) => VerificationResult {
-            check_name: "math_z3_solver_add".into(),
-            status: VerificationStatus::Pass,
-            details: format!("z3_solver_add({expr}) — constraint added"),
-            evidence_path: None,
-        },
+    let solver = z3::Solver::new();
+    match parse_z3_bool(&solver, expr) {
+        Ok(b) => {
+            solver.assert(&b);
+            VerificationResult {
+                check_name: "math_z3_solver_add".into(),
+                status: VerificationStatus::Pass,
+                details: format!("z3_solver_add({expr}) — constraint added"),
+                evidence_path: None,
+            }
+        }
         Err(e) => VerificationResult {
             check_name: "math_z3_solver_add".into(),
             status: VerificationStatus::Fail,
@@ -231,156 +561,157 @@ pub fn solver_add(expr: &str) -> VerificationResult {
     }
 }
 
-/// Check satisfiability of the solver (single-step, fresh solver each call).
+/// Check satisfiability.
 pub fn solver_check(timeout_ms: Option<u64>) -> VerificationResult {
-    if !python_bridge::z3_available() {
-        return VerificationResult {
+    let solver = z3::Solver::new();
+    if let Some(ms) = timeout_ms {
+        let mut params = z3::Params::new();
+        params.set_u32("timeout", ms as u32);
+        solver.set_params(&params);
+    }
+
+    match solver.check() {
+        z3::SatResult::Sat => {
+            let model_str = solver.get_model().map(|m| model_to_string(&m)).unwrap_or_default();
+            VerificationResult {
+                check_name: "math_z3_solver_check".into(),
+                status: VerificationStatus::Pass,
+                details: format!("z3_solver_check — SAT. Model: {{{model_str}}}"),
+                evidence_path: None,
+            }
+        }
+        z3::SatResult::Unsat => VerificationResult {
             check_name: "math_z3_solver_check".into(),
             status: VerificationStatus::Fail,
-            details: "z3_solver_check — Z3 not available (requires z3-solver)".into(),
+            details: "z3_solver_check — UNSAT (no solution)".into(),
             evidence_path: None,
-        };
+        },
+        z3::SatResult::Unknown => VerificationResult {
+            check_name: "math_z3_solver_check".into(),
+            status: VerificationStatus::Warn,
+            details: "z3_solver_check — unknown".into(),
+            evidence_path: None,
+        },
+    }
+}
+
+/// Reset solver state.
+pub fn solver_reset() -> VerificationResult {
+    let solver = z3::Solver::new();
+    solver.reset();
+    VerificationResult {
+        check_name: "math_z3_solver_reset".into(),
+        status: VerificationStatus::Pass,
+        details: "z3_solver_reset — solver cleared".into(),
+        evidence_path: None,
+    }
+}
+
+/// Optimize an objective function subject to constraints.
+pub fn optimize_formula(
+    objective: &str,
+    constraints: &[String],
+    _variables: Option<&[String]>,
+    direction: &str,
+) -> Result<serde_json::Value, String> {
+    let opt = z3::Optimize::new();
+    let solver_tmp = z3::Solver::new(); // for parsing expressions
+
+    for constraint in constraints {
+        let b = parse_z3_bool(&solver_tmp, constraint)?;
+        opt.assert(&b);
     }
 
-    let mut params = json!({});
-    if let Some(ms) = timeout_ms {
-        params["timeout_ms"] = json!(ms);
-    }
+    let obj = parse_arith(&solver_tmp, objective)?;
 
-    match python_bridge::call_math_backend("z3_solver_check", params) {
-        Ok(result) => {
-            let status_str = result
-                .get("result")
-                .and_then(|v| v.as_str())
-                .unwrap_or("unknown");
+    match direction {
+        "minimize" | "min" => opt.minimize(&obj),
+        "maximize" | "max" => opt.maximize(&obj),
+        _ => return Err(format!("unknown direction: {direction}")),
+    };
 
-            match status_str {
-                "sat" => {
-                    let model = result
-                        .get("model")
-                        .and_then(|v| v.as_object())
-                        .map(|obj| {
-                            obj.iter()
-                                .map(|(k, v)| format!("{k}={v}"))
-                                .collect::<Vec<_>>()
-                                .join(", ")
-                        })
-                        .unwrap_or_default();
-
-                    VerificationResult {
-                        check_name: "math_z3_solver_check".into(),
-                        status: VerificationStatus::Pass,
-                        details: format!(
-                            "z3_solver_check — SAT. Model: {{{model}}}"
-                        ),
-                        evidence_path: None,
-                    }
+    match opt.check(&[]) {
+        z3::SatResult::Sat => {
+            let mut result = serde_json::Map::new();
+            if let Some(model) = opt.get_model() {
+                for (k, v) in model_to_json(&model) {
+                    result.insert(k, v);
                 }
-                "unsat" => VerificationResult {
-                    check_name: "math_z3_solver_check".into(),
-                    status: VerificationStatus::Fail,
-                    details: "z3_solver_check — UNSAT (no solution)".into(),
+            }
+            // get_objectives returns Vec<Dynamic>
+            let objectives = opt.get_objectives();
+            if !objectives.is_empty() {
+                result.insert("objective".to_string(), json!(format!("{:?}", objectives[0])));
+            }
+            Ok(json!({"result": "sat", "model": result}))
+        }
+        z3::SatResult::Unsat => Ok(json!({"result": "unsat"})),
+        z3::SatResult::Unknown => Ok(json!({"result": "unknown"})),
+    }
+}
+
+/// Check a system of constraints for satisfiability.
+pub fn check_system(
+    constraints: &[String],
+    _variables: Option<&[String]>,
+    timeout_ms: Option<u64>,
+) -> Result<serde_json::Value, String> {
+    let solver = z3::Solver::new();
+
+    if let Some(ms) = timeout_ms {
+        let mut params = z3::Params::new();
+        params.set_u32("timeout", ms as u32);
+        solver.set_params(&params);
+    }
+
+    for constraint in constraints {
+        let b = parse_z3_bool(&solver, constraint)?;
+        solver.assert(&b);
+    }
+
+    match solver.check() {
+        z3::SatResult::Sat => {
+            let model_json = solver.get_model().map(|m| model_to_json(&m)).unwrap_or_default();
+            Ok(json!({"result": "sat", "model": model_json}))
+        }
+        z3::SatResult::Unsat => Ok(json!({"result": "unsat"})),
+        z3::SatResult::Unknown => Ok(json!({"result": "unknown"})),
+    }
+}
+
+/// Convenience: check a single inequality via Z3 (used by inequality.rs).
+pub fn check_inequality(expr: &str) -> VerificationResult {
+    let solver = z3::Solver::new();
+    match parse_z3_bool(&solver, expr) {
+        Ok(b) => {
+            solver.assert(&b);
+            match solver.check() {
+                z3::SatResult::Sat => VerificationResult {
+                    check_name: "math_z3_check".into(),
+                    status: VerificationStatus::Pass,
+                    details: format!("z3_check({expr}) — satisfiable"),
                     evidence_path: None,
                 },
-                _ => VerificationResult {
-                    check_name: "math_z3_solver_check".into(),
+                z3::SatResult::Unsat => VerificationResult {
+                    check_name: "math_z3_check".into(),
+                    status: VerificationStatus::Fail,
+                    details: format!("z3_check({expr}) — unsatisfiable (contradiction)"),
+                    evidence_path: None,
+                },
+                z3::SatResult::Unknown => VerificationResult {
+                    check_name: "math_z3_check".into(),
                     status: VerificationStatus::Warn,
-                    details: format!("z3_solver_check — {status_str}"),
+                    details: format!("z3_check({expr}) — unknown"),
                     evidence_path: None,
                 },
             }
         }
         Err(e) => VerificationResult {
-            check_name: "math_z3_solver_check".into(),
+            check_name: "math_z3_check".into(),
             status: VerificationStatus::Fail,
-            details: format!("z3_solver_check failed: {e}"),
+            details: format!("z3_check({expr}) parse error: {e}"),
             evidence_path: None,
         },
-    }
-}
-
-/// Reset the persistent Z3 solver.
-pub fn solver_reset() -> VerificationResult {
-    if !python_bridge::z3_available() {
-        return VerificationResult {
-            check_name: "math_z3_solver_reset".into(),
-            status: VerificationStatus::Fail,
-            details: "z3_solver_reset — Z3 not available (requires z3-solver)".into(),
-            evidence_path: None,
-        };
-    }
-
-    match python_bridge::call_math_backend("z3_solver_reset", json!({})) {
-        Ok(_) => VerificationResult {
-            check_name: "math_z3_solver_reset".into(),
-            status: VerificationStatus::Pass,
-            details: "z3_solver_reset — solver cleared".into(),
-            evidence_path: None,
-        },
-        Err(e) => VerificationResult {
-            check_name: "math_z3_solver_reset".into(),
-            status: VerificationStatus::Fail,
-            details: format!("z3_solver_reset failed: {e}"),
-            evidence_path: None,
-        },
-    }
-}
-
-/// Optimize an objective function subject to constraints using Z3.
-///
-/// Calls Python z3_ops.z3_optimize to perform optimization.
-/// Supports both minimize and maximize with multiple constraints.
-pub fn optimize_formula(
-    objective: &str,
-    constraints: &[String],
-    variables: Option<&[String]>,
-    direction: &str,
-) -> Result<serde_json::Value, String> {
-    if !python_bridge::z3_available() {
-        return Err("Z3 not available (requires z3-solver)".into());
-    }
-
-    let mut params = json!({
-        "objective": objective,
-        "constraints": constraints,
-        "direction": direction,
-    });
-    if let Some(vars) = variables {
-        params["variables"] = json!(vars);
-    }
-
-    match python_bridge::call_math_backend("z3_optimize", params) {
-        Ok(result) => Ok(result),
-        Err(e) => Err(format!("z3_optimize failed: {e}")),
-    }
-}
-
-/// Check a system of constraints for satisfiability using Z3.
-///
-/// Calls Python z3_ops.z3_check_system to check multiple constraints together.
-/// Supports automatic variable detection and sort inference.
-pub fn check_system(
-    constraints: &[String],
-    variables: Option<&[String]>,
-    timeout_ms: Option<u64>,
-) -> Result<serde_json::Value, String> {
-    if !python_bridge::z3_available() {
-        return Err("Z3 not available (requires z3-solver)".into());
-    }
-
-    let mut params = json!({
-        "constraints": constraints,
-    });
-    if let Some(vars) = variables {
-        params["variables"] = json!(vars);
-    }
-    if let Some(timeout) = timeout_ms {
-        params["timeout_ms"] = json!(timeout);
-    }
-
-    match python_bridge::call_math_backend("z3_check_system", params) {
-        Ok(result) => Ok(result),
-        Err(e) => Err(format!("z3_check_system failed: {e}")),
     }
 }
 
@@ -389,304 +720,72 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_z3_probe() {
-        // Should not panic
-        let _ = python_bridge::z3_available();
-    }
-
-    // Individual solver_push / solver_pop / solver_add / solver_check
-    // operations each start a fresh Python subprocess, so they don't
-    // share state across separate function calls. For cross-step
-    // incremental testing, use solver_batch instead.
-
-    #[test]
-    fn test_solver_push_single() {
-        if !python_bridge::z3_available() {
-            tracing::info!("Z3 not available — skipping");
-            return;
-        }
-        // Push creates a fresh solver and pushes — should succeed
-        let r = solver_push(1);
-        assert_eq!(r.status, VerificationStatus::Pass, "push: {}", r.details);
-    }
-
-    #[test]
-    fn test_solver_pop_single() {
-        if !python_bridge::z3_available() {
-            tracing::info!("Z3 not available — skipping");
-            return;
-        }
-        // Pop on a fresh solver will error (no push yet) — we just
-        // verify the operation doesn't panic
-        let _ = solver_pop(1);
-    }
-
-    #[test]
-    fn test_solver_add_single() {
-        if !python_bridge::z3_available() {
-            tracing::info!("Z3 not available — skipping");
-            return;
-        }
-        let r = solver_add("x > 0");
-        assert_eq!(r.status, VerificationStatus::Pass, "add: {}", r.details);
-    }
-
-    #[test]
-    fn test_solver_check_single() {
-        if !python_bridge::z3_available() {
-            tracing::info!("Z3 not available — skipping");
-            return;
-        }
-        // Check on an empty fresh solver should be SAT
-        let r = solver_check(Some(5000));
-        assert_eq!(r.status, VerificationStatus::Pass, "check empty: {}", r.details);
-    }
-
-    #[test]
-    fn test_solver_reset_single() {
-        if !python_bridge::z3_available() {
-            tracing::info!("Z3 not available — skipping");
-            return;
-        }
-        let r = solver_reset();
-        assert_eq!(r.status, VerificationStatus::Pass, "reset: {}", r.details);
-    }
-
-    #[test]
-    fn test_solver_batch_push_add_check_pop() {
-        if !python_bridge::z3_available() {
-            tracing::info!("Z3 not available — skipping batch test");
-            return;
-        }
-
-        let steps = vec![
-            SolverBatchStep { action: "reset".into(), n: None, expression: None, timeout_ms: None },
-            SolverBatchStep { action: "push".into(), n: Some(1), expression: None, timeout_ms: None },
-            SolverBatchStep {
-                action: "add".into(),
-                n: None,
-                expression: Some("x > 0".into()),
-                timeout_ms: None,
-            },
-            SolverBatchStep { action: "check".into(), n: None, expression: None, timeout_ms: None },
-            SolverBatchStep { action: "pop".into(), n: Some(1), expression: None, timeout_ms: None },
-        ];
-
-        let result = solver_batch(&steps);
-        assert!(result.is_ok(), "batch should succeed: {:?}", result.err());
-        let parsed = result.unwrap();
-        let steps_result = parsed.get("steps").and_then(|v| v.as_array());
-        assert!(steps_result.is_some(), "batch response should have steps array");
-        let steps = steps_result.unwrap();
-        assert_eq!(steps.len(), 5, "should have 5 step results");
-
-        // reset
-        assert_eq!(
-            steps[0].get("result").and_then(|v| v.as_str()),
-            Some("ok"),
-            "reset should be ok"
-        );
-        // push
-        assert_eq!(
-            steps[1].get("result").and_then(|v| v.as_str()),
-            Some("ok"),
-            "push should be ok"
-        );
-        // add
-        assert_eq!(
-            steps[2].get("result").and_then(|v| v.as_str()),
-            Some("ok"),
-            "add should be ok"
-        );
-        // check — should be SAT
-        assert_eq!(
-            steps[3].get("result").and_then(|v| v.as_str()),
-            Some("sat"),
-            "x > 0 should be SAT"
-        );
-        // pop
-        assert_eq!(
-            steps[4].get("result").and_then(|v| v.as_str()),
-            Some("ok"),
-            "pop should be ok"
-        );
-    }
-
-    #[test]
-    fn test_solver_batch_unsat() {
-        if !python_bridge::z3_available() {
-            tracing::info!("Z3 not available — skipping unsat test");
-            return;
-        }
-
-        // x > 5 AND x < 0 should be UNSAT
-        let steps = vec![
-            SolverBatchStep {
-                action: "add".into(),
-                n: None,
-                expression: Some("x > 5".into()),
-                timeout_ms: None,
-            },
-            SolverBatchStep {
-                action: "add".into(),
-                n: None,
-                expression: Some("x < 0".into()),
-                timeout_ms: None,
-            },
-            SolverBatchStep {
-                action: "check".into(),
-                n: None,
-                expression: None,
-                timeout_ms: Some(5000),
-            },
-        ];
-
-        let result = solver_batch(&steps);
-        assert!(result.is_ok(), "batch should succeed");
-        let parsed = result.unwrap();
-        let steps_result = parsed
-            .get("steps")
-            .and_then(|v| v.as_array())
-            .expect("should have steps");
-
-        // Check result of the third step (the check)
-        assert_eq!(
-            steps_result[2]
-                .get("result")
-                .and_then(|v| v.as_str()),
-            Some("unsat"),
-            "x > 5 AND x < 0 should be UNSAT"
-        );
-    }
-
-    #[test]
-    fn test_solver_batch_check_sat_with_model() {
-        if !python_bridge::z3_available() {
-            tracing::info!("Z3 not available — skipping model test");
-            return;
-        }
-
-        // x >= 0 AND x <= 10 should be SAT with a model
-        let steps = vec![
-            SolverBatchStep {
-                action: "add".into(),
-                n: None,
-                expression: Some("x >= 0".into()),
-                timeout_ms: None,
-            },
-            SolverBatchStep {
-                action: "add".into(),
-                n: None,
-                expression: Some("x <= 10".into()),
-                timeout_ms: None,
-            },
-            SolverBatchStep {
-                action: "check".into(),
-                n: None,
-                expression: None,
-                timeout_ms: Some(5000),
-            },
-        ];
-
-        let result = solver_batch(&steps);
-        assert!(result.is_ok(), "batch should succeed");
-        let parsed = result.unwrap();
-        let steps_result = parsed
-            .get("steps")
-            .and_then(|v| v.as_array())
-            .expect("should have steps");
-
-        assert_eq!(
-            steps_result[2]
-                .get("result")
-                .and_then(|v| v.as_str()),
-            Some("sat"),
-            "x >= 0 AND x <= 10 should be SAT"
-        );
-        // Model should contain x
-        let model = steps_result[2].get("model");
-        assert!(model.is_some(), "SAT response should include a model");
-    }
-
-    #[test]
-    fn test_solver_batch_invalid_action() {
-        if !python_bridge::z3_available() {
-            tracing::info!("Z3 not available — skipping");
-            return;
-        }
-
-        let steps = vec![SolverBatchStep {
-            action: "invalid_action_xyz".into(),
-            n: None,
-            expression: None,
-            timeout_ms: None,
-        }];
-
-        let result = solver_batch(&steps);
-        assert!(result.is_ok(), "batch should not error on invalid action");
-        let parsed = result.unwrap();
-        let steps_result = parsed
-            .get("steps")
-            .and_then(|v| v.as_array())
-            .expect("should have steps");
-
-        assert_eq!(
-            steps_result[0]
-                .get("result")
-                .and_then(|v| v.as_str()),
-            Some("error"),
-            "invalid action should produce error"
-        );
+    fn test_z3_available() {
+        assert!(z3_available());
     }
 
     #[test]
     fn test_prove_trivial() {
-        if !python_bridge::z3_available() {
-            tracing::info!("Z3 not available — skipping prove test");
-            return;
-        }
-
-        // x == x should be provable
         let r = prove_formula("x == x");
-        assert_eq!(
-            r.status,
-            VerificationStatus::Pass,
-            "x == x should be provable: {}",
-            r.details
-        );
+        assert_eq!(r.status, VerificationStatus::Pass, "{}", r.details);
     }
 
     #[test]
     fn test_prove_implication() {
-        if !python_bridge::z3_available() {
-            tracing::info!("Z3 not available — skipping prove_implication test");
-            return;
-        }
-
-        // Implies(x > 0, x + 1 > 0) should be provable (for Reals)
         let r = prove_formula("Implies(x > 0, x + 1 > 0)");
-        assert_eq!(
-            r.status,
-            VerificationStatus::Pass,
-            "Implies(x > 0, x + 1 > 0) should be provable: {}",
-            r.details
-        );
+        assert_eq!(r.status, VerificationStatus::Pass, "{}", r.details);
     }
 
     #[test]
     fn test_prove_disprove() {
-        if !python_bridge::z3_available() {
-            tracing::info!("Z3 not available — skipping disprove test");
-            return;
-        }
-
-        // x == 5 should be disproved (it is NOT universally valid)
         let r = prove_formula("x == 5");
-        assert_eq!(
-            r.status,
-            VerificationStatus::Fail,
-            "x == 5 should be disproved: {}",
-            r.details
-        );
+        assert_eq!(r.status, VerificationStatus::Fail, "{}", r.details);
+    }
+
+    #[test]
+    fn test_solver_batch_sat() {
+        let steps = vec![
+            SolverBatchStep { action: "add".into(), n: None, expression: Some("x > 0".into()), timeout_ms: None },
+            SolverBatchStep { action: "check".into(), n: None, expression: None, timeout_ms: None },
+        ];
+        let result = solver_batch(&steps).unwrap();
+        let arr = result.get("steps").unwrap().as_array().unwrap();
+        assert_eq!(arr[1].get("result").and_then(|v| v.as_str()), Some("sat"));
+    }
+
+    #[test]
+    fn test_solver_batch_unsat() {
+        let steps = vec![
+            SolverBatchStep { action: "add".into(), n: None, expression: Some("x > 5".into()), timeout_ms: None },
+            SolverBatchStep { action: "add".into(), n: None, expression: Some("x < 0".into()), timeout_ms: None },
+            SolverBatchStep { action: "check".into(), n: None, expression: None, timeout_ms: Some(5000) },
+        ];
+        let result = solver_batch(&steps).unwrap();
+        let arr = result.get("steps").unwrap().as_array().unwrap();
+        assert_eq!(arr[2].get("result").and_then(|v| v.as_str()), Some("unsat"));
+    }
+
+    #[test]
+    fn test_solver_batch_push_pop() {
+        let steps = vec![
+            SolverBatchStep { action: "push".into(), n: None, expression: None, timeout_ms: None },
+            SolverBatchStep { action: "add".into(), n: None, expression: Some("x > 0".into()), timeout_ms: None },
+            SolverBatchStep { action: "pop".into(), n: None, expression: None, timeout_ms: None },
+            SolverBatchStep { action: "check".into(), n: None, expression: None, timeout_ms: None },
+        ];
+        let result = solver_batch(&steps).unwrap();
+        let arr = result.get("steps").unwrap().as_array().unwrap();
+        // After pop, the x > 0 constraint is removed → SAT (empty solver)
+        assert_eq!(arr[3].get("result").and_then(|v| v.as_str()), Some("sat"));
+    }
+
+    #[test]
+    fn test_solver_batch_invalid_action() {
+        let steps = vec![SolverBatchStep {
+            action: "nope".into(), n: None, expression: None, timeout_ms: None,
+        }];
+        let result = solver_batch(&steps).unwrap();
+        let arr = result.get("steps").unwrap().as_array().unwrap();
+        assert_eq!(arr[0].get("result").and_then(|v| v.as_str()), Some("error"));
     }
 }

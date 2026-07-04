@@ -768,14 +768,12 @@ pub fn handle_orchestrator_operation(payload: Value) -> Result<Value, FrameworkE
             })
         }
         other => Err(FrameworkError::hook(format!(
-            "orchestrator operation '{other}' is not available: the session-supervisor crate (team/worker/agent \
-                     management) is not wired into this runtime-core build. \
-                     Available operations: team_create, team_add_member, team_remove_member, team_complete, \
-                     team_send_message, team_read_messages, team_alive_members, team_list, agent_register, \
-                     agent_unregister, agent_list_running, launch, list, terminate, classify_block. \
-                     Background control operations (batch-plan, enqueue, interrupt, claim, complete, \
-                     completion-race, retry-claim, interrupt-finalize, retry, session-release) ARE available \
-                     via the appropriate orchestrator operation payload."
+            "orchestrator operation '{other}' is not available here. \
+                     Background control operations available in this handler: \
+                     batch-plan, enqueue, interrupt, claim, complete, completion-race, \
+                     retry-claim, interrupt-finalize, retry, session-release. \
+                     Session-supervisor operations (launch, list, terminate, team_*, agent_*) \
+                     are routed via session_supervisor in stdio_dispatch, not via this handler."
         ))),
     }
 }

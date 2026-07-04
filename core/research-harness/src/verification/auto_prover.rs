@@ -144,7 +144,7 @@ fn find_counterexample(lhs: &str, rhs: &str) -> Option<HashMap<String, f64>> {
     }
 
     // ── Strategy 1: Z3 counterexample model ──
-    if crate::verification::python_bridge::z3_available() {
+    if crate::verification::z3_bridge::z3_available() {
         let inequality = format!("abs({lhs} - {rhs}) > 1e-6");
         let steps = vec![
             crate::verification::z3_bridge::SolverBatchStep {
@@ -262,7 +262,7 @@ pub fn try_prove(lhs: &str, rhs: &str, timeout_ms: Option<u64>) -> AutoProverRes
     }
 
     // ── Strategy 2: Z3 prove (only if available) ──
-    if crate::verification::python_bridge::z3_available() {
+    if crate::verification::z3_bridge::z3_available() {
         trace = ProofTrace::new(UsedBackend::Z3);
         let z3_expr = format!("{lhs} == {rhs}");
         let vr = crate::verification::z3_bridge::prove_formula(&z3_expr);
@@ -422,7 +422,7 @@ pub fn tighten_bounds(expr: &str, var: &str, lo: f64, hi: f64, timeout_ms: Optio
     let timeout = timeout_ms.unwrap_or(5000);
     let initial_range = hi - lo;
 
-    if !crate::verification::python_bridge::z3_available() {
+    if !crate::verification::z3_bridge::z3_available() {
         return TightenBoundsResult {
             lower_bound: lo,
             upper_bound: hi,
@@ -977,7 +977,7 @@ mod tests {
         let result = tighten_bounds("x >= 0", "x", -10.0, 10.0, Some(1000));
         // Should not crash; bounds may or may not be tightened
         assert!(result.lower_bound <= result.upper_bound);
-        if crate::verification::python_bridge::z3_available() {
+        if crate::verification::z3_bridge::z3_available() {
             // At very least, the range [0, 10] is feasible with x >= 0
             assert!(result.lower_bound >= -10.0);
             assert!(result.upper_bound <= 10.0);

@@ -1260,13 +1260,13 @@ fn tool_math_backend_available(arguments: &Value) -> Result<String, FrameworkErr
 
     match backend {
         "z3" => {
-            let available = crate::verification::python_bridge::z3_available();
-            let version = if available { "via Python z3-solver" } else { "" };
+            let available = crate::verification::z3_bridge::z3_available();
+            let version = if available { "native z3 crate" } else { "" };
             serde_json::to_string_pretty(&json!({
                 "backend": "z3", "available": available,
                 "version": version,
                 "description": "Z3 SMT solver (Microsoft Research)",
-                "install_hint": "uv pip install z3-solver",
+                "install_hint": "bundled via z3 crate",
             }))
         }
         "sympy" => {

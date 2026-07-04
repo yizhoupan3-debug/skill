@@ -548,88 +548,8 @@ fn word_boundary_match(text: &str, keyword: &str) -> bool {
 
 /// Route to Z3 backend for nonlinear inequalities.
 fn check_inequality_z3(expr: &str) -> VerificationResult {
-    use crate::verification::python_bridge;
-    use serde_json::json;
-
-    if !python_bridge::z3_available() {
-        return VerificationResult {
-            check_name: "math_prove_inequality".to_string(),
-            status: VerificationStatus::Warn,
-            details: format!(
-                "Z3 not available for nonlinear inequality: {expr} — \
-                 install z3-solver: uv pip install z3-solver"
-            ),
-            evidence_path: None,
-        };
-    }
-
-    // Extract variable names from the expression
-    let re_vars = regex::Regex::new(r"[a-zA-Z_][a-zA-Z0-9_]*")
-        .expect("valid regex");
-    let known_keywords = crate::verification::symbolic::MATH_KEYWORDS;
-    let mut vars: Vec<String> = re_vars
-        .find_iter(expr)
-        .map(|m| m.as_str().to_string())
-        .filter(|v| !known_keywords.contains(&v.as_str()))
-        .collect::<std::collections::HashSet<_>>()
-        .into_iter()
-        .collect();
-    vars.sort();
-
-    let params = json!({
-        "expression": expr,
-        "variables": vars,
-        "timeout_ms": 10000,
-    });
-
-    match python_bridge::call_math_backend("z3_check", params) {
-        Ok(result) => {
-            let status_str = result
-                .get("result")
-                .and_then(|v| v.as_str())
-                .unwrap_or("unknown");
-
-            match status_str {
-                "sat" => {
-                    let model = result
-                        .get("model")
-                        .and_then(|v| v.as_object())
-                        .map(|obj| {
-                            obj.iter()
-                                .map(|(k, v)| format!("{k}={v}"))
-                                .collect::<Vec<_>>()
-                                .join(", ")
-                        })
-                        .unwrap_or_default();
-
-                    VerificationResult {
-                        check_name: "math_prove_inequality".to_string(),
-                        status: VerificationStatus::Pass,
-                        details: format!("Consistent (Z3 sat). Model: {model}"),
-                        evidence_path: None,
-                    }
-                }
-                "unsat" => VerificationResult {
-                    check_name: "math_prove_inequality".to_string(),
-                    status: VerificationStatus::Fail,
-                    details: format!("Inconsistent (Z3 unsat): {expr}"),
-                    evidence_path: None,
-                },
-                _ => VerificationResult {
-                    check_name: "math_prove_inequality".to_string(),
-                    status: VerificationStatus::Warn,
-                    details: format!("Z3 result: {status_str}"),
-                    evidence_path: None,
-                },
-            }
-        }
-        Err(e) => VerificationResult {
-            check_name: "math_prove_inequality".to_string(),
-            status: VerificationStatus::Warn,
-            details: format!("Z3 error: {e}"),
-            evidence_path: None,
-        },
-    }
+    use crate::verification::z3_bridge;
+    z3_bridge::check_inequality(expr)
 }
 
 pub fn check_inequality(expr: &str, timeout_ms: Option<u64>) -> VerificationResult {
@@ -710,7 +630,7 @@ pub fn solver_available() -> bool {
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
-    use crate::verification::python_bridge;
+    use crate::verification::z3_bridge;
     use super::*;
 
     #[test]
@@ -1010,11 +930,7 @@ mod tests {
     #[test]
     fn test_check_inequality_nonlinear_z3_path() {
         // x^2 >= 0 is a nonlinear inequality that should route to the Z3 backend.
-        // When Z3 is available, it should return Pass (x^2 >= 0 is always true).
-        if !python_bridge::z3_available() {
-            tracing::info!("Z3 not available — skipping nonlinear Z3 path test");
-            return;
-        }
+        // Z3 is always available (native Rust z3 crate).
         let result = check_inequality("x^2 >= 0", Some(10000));
         assert_eq!(
             result.status,
@@ -1027,27 +943,20 @@ mod tests {
 
     #[test]
     fn test_check_inequality_nonlinear_z3_unavailable() {
-        // When Z3 is not available, a nonlinear inequality should return Warn
-        // with a helpful installation message.
-        if python_bridge::z3_available() {
-            tracing::info!("Z3 is available — skipping unavailable-path test");
-            return;
-        }
+        // Z3 is always available (native Rust z3 crate), so this test
+        // verifies the Z3 path produces a valid result (not Warn for unavailability).
+        // We just verify it doesn't return Warn with "Z3 not available" text.
         let result = check_inequality("x^2 >= 0", Some(5000));
-        assert_eq!(
+        // Should return Pass (x^2 >= 0 is always true), not Warn.
+        assert_ne!(
             result.status,
             VerificationStatus::Warn,
-            "expected Warn when Z3 unavailable, got: {:?}",
+            "Z3 is always available natively — should not return Warn, got: {:?}",
             result.status
         );
         assert!(
-            result.details.contains("Z3 not available"),
-            "details should mention Z3 unavailability, got: {}",
-            result.details
-        );
-        assert!(
-            result.details.contains("z3-solver"),
-            "details should mention installing z3-solver, got: {}",
+            !result.details.contains("Z3 not available"),
+            "Z3 is always available natively — details should not mention unavailability, got: {}",
             result.details
         );
         assert_eq!(result.check_name, "math_prove_inequality");

@@ -99,6 +99,7 @@ tracing-appender = "0.2"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tungstenite = "0.24"
 which = "8"
+z3 = { version = "0.20", features = ["bundled"] }
 
 [profile.dev]
 split-debuginfo = "unpacked"  # macOS 链接加速：DWARF 不进链接阶段

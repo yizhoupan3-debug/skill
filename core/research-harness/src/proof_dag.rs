@@ -716,7 +716,7 @@ fn attempt_z3_verify(bp: &Blueprint, node_id: &str) -> (VerificationStatus, Stri
         || claim.contains("Or(")
         || claim.contains("Not(");
 
-    if is_logical || crate::verification::python_bridge::z3_available() {
+    if is_logical || crate::verification::z3_bridge::z3_available() {
         let prove_result = crate::verification::z3_bridge::prove_formula(&claim);
         match prove_result.status {
             VerificationStatus::Pass => {

@@ -236,16 +236,14 @@ fn theorem_name_pattern() -> &'static regex::Regex {
 // Enhanced backend capability checks
 //
 // IMPORTANT: Do NOT add `check_z3_available()` / `check_sympy_available()`
-// proxy functions here — call `crate::verification::python_bridge::*`
-// directly at the call site. These proxies previously lived here but
-// violated the module boundary (lean_bridge → python_bridge bridge for
-// non-Lean concerns). See mcp_tools or python_bridge for the canonical
-// backend status probes.
+// proxy functions here — call `crate::verification::z3_bridge::*` or
+// `crate::verification::python_bridge::*` directly at the call site.
+// See mcp_tools or z3_bridge for the canonical backend status probes.
 // ===========================================================================
 
 /// Get detailed capability info for the Z3 backend.
 pub fn check_z3_capability() -> BackendCapability {
-    let available = crate::verification::python_bridge::z3_available();
+    let available = crate::verification::z3_bridge::z3_available();
     if !available {
         return BackendCapability {
             available: false,
@@ -268,13 +266,14 @@ pub fn check_z3_capability() -> BackendCapability {
     }
 }
 
-/// Check whether Z3 supports non-linear arithmetic (Z3 ≥4.x does).
+/// Check whether Z3 supports non-linear arithmetic (Z3 >=4.x does).
 pub fn z3_supports_nonlinear() -> bool {
-    if !crate::verification::python_bridge::z3_available() {
+    if !crate::verification::z3_bridge::z3_available() {
         return false;
     }
-    let params = serde_json::json!({"expression": "x * x == 4", "timeout_ms": 5000});
-    crate::verification::python_bridge::call_math_backend("z3_prove", params).is_ok()
+    let result = crate::verification::z3_bridge::prove_formula("x * x == 4");
+    result.status == crate::types::VerificationStatus::Pass
+        || result.status == crate::types::VerificationStatus::Fail
 }
 
 /// Get detailed capability info for the SymPy backend.
@@ -920,7 +919,7 @@ pub fn try_prove_with_all_backends(statement: &str) -> VerificationResult {
     let trimmed = statement.trim().to_string();
 
     // ── Step 1: Z3 prove ──
-    if crate::verification::python_bridge::z3_available() {
+    if crate::verification::z3_bridge::z3_available() {
         // Replace `=` with `==` for Z3
         let z3_expr = trimmed.replace('=', "==").replace("====", "==");
         let z3_result = crate::verification::z3_bridge::prove_formula(&z3_expr);
@@ -971,7 +970,7 @@ pub fn try_prove_with_all_backends(statement: &str) -> VerificationResult {
     );
 
     // ── All backends failed: return failure summary ──
-    let z3_status = if crate::verification::python_bridge::z3_available() {
+    let z3_status = if crate::verification::z3_bridge::z3_available() {
         "tried"
     } else {
         "unavailable"

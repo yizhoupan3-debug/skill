@@ -40,6 +40,7 @@ fs2.workspace = true
 libc.workspace = true
 mcp-stdio-common = { path = "../../rust_tools/mcp-stdio-common" }
 minilp.workspace = true
+z3.workspace = true
 
 # CLI (optional)
 clap = { workspace = true, optional = true }
