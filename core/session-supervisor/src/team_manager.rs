@@ -429,91 +429,89 @@ pub fn read_my_messages(
     team_id: &str,
     agent_id: &str,
 ) -> Result<Vec<InterAgentMessage>, FrameworkError> {
-    // Validate team exists first (under read lock)
     let safe_team = sanitize_path_segment(team_id)?;
     let safe_agent = sanitize_segment_strict(agent_id)?;
 
+    // Validate team AND read messages under the same lock to prevent TOCTOU
+    // (team could be deleted between validation and message read).
     with_team_registry_ro(repo_root, |registry| {
         if registry.teams.iter().all(|t| t.team_id != team_id) {
             return Err(FrameworkError::not_found(format!(
                 "team not found: {team_id}"
             )));
         }
-        Ok(())
-    })?;
 
-    let inbox = team_messages_dir_safe(repo_root, &safe_team).join(&safe_agent);
-    let broadcast_dir = team_messages_dir_safe(repo_root, &safe_team).join("broadcast");
+        let inbox = team_messages_dir_safe(repo_root, &safe_team).join(&safe_agent);
+        let broadcast_dir = team_messages_dir_safe(repo_root, &safe_team).join("broadcast");
 
-    let mut messages = Vec::new();
+        let mut messages = Vec::new();
 
-    // Read agent's own inbox
-    if inbox.is_dir() {
-        let mut entries: Vec<_> = fs::read_dir(&inbox)?
-            .filter_map(|e| e.ok())
-            .filter(|e| e.path().extension().is_some_and(|ext| ext == "json"))
-            .collect();
-        entries.sort_by_key(|e| e.path().file_name().map(|n| n.to_os_string()));
+        // Read agent's own inbox
+        if inbox.is_dir() {
+            let mut entries: Vec<_> = fs::read_dir(&inbox)?
+                .filter_map(|e| e.ok())
+                .filter(|e| e.path().extension().is_some_and(|ext| ext == "json"))
+                .collect();
+            entries.sort_by_key(|e| e.path().file_name().map(|n| n.to_os_string()));
 
-        for entry in &entries {
-            let raw = fs::read_to_string(entry.path())?;
-            if let Ok(mut msg) = serde_json::from_str::<InterAgentMessage>(&raw) {
-                // Mark as read (best-effort — log on failure)
-                if !msg.read {
-                    msg.read = true;
-                    if let Ok(updated) = serde_json::to_string_pretty(&msg) {
-                        if let Err(e) = core_state_utils::atomic_write::write_atomic_text(
-                            &entry.path(),
-                            &updated,
-                        ) {
-                            tracing::warn!(
-                                path = %entry.path().display(),
-                                error = %e,
-                                "failed to mark message as read",
-                            );
+            for entry in &entries {
+                let raw = fs::read_to_string(entry.path())?;
+                if let Ok(mut msg) = serde_json::from_str::<InterAgentMessage>(&raw) {
+                    if !msg.read {
+                        msg.read = true;
+                        if let Ok(updated) = serde_json::to_string_pretty(&msg) {
+                            if let Err(e) = core_state_utils::atomic_write::write_atomic_text(
+                                &entry.path(),
+                                &updated,
+                            ) {
+                                tracing::warn!(
+                                    path = %entry.path().display(),
+                                    error = %e,
+                                    "failed to mark message as read",
+                                );
+                            }
                         }
                     }
+                    messages.push(msg);
                 }
-                messages.push(msg);
             }
         }
-    }
 
-    // Read broadcast messages
-    if broadcast_dir.is_dir() && broadcast_dir != inbox {
-        let entries: Vec<_> = fs::read_dir(&broadcast_dir)?
-            .filter_map(|e| e.ok())
-            .filter(|e| e.path().extension().is_some_and(|ext| ext == "json"))
-            .collect();
+        // Read broadcast messages
+        if broadcast_dir.is_dir() && broadcast_dir != inbox {
+            let entries: Vec<_> = fs::read_dir(&broadcast_dir)?
+                .filter_map(|e| e.ok())
+                .filter(|e| e.path().extension().is_some_and(|ext| ext == "json"))
+                .collect();
 
-        for entry in entries {
-            let raw = fs::read_to_string(entry.path())?;
-            if let Ok(mut msg) = serde_json::from_str::<InterAgentMessage>(&raw)
-                && !messages.iter().any(|m| m.message_id == msg.message_id)
-            {
-                // Mark broadcast as read too (best-effort — log on failure)
-                if !msg.read {
-                    msg.read = true;
-                    if let Ok(updated) = serde_json::to_string_pretty(&msg) {
-                        if let Err(e) = core_state_utils::atomic_write::write_atomic_text(
-                            &entry.path(),
-                            &updated,
-                        ) {
-                            tracing::warn!(
-                                path = %entry.path().display(),
-                                error = %e,
-                                "failed to mark broadcast as read",
-                            );
+            for entry in entries {
+                let raw = fs::read_to_string(entry.path())?;
+                if let Ok(mut msg) = serde_json::from_str::<InterAgentMessage>(&raw)
+                    && !messages.iter().any(|m| m.message_id == msg.message_id)
+                {
+                    if !msg.read {
+                        msg.read = true;
+                        if let Ok(updated) = serde_json::to_string_pretty(&msg) {
+                            if let Err(e) = core_state_utils::atomic_write::write_atomic_text(
+                                &entry.path(),
+                                &updated,
+                            ) {
+                                tracing::warn!(
+                                    path = %entry.path().display(),
+                                    error = %e,
+                                    "failed to mark broadcast as read",
+                                );
+                            }
                         }
                     }
+                    messages.push(msg);
                 }
-                messages.push(msg);
             }
         }
-    }
 
-    messages.sort_by(|a, b| a.sent_at.cmp(&b.sent_at));
-    Ok(messages)
+        messages.sort_by(|a, b| a.sent_at.cmp(&b.sent_at));
+        Ok(messages)
+    })
 }
 
 /// Get agent health (running member IDs) for a team.

@@ -300,7 +300,12 @@ pub fn handle_session_supervisor_operation(payload: Value) -> Result<Value, Fram
                     tracing::warn!("agent_register missing tool_type, defaulting to 'agent'");
                     "agent".to_string()
                 });
-            let cwd = std::env::current_dir()?;
+            // Prefer explicit repo_root from payload; fall back to cwd for backward compat.
+            let cwd = payload
+                .get("repo_root")
+                .and_then(|v| v.as_str())
+                .map(std::path::PathBuf::from)
+                .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
             process::register_agent_alive(&cwd, &agent_id, &host_id, &tool_type, &now)?;
             Ok(json!({
                 "operation": operation,
@@ -322,7 +327,11 @@ pub fn handle_session_supervisor_operation(payload: Value) -> Result<Value, Fram
                 .and_then(|v| v.as_str())
                 .filter(|s| !s.is_empty())
                 .map(String::from);
-            let cwd = std::env::current_dir()?;
+            let cwd = payload
+                .get("repo_root")
+                .and_then(|v| v.as_str())
+                .map(std::path::PathBuf::from)
+                .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
             process::unregister_agent(&cwd, &agent_id, &terminal_status, error.as_deref(), &now)?;
             Ok(json!({
                 "operation": operation,

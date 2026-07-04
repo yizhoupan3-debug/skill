@@ -157,8 +157,13 @@ pub fn run_loop(ctx: &RunContext) -> Result<LoopCloseoutAggregate, LoopError> {
                     .unwrap_or_default();
                 let lock_ms = lock_start.elapsed().as_millis() as u64;
                 let report_text = report::render_loop_report(&state, &agg, &findings, Some(lock_ms / 1000));
-                let report_path =
-                    report::write_loop_report(ctx.repo_root, loop_id, &run_id, &report_text).ok();
+                let report_path = match report::write_loop_report(ctx.repo_root, loop_id, &run_id, &report_text) {
+                    Ok(p) => Some(p),
+                    Err(e) => {
+                        tracing::warn!("failed to write loop report: {e}");
+                        None
+                    }
+                };
                 if let Some(ref mut r) = state.current_run {
                     r.report_path = report_path;
                     r.closeout_aggregate = Some(agg.clone());
@@ -444,13 +449,33 @@ fn run_loop_inner(
                                 "{run_id}-{}.json",
                                 action.action_id
                             ));
-                            let action_out = std::fs::read_to_string(&closeout_file)
-                                .ok()
-                                .and_then(|raw| serde_json::from_str(&raw).ok())
-                                .unwrap_or_else(|| serde_json::json!({
-                                    "action_id": &action.action_id,
-                                    "status": "committed"
-                                }));
+                            let action_out = match std::fs::read_to_string(&closeout_file) {
+                                Ok(raw) => match serde_json::from_str(&raw) {
+                                    Ok(v) => v,
+                                    Err(e) => {
+                                        tracing::warn!(
+                                            action_id = %action.action_id,
+                                            error = %e,
+                                            "closeout record parse failed, using fallback"
+                                        );
+                                        serde_json::json!({
+                                            "action_id": &action.action_id,
+                                            "status": "committed"
+                                        })
+                                    }
+                                },
+                                Err(e) => {
+                                    tracing::warn!(
+                                        action_id = %action.action_id,
+                                        error = %e,
+                                        "closeout record file not readable, using fallback"
+                                    );
+                                    serde_json::json!({
+                                        "action_id": &action.action_id,
+                                        "status": "committed"
+                                    })
+                                }
+                            };
                             action_outputs.insert(action.action_id.clone(), action_out);
                             // ── Checkpoint: persist state after committed action ──
                             // This enables crash recovery: if the process dies between

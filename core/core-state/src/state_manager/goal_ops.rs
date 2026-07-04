@@ -851,10 +851,17 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
                     write_atomic_json(&goal_path, &pending)?;
                     let tx = crate::task_ledger::LedgerTransaction::new("goal_state", pending.clone())
                         .with_schema_version(1);
-                    crate::task_ledger::append_transaction_assuming_l1_held(&repo_root, &task_id, tx)
-                        .map_err(|e| {
-                            FrameworkError::validation(format!("TASK_LEDGER append failed: {e}"))
-                        })?;
+                    if let Err(e) = crate::task_ledger::append_transaction_assuming_l1_held(&repo_root, &task_id, tx) {
+                        tracing::error!(
+                            task_id = %task_id,
+                            error = %e,
+                            "CRITICAL: GOAL_STATE written but TASK_LEDGER append failed (max_iterations)"
+                        );
+                        if let Some(obj) = pending.as_object_mut() {
+                            obj.insert("_dirty".to_string(), json!(true));
+                        }
+                        let _ = write_atomic_json(&goal_path, &pending);
+                    }
                     return Ok(json!({
                         "ok": true,
                         "operation": "max_iterations_reached",
@@ -910,17 +917,22 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
                             write_atomic_json(&goal_path, &qg_state)?;
                             let tx = crate::task_ledger::LedgerTransaction::new(
                                 "goal_iteration_blocked",
-                                qg_state,
+                                qg_state.clone(),
                             )
                             .with_schema_version(1);
-                            crate::task_ledger::append_transaction_assuming_l1_held(
+                            if let Err(e) = crate::task_ledger::append_transaction_assuming_l1_held(
                                 &repo_root, &task_id, tx,
-                            )
-                            .map_err(|e| {
-                                FrameworkError::validation(format!(
-                                    "TASK_LEDGER append failed: {e}"
-                                ))
-                            })?;
+                            ) {
+                                tracing::error!(
+                                    task_id = %task_id,
+                                    error = %e,
+                                    "CRITICAL: GOAL_STATE written but TASK_LEDGER append failed (QG blocked)"
+                                );
+                                if let Some(obj) = qg_state.as_object_mut() {
+                                    obj.insert("_dirty".to_string(), json!(true));
+                                }
+                                let _ = write_atomic_json(&goal_path, &qg_state);
+                            }
                             return Ok(json!({
                                 "ok": true,
                                 "operation": "quality_gate_blocked",
@@ -955,17 +967,22 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
                         write_atomic_json(&goal_path, &degraded_state)?;
                         let tx = crate::task_ledger::LedgerTransaction::new(
                             "goal_iteration_blocked",
-                            degraded_state,
+                            degraded_state.clone(),
                         )
                         .with_schema_version(1);
-                        crate::task_ledger::append_transaction_assuming_l1_held(
+                        if let Err(e) = crate::task_ledger::append_transaction_assuming_l1_held(
                             &repo_root, &task_id, tx,
-                        )
-                        .map_err(|e| {
-                            FrameworkError::validation(format!(
-                                "TASK_LEDGER append failed: {e}"
-                            ))
-                        })?;
+                        ) {
+                            tracing::error!(
+                                task_id = %task_id,
+                                error = %e,
+                                "CRITICAL: GOAL_STATE written but TASK_LEDGER append failed (QG hook error)"
+                            );
+                            if let Some(obj) = degraded_state.as_object_mut() {
+                                obj.insert("_dirty".to_string(), json!(true));
+                            }
+                            let _ = write_atomic_json(&goal_path, &degraded_state);
+                        }
                         return Ok(json!({
                             "ok": true,
                             "operation": "quality_gate_blocked",
@@ -1018,10 +1035,21 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
             write_atomic_json(&goal_path, &loop_state)?;
             let tx = crate::task_ledger::LedgerTransaction::new("goal_iteration_completed", loop_state.clone())
                 .with_schema_version(1);
-            crate::task_ledger::append_transaction_assuming_l1_held(&repo_root, &task_id, tx)
-                .map_err(|e| {
-                    FrameworkError::validation(format!("TASK_LEDGER append failed: {e}"))
-                })?;
+            if let Err(e) = crate::task_ledger::append_transaction_assuming_l1_held(&repo_root, &task_id, tx) {
+                // Ledger append failed after GOAL_STATE was written → mark dirty for recovery.
+                // hydrate_task_state_hybrid will detect the dirty flag and warn.
+                tracing::error!(
+                    task_id = %task_id,
+                    error = %e,
+                    "CRITICAL: GOAL_STATE written but TASK_LEDGER append failed — state may be inconsistent. \
+                     Setting dirty flag for next hydrate cycle."
+                );
+                if let Some(obj) = loop_state.as_object_mut() {
+                    obj.insert("_dirty".to_string(), json!(true));
+                    obj.insert("_dirty_reason".to_string(), json!(format!("ledger append failed: {e}")));
+                }
+                let _ = write_atomic_json(&goal_path, &loop_state);
+            }
             Ok(json!({
                 "ok": true,
                 "operation": "iteration_completed",
@@ -1069,10 +1097,17 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
             write_atomic_json(&path, &state)?;
             let tx = crate::task_ledger::LedgerTransaction::new("goal_state", state.clone())
                 .with_schema_version(1);
-            crate::task_ledger::append_transaction_assuming_l1_held(&repo_root, &task_id, tx)
-                .map_err(|e| {
-                    FrameworkError::validation(format!("TASK_LEDGER append failed: {e}"))
-                })?;
+            if let Err(e) = crate::task_ledger::append_transaction_assuming_l1_held(&repo_root, &task_id, tx) {
+                tracing::error!(
+                    task_id = %task_id,
+                    error = %e,
+                    "CRITICAL: GOAL_STATE written but TASK_LEDGER append failed (retry)"
+                );
+                if let Some(obj) = state.as_object_mut() {
+                    obj.insert("_dirty".to_string(), json!(true));
+                }
+                let _ = write_atomic_json(&path, &state);
+            }
             let goal_label = state
                 .get("goal")
                 .and_then(Value::as_str)

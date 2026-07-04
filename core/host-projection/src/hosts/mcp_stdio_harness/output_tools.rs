@@ -10,6 +10,7 @@ use core_state::chain_output::{self as chain_output_mod};
 use core_state::task_output::{
     self as task_output_mod, TaskOutput, OutputData, ConsumedInput,
 };
+use core_state_utils::path_guard::validate_task_id_component;
 use serde_json::{Value, json};
 use std::path::Path;
 
@@ -36,6 +37,7 @@ pub(crate) fn tool_task_output_write(
             "task_output_write: task_id must not be empty".to_string(),
         ));
     }
+    validate_task_id_component(task_id)?;
 
     let status_str = arguments
         .get("status")
@@ -137,6 +139,7 @@ pub(crate) fn tool_task_output_read(
             "task_output_read: task_id must not be empty".to_string(),
         ));
     }
+    validate_task_id_component(task_id)?;
 
     let output = task_output_mod::read_task_output(repo_root, task_id)?;
     match output {
@@ -170,6 +173,7 @@ pub(crate) fn tool_task_output_init(
             "task_output_init: task_id must not be empty".to_string(),
         ));
     }
+    validate_task_id_component(task_id)?;
 
     let title = arguments
         .get("title")
@@ -215,6 +219,7 @@ pub(crate) fn tool_task_output_pull(
             "task_output_pull: current_task_id must not be empty".to_string(),
         ));
     }
+    validate_task_id_component(current_task_id)?;
 
     let source_task_id = arguments
         .get("source_task_id")
@@ -230,6 +235,7 @@ pub(crate) fn tool_task_output_pull(
             "task_output_pull: source_task_id must not be empty".to_string(),
         ));
     }
+    validate_task_id_component(source_task_id)?;
 
     let fields: Vec<String> = arguments
         .get("fields")
@@ -326,6 +332,7 @@ pub(crate) fn tool_task_output_validate(
             "task_output_validate: task_id must not be empty".to_string(),
         ));
     }
+    validate_task_id_component(task_id)?;
 
     let mut issues: Vec<String> = Vec::new();
 

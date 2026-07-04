@@ -22,6 +22,7 @@ pub(crate) fn goal_state_manage_dispatch(
         None => core_state::state_manager::read_primary_task_id(repo_root)
             .ok_or_else(|| FrameworkError::validation("No active task_id in TASK_POINTERS.json (start a task first or provide task_id explicitly)"))?,
     };
+    core_state_utils::path_guard::validate_task_id_component(&task_id)?;
 
     let repo_root_str = repo_root.to_string_lossy().to_string();
     let mut payload = json!({

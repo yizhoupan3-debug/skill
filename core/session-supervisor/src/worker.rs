@@ -316,6 +316,20 @@ pub fn reap_stale_workers(
         ) {
             continue;
         }
+        // Running workers with a valid PID: trust the PID check, don't apply age-based reaping.
+        // A running worker may legitimately take minutes (code review, long tests).
+        // Only reap if the PID is dead AND reconcile_process_state hasn't caught it yet.
+        if worker.status == "running" {
+            if let Some(pid) = worker.pid {
+                if process_is_alive(pid) {
+                    continue; // PID alive → worker is actively running, skip
+                }
+                // PID dead but status still "running" → reconcile will catch it on next list.
+                // Don't force-reap here; let reconcile_process_state handle the transition.
+                continue;
+            }
+            // No PID in running status → unusual, fall through to age check
+        }
         if let Some(pid) = worker.pid
             && process_is_alive(pid)
         {

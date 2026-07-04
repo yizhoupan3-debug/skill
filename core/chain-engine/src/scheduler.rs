@@ -269,12 +269,21 @@ fn handle_expired_backoffs(root: &mut ChainDagRoot) {
 
 /// Build a summary of all tasks that are ready to execute (for diagnostic output).
 /// Unlike `advance_dag`, this is a pure read — it doesn't modify any status.
+/// Evaluates both dependency and condition gates (Status conditions use DAG state;
+/// OutputField/Expression conditions use empty outputs map → treated as unsatisfied).
 pub fn compute_ready_tasks(root: &ChainDagRoot) -> Vec<&DagTaskEntry> {
+    let status_map: HashMap<&str, &TaskStatus> = root
+        .tasks
+        .iter()
+        .map(|t| (t.task_id.as_str(), &t.status))
+        .collect();
+    let empty_outputs = HashMap::new();
     root.tasks
         .iter()
         .filter(|t| {
             (t.status == TaskStatus::Pending || t.status == TaskStatus::RetryScheduled)
                 && dependencies_met(t, &root.tasks)
+                && condition_met(t, &status_map, &empty_outputs)
         })
         .collect()
 }
