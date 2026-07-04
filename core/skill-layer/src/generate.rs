@@ -55,6 +55,7 @@ pub const FRONTMATTER_KEYS: &[(&str, &str)] = &[
     ("kind", "kind"),
     ("scene", "scene"),
     ("sub_scene", "sub_scene"),
+    ("when_to_use", "when_to_use"),
     ("do_not_use", "do_not_use"),
 ];
 

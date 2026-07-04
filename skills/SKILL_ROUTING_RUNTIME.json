@@ -2740,6 +2740,86 @@
       null,
       "general",
       null
+    ],
+    [
+      "gitx",
+      "L2",
+      "owner",
+      "none",
+      "P1",
+      "Git 自主收口：review-fix-tidy-commit-branch-merge 全流程，三车道自动匹配",
+      "n/a",
+      [
+        "/gitx",
+        "gitx",
+        "提交代码",
+        "代码提交",
+        "commit",
+        "git commit",
+        "合并",
+        "merge",
+        "提交",
+        "分支合并",
+        "worktree 合并",
+        "清理分支",
+        "收拢分支",
+        "收口",
+        "帮我提交",
+        "提交一下",
+        "提交改动",
+        "代码收尾",
+        "git收尾",
+        "git 收尾",
+        "整理提交",
+        "代码整理",
+        "close out",
+        "wrap up",
+        "tidy up",
+        "提交吧",
+        "提交了",
+        "提交上去",
+        "推上去"
+      ],
+      "local",
+      "skills/gitx/SKILL.md",
+      null,
+      "skill",
+      [],
+      "Git 自主收口——review-fix-tidy-commit-branch-merge 全流程",
+      [
+        "git",
+        "commit",
+        "merge",
+        "worktree",
+        "closeout"
+      ],
+      "用户要求提交代码、收口改动、合并分支、清理 worktree、整理 git 历史时使用。关键词：提交、commit、收口、merge、rebase、squash、清理分支、worktree。自然语言变体：「帮我提交」「提交一下」「收口吧」「代码整理」「close out」。",
+      "不用于查看 git log、git diff 只读浏览、创建新分支（非合并）、git blame 调查。不用于普通代码 review（用 code-review-deep）。",
+      {
+        "platforms": [
+          "supported"
+        ],
+        "tags": [
+          "git",
+          "commit",
+          "merge",
+          "worktree",
+          "closeout"
+        ],
+        "version": "2.0.0"
+      },
+      "medium",
+      [
+        "Bash",
+        "Read",
+        "Write",
+        "Edit"
+      ],
+      null,
+      "conditional",
+      null,
+      "general",
+      null
     ]
   ],
   "_comment": "auto-generated — update via migration (2026-07-01). research skill refactoring applied."

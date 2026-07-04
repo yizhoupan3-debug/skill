@@ -164,6 +164,8 @@ struct RawFrontmatter {
     kind: Option<String>,
     scene: Option<String>,
     sub_scene: Option<String>,
+    when_to_use: Option<String>,
+    do_not_use: Option<String>,
 }
 
 fn parse_enum<T: std::str::FromStr + fmt::Debug>(
@@ -257,6 +259,8 @@ pub fn parse_frontmatter(
         },
         scene: raw.scene,
         sub_scene: raw.sub_scene,
+        when_to_use: raw.when_to_use,
+        do_not_use: raw.do_not_use,
     })
 }
 

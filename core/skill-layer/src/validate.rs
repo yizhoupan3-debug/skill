@@ -385,8 +385,8 @@ fn check_frontmatter_vs_registry(
             }
 
             match (reg_val, fm_val) {
-                // Both non-null and different → value mismatch
-                (Some(reg), Some(fm_v)) if !reg.is_null() && reg != &fm_v => {
+                // Both non-null and different → value mismatch (trim whitespace for string fields)
+                (Some(reg), Some(fm_v)) if !reg.is_null() && !values_equal(reg, &fm_v) => {
                     errors.push(format!(
                         "{slug}: registry `{registry_col}` ≠ frontmatter `{yaml_key}` — registry={reg}, frontmatter={fm_v}",
                     ));
@@ -459,6 +459,8 @@ fn frontmatter_field_to_value(
         "kind" => fm.kind.map(|k| Value::String(k.as_str().to_string())),
         "scene" => fm.scene.as_ref().map(|s| Value::String(s.clone())),
         "sub_scene" => fm.sub_scene.as_ref().map(|s| Value::String(s.clone())),
+        "when_to_use" => fm.when_to_use.as_ref().map(|s| Value::String(s.clone())),
+        "do_not_use" => fm.do_not_use.as_ref().map(|s| Value::String(s.clone())),
         _ => None,
     }
 }
@@ -469,4 +471,21 @@ fn is_empty_value(v: &Value) -> bool {
         || v.as_str().map(|s| s.trim().is_empty()).unwrap_or(false)
         || v.as_object().map(|o| o.is_empty()).unwrap_or(false)
         || v.as_array().map(|a| a.is_empty()).unwrap_or(false)
+}
+
+/// Compare two JSON values, treating string values as equal when whitespace-normalized.
+/// Handles YAML block scalar (`|`) internal newlines vs registry single-line strings.
+fn values_equal(a: &Value, b: &Value) -> bool {
+    if a == b {
+        return true;
+    }
+    match (a.as_str(), b.as_str()) {
+        (Some(sa), Some(sb)) => normalize_ws(sa) == normalize_ws(sb),
+        _ => false,
+    }
+}
+
+/// Collapse all whitespace sequences to single space, trim, for string comparison.
+fn normalize_ws(s: &str) -> String {
+    s.split_whitespace().collect::<Vec<_>>().join(" ")
 }

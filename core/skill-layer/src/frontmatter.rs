@@ -175,6 +175,10 @@ pub struct SkillFrontmatter {
     /// Sub-scene identifier (Wave 6) for granular checker affinity filtering.
     #[serde(default)]
     pub sub_scene: Option<String>,
+    #[serde(default)]
+    pub when_to_use: Option<String>,
+    #[serde(default)]
+    pub do_not_use: Option<String>,
 }
 
 impl SkillFrontmatter {
