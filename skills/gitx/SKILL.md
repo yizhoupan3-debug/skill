@@ -88,7 +88,6 @@ do_not_use: '不用于查看 git log、git diff 只读浏览、创建新分支�
 ```bash
 git status --short --branch
 git worktree list --porcelain
-git stash list
 git branch --merged main
 git diff --stat
 git diff --check
@@ -96,7 +95,6 @@ git diff --check
 
 **全自动化处理（不暂停）：**
 - **dirty 在 `main` 上** → 正常在 main 操作，不创建分支
-- **有 stash** → 自动 pop/apply（冲突时 stash@{0} 保存后重试）
 - **worktree 头部不一致** → 记录状态，继续当前 worktree
 - **已 merged 分支** → 标记待清理，§8 自动执行
 - **untracked 文件** → 按文件类型和 .gitignore 自动 `git add`，生成物/缓存自动跳过
@@ -211,10 +209,10 @@ git worktree list --porcelain
   - `rebase` / `commit --amend` 改写历史
   - `git merge` 遇到冲突或分叉历史
   - 发现安全敏感信息（密钥、凭证）
+- gitx **不创建 stash**，所有改动直接在工作区操作
 - gitx **不创建 topic 分支**，所有改动直接在 main 上操作
 - 不使用破坏性命令（`git clean -fd` / `git reset --hard` 等）
 - 远端分支只读不删
-- stash pop 失败时自动 stash@{0} 保存后重试，不暂停
 
 ## Usage
 
