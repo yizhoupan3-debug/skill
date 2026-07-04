@@ -175,6 +175,13 @@ pub fn transition_phase(state: &mut LoopRunState, new_phase: LoopPhase) {
                 "LoopPhase: invalid transition detected (allowed but unusual)"
             );
         }
+    } else {
+        // Unknown current phase — this indicates state corruption.
+        tracing::warn!(
+            from = %current_str,
+            to = %new_phase.as_str(),
+            "LoopPhase: unknown current phase — allowing transition but flagging for investigation"
+        );
     }
     state.phase = new_phase.as_str().to_string();
     state.last_heartbeat = now_iso();
@@ -215,12 +222,12 @@ pub fn transition_phase_strict(state: &mut LoopRunState, new_phase: LoopPhase) -
             )));
         }
     } else {
-        // Unknown phase string — log and allow
-        tracing::warn!(
-            from = %current_str,
-            to = %new_phase.as_str(),
-            "LoopPhase: unknown current phase — allowing transition"
-        );
+        // Unknown phase string — reject in strict mode to prevent corrupted state propagation.
+        return Err(LoopError::PhaseTransition(format!(
+            "unknown current phase '{}' — cannot transition to {}",
+            current_str,
+            new_phase.as_str(),
+        )));
     }
 
     state.phase = new_phase.as_str().to_string();

@@ -1154,6 +1154,12 @@
         "crate": "runtime-core"
       },
       {
+        "scene": "general",
+        "checker_type": "GoalContractChecker",
+        "checker_module": "checkers::goal_contract_checker",
+        "crate": "runtime-core"
+      },
+      {
         "scene": "research",
         "checker_type": "AdversarialChecker",
         "checker_module": "checkers::adversarial_checker",

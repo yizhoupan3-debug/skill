@@ -16,6 +16,14 @@ pub(crate) fn goal_state_manage_dispatch(
         .and_then(Value::as_str)
         .ok_or_else(|| FrameworkError::validation("Missing required argument: operation"))?;
 
+    // Diagnostic: log repo_root and operation for MCP persistence debugging
+    tracing::info!(
+        operation = operation,
+        repo_root = %repo_root.display(),
+        artifacts_dir_exists = repo_root.join("artifacts/current").is_dir(),
+        "goal_state_manage_dispatch entry"
+    );
+
     // Auto-resolve task_id from TASK_POINTERS.json
     let task_id = match arguments.get("task_id").and_then(Value::as_str).filter(|s| !s.trim().is_empty()) {
         Some(tid) => tid.to_string(),
@@ -186,6 +194,20 @@ pub(crate) fn goal_state_manage_dispatch(
     }
 
     let result = core_state::state_manager::framework_goal_drive(payload)?;
+
+    // Diagnostic: verify file persistence after drive
+    if operation == "start" {
+        if let Some(task_id_val) = result.get("task_id").and_then(Value::as_str) {
+            let goal_path = repo_root.join("artifacts/current").join(task_id_val).join("GOAL_STATE.json");
+            tracing::info!(
+                task_id = task_id_val,
+                goal_path = %goal_path.display(),
+                file_exists = goal_path.is_file(),
+                "goal_state_manage_dispatch post-start: file persistence check"
+            );
+        }
+    }
+
     Ok(serde_json::to_string_pretty(&result).map_err(|e| e.to_string())?)
 }
 

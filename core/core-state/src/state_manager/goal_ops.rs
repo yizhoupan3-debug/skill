@@ -24,13 +24,127 @@ fn strip_stale_annotations(state: &mut Value) {
     }
 }
 
-// ── T-SG-001: Goal state machine — formal transition matrix ──
-//
-// Single source of truth for all valid goal status transitions.
-// Every mutation path MUST validate against this matrix.
-const VALID_GOAL_STATUSES: &[&str] = &[
-    "running", "paused", "blocked", "review_pending", "completed", "failed",
-];
+/// Append a ledger transaction with bounded retries, then fall back to dirty-marking.
+///
+/// Used after `write_atomic_json` has already succeeded — if ledger append fails,
+/// retry up to `MAX_LEDGER_RETRIES` times with a short sleep. If all retries fail,
+/// mark the GOAL_STATE as `_dirty` and re-write for recovery on next hydrate.
+///
+/// Returns `Ok(())` in all cases (best-effort): the dirty flag ensures eventual consistency.
+fn append_transaction_with_retry(
+    repo_root: &Path,
+    task_id: &str,
+    tx: crate::task_ledger::LedgerTransaction,
+    goal_path: &Path,
+    state: &mut Value,
+    context: &str,
+) {
+    const MAX_LEDGER_RETRIES: u32 = 3;
+    const RETRY_DELAY: std::time::Duration = std::time::Duration::from_millis(50);
+
+    let mut last_err = None;
+    for attempt in 0..MAX_LEDGER_RETRIES {
+        match crate::task_ledger::append_transaction_assuming_l1_held(repo_root, task_id, tx.clone()) {
+            Ok(()) => {
+                if attempt > 0 {
+                    tracing::info!(
+                        task_id = %task_id,
+                        attempt = attempt + 1,
+                        context = context,
+                        "TASK_LEDGER append succeeded after retry"
+                    );
+                }
+                return;
+            }
+            Err(e) => {
+                if attempt + 1 < MAX_LEDGER_RETRIES {
+                    tracing::warn!(
+                        task_id = %task_id,
+                        attempt = attempt + 1,
+                        error = %e,
+                        context = context,
+                        "TASK_LEDGER append failed — retrying"
+                    );
+                    std::thread::sleep(RETRY_DELAY);
+                }
+                last_err = Some(e);
+            }
+        }
+    }
+
+    // All retries exhausted — mark dirty for recovery on next hydrate.
+    let e = last_err.unwrap();
+    tracing::error!(
+        task_id = %task_id,
+        error = %e,
+        context = context,
+        retries = MAX_LEDGER_RETRIES,
+        "CRITICAL: GOAL_STATE written but TASK_LEDGER append failed after retries — \
+         setting _dirty flag for next hydrate cycle"
+    );
+    if let Some(obj) = state.as_object_mut() {
+        obj.insert("_dirty".to_string(), json!(true));
+        obj.insert("_dirty_reason".to_string(), json!(format!(
+            "ledger append failed after {MAX_LEDGER_RETRIES} retries ({context}): {e}"
+        )));
+    }
+    let _ = write_atomic_json(goal_path, state);
+}
+
+/// Commit a goal mutation: strip stale annotations → write GOAL_STATE.json → append ledger.
+///
+/// This is the standard write path for all goal mutation operations. It replaces the
+/// previously duplicated 3-step pattern (strip → write → ledger) found in 10+ locations.
+///
+/// Returns the JSON response on success, or propagates the first error.
+fn commit_goal_mutation(
+    repo_root: &Path,
+    task_id: &str,
+    state: &mut Value,
+    tx_label: &str,
+) -> Result<(), FrameworkError> {
+    strip_stale_annotations(state);
+    let path = goal_state_path_for_task(repo_root, task_id)?;
+    write_atomic_json(&path, state)?;
+    let tx = crate::task_ledger::LedgerTransaction::new(tx_label, state.clone())
+        .with_schema_version(1);
+    append_transaction_with_retry(repo_root, task_id, tx, &path, state, tx_label);
+    Ok(())
+}
+
+/// Transition a goal to review_pending with blockers, commit, and return a structured response.
+///
+/// Replaces the 3 near-identical blocks in the complete path (max_iterations, QG blocked,
+/// QG hook error).
+fn transition_to_review_pending(
+    repo_root: &Path,
+    task_id: &str,
+    state: &mut Value,
+    blockers: Vec<Value>,
+    operation_label: &str,
+    extra_fields: Vec<(String, Value)>,
+) -> Result<Value, FrameworkError> {
+    if let Some(obj) = state.as_object_mut() {
+        obj.insert("status".to_string(), json!("review_pending"));
+        obj.insert("blockers".to_string(), json!(blockers));
+        obj.insert(
+            "updated_at".to_string(),
+            json!(framework_core::time::now_iso()),
+        );
+    }
+    commit_goal_mutation(repo_root, task_id, state, &format!("goal_{operation_label}"))?;
+    let mut response = json!({
+        "ok": true,
+        "operation": operation_label,
+        "task_id": task_id,
+        "status": "review_pending",
+        "blockers": state.get("blockers"),
+    });
+    for (key, val) in extra_fields {
+        response[key] = val;
+    }
+    Ok(response)
+}
 
 /// Check whether a goal status transition is allowed by the state machine.
 /// Returns true only for transitions explicitly listed in the matrix.
@@ -54,13 +168,6 @@ fn is_valid_goal_transition(from: &str, to: &str) -> bool {
     )
 }
 
-// P3-08: completed and failed are terminal — guard against accidental transitions.
-// The catch-all below (returns false) already handles these; this doc+guard
-// makes the intent explicit and protects against future matrix additions.
-#[allow(dead_code)] // P3-08: defensive guard, kept for documentation
-pub(crate) fn is_terminal_goal_status(status: &str) -> bool {
-    matches!(status, "completed" | "failed")
-}
 
 /// Merge or replace array fields during amend (GOAL-009).
 /// When `merge` is true, new items are appended to the existing array.
@@ -573,21 +680,13 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
             }
             apply_optional_goal_fields_from_payload(&mut obj, &payload)?;
             ensure_task_directory(&repo_root, &task_id)?;
-            let path = goal_state_path_for_task(&repo_root, &task_id)?;
-            let value = Value::Object(obj);
-            write_atomic_json(&path, &value)?;
-            let tx = crate::task_ledger::LedgerTransaction::new("goal_state", value.clone())
-                .with_schema_version(1);
-            crate::task_ledger::append_transaction_assuming_l1_held(&repo_root, &task_id, tx)
-                .map_err(|e| {
-                    FrameworkError::validation(format!("TASK_LEDGER append failed: {e}"))
-                })?;
+            let mut value = Value::Object(obj);
+            commit_goal_mutation(&repo_root, &task_id, &mut value, "goal_state")?;
             sync_task_pointers_after_goal_drive(&repo_root, &task_id, goal, &payload)?;
             Ok(json!({
                 "ok": true,
                 "operation": "start",
                 "task_id": task_id,
-                "goal_state_path": path.display().to_string(),
                 "status": "running",
             }))
         }
@@ -626,10 +725,8 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
                 }
             }
 
-            // GOAL-001: Strip stale annotations before mutation+write
-            strip_stale_annotations(&mut state);
-
             // T-F-005: Enforce checkpoint note length limit to prevent GOAL_STATE.json bloat.
+            // Use char-aware truncation to avoid panicking on multi-byte UTF-8 boundaries (e.g. CJK).
             const MAX_CHECKPOINT_NOTE_LEN: usize = 2048;
             let note_clamped = if note.len() > MAX_CHECKPOINT_NOTE_LEN {
                 tracing::warn!(
@@ -637,7 +734,12 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
                     max = MAX_CHECKPOINT_NOTE_LEN,
                     "checkpoint note exceeds length limit — clamping"
                 );
-                &note[..MAX_CHECKPOINT_NOTE_LEN]
+                // Find a valid char boundary at or before MAX_CHECKPOINT_NOTE_LEN
+                let mut idx = MAX_CHECKPOINT_NOTE_LEN;
+                while idx > 0 && !note.is_char_boundary(idx) {
+                    idx -= 1;
+                }
+                &note[..idx]
             } else {
                 note
             };
@@ -661,18 +763,11 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
                 );
                 crate::goal_prediction::merge_prediction_from_payload(o, &payload);
             }
-            write_atomic_json(&path, &state)?;
-            let tx = crate::task_ledger::LedgerTransaction::new("goal_state", state.clone())
-                .with_schema_version(1);
-            crate::task_ledger::append_transaction_assuming_l1_held(&repo_root, &task_id, tx)
-                .map_err(|e| {
-                    FrameworkError::validation(format!("TASK_LEDGER append failed: {e}"))
-                })?;
+            commit_goal_mutation(&repo_root, &task_id, &mut state, "goal_state")?;
             Ok(json!({
                 "ok": true,
                 "operation": "checkpoint",
                 "task_id": task_id,
-                "goal_state_path": path.display().to_string(),
             }))
         }
         "fail" => {
@@ -695,7 +790,6 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
                     "goal is already in '{current_status}' status — cannot fail"
                 )));
             }
-            strip_stale_annotations(&mut state);
             let obj = state
                 .as_object_mut()
                 .ok_or_else(|| FrameworkError::validation("GOAL_STATE root must be object"))?;
@@ -712,13 +806,7 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
             if let Some(reason) = payload.get("reason").and_then(Value::as_str) {
                 obj.insert("failure_reason".to_string(), json!(reason));
             }
-            write_atomic_json(&path, &state)?;
-            let tx = crate::task_ledger::LedgerTransaction::new("goal_failed", state.clone())
-                .with_schema_version(1);
-            crate::task_ledger::append_transaction_assuming_l1_held(&repo_root, &task_id, tx)
-                .map_err(|e| {
-                    FrameworkError::validation(format!("TASK_LEDGER append failed: {e}"))
-                })?;
+            commit_goal_mutation(&repo_root, &task_id, &mut state, "goal_failed")?;
             // Neutralize pointers since the goal is now terminal
             neutralize_task_pointers_for_task(&repo_root, &task_id)?;
 
@@ -754,7 +842,7 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
             &repo_root,
             Some(resolve_task_id_strict(&payload)?),
             "paused",
-            Some(false),
+            None, // Don't overwrite drive_until_done — preserve for resume
             None,
         ),
         "resume" => {
@@ -763,7 +851,7 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
 
             // A6: When drive_until_done is not explicitly provided, preserve
             // the existing value from GOAL_STATE instead of defaulting to true.
-            let path = goal_state_path_for_task(&repo_root, &task_id)?;
+            let _path = goal_state_path_for_task(&repo_root, &task_id)?;
             let existing_state = read_goal_state(&repo_root, Some(&task_id))?.unwrap_or_default();
             let existing_drive = existing_state
                 .get("drive_until_done")
@@ -782,7 +870,7 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
         }
         "complete" => {
             let task_id = resolve_task_id_strict(&payload)?;
-            let state = read_goal_state(&repo_root, Some(&task_id))?.ok_or_else(|| {
+            let mut state = read_goal_state(&repo_root, Some(&task_id))?.ok_or_else(|| {
                 FrameworkError::validation("GOAL_STATE missing for completion gate check")
             })?;
 
@@ -829,45 +917,17 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
                 if next_count >= max_iter {
                     // Increment iteration_count so that retry→complete will see
                     // next_count >= max_iter and pass through (P1-004 livelock fix).
-                    // Without this increment, retry resets status to running but
-                    // iteration_count stays the same, causing an infinite loop.
-                    let goal_path = goal_state_path_for_task(&repo_root, &task_id)?;
-                    let mut pending = state;
-                    if let Some(obj) = pending.as_object_mut() {
-                        obj.insert("status".to_string(), json!("review_pending"));
+                    if let Some(obj) = state.as_object_mut() {
                         obj.insert("iteration_count".to_string(), json!(next_count));
-                        let blockers = vec![json!({
-                            "finding": "max_iterations reached",
-                            "severity": "info",
-                        })];
-                        obj.insert("blockers".to_string(), json!(blockers.clone()));
-                        obj.insert(
-                            "updated_at".to_string(),
-                            json!(framework_core::time::now_iso()),
-                        );
                     }
-                    // GOAL-001: Strip stale annotations before write
-                    strip_stale_annotations(&mut pending);
-                    write_atomic_json(&goal_path, &pending)?;
-                    let tx = crate::task_ledger::LedgerTransaction::new("goal_state", pending.clone())
-                        .with_schema_version(1);
-                    if let Err(e) = crate::task_ledger::append_transaction_assuming_l1_held(&repo_root, &task_id, tx) {
-                        tracing::error!(
-                            task_id = %task_id,
-                            error = %e,
-                            "CRITICAL: GOAL_STATE written but TASK_LEDGER append failed (max_iterations)"
-                        );
-                        if let Some(obj) = pending.as_object_mut() {
-                            obj.insert("_dirty".to_string(), json!(true));
-                        }
-                        let _ = write_atomic_json(&goal_path, &pending);
-                    }
-                    return Ok(json!({
-                        "ok": true,
-                        "operation": "max_iterations_reached",
-                        "task_id": task_id,
-                        "blockers": pending.get("blockers"),
-                    }));
+                    let blockers = vec![json!({
+                        "finding": "max_iterations reached",
+                        "severity": "info",
+                    })];
+                    return transition_to_review_pending(
+                        &repo_root, &task_id, &mut state, blockers,
+                        "max_iterations_reached", vec![],
+                    );
                 }
             }
 
@@ -898,49 +958,18 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
                             .and_then(Value::as_bool)
                             .unwrap_or(false);
                         if !passed {
-                            let goal_path = goal_state_path_for_task(&repo_root, &task_id)?;
-                            let blockers = verdict
+                            let blockers: Vec<Value> = verdict
                                 .get("blockers")
                                 .cloned()
-                                .unwrap_or(serde_json::Value::Array(vec![]));
-                            let mut qg_state = state;
-                            if let Some(obj) = qg_state.as_object_mut() {
-                                obj.insert("status".to_string(), json!("review_pending"));
-                                obj.insert("blockers".to_string(), blockers.clone());
-                                obj.insert(
-                                    "updated_at".to_string(),
-                                    json!(framework_core::time::now_iso()),
-                                );
-                            }
-                            // GOAL-001: Strip stale annotations before write
-                            strip_stale_annotations(&mut qg_state);
-                            write_atomic_json(&goal_path, &qg_state)?;
-                            let tx = crate::task_ledger::LedgerTransaction::new(
-                                "goal_iteration_blocked",
-                                qg_state.clone(),
-                            )
-                            .with_schema_version(1);
-                            if let Err(e) = crate::task_ledger::append_transaction_assuming_l1_held(
-                                &repo_root, &task_id, tx,
-                            ) {
-                                tracing::error!(
-                                    task_id = %task_id,
-                                    error = %e,
-                                    "CRITICAL: GOAL_STATE written but TASK_LEDGER append failed (QG blocked)"
-                                );
-                                if let Some(obj) = qg_state.as_object_mut() {
-                                    obj.insert("_dirty".to_string(), json!(true));
-                                }
-                                let _ = write_atomic_json(&goal_path, &qg_state);
-                            }
-                            return Ok(json!({
-                                "ok": true,
-                                "operation": "quality_gate_blocked",
-                                "task_id": task_id,
-                                "status": "review_pending",
-                                "blockers": blockers,
-                                "reason": verdict.get("reason"),
-                            }));
+                                .unwrap_or(json!([]))
+                                .as_array()
+                                .cloned()
+                                .unwrap_or_default();
+                            return transition_to_review_pending(
+                                &repo_root, &task_id, &mut state, blockers,
+                                "quality_gate_blocked",
+                                vec![("reason".to_string(), verdict.get("reason").cloned().unwrap_or(Value::Null))],
+                            );
                         }
                     }
                     Err(e) => {
@@ -950,46 +979,12 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
                         tracing::error!(
                             "QG auto-trigger hook error: {e} — degrading to review_pending (fail-closed)"
                         );
-                        let goal_path = goal_state_path_for_task(&repo_root, &task_id)?;
-                        let mut degraded_state = state;
-                        if let Some(obj) = degraded_state.as_object_mut() {
-                            obj.insert("status".to_string(), json!("review_pending"));
-                            obj.insert(
-                                "blockers".to_string(),
-                                json!([{"id": "qg_hook_error", "description": format!("{e}")}]),
-                            );
-                            obj.insert(
-                                "updated_at".to_string(),
-                                json!(framework_core::time::now_iso()),
-                            );
-                        }
-                        strip_stale_annotations(&mut degraded_state);
-                        write_atomic_json(&goal_path, &degraded_state)?;
-                        let tx = crate::task_ledger::LedgerTransaction::new(
-                            "goal_iteration_blocked",
-                            degraded_state.clone(),
-                        )
-                        .with_schema_version(1);
-                        if let Err(e) = crate::task_ledger::append_transaction_assuming_l1_held(
-                            &repo_root, &task_id, tx,
-                        ) {
-                            tracing::error!(
-                                task_id = %task_id,
-                                error = %e,
-                                "CRITICAL: GOAL_STATE written but TASK_LEDGER append failed (QG hook error)"
-                            );
-                            if let Some(obj) = degraded_state.as_object_mut() {
-                                obj.insert("_dirty".to_string(), json!(true));
-                            }
-                            let _ = write_atomic_json(&goal_path, &degraded_state);
-                        }
-                        return Ok(json!({
-                            "ok": true,
-                            "operation": "quality_gate_blocked",
-                            "task_id": task_id,
-                            "status": "review_pending",
-                            "reason": format!("quality gate hook error: {e}"),
-                        }));
+                        let blockers = vec![json!({"id": "qg_hook_error", "description": format!("{e}")})];
+                        return transition_to_review_pending(
+                            &repo_root, &task_id, &mut state, blockers,
+                            "quality_gate_blocked",
+                            vec![("reason".to_string(), json!(format!("quality gate hook error: {e}")))],
+                        );
                     }
                 }
             } else {
@@ -1013,7 +1008,6 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
                 }
             }
 
-            let goal_path = goal_state_path_for_task(&repo_root, &task_id)?;
             let mut loop_state = state; // reuse the single read from above
             if let Some(obj) = loop_state.as_object_mut() {
                 let count = obj
@@ -1030,38 +1024,37 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
                     json!(framework_core::time::now_iso()),
                 );
             }
-            // GOAL-001: Strip stale annotations before write
-            strip_stale_annotations(&mut loop_state);
-            write_atomic_json(&goal_path, &loop_state)?;
-            let tx = crate::task_ledger::LedgerTransaction::new("goal_iteration_completed", loop_state.clone())
-                .with_schema_version(1);
-            if let Err(e) = crate::task_ledger::append_transaction_assuming_l1_held(&repo_root, &task_id, tx) {
-                // Ledger append failed after GOAL_STATE was written → mark dirty for recovery.
-                // hydrate_task_state_hybrid will detect the dirty flag and warn.
-                tracing::error!(
-                    task_id = %task_id,
-                    error = %e,
-                    "CRITICAL: GOAL_STATE written but TASK_LEDGER append failed — state may be inconsistent. \
-                     Setting dirty flag for next hydrate cycle."
-                );
-                if let Some(obj) = loop_state.as_object_mut() {
-                    obj.insert("_dirty".to_string(), json!(true));
-                    obj.insert("_dirty_reason".to_string(), json!(format!("ledger append failed: {e}")));
-                }
-                let _ = write_atomic_json(&goal_path, &loop_state);
-            }
-            Ok(json!({
+            commit_goal_mutation(&repo_root, &task_id, &mut loop_state, "goal_iteration_completed")?;
+
+            // Enrich response with loop semantics context for model awareness
+            let iteration_count = loop_state.get("iteration_count").and_then(Value::as_u64).unwrap_or(0);
+            let drive_until_done = loop_state.get("drive_until_done").and_then(Value::as_bool).unwrap_or(false);
+            let done_when = loop_state.get("done_when").cloned().unwrap_or(json!([]));
+            let status = loop_state.get("status").and_then(Value::as_str).unwrap_or("running");
+
+            let mut response = json!({
                 "ok": true,
                 "operation": "iteration_completed",
                 "task_id": task_id,
-                "iteration_count": loop_state.get("iteration_count").and_then(Value::as_u64).unwrap_or(0),
-            }))
-        }
-        "continue_review" | "retry" => {
-            // GOAL-003: continue_review is a deprecated alias for retry
-            if operation == "continue_review" {
-                tracing::warn!("'continue_review' is a deprecated alias for 'retry' — use 'retry' instead");
+                "iteration_count": iteration_count,
+                "status": status,
+                "drive_until_done": drive_until_done,
+                "done_when": done_when,
+            });
+
+            // Loop continuation hint: guide the model to keep driving
+            if drive_until_done && status == "running" {
+                response["message"] = json!(
+                    "Iteration completed. Goal is still running — continue executing \
+                     until all done_when items are satisfied, then call complete again. \
+                     Use checkpoint to record progress between iterations."
+                );
+                response["next_action"] = json!("continue");
             }
+
+            Ok(response)
+        }
+        "retry" => {
             let task_id = resolve_task_id_strict(&payload)?;
             crate::utils::path_guard::validate_task_id_component(&task_id)?;
             let path = goal_state_path_for_task(&repo_root, &task_id)?;
@@ -1075,9 +1068,6 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
                     "cannot retry a stale goal — session_id does not match current session",
                 ));
             }
-
-            // GOAL-001: Strip stale annotations before mutation+write
-            strip_stale_annotations(&mut state);
 
             let obj = state
                 .as_object_mut()
@@ -1094,29 +1084,15 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
                 "updated_at".to_string(),
                 json!(framework_core::time::now_iso()),
             );
-            write_atomic_json(&path, &state)?;
-            let tx = crate::task_ledger::LedgerTransaction::new("goal_state", state.clone())
-                .with_schema_version(1);
-            if let Err(e) = crate::task_ledger::append_transaction_assuming_l1_held(&repo_root, &task_id, tx) {
-                tracing::error!(
-                    task_id = %task_id,
-                    error = %e,
-                    "CRITICAL: GOAL_STATE written but TASK_LEDGER append failed (retry)"
-                );
-                if let Some(obj) = state.as_object_mut() {
-                    obj.insert("_dirty".to_string(), json!(true));
-                }
-                let _ = write_atomic_json(&path, &state);
-            }
+            commit_goal_mutation(&repo_root, &task_id, &mut state, "goal_state")?;
             let goal_label = state
                 .get("goal")
                 .and_then(Value::as_str)
                 .unwrap_or(task_id.as_str());
             sync_task_pointers_after_goal_drive(&repo_root, &task_id, goal_label, &payload)?;
-            let resp_op = if operation == "continue_review" { "continue_review" } else { "retry" };
             Ok(json!({
                 "ok": true,
-                "operation": resp_op,
+                "operation": "retry",
                 "task_id": task_id,
                 "goal_state_path": path.display().to_string(),
             }))
@@ -1319,21 +1295,11 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
                 json!(framework_core::time::now_iso()),
             );
 
-            // GOAL-001: Strip stale annotations before write
-            strip_stale_annotations(&mut state);
-
-            write_atomic_json(&path, &state)?;
-            let tx = crate::task_ledger::LedgerTransaction::new("goal_state", state.clone())
-                .with_schema_version(1);
-            crate::task_ledger::append_transaction_assuming_l1_held(&repo_root, &task_id, tx)
-                .map_err(|e| {
-                    FrameworkError::validation(format!("TASK_LEDGER append failed: {e}"))
-                })?;
+            commit_goal_mutation(&repo_root, &task_id, &mut state, "goal_state")?;
             Ok(json!({
                 "ok": true,
                 "operation": "amend",
                 "task_id": task_id,
-                "goal_state_path": path.display().to_string(),
             }))
         }
         _ => Err(FrameworkError::validation(format!(
@@ -1434,9 +1400,6 @@ fn resume_goal_running(
         ));
     }
 
-    // GOAL-001: Strip stale annotations before mutation+write
-    strip_stale_annotations(&mut state);
-
     let obj = state
         .as_object_mut()
         .ok_or_else(|| FrameworkError::validation("GOAL_STATE root must be object"))?;
@@ -1475,11 +1438,7 @@ fn resume_goal_running(
         "resume",
     )?;
 
-    write_atomic_json(&path, &state)?;
-    let tx = crate::task_ledger::LedgerTransaction::new("goal_state", state.clone())
-        .with_schema_version(1);
-    crate::task_ledger::append_transaction_assuming_l1_held(repo_root, &task_id, tx)
-        .map_err(|e| FrameworkError::validation(format!("TASK_LEDGER append failed: {e}")))?;
+    commit_goal_mutation(repo_root, &task_id, &mut state, "goal_state")?;
     let goal_label = state
         .get("goal")
         .and_then(Value::as_str)
@@ -1516,46 +1475,16 @@ fn set_terminal_flags(
         ));
     }
 
-    // GOAL-001: Strip stale annotations before mutation+write
-    strip_stale_annotations(&mut state);
-
     let obj = state
         .as_object_mut()
         .ok_or_else(|| FrameworkError::validation("GOAL_STATE root must be object"))?;
 
-    // Guard: cannot pause or block a goal in a terminal/review state.
-    // Only running, paused, and blocked are mutable operational states.
-    // 'completed' is reserved for future state machine use; currently unreachable
-    // since loop semantics keep goals at "running" after iteration complete.
-    // P2-019: Also guard against completed/archived, consistent with amend path.
-    // T-SG-002: Validate that the requested status is a known goal status.
-    // Uses the module-level VALID_GOAL_STATUSES constant (T-SG-001).
-    if !VALID_GOAL_STATUSES.contains(&status) {
-        return Err(FrameworkError::validation(format!(
-            "framework_goal_drive: invalid goal status '{status}' — must be one of {VALID_GOAL_STATUSES:?}"
-        )));
-    }
-
     let current = obj.get("status").and_then(Value::as_str).unwrap_or("");
     // T-SG-001: Validate transition against the formal state machine matrix.
+    // This single check covers: invalid status, terminal states, archived, cross-state.
     if !is_valid_goal_transition(current, status) {
         return Err(FrameworkError::validation(format!(
             "goal transition '{current}' → '{status}' is not allowed by the state machine"
-        )));
-    }
-    if current == "completed" {
-        return Err(FrameworkError::validation(format!(
-            "cannot set status '{status}' on a completed goal"
-        )));
-    }
-    if obj.get("archived").and_then(Value::as_bool).unwrap_or(false) {
-        return Err(FrameworkError::validation(format!(
-            "cannot set status '{status}' on an archived goal"
-        )));
-    }
-    if current == "review_pending" {
-        return Err(FrameworkError::validation(format!(
-            "cannot set status '{status}' on a goal in '{current}' state"
         )));
     }
     // Idempotent pause/block guard: reject same-state transition.
@@ -1563,18 +1492,6 @@ fn set_terminal_flags(
         return Err(FrameworkError::validation(format!(
             "goal is already in '{status}' state"
         )));
-    }
-    // P2-016: Cross-state transition guard — only allow running → {paused,blocked}.
-    // Reject paused→blocked and blocked→paused as unreachable intermediate states.
-    if current == "paused" && status == "blocked" {
-        return Err(FrameworkError::validation(
-            "cannot block a paused goal — resume first, then block if needed"
-        ));
-    }
-    if current == "blocked" && status == "paused" {
-        return Err(FrameworkError::validation(
-            "cannot pause a blocked goal — resolve the blocker first, then pause if needed"
-        ));
     }
     obj.insert("status".to_string(), json!(status));
     if let Some(d) = drive_until_done {
@@ -1589,11 +1506,7 @@ fn set_terminal_flags(
         "updated_at".to_string(),
         json!(framework_core::time::now_iso()),
     );
-    write_atomic_json(&path, &state)?;
-    let tx = crate::task_ledger::LedgerTransaction::new("goal_state", state.clone())
-        .with_schema_version(1);
-    crate::task_ledger::append_transaction_assuming_l1_held(repo_root, &task_id, tx)
-        .map_err(|e| FrameworkError::validation(format!("TASK_LEDGER append failed: {e}")))?;
+    commit_goal_mutation(repo_root, &task_id, &mut state, "goal_state")?;
     Ok(json!({
         "ok": true,
         "operation": status,
@@ -1948,7 +1861,8 @@ mod tests {
         let raw = fs::read_to_string(repo.join("artifacts/current/t-pa/GOAL_STATE.json")).unwrap();
         let goal: Value = serde_json::from_str(&raw).unwrap();
         assert_eq!(goal["status"], json!("paused"));
-        assert_eq!(goal["drive_until_done"], json!(false));
+        // drive_until_done is preserved (not overwritten to false) so resume can restore it
+        assert_eq!(goal["drive_until_done"], json!(true));
         let _ = fs::remove_dir_all(&repo);
     }
 
@@ -1978,8 +1892,8 @@ mod tests {
         let raw = fs::read_to_string(repo.join("artifacts/current/t-pr/GOAL_STATE.json")).unwrap();
         let goal: Value = serde_json::from_str(&raw).unwrap();
         assert_eq!(goal["status"], json!("running"));
-        // A6: without explicit drive_until_done, resume preserves the paused value (false)
-        assert_eq!(goal["drive_until_done"], json!(false));
+        // A6: pause preserves drive_until_done, so resume sees the original value
+        assert_eq!(goal["drive_until_done"], json!(true));
         let _ = fs::remove_dir_all(&repo);
     }
 

@@ -238,39 +238,109 @@
       "input_schema": {
         "type": "object",
         "required": [
-          "operation",
-          "task_id"
+          "operation"
         ],
         "properties": {
           "operation": {
             "type": "string",
-            "description": "操作类型"
+            "description": "操作类型",
+            "enum": ["start", "checkpoint", "pause", "resume", "complete", "clear", "block", "amend"]
           },
           "task_id": {
             "type": "string",
-            "description": "任务 ID"
+            "description": "任务 ID（可选，默认从 TASK_POINTERS.json 自动解析当前活跃任务）"
           },
           "goal": {
             "type": "string",
-            "description": "Goal 描述"
+            "description": "Goal 描述（start 必填；amend 可选）"
           },
           "non_goals": {
             "type": "array",
             "items": {
               "type": "string"
-            }
+            },
+            "description": "非目标列表（start/amend 可选）"
           },
           "done_when": {
             "type": "array",
             "items": {
               "type": "string"
-            }
+            },
+            "description": "完成条件列表（start/amend 可选）"
           },
           "validation_commands": {
             "type": "array",
             "items": {
               "type": "string"
+            },
+            "description": "验证命令列表（start/amend 可选）"
+          },
+          "note": {
+            "type": "string",
+            "description": "checkpoint 的备注文本（checkpoint 必填）"
+          },
+          "blocker": {
+            "type": "string",
+            "description": "阻塞原因描述（block 必填）"
+          },
+          "session_id": {
+            "type": "string",
+            "description": "会话 ID（可选，默认使用连接级 session_id）"
+          },
+          "goal_type": {
+            "type": "string",
+            "description": "目标类型，仅支持 'loop'（可选）",
+            "enum": ["loop"]
+          },
+          "drive_until_done": {
+            "type": "boolean",
+            "description": "是否驱动直到完成（默认 true）"
+          },
+          "keep_progress": {
+            "type": "boolean",
+            "description": "amend 时是否保留已有 progress（默认 true）"
+          },
+          "completion_gates": {
+            "type": "object",
+            "description": "自定义完成门控条件（可选）。设置后 goal complete 时会校验这些条件。",
+            "properties": {
+              "enabled": {
+                "type": "boolean",
+                "description": "是否启用门控（默认 true）"
+              },
+              "min_depth_score": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 3,
+                "description": "最小深度分数（0-3）。0=无要求，1=基本，2=中等，3=严格"
+              },
+              "require_successful_evidence_row": {
+                "type": "boolean",
+                "description": "是否要求 EVIDENCE_INDEX 中至少有一条成功验证记录"
+              },
+              "min_goal_checkpoints": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "最少 checkpoint 数量"
+              },
+              "block_on_rfv_pass_without_evidence": {
+                "type": "boolean",
+                "description": "RFV 通过但无 evidence 时是否阻塞"
+              }
             }
+          },
+          "metadata": {
+            "type": "object",
+            "description": "附加元数据"
+          },
+          "set_focus": {
+            "type": "boolean",
+            "description": "start 后是否自动设置 focus 指针"
+          },
+          "max_iterations": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "最大迭代轮数（可选）。达到上限后 goal 自动转为 review_pending。"
           }
         }
       }
@@ -332,7 +402,7 @@
     {
       "slug": "task_complete",
       "display_name": "任务完成",
-      "description": "完成指定 task",
+      "description": "完成指定 task。如果存在 GOAL_STATE 则委托给 goal_state_manage(complete)；否则直接完成。",
       "layer": "builtin",
       "dispatch_domain": "domain:framework",
       "owner": "framework",
@@ -347,13 +417,10 @@
       ],
       "input_schema": {
         "type": "object",
-        "required": [
-          "task_id"
-        ],
         "properties": {
           "task_id": {
             "type": "string",
-            "description": "任务 ID"
+            "description": "任务 ID（可选，默认使用当前活跃任务）"
           }
         }
       }

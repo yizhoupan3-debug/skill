@@ -644,7 +644,7 @@
       "id": "eval-email-template-newsletter",
       "category": "should-trigger",
       "task": "帮我做一个产品周报的HTML邮件模板，兼容Outlook和Gmail客户端",
-      "expected_owner": "goalx",
+      "expected_owner": "doc",
       "expected_overlay": null,
       "first_turn": true,
       "notes": "新覆盖 email-template 冷表技能"
@@ -806,7 +806,7 @@
       "expected_owner": "goalx",
       "expected_overlay": null,
       "first_turn": true,
-      "notes": "新覆盖 goalx 框架命令技能"
+      "notes": "goalx 是原生 slash 命令（~/.claude/skills/goalx），不经过 MCP 路由"
     },
     {
       "id": "eval-code-review-deep-direct-owner",

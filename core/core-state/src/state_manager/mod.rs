@@ -617,7 +617,7 @@ mod tests {
         let paused = read_goal_state(&repo, Some("rs-task"))
             .expect("read")
             .expect("some");
-        assert_eq!(paused["drive_until_done"], json!(false));
+        assert_eq!(paused["drive_until_done"], json!(true)); // preserved from start
         assert_eq!(paused[REQUIRES_COMPLETION_EVIDENCE_KEY], json!(true));
         framework_goal_drive(json!({
             "repo_root": rr,
@@ -631,8 +631,8 @@ mod tests {
         assert_eq!(running["status"], json!("running"));
         assert_eq!(
             running["drive_until_done"],
-            json!(false),
-            "resume without explicit drive_until_done should preserve the pause-set value (A6 fix)"
+            json!(true),
+            "resume without explicit drive_until_done preserves the original value (pause no longer overwrites)"
         );
         assert_eq!(running[REQUIRES_COMPLETION_EVIDENCE_KEY], json!(true));
         let _ = fs::remove_dir_all(&repo);

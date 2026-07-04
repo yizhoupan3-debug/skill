@@ -30,6 +30,7 @@
 pub mod adversarial_checker;
 pub mod correctness_checker;
 pub mod evidence_checker;
+pub mod goal_contract_checker;
 pub mod overflow_checker;
 pub mod screenshot_layout_checker;
 pub mod security_checker;
@@ -279,12 +280,17 @@ mod tests {
     fn all_checkers_register_correctly() {
         let mut registry = quality_gate::CheckerRegistry::new();
         register_checkers_from_registry(&mut registry);
-        // Evaluate each scene to verify no panics
+        // Evaluate each scene to verify no panics (not all scenes pass with empty repo)
         for scene_str in [scene::GENERAL, scene::CODE_REVIEW, scene::RESEARCH, scene::VISUAL, scene::SLIDES] {
             let tmp = tempfile::tempdir().unwrap();
             let ctx = make_ctx(tmp.path());
             let verdict = registry.evaluate(scene_str, &ctx);
-            assert!(verdict.passed, "scene '{scene_str}' should pass with empty repo");
+            // General scene may fail due to GoalContractChecker (no GOAL_STATE.json)
+            // Other scenes should pass with empty repo
+            if scene_str != scene::GENERAL {
+                assert!(verdict.passed, "scene '{scene_str}' should pass with empty repo");
+            }
+            assert!(verdict.checkers_ran > 0, "scene '{scene_str}' should have run at least one checker");
         }
     }
 }
