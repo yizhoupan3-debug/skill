@@ -403,25 +403,32 @@ fn evaluate_record(record: &CloseoutRecord, ctx: Option<&CloseoutEvidenceContext
     }
 
     // R8: Cross-check EVIDENCE_INDEX when evidence context is available.
-    // R8's commands_run.is_empty() guard: if commands_run is present and non-empty,
-    // the closeout record's own commands already serve as evidence of verification
-    // activity. R8 only triggers when there are no commands_run (the record claims
-    // "passed" purely through the evidence summary), because in that case the
-    // EVIDENCE_INDEX.json is the sole verification source and must independently
-    // confirm success.
+    // R8's guard: if commands_run contains recognized verification commands
+    // (cargo test, cargo check, npm test, etc.), they serve as evidence.
+    // R8 triggers when commands_run is empty OR contains only non-verification commands,
+    // AND EVIDENCE_INDEX.json has no successful rows.
     if let Some(ctx) = ctx {
         let has_success = ctx.has_successful_verification;
         let status = record.verification_status.trim().to_ascii_lowercase();
-        if status == "passed"
-            && record.commands_run.is_empty()
-            && !has_success
+        if status == "passed" && !has_success
             && !violations.iter().any(|v| v.rule == "claimed_passed_without_evidence")
         {
-            violations.push(CloseoutViolation::new(
-                "claimed_passed_without_evidence_index_rows", "block",
-                "verification_status=passed and commands_run is empty, and EVIDENCE_INDEX.json has no successful rows",
-            ));
-            missing.push("evidence_index_successful_row".into());
+            let has_real_verification = record.commands_run.iter().any(|cmd| {
+                let c = cmd.command.to_ascii_lowercase();
+                const VERIFY_CMDS: &[&str] = &[
+                    "cargo test", "cargo check", "cargo build", "cargo clippy",
+                    "npm test", "npm run test", "pytest", "make test", "make check",
+                    "go test", "git diff", "git log",
+                ];
+                VERIFY_CMDS.iter().any(|v| c.contains(v))
+            });
+            if !has_real_verification {
+                violations.push(CloseoutViolation::new(
+                    "claimed_passed_without_evidence_index_rows", "block",
+                    "verification_status=passed but no recognized verification command in commands_run and EVIDENCE_INDEX.json has no successful rows",
+                ));
+                missing.push("evidence_index_successful_row".into());
+            }
         }
     }
 

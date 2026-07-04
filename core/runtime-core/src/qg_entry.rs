@@ -80,7 +80,7 @@ pub fn trigger(
                 task_id = %task_id,
                 "QGEntry Stage 1: all successful evidence is self-attested (no host-bound verification)"
             );
-            Some(Finding::new("self_attested_evidence", Severity::B,
+            Some(Finding::new("self_attested_evidence", Severity::A,
                 format!("all successful evidence for task '{task_id}' is self-attested \
                      (via mcp_record_evidence) without host-bound verification"))
                 .with_suggestion("ensure a host-bound evidence collector has verified the artifacts independently"))
@@ -114,9 +114,11 @@ pub fn trigger(
 
     let mut verdict = evaluate_qg_route(scene, &ctx);
 
-    // Append self-attested evidence advisory to verdict (P2-007)
+    // Append self-attested evidence to blockers (upgraded from B/advisory to A/blocking).
+    // All-successful-evidence being self-attested means no independent verification occurred.
     if let Some(advisory) = self_attested_advisory {
-        verdict.advisories.push(advisory);
+        verdict.blockers.push(advisory);
+        verdict.passed = false;
     }
 
     verdict

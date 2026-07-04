@@ -456,11 +456,19 @@ pub fn build_user_prompt_context_injection(
                 } else {
                     prompt.to_string()
                 };
+                // Extract basic done_when items from prompt for drive enforcement.
+                // Requires >= 2 items for drive_until_done contract.
+                let done_when_items = extract_auto_done_when(prompt);
+                let non_goals = vec![Value::String("no unrelated changes outside described scope".to_string())];
+                let validation_commands = vec![Value::String("cargo check".to_string())];
                 let create_payload = serde_json::json!({
                     "repo_root": repo_root.to_string_lossy().to_string(),
                     "operation": "start",
                     "task_id": task_id,
                     "goal": goal_text,
+                    "done_when": done_when_items,
+                    "non_goals": non_goals,
+                    "validation_commands": validation_commands,
                 });
                 match core_state::state_manager::framework_goal_drive(create_payload) {
                     Ok(_) => {
@@ -484,6 +492,39 @@ pub fn build_user_prompt_context_injection(
     }
 
     contexts
+}
+
+/// Extract basic done_when items from a user prompt for auto-detected goals.
+///
+/// Heuristic: scan for bullet/numbered items, code file references, and
+/// implementation verbs. Falls back to generic items if fewer than 2 are found.
+/// Returns at least 2 items (drive contract minimum).
+fn extract_auto_done_when(prompt: &str) -> Vec<Value> {
+    let mut items: Vec<String> = Vec::new();
+
+    // 1. Extract bullet/numbered items (strong signal)
+    for line in prompt.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("- ") || trimmed.starts_with("* ") || trimmed.starts_with("• ") {
+            let content = trimmed.trim_start_matches(|c: char| c == '-' || c == '*' || c == '•' || c.is_whitespace());
+            if content.len() > 5 && content.len() < 200 {
+                items.push(content.to_string());
+            }
+        } else if let Some(stripped) = trimmed.strip_prefix(|c: char| c.is_ascii_digit()) {
+            let content = stripped.trim_start_matches(|c: char| c == '.' || c == ')' || c.is_whitespace());
+            if content.len() > 5 && content.len() < 200 {
+                items.push(content.to_string());
+            }
+        }
+    }
+
+    // 2. If not enough items, add generic completion conditions
+    if items.len() < 2 {
+        items.push("implementation complete — all described changes applied".to_string());
+        items.push("cargo check passes without errors".to_string());
+    }
+
+    items.into_iter().map(Value::String).collect()
 }
 
 #[cfg(test)]

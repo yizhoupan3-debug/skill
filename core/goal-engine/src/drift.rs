@@ -73,10 +73,42 @@ fn jaccard_drift(a: &str, b: &str) -> f64 {
 }
 
 fn extract_words(text: &str) -> HashSet<String> {
-    text.split(|c: char| !c.is_alphanumeric() && c != '_' && c != '-')
-        .map(|w| w.to_ascii_lowercase())
-        .filter(|w| w.len() >= 3 && !STOPWORDS.contains(&w.as_str()))
-        .collect()
+    let mut words = HashSet::new();
+
+    // Split on non-alphanumeric boundaries (works for English, code, etc.)
+    for token in text.split(|c: char| !c.is_alphanumeric() && c != '_' && c != '-') {
+        let lower = token.to_ascii_lowercase();
+        if lower.len() >= 3 && !STOPWORDS.contains(&lower.as_str()) {
+            words.insert(lower);
+        }
+    }
+
+    // Chinese bigram extraction: slide a 2-char window over CJK characters.
+    // This gives word-level granularity for Chinese text (no spaces in Chinese).
+    let chars: Vec<char> = text.chars().collect();
+    let mut i = 0;
+    while i + 1 < chars.len() {
+        let c0 = chars[i];
+        let c1 = chars[i + 1];
+        if is_cjk(c0) && is_cjk(c1) {
+            let bigram = format!("{c0}{c1}");
+            if !STOPWORDS.contains(&bigram.as_str()) {
+                words.insert(bigram);
+            }
+            i += 1; // slide by 1 to get overlapping bigrams
+        } else {
+            i += 1;
+        }
+    }
+
+    words
+}
+
+/// Check if a character is CJK (Chinese/Japanese/Korean).
+fn is_cjk(c: char) -> bool {
+    ('\u{4E00}'..='\u{9FFF}').contains(&c)   // CJK Unified Ideographs
+        || ('\u{3400}'..='\u{4DBF}').contains(&c) // CJK Extension A
+        || ('\u{F900}'..='\u{FAFF}').contains(&c) // CJK Compatibility Ideographs
 }
 
 static STOPWORDS: &[&str] = &[

@@ -69,6 +69,41 @@ trigger_hints:
    - 调 `goal_state_manage` operation=start 创建新 goal
 4. **完成后总结**：告知当前 goal 状态和后续可用操作
 
+## Drive Protocol（核心行为约束）
+
+**创建或恢复 goal 后，你必须持续执行直到目标完成。禁止中途停下来询问用户。**
+
+### 执行循环
+
+每次迭代的固定流程：
+
+1. **执行动作** — 根据当前 goal 和 done_when，执行具体的操作（写代码、运行测试、修复问题等）
+2. **记录 checkpoint** — 调 `goal_state_manage(operation="checkpoint", note="...")` 记录进展
+3. **检查完成度** — 对照 done_when 列表，逐条验证是否满足
+4. **如果 done_when 全部满足** — 调 `goal_state_manage(operation="complete")`，然后停止
+5. **如果 done_when 未全部满足** — 回到步骤 1，继续下一轮迭代
+
+### 禁止行为
+
+- ❌ 在 done_when 未全部满足时调用 `complete`
+- ❌ 在 done_when 未全部满足时主动停止或说"已完成"
+- ❌ 跳过 checkpoint 直接尝试 complete
+- ❌ 中途询问用户"是否继续"（除非遇到 blocker 需要 block 操作）
+
+### 合法终止条件
+
+只有以下情况允许停止：
+- `goal_state_manage(operation="complete")` 成功且所有 done_when 已覆盖
+- `goal_state_manage(operation="block", blocker="...")` — 遇到不可自行解决的阻塞
+- `goal_state_manage(operation="fail")` — 确认无法完成
+
+### 完成条件自动检测
+
+每轮迭代后，自动检查 done_when 覆盖情况：
+- 调 `goal_state_read` 读取 done_when 列表
+- 对照你的输出文本，确认每项 done_when 是否有对应的完成证据
+- 只有 100% 覆盖时才能调用 complete
+
 ## Usage
 
 ```text

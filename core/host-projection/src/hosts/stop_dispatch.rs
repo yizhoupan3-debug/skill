@@ -197,7 +197,7 @@ pub fn run_unified_stop(
                         .iter()
                         .filter(|item| {
                             item.as_str()
-                                .map(|s| response_text.contains(s))
+                                .map(|s| done_when_item_satisfied(&response_text, s))
                                 .unwrap_or(false)
                         })
                         .count();
@@ -221,7 +221,7 @@ pub fn run_unified_stop(
             let uncovered: Vec<&str> = items
                 .iter()
                 .filter_map(|item| item.as_str())
-                .filter(|s| !response_text.contains(s))
+                .filter(|s| !done_when_item_satisfied(&response_text, s))
                 .take(3)
                 .collect();
             if !uncovered.is_empty() {
@@ -239,18 +239,28 @@ pub fn run_unified_stop(
         return add_context("Stop", &message);
     }
 
-    // Advisory: even if signals are satisfied, check done_when coverage >= 50%.
-    // Only fires once to avoid nagging on every Stop.
+    // Advisory: check done_when coverage — fires on every Stop until all covered.
+    // Removed one-shot limit (done_when_advisory_sent) to prevent agent bypass.
     if goal_is_satisfied
         && review_state.tracks_goal()
-        && !review_state.goal.done_when_advisory_sent
-        && let Some((covered, total, _)) = &done_when_coverage
+        && let Some((covered, total, items)) = &done_when_coverage
         && *total > 0
-        && (*covered as f64 / *total as f64) < 0.5
+        && *covered < *total
     {
+        let uncovered: Vec<&str> = items
+            .iter()
+            .filter_map(|item| item.as_str())
+            .filter(|s| !response_text.contains(s))
+            .take(3)
+            .collect();
         let message = format!(
             "Goal signals satisfied but done_when coverage is low ({covered}/{total}). \
-                     Verify all completion conditions before completing. Still missing items may remain.",
+             Verify all completion conditions before completing. Still missing: {}.",
+            if uncovered.is_empty() {
+                "unknown items".to_string()
+            } else {
+                uncovered.join("; ")
+            }
         );
         review_state.goal.done_when_advisory_sent = true;
         let _ = write_review_state(&review_path, &review_state);
@@ -260,7 +270,7 @@ pub fn run_unified_stop(
     // ── 10b. Auto-complete detection ──
     // When goal signals are satisfied and all done_when (if any) are 100% covered,
     // suggest completion and optionally probe for next goal.
-    if goal_is_satisfied && review_state.tracks_goal() {
+    let step_10b_all_done = goal_is_satisfied && review_state.tracks_goal() && {
         let all_done = done_when_coverage
             .as_ref()
             .map(|(c, t, _)| *t == 0 || *c >= *t)
@@ -283,6 +293,67 @@ pub fn run_unified_stop(
                     "Stop",
                     "[Goal Suggestion] 前一个任务已完成。检测到新的复杂任务，是否创建新 Goal？",
                 );
+            }
+        }
+        all_done
+    };
+
+    // ── 10c. Drive enforcement — read actual GOAL_STATE and block if still running ──
+    // This is the hard gate: even if regex signals (step 8) say "satisfied",
+    // the goal is still actively driving — agent must continue.
+    // SKIP if step 10b confirmed all done_when covered (goal实质完成，不应阻断).
+    if !step_10b_all_done && review_state.tracks_goal() {
+        if let Ok(Some(goal)) =
+            core_state::state_manager::read_goal_state(repo_root, None).map(|v| v)
+        {
+            let status = goal
+                .get("status")
+                .and_then(Value::as_str)
+                .unwrap_or("");
+            let driving = goal
+                .get("drive_until_done")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            let stale = goal.get("stale").and_then(Value::as_bool).unwrap_or(false);
+
+            // Goal is still running and driving — agent must continue
+            if driving && status == "running" && !stale {
+                let iter = goal
+                    .get("iteration_count")
+                    .and_then(Value::as_u64)
+                    .unwrap_or(0);
+                let done_when = goal.get("done_when").and_then(Value::as_array);
+                let (covered, total) = done_when
+                    .map(|arr| {
+                        let t = arr.len();
+                        let c = arr
+                            .iter()
+                            .filter(|item| {
+                                item.as_str()
+                                    .map(|s| done_when_item_satisfied(&response_text, s))
+                                    .unwrap_or(false)
+                            })
+                            .count();
+                        (c, t)
+                    })
+                    .unwrap_or((0, 0));
+                let uncovered: Vec<&str> = done_when
+                    .map(|arr| {
+                        arr.iter()
+                            .filter_map(|item| item.as_str())
+                            .filter(|s| !response_text.contains(s))
+                            .take(3)
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                let mut msg = format!(
+                    "Goal drive active (iteration={iter}, done_when={covered}/{total}). \
+                     Continue working — do not stop until goal_state_manage(operation=complete) is called."
+                );
+                if !uncovered.is_empty() {
+                    msg.push_str(&format!(" Still missing: {}.", uncovered.join("; ")));
+                }
+                return add_context("Stop", &msg);
             }
         }
     }
@@ -402,6 +473,43 @@ fn add_context(event: &str, msg: &str) -> Option<Value> {
     }))
 }
 
+/// Check if a done_when item is satisfied by the response text.
+///
+/// Hardened matching vs naive `response_text.contains(item)`:
+/// 1. Empty/whitespace-only items are never satisfied (guard against "".contains("") == true)
+/// 2. English items are matched case-insensitively
+/// 3. Simple negation prefix detection: "not X", "no X", "未X", "没X" → not satisfied
+fn done_when_item_satisfied(response_text: &str, item: &str) -> bool {
+    let trimmed = item.trim();
+    if trimmed.is_empty() {
+        return false;
+    }
+    // Negation prefix detection (ZH + EN)
+    let negated = trimmed.starts_with("未")
+        || trimmed.starts_with("没")
+        || trimmed.starts_with("不")
+        || trimmed.starts_with("not ")
+        || trimmed.starts_with("no ");
+    if negated {
+        return false; // negated items are never auto-satisfied
+    }
+    let lower_response = response_text.to_ascii_lowercase();
+    let lower_item = trimmed.to_ascii_lowercase();
+    // Case-insensitive substring match
+    if lower_response.contains(&lower_item) {
+        // Double-check negation in context: scan surrounding words for negation
+        // Simple heuristic: if "not" or "no" appears within 5 chars before the match
+        if let Some(pos) = lower_response.find(&lower_item) {
+            let prefix = &lower_response[..pos];
+            let tail = prefix.chars().rev().take(6).collect::<String>();
+            let has_negation = tail.contains("not ") || tail.contains("no ");
+            return !has_negation;
+        }
+        return true;
+    }
+    false
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
@@ -452,6 +560,80 @@ mod tests {
     fn add_context_never_returns_none() {
         assert!(add_context("Stop", "anything").is_some());
         assert!(add_context("", "").is_some());
+    }
+
+    // ── done_when_item_satisfied ──
+
+    #[test]
+    fn empty_item_never_satisfied() {
+        assert!(!done_when_item_satisfied("some text", ""));
+        assert!(!done_when_item_satisfied("some text", "  "));
+    }
+
+    #[test]
+    fn basic_match() {
+        assert!(done_when_item_satisfied("all tests pass", "all tests pass"));
+        assert!(!done_when_item_satisfied("some tests fail", "all tests pass"));
+    }
+
+    #[test]
+    fn case_insensitive_match() {
+        assert!(done_when_item_satisfied("All Tests Pass", "all tests pass"));
+        assert!(done_when_item_satisfied("ALL TESTS PASS", "All Tests Pass"));
+    }
+
+    #[test]
+    fn negation_prefix_detected() {
+        assert!(!done_when_item_satisfied("not passing", "not passing"));
+        assert!(!done_when_item_satisfied("未完成", "未完成"));
+        assert!(!done_when_item_satisfied("没测试", "没测试"));
+    }
+
+    #[test]
+    fn negation_in_context_detected() {
+        assert!(!done_when_item_satisfied(
+            "tests are not passing",
+            "tests pass"
+        ));
+        assert!(!done_when_item_satisfied(
+            "tests are no passing",
+            "tests pass"
+        ));
+    }
+
+    #[test]
+    fn negation_not_in_context() {
+        // "not" in a different context should not block
+        assert!(done_when_item_satisfied(
+            "nothing to do, tests pass",
+            "tests pass"
+        ));
+    }
+
+    // ── Drive enforcement gate format ──
+
+    #[test]
+    fn drive_enforcement_message_format() {
+        // Verify the message format used by the drive enforcement gate (step 10c)
+        let msg = "Goal drive active (iteration=2, done_when=1/3). \
+                   Continue working — do not stop until goal_state_manage(operation=complete) is called. \
+                   Still missing: all tests pass; docs updated.";
+        let result = add_context("Stop", msg).unwrap();
+        let text = result["context_append"].as_str().unwrap();
+        assert!(text.contains("Goal drive active"));
+        assert!(text.contains("iteration=2"));
+        assert!(text.contains("done_when=1/3"));
+        assert!(text.contains("Still missing: all tests pass; docs updated."));
+    }
+
+    #[test]
+    fn drive_enforcement_no_uncovered_items() {
+        // When all done_when items are covered, message should not list "Still missing"
+        let msg = "Goal drive active (iteration=1, done_when=3/3). \
+                   Continue working — do not stop until goal_state_manage(operation=complete) is called.";
+        let result = add_context("Stop", msg).unwrap();
+        let text = result["context_append"].as_str().unwrap();
+        assert!(!text.contains("Still missing"));
     }
 
     // ── DiskState ──
