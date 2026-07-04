@@ -845,4 +845,69 @@ mod tests {
             }
         }
     }
+
+    /// Test that query_contains rules fire correctly for code review queries.
+    #[test]
+    fn query_contains_code_review_suppresses_non_code_skills() {
+        let j = r#"{
+            "schema_version": "nl-route-adjustments-v1",
+            "pre_framework_alias_rules": [],
+            "post_framework_alias_rules": [
+                {
+                    "when": {"query_contains": "代码审查"},
+                    "action": {"type": "suppress", "reason": "code review suppresses lit"},
+                    "record": {"slug": "literature-verification"}
+                }
+            ]
+        }"#;
+        let nl = compile_nl_route_adjustments(j).unwrap();
+        let record = SkillRecord {
+            slug: "literature-verification".into(),
+            layer: "L2".into(),
+            owner: "owner".into(),
+            gate: "none".into(),
+            gate_lower: "none".into(),
+            summary: "".into(),
+            trigger_hints: vec![],
+            priority: "P2".into(),
+            session_start: "preferred".into(),
+            skill_path: None,
+            host_platforms: vec![],
+            record_kind: "skill".into(),
+            skill_flags: vec![],
+            slug_lower: "literature-verification".into(),
+            owner_lower: "owner".into(),
+            session_start_lower: "preferred".into(),
+            gate_phrases: vec![],
+            name_tokens: Default::default(),
+            keyword_tokens: Default::default(),
+            alias_tokens: Default::default(),
+            do_not_use_tokens: Default::default(),
+            framework_alias_entrypoints: vec![],
+            metadata_positive_triggers: vec![],
+            primary_allowed: true,
+            fallback_policy_mode: "fallback".into(),
+        };
+        let query = "代码审查";
+        let tokens = vec!["代码".to_string(), "审查".to_string()];
+        let token_set: std::collections::HashSet<&str> = tokens.iter().map(|s| s.as_str()).collect();
+        let mut score = 10.0f64;
+        let mut reasons = Vec::new();
+
+        // Apply post-framework-alias rules
+        let result = apply_rule_list(
+            &nl.post,
+            &record,
+            query,
+            &tokens,
+            &token_set,
+            true,
+            &mut score,
+            &mut reasons,
+        );
+
+        assert!(result.is_some(), "literature-verification should be suppressed for '代码审查'");
+        let candidate = result.unwrap();
+        assert_eq!(candidate.score, 0.0, "suppressed candidate should have score 0");
+    }
 }

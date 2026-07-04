@@ -371,6 +371,72 @@ pub fn eval(expr: &Expr, vars: &HashMap<String, f64>) -> Result<f64, FrameworkEr
                     }
                     Ok(vals[0].abs())
                 }
+                "tan" => {
+                    if vals.len() != 1 {
+                        return Err(FrameworkError::validation("tan requires 1 argument"));
+                    }
+                    Ok(vals[0].tan())
+                }
+                "asin" => {
+                    if vals.len() != 1 {
+                        return Err(FrameworkError::validation("asin requires 1 argument"));
+                    }
+                    if vals[0].abs() > 1.0 {
+                        return Err(FrameworkError::validation("asin domain: |x| <= 1"));
+                    }
+                    Ok(vals[0].asin())
+                }
+                "acos" => {
+                    if vals.len() != 1 {
+                        return Err(FrameworkError::validation("acos requires 1 argument"));
+                    }
+                    if vals[0].abs() > 1.0 {
+                        return Err(FrameworkError::validation("acos domain: |x| <= 1"));
+                    }
+                    Ok(vals[0].acos())
+                }
+                "atan" => {
+                    if vals.len() != 1 {
+                        return Err(FrameworkError::validation("atan requires 1 argument"));
+                    }
+                    Ok(vals[0].atan())
+                }
+                "sinh" => {
+                    if vals.len() != 1 {
+                        return Err(FrameworkError::validation("sinh requires 1 argument"));
+                    }
+                    Ok(vals[0].sinh())
+                }
+                "cosh" => {
+                    if vals.len() != 1 {
+                        return Err(FrameworkError::validation("cosh requires 1 argument"));
+                    }
+                    Ok(vals[0].cosh())
+                }
+                "tanh" => {
+                    if vals.len() != 1 {
+                        return Err(FrameworkError::validation("tanh requires 1 argument"));
+                    }
+                    Ok(vals[0].tanh())
+                }
+                "erf" => {
+                    if vals.len() != 1 {
+                        return Err(FrameworkError::validation("erf requires 1 argument"));
+                    }
+                    // Abramowitz-Stegun approximation
+                    let x = vals[0];
+                    let sign = if x >= 0.0 { 1.0 } else { -1.0 };
+                    let ax = x.abs();
+                    let t = 1.0 / (1.0 + 0.327_591_1 * ax);
+                    let poly = t * (0.254_829_592 + t * (-0.284_496_736 + t * (1.421_413_741 + t * (-1.453_152_027 + t * 1.061_405_429))));
+                    Ok(sign * (1.0 - poly * (-ax * ax).exp()))
+                }
+                "atan2" => {
+                    if vals.len() != 2 {
+                        return Err(FrameworkError::validation("atan2 requires 2 arguments"));
+                    }
+                    Ok(vals[0].atan2(vals[1]))
+                }
                 _ => Err(FrameworkError::validation(format!(
                     "unknown function: {name}"
                 ))),
@@ -5600,5 +5666,136 @@ mod tests {
         assert!(result.is_ok(), "1/x at x→∞ should be 0: {:?}", result.err());
         let val = eval(&result.unwrap(), &HashMap::new()).unwrap();
         assert!(val.abs() < 0.1, "1/x → 0, got {val}");
+    }
+
+    // ── New capability tests: inverse trig / hyperbolic differentiation ──
+
+    #[test]
+    fn test_diff_asin() {
+        // d/dx asin(x) = 1/sqrt(1-x^2)
+        let expr = parse("asin(x)").unwrap();
+        let d = differentiate(&expr, "x");
+        let s = display(&d);
+        // At x=0, derivative should be 1
+        let val = eval(&d, &HashMap::from([("x".into(), 0.0)])).unwrap();
+        assert!((val - 1.0).abs() < 1e-10, "asin'(0) = 1, got {val}");
+        // At x=0.5, derivative should be 1/sqrt(0.75) ≈ 1.1547
+        let val2 = eval(&d, &HashMap::from([("x".into(), 0.5)])).unwrap();
+        let expected = 1.0 / 0.75_f64.sqrt();
+        assert!((val2 - expected).abs() < 1e-8, "asin'(0.5) = {expected}, got {val2}");
+    }
+
+    #[test]
+    fn test_diff_atan() {
+        // d/dx atan(x) = 1/(1+x^2)
+        let expr = parse("atan(x)").unwrap();
+        let d = differentiate(&expr, "x");
+        let val = eval(&d, &HashMap::from([("x".into(), 0.0)])).unwrap();
+        assert!((val - 1.0).abs() < 1e-10, "atan'(0) = 1, got {val}");
+        let val2 = eval(&d, &HashMap::from([("x".into(), 1.0)])).unwrap();
+        assert!((val2 - 0.5).abs() < 1e-10, "atan'(1) = 0.5, got {val2}");
+    }
+
+    #[test]
+    fn test_diff_sinh() {
+        // d/dx sinh(x) = cosh(x)
+        let expr = parse("sinh(x)").unwrap();
+        let d = differentiate(&expr, "x");
+        let val = eval(&d, &HashMap::from([("x".into(), 0.0)])).unwrap();
+        assert!((val - 1.0).abs() < 1e-10, "sinh'(0) = cosh(0) = 1, got {val}");
+        let val2 = eval(&d, &HashMap::from([("x".into(), 1.0)])).unwrap();
+        let expected = 1.0_f64.cosh();
+        assert!((val2 - expected).abs() < 1e-8, "sinh'(1) = cosh(1) = {expected}, got {val2}");
+    }
+
+    #[test]
+    fn test_diff_cosh() {
+        // d/dx cosh(x) = sinh(x)
+        let expr = parse("cosh(x)").unwrap();
+        let d = differentiate(&expr, "x");
+        let val = eval(&d, &HashMap::from([("x".into(), 0.0)])).unwrap();
+        assert!((val.abs()) < 1e-10, "cosh'(0) = sinh(0) = 0, got {val}");
+    }
+
+    #[test]
+    fn test_diff_tanh() {
+        // d/dx tanh(x) = 1 - tanh(x)^2
+        let expr = parse("tanh(x)").unwrap();
+        let d = differentiate(&expr, "x");
+        let val = eval(&d, &HashMap::from([("x".into(), 0.0)])).unwrap();
+        assert!((val - 1.0).abs() < 1e-10, "tanh'(0) = 1, got {val}");
+    }
+
+    // ── Integration expansion tests ──
+
+    #[test]
+    fn test_integrate_inv_x_squared() {
+        // ∫ x^(-2) dx = -1/x = x^(-1)/(-1)
+        let expr = parse("x^(-2)").unwrap();
+        let result = integrate(&expr, "x");
+        let d = differentiate(&result, "x");
+        let val = eval(&d, &HashMap::from([("x".into(), 2.0)])).unwrap();
+        assert!((val - 0.25).abs() < 1e-10, "d/dx ∫x^(-2) at x=2 should be 0.25, got {val}");
+    }
+
+    #[test]
+    fn test_integrate_sqrt() {
+        // ∫ sqrt(x) dx = (2/3)*x^(3/2)
+        let expr = parse("sqrt(x)").unwrap();
+        let result = integrate(&expr, "x");
+        let d = differentiate(&result, "x");
+        let val = eval(&d, &HashMap::from([("x".into(), 4.0)])).unwrap();
+        assert!((val - 2.0).abs() < 1e-10, "d/dx ∫sqrt(x) at x=4 = sqrt(4) = 2, got {val}");
+    }
+
+    #[test]
+    fn test_integrate_atan_reciprocal() {
+        // ∫ 1/(x^2+1) dx = atan(x)
+        let expr = parse("1/(x^2+1)").unwrap();
+        let result = integrate(&expr, "x");
+        let s = display(&result);
+        // Should be atan(x)
+        assert!(s.contains("atan"), "∫1/(x^2+1) should produce atan(x), got {s}");
+    }
+
+    // ── Simplification tests ──
+
+    #[test]
+    fn test_simplify_exp_ln() {
+        // exp(ln(x)) = x
+        let expr = parse("exp(ln(x))").unwrap();
+        let s = simplify(&expr);
+        assert_eq!(display(&s), "x", "exp(ln(x)) should simplify to x");
+    }
+
+    #[test]
+    fn test_simplify_ln_exp() {
+        // ln(exp(x)) = x
+        let expr = parse("ln(exp(x))").unwrap();
+        let s = simplify(&expr);
+        assert_eq!(display(&s), "x", "ln(exp(x)) should simplify to x");
+    }
+
+    // ── Scientific notation tests ──
+
+    #[test]
+    fn test_parse_scientific_notation() {
+        let expr = parse("1e-3").unwrap();
+        let val = eval(&expr, &HashMap::new()).unwrap();
+        assert!((val - 0.001).abs() < 1e-15, "1e-3 = 0.001, got {val}");
+    }
+
+    #[test]
+    fn test_parse_scientific_notation_positive_exp() {
+        let expr = parse("2.5E10").unwrap();
+        let val = eval(&expr, &HashMap::new()).unwrap();
+        assert!((val - 2.5e10).abs() < 1e3, "2.5E10 = 2.5e10, got {val}");
+    }
+
+    #[test]
+    fn test_parse_scientific_notation_plus_sign() {
+        let expr = parse("1e+3").unwrap();
+        let val = eval(&expr, &HashMap::new()).unwrap();
+        assert!((val - 1000.0).abs() < 1e-10, "1e+3 = 1000, got {val}");
     }
 }

@@ -458,6 +458,8 @@ pub fn load_records_from_runtime(path: &Path) -> Result<Vec<SkillRecord>, Framew
     };
 
     let mut records = collect_skill_records_from_rows(rows, indexes);
+    // Filter out disabled skills — they should not participate in routing.
+    records.retain(|r| !r.skill_flags.iter().any(|f| f == "disabled"));
     let mut meta = HashMap::new();
     merge_sidecar_route_metadata(path, route_metadata_sidecar_for_runtime, &mut meta)?;
     apply_manifest_route_meta(&mut records, &meta);

@@ -21,6 +21,8 @@ const KNOWN_FUNCTIONS: &[&str] = &[
 // ════════════════════════════════════════════════════════════════════════════
 
 /// Top-level: parse a relational/boolean expression into a z3 Bool.
+///
+/// Supports quantifiers: `ForAll([x, y], body)` and `Exists([x, y], body)`.
 fn parse_z3_bool(solver: &z3::Solver, expr: &str) -> Result<z3::ast::Bool, String> {
     let expr = expr.trim();
     if let Some(inner) = strip_prefix_parens(expr, "And") {
@@ -50,6 +52,32 @@ fn parse_z3_bool(solver: &z3::Solver, expr: &str) -> Result<z3::ast::Bool, Strin
         let a = parse_z3_bool(solver, &parts[0])?;
         let b = parse_z3_bool(solver, &parts[1])?;
         return Ok(a.implies(&b));
+    }
+    // ForAll([var1, var2, ...], body) — universal quantifier
+    if let Some(inner) = strip_prefix_parens(expr, "ForAll") {
+        let parts = split_top_level_args(inner)?;
+        if parts.len() != 2 { return Err("ForAll requires 2 arguments: [vars] and body".into()); }
+        let var_names = parse_var_list(&parts[0])?;
+        let bound_vars: Vec<z3::ast::Real> = var_names.iter()
+            .map(|v| z3::ast::Real::new_const(v.as_str()))
+            .collect();
+        let body = parse_z3_bool(solver, &parts[1])?;
+        let bounds_refs: Vec<&dyn z3::ast::Ast> = bound_vars.iter().map(|v| v as &dyn z3::ast::Ast).collect();
+        let empty_patterns: &[&z3::Pattern] = &[];
+        return Ok(z3::ast::forall_const(&bounds_refs, empty_patterns, &body));
+    }
+    // Exists([var1, var2, ...], body) — existential quantifier
+    if let Some(inner) = strip_prefix_parens(expr, "Exists") {
+        let parts = split_top_level_args(inner)?;
+        if parts.len() != 2 { return Err("Exists requires 2 arguments: [vars] and body".into()); }
+        let var_names = parse_var_list(&parts[0])?;
+        let bound_vars: Vec<z3::ast::Real> = var_names.iter()
+            .map(|v| z3::ast::Real::new_const(v.as_str()))
+            .collect();
+        let body = parse_z3_bool(solver, &parts[1])?;
+        let bounds_refs: Vec<&dyn z3::ast::Ast> = bound_vars.iter().map(|v| v as &dyn z3::ast::Ast).collect();
+        let empty_patterns: &[&z3::Pattern] = &[];
+        return Ok(z3::ast::exists_const(&bounds_refs, empty_patterns, &body));
     }
     if let Some((op, lhs_s, rhs_s)) = parse_comparison(expr) {
         let lhs = parse_arith(solver, lhs_s.trim())?;
@@ -277,14 +305,21 @@ fn parse_atom_depth(solver: &z3::Solver, expr: &str, depth: i32) -> Result<z3::a
                 // Apply the function to the argument
                 let func_result = match name {
                     "abs" => {
-                        // |x| using Z3's native abs function for Real
+                        // |x| using Z3's native abs function for Real.
+                        // Falls back to ITE(x >= 0, x, -x) if Z3_mk_abs fails.
                         let ctx = solver.get_context();
                         let raw_ctx = ctx.get_z3_context();
                         let raw_ast = arg.get_z3_ast();
                         unsafe {
-                            let abs_ast = z3_sys::Z3_mk_abs(raw_ctx, raw_ast)
-                                .unwrap_or(raw_ast);
-                            z3::ast::Real::wrap(ctx, abs_ast)
+                            match z3_sys::Z3_mk_abs(raw_ctx, raw_ast) {
+                                Some(abs_ast) => z3::ast::Real::wrap(ctx, abs_ast),
+                                None => {
+                                    // ITE fallback: abs(x) = x >= 0 ? x : -x
+                                    let zero = z3::ast::Real::from_rational(0, 1);
+                                    let neg = z3::ast::Real::unary_minus(&arg);
+                                    arg.ge(&zero).ite(&arg, &neg)
+                                }
+                            }
                         }
                     }
                     "sign" => {
@@ -387,6 +422,20 @@ fn split_top_level_args(args: &str) -> Result<Vec<String>, String> {
     }
     parts.push(args[last..].trim().to_string());
     Ok(parts.into_iter().filter(|s| !s.is_empty()).collect())
+}
+
+/// Parse a bracketed list of variable names: `[x, y, z]` → `["x", "y", "z"]`.
+fn parse_var_list(s: &str) -> Result<Vec<String>, String> {
+    let s = s.trim();
+    let inner = if s.starts_with('[') && s.ends_with(']') {
+        &s[1..s.len() - 1]
+    } else {
+        return Err(format!("expected [vars], got: {s}"));
+    };
+    Ok(inner.split(',')
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+        .collect())
 }
 
 fn parse_comparison(expr: &str) -> Option<(&str, &str, &str)> {

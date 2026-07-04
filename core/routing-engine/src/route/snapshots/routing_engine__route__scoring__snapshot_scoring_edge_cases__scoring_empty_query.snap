@@ -44,7 +44,15 @@ expression: results
     200.0
   ],
   [
-    "math-derivation",
+    "math-verify",
+    203.0
+  ],
+  [
+    "math-explore",
+    203.0
+  ],
+  [
+    "math-modeling",
     203.0
   ],
   [
