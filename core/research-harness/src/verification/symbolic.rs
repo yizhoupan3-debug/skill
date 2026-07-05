@@ -1141,7 +1141,36 @@ pub fn trig_simplify(expr: &Expr) -> Expr {
             Expr::Sub(Box::new(ta), Box::new(tb))
         }
         Expr::Mul(a, b) => {
-            Expr::Mul(Box::new(trig_simplify(a)), Box::new(trig_simplify(b)))
+            let sa = trig_simplify(a);
+            let sb = trig_simplify(b);
+            // ── Product-to-sum ──
+            // sinA*cosB → (sin(A+B) + sin(A-B))/2
+            if let (Expr::Fn(na, aa), Expr::Fn(nb, ab)) = (&sa, &sb) {
+                if aa.len() == 1 && ab.len() == 1 {
+                    let (ha, hb) = (aa[0].clone(), ab[0].clone());
+                    if na == "sin" && nb == "cos" {
+                        let sin_sum = Expr::Fn("sin".to_string(), vec![Expr::Add(Box::new(ha.clone()), Box::new(hb.clone()))]);
+                        let sin_diff = Expr::Fn("sin".to_string(), vec![Expr::Sub(Box::new(ha), Box::new(hb))]);
+                        return Expr::Mul(Box::new(Expr::Const(0.5)), Box::new(Expr::Add(Box::new(sin_sum), Box::new(sin_diff))));
+                    }
+                    if na == "cos" && nb == "sin" {
+                        let sin_sum = Expr::Fn("sin".to_string(), vec![Expr::Add(Box::new(ha.clone()), Box::new(hb.clone()))]);
+                        let sin_diff = Expr::Fn("sin".to_string(), vec![Expr::Sub(Box::new(ha), Box::new(hb))]);
+                        return Expr::Mul(Box::new(Expr::Const(0.5)), Box::new(Expr::Sub(Box::new(sin_sum), Box::new(sin_diff))));
+                    }
+                    if na == "cos" && nb == "cos" {
+                        let cos_sum = Expr::Fn("cos".to_string(), vec![Expr::Add(Box::new(ha.clone()), Box::new(hb.clone()))]);
+                        let cos_diff = Expr::Fn("cos".to_string(), vec![Expr::Sub(Box::new(ha), Box::new(hb))]);
+                        return Expr::Mul(Box::new(Expr::Const(0.5)), Box::new(Expr::Add(Box::new(cos_sum), Box::new(cos_diff))));
+                    }
+                    if na == "sin" && nb == "sin" {
+                        let cos_diff = Expr::Fn("cos".to_string(), vec![Expr::Sub(Box::new(ha.clone()), Box::new(hb.clone()))]);
+                        let cos_sum = Expr::Fn("cos".to_string(), vec![Expr::Add(Box::new(ha), Box::new(hb))]);
+                        return Expr::Mul(Box::new(Expr::Const(0.5)), Box::new(Expr::Sub(Box::new(cos_diff), Box::new(cos_sum))));
+                    }
+                }
+            }
+            Expr::Mul(Box::new(sa), Box::new(sb))
         }
         Expr::Div(a, b) => {
             Expr::Div(Box::new(trig_simplify(a)), Box::new(trig_simplify(b)))
@@ -1240,6 +1269,48 @@ pub fn trig_simplify(expr: &Expr) -> Expr {
                     }
                 }
             }
+
+            // ── 负角化简 ──
+            // sin(-x) → -sin(x), tan(-x) → -tan(x)
+            if matches!(name.as_str(), "sin" | "tan") && sargs.len() == 1 {
+                if let Expr::Neg(inner) = &sargs[0] {
+                    return Expr::Neg(Box::new(Expr::Fn(name.clone(), vec![(**inner).clone()])));
+                }
+            }
+            // cos(-x) → cos(x)
+            if name == "cos" && sargs.len() == 1 {
+                if matches!(&sargs[0], Expr::Neg(_)) {
+                    if let Expr::Neg(inner) = &sargs[0] {
+                        return Expr::Fn("cos".to_string(), vec![(**inner).clone()]);
+                    }
+                }
+            }
+
+            // ── 周期性化简 ──
+            // sin/cos/tan(x + 2πk) → sin/cos/tan(x)
+            if matches!(name.as_str(), "sin" | "cos" | "tan") && sargs.len() == 1 {
+                if let Expr::Add(a, b) = &sargs[0] {
+                    let (const_part, var_part) = match (a.as_ref(), b.as_ref()) {
+                        (Expr::Const(c), other) => (*c, other.clone()),
+                        (other, Expr::Const(c)) => (*c, other.clone()),
+                        _ => (0.0, sargs[0].clone()),
+                    };
+                    if const_part.abs() > 1e-10 {
+                        let period = if name == "tan" { std::f64::consts::PI } else { 2.0 * std::f64::consts::PI };
+                        let reduced = const_part % period;
+                        if reduced.abs() < 1e-10 {
+                            return Expr::Fn(name.clone(), vec![var_part]);
+                        }
+                        if (reduced - period).abs() < 1e-10 {
+                            // sin/cos/tan(x) after full period reduction
+                            return Expr::Fn(name.clone(), vec![var_part]);
+                        }
+                    }
+                }
+            }
+
+            // ── 和差化积: sinA + sinB → 2*sin((A+B)/2)*cos((A-B)/2) ──
+            // (applied at the Add level, not Fn level, so handled above)
 
             Expr::Fn(name.clone(), sargs)
         }
@@ -1779,7 +1850,7 @@ pub fn expand(expr: &Expr) -> Expr {
             // Only expand small integer powers
             if let Expr::Const(n) = b.as_ref() {
                 let n = *n;
-                if n.fract() == 0.0 && n >= 0.0 && n <= 10.0 {
+                if n.fract() == 0.0 && n >= 0.0 && n <= 20.0 {
                     let n = n as u32;
                     if n == 0 {
                         return Expr::Const(1.0);
@@ -1788,14 +1859,17 @@ pub fn expand(expr: &Expr) -> Expr {
                         return expand(a);
                     }
                     let base = expand(a);
-                    // Repeated squaring
+                    // For (sum)^n, use binomial expansion with combinatorial coefficients.
+                    // This produces correctly merged terms like a² + 2ab + b².
+                    if let Expr::Add(..) = &base {
+                        return expand_binomial(&base, n);
+                    }
+                    // For non-sum bases, use repeated squaring
                     let mut result = base.clone();
                     for _ in 1..n {
                         result =
                             simplify(&Expr::Mul(Box::new(result.clone()), Box::new(base.clone())));
                     }
-                    // Guard: if simplify collapsed Mul(base,base) back into Pow(base,n),
-                    // expand only the inner-base to avoid infinite recursion.
                     return match &result {
                         Expr::Pow(inner_base, _) => {
                             Expr::Pow(Box::new(expand(inner_base)), Box::new(Expr::Const(n as f64)))
@@ -1810,6 +1884,69 @@ pub fn expand(expr: &Expr) -> Expr {
         Expr::Sub(a, b) => Expr::Sub(Box::new(expand(a)), Box::new(expand(b))),
         _ => expr,
     }
+}
+
+/// Expand (sum)^n using binomial coefficients: Σ C(n,k) * a^(n-k) * b^k
+/// This produces correctly merged commutative terms like a² + 2ab + b².
+fn expand_binomial(base: &Expr, n: u32) -> Expr {
+    // Collect flattened terms from the base (the sum expression)
+    let terms: Vec<Expr> = flatten_add(base).into_iter().cloned().collect();
+    if terms.len() < 2 {
+        return Expr::Pow(Box::new(base.clone()), Box::new(Expr::Const(n as f64)));
+    }
+    // For 2-term binomial (most common case), use explicit binomial expansion
+    if terms.len() == 2 {
+        let a = &terms[0];
+        let b = &terms[1];
+        let mut result_terms = Vec::new();
+        for k in 0..=n {
+            let coeff = binomial_coeff(n, k);
+            if coeff.abs() < 1e-12 { continue; }
+            let pow_a = if n - k == 0 {
+                Expr::Const(1.0)
+            } else if n - k == 1 {
+                a.clone()
+            } else {
+                Expr::Pow(Box::new(a.clone()), Box::new(Expr::Const((n - k) as f64)))
+            };
+            let pow_b = if k == 0 {
+                Expr::Const(1.0)
+            } else if k == 1 {
+                b.clone()
+            } else {
+                Expr::Pow(Box::new(b.clone()), Box::new(Expr::Const(k as f64)))
+            };
+            let term = if (coeff - 1.0).abs() < 1e-12 {
+                simplify(&Expr::Mul(Box::new(pow_a), Box::new(pow_b)))
+            } else {
+                let coeff_expr = Expr::Const(coeff);
+                simplify(&Expr::Mul(
+                    Box::new(coeff_expr),
+                    Box::new(Expr::Mul(Box::new(pow_a), Box::new(pow_b))),
+                ))
+            };
+            result_terms.push(term);
+        }
+        return simplify(&make_add(result_terms));
+    }
+    // For >2 terms (multinomial), fall back to repeated multiplication
+    let mut result = base.clone();
+    for _ in 1..n {
+        result = simplify(&Expr::Mul(Box::new(result.clone()), Box::new(base.clone())));
+    }
+    expand(&result)
+}
+
+/// Compute binomial coefficient C(n,k) using multiplicative formula.
+fn binomial_coeff(n: u32, k: u32) -> f64 {
+    if k > n { return 0.0; }
+    if k == 0 || k == n { return 1.0; }
+    let k = k.min(n - k); // symmetry
+    let mut result = 1.0_f64;
+    for i in 1..=k {
+        result = result * (n as f64 - k as f64 + i as f64) / (i as f64);
+    }
+    result
 }
 
 fn distribute_add(add_expr: &Expr, other: &Expr) -> Expr {
@@ -3012,6 +3149,17 @@ fn is_x_squared_plus_one(a: &Expr, b: &Expr, var: &str) -> bool {
         || (is_x_squared(b, var) && is_const_one(a))
 }
 
+/// Check if `expr` is `var^2 + c` (one is var^2, the other is constant c).
+fn is_x_squared_plus_const(a: &Expr, b: &Expr, var: &str) -> Option<f64> {
+    if is_x_squared(a, var) {
+        if let Expr::Const(c) = b { Some(*c) } else { None }
+    } else if is_x_squared(b, var) {
+        if let Expr::Const(c) = a { Some(*c) } else { None }
+    } else {
+        None
+    }
+}
+
 fn try_integration_by_parts(f: &Expr, g: &Expr, var: &str) -> Option<Expr> {
     // Compute G = ∫ g dx
     let g_integrated = integrate(g, var);
@@ -3177,6 +3325,23 @@ pub fn integrate(expr: &Expr, var: &str) -> Expr {
                         if is_x_squared_plus_one(inner_a, inner_b, var) || is_x_squared_plus_one(inner_b, inner_a, var) {
                             return Expr::Fn("atan".to_string(), vec![Expr::Var(var.to_string())]);
                         }
+                        // ∫ 1/(x² + a²) dx = (1/a) * atan(x/a)
+                        if let Some(a_sq) = is_x_squared_plus_const(inner_a, inner_b, var).or_else(|| is_x_squared_plus_const(inner_b, inner_a, var)) {
+                            if a_sq > 0.0 {
+                                let a = a_sq.sqrt();
+                                let inv_a = simplify(&Expr::Div(
+                                    Box::new(Expr::Const(1.0)),
+                                    Box::new(Expr::Const(a)),
+                                ));
+                                let atan_term = Expr::Fn("atan".to_string(), vec![
+                                    simplify(&Expr::Div(
+                                        Box::new(Expr::Var(var.to_string())),
+                                        Box::new(Expr::Const(a)),
+                                    ))
+                                ]);
+                                return Expr::Mul(Box::new(inv_a), Box::new(atan_term));
+                            }
+                        }
                     }
                     // ∫ 1/sqrt(1-x^2) dx = arcsin(x)
                     if let Expr::Fn(name, fargs) = b.as_ref() {
@@ -3194,6 +3359,25 @@ pub fn integrate(expr: &Expr, var: &str) -> Expr {
                     // Partial fraction decomposition: 1/(x^2 - a^2) = 1/(2a) * (1/(x-a) - 1/(x+a))
                     if let Some(result) = try_partial_fractions(b, *c, var) {
                         return simplify(&result);
+                    }
+                }
+            }
+            // ∫ x/(x² + a²) dx = (1/2)ln(x² + a²)
+            if let Expr::Var(v) = a.as_ref() {
+                if v == var {
+                    if let Expr::Add(inner_a, inner_b) = b.as_ref() {
+                        if let Some(a_sq) = is_x_squared_plus_const(inner_a, inner_b, var).or_else(|| is_x_squared_plus_const(inner_b, inner_a, var)) {
+                            if a_sq > 0.0 {
+                                let x_sq_plus_a_sq = Expr::Add(
+                                    Box::new(Expr::Pow(Box::new(Expr::Var(var.to_string())), Box::new(Expr::Const(2.0)))),
+                                    Box::new(Expr::Const(a_sq)),
+                                );
+                                return Expr::Mul(
+                                    Box::new(Expr::Const(0.5)),
+                                    Box::new(Expr::Fn("ln".to_string(), vec![x_sq_plus_a_sq])),
+                                );
+                            }
+                        }
                     }
                 }
             }

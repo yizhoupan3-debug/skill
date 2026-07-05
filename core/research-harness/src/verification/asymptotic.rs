@@ -521,6 +521,44 @@ pub fn verify_asymptotic_chain_with_name(
         };
     }
 
+    // Transitive closure check: for pure chains, verify that non-adjacent
+    // pairs also satisfy the relation (e.g., a≪b and b≪c implies a≪c).
+    // This catches inconsistent chains where discrete steps are individually
+    // valid but their transitive composition is not.
+    if steps.len() >= 3 && composition.is_pure {
+        let mut transitive_issues = Vec::new();
+        for i in 0..steps.len() {
+            for j in (i + 2)..steps.len() {
+                let vr = check_asymptotic_claim(
+                    &steps[i].premise,
+                    &steps[j].conclusion,
+                    &steps[i].relation,
+                    var, regime,
+                );
+                if vr.status != VerificationStatus::Pass {
+                    transitive_issues.push(format!(
+                        "transitive({}→{}): {} {} {} FAILED: {}",
+                        i + 1, j + 1,
+                        steps[i].premise, steps[i].relation.symbol(), steps[j].conclusion,
+                        vr.details,
+                    ));
+                }
+            }
+        }
+        if !transitive_issues.is_empty() {
+            step_details.push("⚠ Transitivity violation detected".to_string());
+            return VerificationResult {
+                check_name: check_name.to_string(),
+                status: VerificationStatus::Warn,
+                details: format!(
+                    "Transitivity violation: {}",
+                    transitive_issues.join("; "),
+                ),
+                evidence_path: None,
+            };
+        }
+    }
+
     // Mixed chain → WARN even if all steps pass
     if let Some(warning) = &composition.mixed_chain_warning {
         step_details.push(format!("⚠ Mixed chain: {warning} — human review recommended"));
