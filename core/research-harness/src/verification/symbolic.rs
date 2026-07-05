@@ -1995,6 +1995,62 @@ pub fn equivalent(lhs: &str, rhs: &str) -> bool {
     equivalent_with_seed(lhs, rhs, seed)
 }
 
+/// Compare two already-parsed expressions for equivalence (structural + numerical).
+/// This avoids re-parsing `lhs` when it has already been parsed elsewhere.
+pub fn equivalent_expr(lhs: &Expr, rhs: &Expr) -> bool {
+    // Strategy 1: Expand both, simplify, compare structurally
+    let lhs_expanded = expand(lhs);
+    let rhs_expanded = expand(rhs);
+    let lhs_simplified = simplify(&lhs_expanded);
+    let rhs_simplified = simplify(&rhs_expanded);
+
+    if lhs_simplified == rhs_simplified {
+        return true;
+    }
+
+    // Strategy 2: Numerical sampling (same logic as equivalent_with_seed)
+    let seed = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos() as u64)
+        .unwrap_or(42);
+    let mut rng = SimpleRng::new(seed);
+
+    let vars = collect_variables(&lhs_simplified, &rhs_simplified);
+    if vars.is_empty() {
+        return match (eval(&lhs_simplified, &HashMap::new()), eval(&rhs_simplified, &HashMap::new())) {
+            (Ok(l), Ok(r)) => (l - r).abs() < 1e-8,
+            _ => false,
+        };
+    }
+
+    // Special value pre-check
+    let special_values = [0.0, 1.0, -1.0, std::f64::consts::FRAC_PI_2, std::f64::consts::PI, std::f64::consts::E];
+    for sv in &special_values {
+        let mut bindings = HashMap::new();
+        for v in &vars { bindings.insert(v.clone(), *sv); }
+        if let (Ok(l), Ok(r)) = (eval(&lhs_simplified, &bindings), eval(&rhs_simplified, &bindings)) {
+            if (l - r).abs() > 1e-6 { return false; }
+        }
+    }
+
+    // Random sampling
+    for _ in 0..20 {
+        let mut bindings = HashMap::new();
+        for v in &vars {
+            let (lo, hi) = match v.as_str() {
+                "n" | "m" | "k" | "i" | "j" | "N" | "M" => (1.0, 100.0),
+                _ => (-10.0, 10.0),
+            };
+            bindings.insert(v.clone(), rng.next_range(lo, hi));
+        }
+        if let (Ok(l), Ok(r)) = (eval(&lhs_simplified, &bindings), eval(&rhs_simplified, &bindings)) {
+            if (l - r).abs() > 1e-6 { return false; }
+        }
+    }
+
+    true
+}
+
 /// Internal helper that accepts an explicit RNG seed for deterministic testing.
 fn equivalent_with_seed(lhs: &str, rhs: &str, seed: u64) -> bool {
     let lhs_expr = match parse(lhs) {

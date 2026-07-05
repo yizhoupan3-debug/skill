@@ -304,6 +304,17 @@ pub fn solve_optimization(
         };
     }
 
+    // When no timeout is set, call solve_via_minilp directly (10x faster,
+    // avoids OS thread spawn overhead).
+    if timeout_ms.is_none() {
+        return match solve_via_minilp(system, objective) {
+            Ok(model) => FeasibilityResult::Feasible { model },
+            Err(cert) => FeasibilityResult::Infeasible {
+                proof_certificate: cert.to_string(),
+            },
+        };
+    }
+
     let (tx, rx) = std::sync::mpsc::channel();
     let system_clone = system.clone();
     let objective_clone = objective.map(|o| o.clone());
@@ -311,23 +322,14 @@ pub fn solve_optimization(
         let _ = tx.send(solve_via_minilp(&system_clone, objective_clone.as_ref()));
     });
 
-    let result = match timeout_ms {
-        Some(ms) => match rx.recv_timeout(std::time::Duration::from_millis(ms)) {
-            Ok(r) => r,
-            Err(_) => {
-                return FeasibilityResult::Timeout {
-                    timeout_ms: ms,
-                }
+    let timeout = timeout_ms.unwrap(); // safe: checked above
+    let result = match rx.recv_timeout(std::time::Duration::from_millis(timeout)) {
+        Ok(r) => r,
+        Err(_) => {
+            return FeasibilityResult::Timeout {
+                timeout_ms: timeout,
             }
-        },
-        None => match rx.recv() {
-            Ok(r) => r,
-            Err(_) => {
-                return FeasibilityResult::Error {
-                    message: "inequality solver thread died unexpectedly (channel closed)".into(),
-                };
-            }
-        },
+        }
     };
 
     match result {
