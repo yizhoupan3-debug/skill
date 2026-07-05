@@ -360,7 +360,6 @@ pub fn route_task(
         return Ok(log_decision(
             make_no_hit_decision(query, session_id, route_context, fallback_reasons),
             query,
-            session_id,
         ));
     }
     let primary_query = primary_owner_query_text(query, records, allow_overlay);
@@ -382,7 +381,7 @@ pub fn route_task(
         &query_token_list,
         session_id,
     ) {
-        return Ok(log_decision(decision, query, session_id));
+        return Ok(log_decision(decision, query));
     }
 
     let w = scoring_weights();
@@ -428,8 +427,7 @@ pub fn route_task(
                     None,
                 ),
                 query,
-                session_id,
-            ));
+            )));
         }
         tracing::debug!(query, session_id, "route: no skill hit");
         let fallback_reasons = compact_route_reasons(&[
@@ -438,7 +436,6 @@ pub fn route_task(
         return Ok(log_decision(
             make_no_hit_decision(query, session_id, route_context, fallback_reasons),
             query,
-            session_id,
         ));
     }
     // 所有候选（含仅 1 个）全部是 overlay 且 caller 未允许 overlay 时返回 no-hit
@@ -454,7 +451,6 @@ pub fn route_task(
         return Ok(log_decision(
             make_no_hit_decision(query, session_id, route_context, fallback_reasons),
             query,
-            session_id,
         ));
     }
 
