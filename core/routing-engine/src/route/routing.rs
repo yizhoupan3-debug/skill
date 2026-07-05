@@ -1,7 +1,7 @@
 //! Primary routing entrypoints (`route_task`, search).
 use super::aliases::{has_literal_framework_alias_call, qg_checker_id_for_slug};
 use super::constants::{
-    FRAMEWORK_COMMAND_KIND, NO_SKILL_SELECTED, PARALLEL_RECORD_SCAN_MIN, PROFILE_COMPILE_AUTHORITY,
+    FRAMEWORK_COMMAND_KIND, NO_SKILL_SELECTED, PARALLEL_RECORD_SCAN_MIN,
     ROUTE_AUTHORITY, ROUTE_DECISION_SCHEMA_VERSION, SEARCH_RESULTS_SCHEMA_VERSION,
 };
 use super::fuzzy::{FUZZY_MIN_SIMILARITY, fuzzy_fallback_score};
@@ -755,7 +755,7 @@ fn has_skill_flag(record: &SkillRecord, flag: &str) -> bool {
 
 /// Wrapper that logs every routing decision to `logs/skill-routing/routing_audit.ndjson`.
 /// Logger auto-initializes on first call (creates directory + file).
-fn log_decision(decision: RouteDecision, query: &str, _session_id: &str) -> RouteDecision {
+fn log_decision(decision: RouteDecision, query: &str) -> RouteDecision {
     static LOG: AuditLog = AuditLog::new();
 
     let entry = serde_json::json!({
