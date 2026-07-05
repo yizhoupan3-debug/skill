@@ -17,7 +17,7 @@ use super::types::{
     SearchMatchRecordPayload, SearchResultsPayload, SkillRecord,
 };
 use core_errors::FrameworkError;
-use std::io::Write;
+use routing_core::audit_log::AuditLog;
 use tracing;
 
 /// Shared skeleton for every RouteDecision — avoids repeated `.to_string()` on static constants
@@ -758,47 +758,10 @@ fn has_skill_flag(record: &SkillRecord, flag: &str) -> bool {
 /// Wrapper that logs every routing decision to `logs/skill-routing/routing_audit.ndjson`.
 /// Logger auto-initializes on first call (creates directory + file).
 fn log_decision(decision: RouteDecision, query: &str, _session_id: &str) -> RouteDecision {
-    // One-shot auto-init: create directory and open file on first use.
-    static LOG_PATH: std::sync::OnceLock<std::path::PathBuf> = std::sync::OnceLock::new();
-    static LOG_FILE: std::sync::Mutex<Option<std::io::BufWriter<std::fs::File>>> =
-        std::sync::Mutex::new(None);
-
-    let path = LOG_PATH.get_or_init(|| {
-        let root = std::env::var("FRAMEWORK_ROOT")
-            .or_else(|_| std::env::var("CARGO_MANIFEST_DIR"))
-            .unwrap_or_else(|_| ".".to_string());
-        let p = std::path::Path::new(&root).join("logs/skill-routing/routing_audit.ndjson");
-        if let Some(parent) = p.parent() {
-            let _ = std::fs::create_dir_all(parent);
-        }
-        p
-    });
-
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default();
-    let secs = now.as_secs();
-    let days = secs / 86400;
-    let time_secs = secs % 86400;
-    let hours = time_secs / 3600;
-    let minutes = (time_secs % 3600) / 60;
-    let seconds = time_secs % 60;
-    let ts = {
-        let z = days as i64 + 719468;
-        let era = if z >= 0 { z } else { z - 146096 } / 146097;
-        let doe = z - era * 146097;
-        let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
-        let y = yoe + era * 400;
-        let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-        let mp = (5 * doy + 2) / 153;
-        let d = doy - (153 * mp + 2) / 5 + 1;
-        let m = if mp < 10 { mp + 3 } else { mp - 9 };
-        let y = if m <= 2 { y + 1 } else { y };
-        format!("{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z", y, m, d, hours, minutes, seconds)
-    };
+    static LOG: AuditLog = AuditLog::new();
 
     let entry = serde_json::json!({
-        "ts": ts,
+        "ts": routing_core::audit_log::iso_timestamp_now(),
         "query": query,
         "selected_skill": decision.selected_skill,
         "score": decision.score,
@@ -809,21 +772,7 @@ fn log_decision(decision: RouteDecision, query: &str, _session_id: &str) -> Rout
         "top_3_reasons": &decision.reasons.iter().take(3).cloned().collect::<Vec<_>>(),
     });
 
-    if let Ok(mut guard) = LOG_FILE.lock() {
-        if guard.is_none() {
-            *guard = std::fs::OpenOptions::new()
-                .create(true)
-                .append(true)
-                .write(true)
-                .open(path)
-                .ok()
-                .map(|f| std::io::BufWriter::new(f));
-        }
-        if let Some(ref mut writer) = *guard {
-            let _ = writeln!(writer, "{}", entry);
-            let _ = writer.flush();
-        }
-    }
+    LOG.write_entry("logs/skill-routing/routing_audit.ndjson", &entry);
 
     decision
 }

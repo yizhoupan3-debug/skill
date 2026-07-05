@@ -17,7 +17,13 @@
 //! - `scoring::score_shared_token_matches()` — 5-step dedup token scoring
 //! - `scoring::best_fuzzy_score()` — shared fuzzy rescue
 //! - `scoring::TokenScoreWeights`, `scoring::TokenScoreResult`
+//!
+//! ## Audit logging
+//!
+//! - `audit_log::AuditLog` — lazily-initialized JSON-lines log writer
+//! - `audit_log::days_to_date()`, `audit_log::iso_timestamp_now()` — date utilities
 
+pub mod audit_log;
 pub mod fuzzy;
 pub mod scoring;
 
