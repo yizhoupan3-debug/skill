@@ -659,7 +659,7 @@ pub(crate) fn tool_task_chain_advance(
 /// The file is stored at `.loop-kill/{loop_id}` with JSON content.
 fn write_loop_signal(repo_root: &Path, loop_id: &str, payload: &serde_json::Value) -> Result<String, FrameworkError> {
     // Guard: reject path-traversal characters in loop_id
-    let sanitized = sanitize_loop_id(loop_id)?;
+    sanitize_loop_id(loop_id)?;
     let kill_dir = repo_root.join(".loop-kill");
     std::fs::create_dir_all(&kill_dir)
         .map_err(|e| FrameworkError::Io(e))?;

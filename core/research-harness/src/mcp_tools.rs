@@ -121,6 +121,8 @@ fn math_tool_dispatch(name: &str, arguments: &Value) -> Result<String, Framework
         "math_check_homomorphism" => tool_math_check_homomorphism(arguments),
         "math_proof_trace_record" => tool_math_proof_trace_record(arguments),
         "math_perturbation_expand" => tool_math_perturbation_expand(arguments),
+        "math_z3_optimize" => tool_math_z3_optimize(arguments),
+        "math_z3_check_system" => tool_math_z3_check_system(arguments),
         _ => Err(FrameworkError::validation(format!(
             "unknown math tool: {name}"
         ))),
@@ -1183,6 +1185,66 @@ fn tool_math_z3_solver_batch(arguments: &Value) -> Result<String, FrameworkError
             "details": e,
         }))
         .map_err(FrameworkError::Json),
+    }
+}
+
+
+// ── Z3 optimize / check-system tools ──
+
+fn tool_math_z3_optimize(arguments: &Value) -> Result<String, FrameworkError> {
+    let objective = arguments
+        .get("objective")
+        .and_then(Value::as_str)
+        .ok_or(FrameworkError::validation(
+            "math_z3_optimize requires 'objective' (string)",
+        ))?;
+    let constraints: Vec<String> = arguments
+        .get("constraints")
+        .and_then(Value::as_array)
+        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+        .unwrap_or_default();
+    let direction = arguments
+        .get("direction")
+        .and_then(Value::as_str)
+        .ok_or(FrameworkError::validation(
+            "math_z3_optimize requires 'direction' (string: minimize/maximize)",
+        ))?;
+    match crate::verification::z3_bridge::optimize_formula(objective, &constraints, None, direction) {
+        Ok(result) => serde_json::to_string_pretty(&json!({
+            "check_name": "math_z3_optimize",
+            "status": "Pass",
+            "result": result,
+            "objective": objective,
+            "direction": direction,
+        })).map_err(FrameworkError::Json),
+        Err(e) => serde_json::to_string_pretty(&json!({
+            "check_name": "math_z3_optimize",
+            "status": "Fail",
+            "details": e,
+        })).map_err(FrameworkError::Json),
+    }
+}
+
+fn tool_math_z3_check_system(arguments: &Value) -> Result<String, FrameworkError> {
+    let constraints: Vec<String> = arguments
+        .get("constraints")
+        .and_then(Value::as_array)
+        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+        .ok_or(FrameworkError::validation(
+            "math_z3_check_system requires 'constraints' (array of strings)",
+        ))?;
+    let timeout_ms = arguments.get("timeout_ms").and_then(Value::as_u64);
+    match crate::verification::z3_bridge::check_system(&constraints, None, timeout_ms) {
+        Ok(result) => serde_json::to_string_pretty(&json!({
+            "check_name": "math_z3_check_system",
+            "status": "Pass",
+            "result": result,
+        })).map_err(FrameworkError::Json),
+        Err(e) => serde_json::to_string_pretty(&json!({
+            "check_name": "math_z3_check_system",
+            "status": "Fail",
+            "details": e,
+        })).map_err(FrameworkError::Json),
     }
 }
 

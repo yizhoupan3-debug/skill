@@ -9,6 +9,7 @@ use tracing::{debug, instrument};
 mod driver;
 mod process;
 mod runtime;
+#[cfg(test)]
 pub mod team_manager;
 mod types;
 mod worker;

@@ -2706,7 +2706,7 @@
             "description": "展开变量"
           },
           "point": {
-            "type": "string",
+            "type": "number",
             "description": "展开点"
           },
           "order": {

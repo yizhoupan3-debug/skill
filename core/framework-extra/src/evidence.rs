@@ -5,12 +5,9 @@
 
 use framework_runtime::constants::{
     EVIDENCE_INDEX_FILENAME, EVIDENCE_INDEX_SCHEMA_VERSION,
-    FRAMEWORK_SESSION_ARTIFACT_WRITE_AUTHORITY, HOOK_EVIDENCE_APPEND_SCHEMA_VERSION,
     TASK_POINTERS_FILENAME,
 };
 use core_state_utils::json_io::read_json_strict;
-use framework_runtime::json_value::value_text;
-use framework_core::repo_roots::resolve_repo_root_arg;
 use serde_json::{Map, Value, json};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -63,41 +60,6 @@ fn coerce_duration_ms_value(value: Option<&Value>) -> Option<u64> {
     }
     if let Some(text) = value.as_str() {
         return text.trim().parse::<u64>().ok();
-    }
-    None
-}
-
-/// PostToolUse journal: tool execution duration when the host payload carries it.
-pub fn extract_post_tool_duration_ms(event: &Value) -> Option<u64> {
-    let candidates: [&Option<&Value>; 10] = [
-        &event.get("duration_ms"),
-        &event.get("durationMs"),
-        &event.get("tool_duration_ms"),
-        &event.get("toolDurationMs"),
-        &event.get("execution_time_ms"),
-        &event.get("executionTimeMs"),
-        &event.get("tool_output").and_then(|v| v.get("duration_ms")),
-        &event.get("tool_output").and_then(|v| v.get("durationMs")),
-        &event
-            .get("tool_output")
-            .and_then(|v| v.get("metadata"))
-            .and_then(|m| m.get("duration_ms")),
-        &event.get("result").and_then(|v| v.get("duration_ms")),
-    ];
-    if let Some(text) = event.get("tool_output").and_then(Value::as_str) {
-        if let Ok(parsed) = serde_json::from_str::<Value>(text) {
-            if let Some(ms) = coerce_duration_ms_value(parsed.get("duration_ms")) {
-                return Some(ms);
-            }
-            if let Some(ms) = coerce_duration_ms_value(parsed.get("durationMs")) {
-                return Some(ms);
-            }
-        }
-    }
-    for candidate in candidates {
-        if let Some(ms) = coerce_duration_ms_value(*candidate) {
-            return Some(ms);
-        }
     }
     None
 }
@@ -288,38 +250,6 @@ pub fn append_evidence_index_merged_row(
     // TASK_STATE.json aggregate was removed in Wave 2b.
     Ok(())
 }
-
-/// Allowed evidence row kinds for the structured evidence schema.
-pub const ALLOWED_EVIDENCE_KINDS: &[&str] = &[
-    "command_run",
-    "external_hook_verification",
-    "artifact_check",
-    "aggregate_summary",
-];
-
-/// Validate an evidence row entry against the schema constraints.
-///
-/// Returns a list of warning strings for non-blocking issues.
-/// If `strict` is true, returns errors for missing `kind` field instead of warnings.
-pub fn validate_evidence_row(
-    entry: &Map<String, Value>,
-    strict: bool,
-) -> Result<Vec<String>> {
-    let mut issues = Vec::new();
-
-    let kind = entry.get("kind").and_then(Value::as_str).unwrap_or("");
-    if kind.is_empty() {
-        let msg = "evidence row missing 'kind' field — expected one of: command_run, external_hook_verification, artifact_check, aggregate_summary";
-        if strict {
-            return Err(FrameworkError::validation(msg));
-        }
-        issues.push(msg.to_string());
-    } else if !ALLOWED_EVIDENCE_KINDS.contains(&kind) {
-        issues.push(format!(
-            "evidence row 'kind' is '{kind}' — expected one of: {allowed}",
-            allowed = ALLOWED_EVIDENCE_KINDS.join(", ")
-        ));
-    }
 
     if entry.get("command_preview").and_then(Value::as_str).map(str::trim).unwrap_or("").is_empty() {
         issues.push("evidence row missing non-empty 'command_preview'".to_string());

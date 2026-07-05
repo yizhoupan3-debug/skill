@@ -227,13 +227,16 @@ fn compile_session_mode(session_policy: &Map<String, Value>) -> Value {
         }
     }
 
-    let Value::Object(mut result) = serde_json::json!({
+    let mut result = match serde_json::json!({
         "mode": session_policy.get("mode"),
         "approval_mode": session_policy.get("approval_mode"),
         "history_policy": session_policy.get("history_policy"),
         "takeover": session_policy.get("takeover"),
         "extras": extras,
-    })
+    }) {
+        Value::Object(map) => map,
+        _ => unreachable!(),
+    };
     // json! serializes `None` (from .get() for a missing key) as `Value::Null`.
     // Replace Null entries with the defaults that the old code applied.
     if matches!(result.get("mode"), Some(Value::Null)) {
@@ -264,7 +267,7 @@ fn build_shared_contract(
     normalized_mcp_servers: &[Value],
     workspace_bootstrap: &Map<String, Value>,
 ) -> Map<String, Value> {
-    let Value::Object(contract) = serde_json::json!({
+    let contract = match serde_json::json!({
         "routing": {
             "mode": profile
                 .session_policy
@@ -297,7 +300,10 @@ fn build_shared_contract(
             "mode": "shared-rust-core",
             "metadata": profile.metadata,
         },
-    })
+    }) {
+        Value::Object(map) => map,
+        _ => unreachable!(),
+    };
     contract
 }
 
@@ -424,14 +430,16 @@ fn build_host_profile(
         workspace_bootstrap,
     };
     let mut profile_map = {
-        let Value::Object(map) = serde_json::json!({
+        let Value::Object(profile_map_base) = serde_json::json!({
             "profile_id": profile.profile_id,
             "display_name": profile.display_name,
             "framework_profile_version": profile.framework_profile_version,
             "runtime_family": profile.runtime_family,
             "host_family": profile.host_family,
-        })
-        map
+        }) else {
+            unreachable!("json! with object literal always produces Value::Object")
+        };
+        profile_map_base
     };
     profile_map.insert(
         "capabilities".to_string(),
