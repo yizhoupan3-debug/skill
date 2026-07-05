@@ -47,6 +47,7 @@ fn vr_to_finding(vr: &VerificationResult, id_prefix: &str) -> Finding {
 fn parse_order_relation(s: &str) -> OrderRelation {
     match s.to_lowercase().as_str() {
         "much_less" | "<<" => OrderRelation::MuchLess,
+        "much_greater" | ">>" | "≫" => OrderRelation::MuchGreater,
         "less_sim" | "lesssim" | "≲" => OrderRelation::LessSim,
         "asymp" | "≈" | "~" | "equivalent" => OrderRelation::Asymp,
         _ => OrderRelation::Asymp,

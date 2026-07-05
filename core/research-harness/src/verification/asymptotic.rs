@@ -24,6 +24,8 @@ pub enum OrderRelation {
     MuchLess,
     /// ≍ — asymptotically equivalent: f ≲ g ∧ g ≲ f
     Asymp,
+    /// ≫ — much-greater-than: g ≪ f (reverse of MuchLess)
+    MuchGreater,
 }
 
 impl OrderRelation {
@@ -32,6 +34,7 @@ impl OrderRelation {
             OrderRelation::LessSim => "≲",
             OrderRelation::MuchLess => "≪",
             OrderRelation::Asymp => "≍",
+            OrderRelation::MuchGreater => "≫",
         }
     }
 
@@ -413,6 +416,10 @@ pub fn check_asymptotic_claim_with_name(
         OrderRelation::MuchLess => {
             // f ≪ g: f grows strictly slower than g
             cmp == std::cmp::Ordering::Less || (cmp == std::cmp::Ordering::Equal && gf != gg)
+        }
+        OrderRelation::MuchGreater => {
+            // f ≫ g: g ≪ f, i.e. g grows strictly slower than f
+            cmp == std::cmp::Ordering::Greater || (cmp == std::cmp::Ordering::Equal && gf != gg)
         }
         OrderRelation::LessSim => {
             // f ≲ g: f grows no faster than g

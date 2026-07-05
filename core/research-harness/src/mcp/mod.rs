@@ -232,7 +232,7 @@ pub fn tool_definitions() -> Vec<Value> {
                             "properties": {
                                 "premise": {"type": "string", "description": "前提表达式"},
                                 "conclusion": {"type": "string", "description": "结论表达式"},
-                                "relation": {"type": "string", "enum": ["LessSim", "MuchLess", "Asymp"], "description": "渐近关系"},
+                                "relation": {"type": "string", "enum": ["LessSim", "MuchLess", "Asymp", "MuchGreater"], "description": "渐近关系：LessSim=≲, MuchLess=≪, Asymp=≍, MuchGreater=≫"},
                                 "justification": {"type": "string", "description": "证明理由（可选）"}
                             },
                             "required": ["premise", "conclusion", "relation"]
