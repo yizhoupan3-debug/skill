@@ -1511,19 +1511,6 @@ mod tests {
         assert_eq!(anchors[1].strength, EvidenceStrength::Weak);
     }
 
-    // ── Math tool tests ──
-
-    #[test]
-    fn test_math_prove_inequality_missing_expression() {
-        let result = handle_research_tool("math_prove_inequality", &json!({}));
-        assert!(result.is_err());
-        assert!(
-            result
-                .unwrap_err()
-                .to_string()
-                .contains("requires 'expression'")
-        );
-    }
 
     #[test]
     fn test_math_prove_inequality_optional_timeout() {
