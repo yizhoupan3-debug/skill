@@ -37,6 +37,42 @@ pub struct ToolScoringWeights {
     /// when the raw query doesn't contain matching trigger tokens.
     #[serde(default)]
     pub skill_context_boost: f64,
+    /// Web task classification weights (optional — defaults to zero if absent).
+    #[serde(default)]
+    pub web_task_boost: WebTaskBoostConfig,
+}
+
+/// Boosting weights for web task post-pick adjustment.
+///
+/// All fields have `#[serde(default)]` so the entire section is optional
+/// in `tool_scoring_weights.json`. A missing section silently uses zero.
+#[derive(Debug, Clone, Deserialize)]
+pub struct WebTaskBoostConfig {
+    /// Boost applied when swapping to a web-task-matching tool (post-pick).
+    /// Default 5.0 — small enough to be a tie-breaker, not a dominant signal.
+    #[serde(default = "default_web_task_boost")]
+    pub category_boost: f64,
+    /// Minimum academic signals required to classify as AcademicSearch/LiteratureBatch.
+    /// Default 2 — prevents single-keyword false positives.
+    #[serde(default = "default_web_task_min_academic")]
+    pub academic_min_signals: usize,
+}
+
+fn default_web_task_boost() -> f64 {
+    5.0
+}
+
+fn default_web_task_min_academic() -> usize {
+    2
+}
+
+impl Default for WebTaskBoostConfig {
+    fn default() -> Self {
+        Self {
+            category_boost: default_web_task_boost(),
+            academic_min_signals: default_web_task_min_academic(),
+        }
+    }
 }
 
 fn default_fuzzy_min() -> f64 {

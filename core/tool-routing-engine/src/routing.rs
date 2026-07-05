@@ -7,6 +7,16 @@
 //! - Session-start signals (tools are stateless)
 //! - Design/paper/agent-swarm domain signals
 //! - Parallel review / code-review-deep / visual-review / codegraph signals
+//!
+//! ## Web task enhancement
+//!
+//! Pre-scoring web task classification (`web_task::classify_web_task`) detects
+//! user intent for web-related tasks (fetch, browser, screenshot, academic).
+//! Post-pick validation (`web_task::adjust_or_validate_decision`) corrects
+//! misroutes when the gap to the correct tool is small.
+//!
+//! The web_task module does NOT modify `score_tool()` — all adjustments are
+//! post-pick in `route_tool_from_records()`, leaving `search_tools()` clean.
 
 use crate::fuzzy::best_fuzzy_score;
 use crate::scoring_config::tool_scoring_weights;
@@ -74,6 +84,10 @@ pub fn route_tool_from_records(
         })
         .collect();
 
+    // Pre-scoring web task classification — enables post-pick validation below.
+    // Does NOT modify any score values — purely observational.
+    let web_class = crate::web_task::classify_web_task(&query_lower);
+
     // Step 6: pick best among scored candidates above zero
     let best = candidates.iter().max_by(|a, b| {
         a.score
@@ -92,6 +106,22 @@ pub fn route_tool_from_records(
             mcp_server: best.record.mcp_server.clone(),
             fuzzy_match: false,
         };
+
+        // Step 7: Post-pick web task validation.
+        // When the classified web task conflicts with the selected tool,
+        // and the gap to a better-matching tool is small, apply a small
+        // adjustment. This is a tie-breaker — NOT a dominant signal.
+        if let Some(wc) = web_class.as_ref() {
+            if let Some(adjusted) = crate::web_task::adjust_or_validate_decision(
+                &decision,
+                wc,
+                &candidates,
+            ) {
+                log_tool_decision(&adjusted, query);
+                return Some(adjusted);
+            }
+        }
+
         log_tool_decision(&decision, query);
         return Some(decision);
     }
@@ -128,6 +158,22 @@ pub fn route_tool_from_records(
         mcp_server: fuzzy_record.mcp_server.clone(),
         fuzzy_match: true,
     };
+
+    // Step 9: Post-pick web task validation (also applies after fuzzy rescue).
+    // When the classified web task has a non-zero-scoring candidate that matches
+    // better than the fuzzy-rescued tool, use it instead. This prevents the
+    // fuzzy rescue from picking a non-web tool for clearly web-related queries.
+    if let Some(wc) = web_class.as_ref() {
+        if let Some(adjusted) = crate::web_task::adjust_or_validate_decision(
+            &decision,
+            wc,
+            &candidates,
+        ) {
+            log_tool_decision(&adjusted, query);
+            return Some(adjusted);
+        }
+    }
+
     log_tool_decision(&decision, query);
     Some(decision)
 }

@@ -1,6 +1,5 @@
 ---
-
-description: Deep research harness — fan-out web searches, fetch sources, verify claims, synthesize cited report.
+description: Deep research harness — fan-out web searches, fetch sources, verify claims, synthesize cited report. 支持 Agent Reach 多平台源。
 metadata:
   platforms:
   - supported
@@ -10,7 +9,7 @@ metadata:
   - web
   - fact-check
   - multi-source
-  version: '1.1.0'
+  version: '1.2.0'
 name: deep-search
 scene: general
 risk: low
@@ -19,7 +18,7 @@ routing_layer: L3
 routing_owner: owner
 routing_priority: P2
 session_start: preferred
-short_description: 通用深度搜索引擎 — web 多源覆盖+事实核查+综合报告
+short_description: 通用深度搜索引擎 — 多源覆盖（Web/学术/社交/视频）+ 事实核查 + 综合报告
 trigger_hints:
 - deep research
 - deep-search
@@ -35,13 +34,13 @@ trigger_hints:
 - investigate claims
 - verify claims
 ---
-# Deep Search
+
+# Deep Search — 多平台深度调研
 
 This skill provides a **web-first deep research harness** that fans out across
 multiple web searches, fetches source documents, adversarially verifies claims,
-and synthesizes a cited report. It is the general-purpose answer to "deeply
-research this topic for me" when the task does not require literature-survey
-scoping, experiment design, or manuscript work.
+and synthesizes a cited report. It supports multi-platform source routing using
+Agent Reach channels when available.
 
 ## When to use
 
@@ -57,11 +56,11 @@ scoping, experiment design, or manuscript work.
 - The user wants to **design experiments, ablations, benchmarks, or math modeling** (execution phase) → use `$research` (execution lane).
 - The object is a **manuscript, submission, reviewer response, paper structure, or "能不能投" decision** → use `$research` (paper-workbench lane).
 - The user only asks which **statistical test** to use → use `$statistical-analysis`.
-- The user only asks for a **formal proof, derivation, or pure-math task** (数学推导、定理证明、公式推导、不等式证明) with no research orchestration → use `$math-verify` (for verification/checking) or `$math-explore` (for exploration/discovery).
+- The user only asks for a **formal proof, derivation, or pure-math task** → use `$math-verify` or `$math-explore`.
 - The user only asks for **citation metadata cleanup** or BibTeX formatting → use `$citation-management`.
 - The user only asks for **reproducibility hygiene** → use `$experiment-reproducibility`.
 - The user asks for **ordinary code implementation** without research-grade evidence gates → answer in the current coding context.
-- The task is a **deep internal codebase exploration** (finding all callers, understanding architecture) → answer in the current coding context or use `$code-review-deep`.
+- The task is a **deep internal codebase exploration** → answer in the current coding context or use `$code-review-deep`.
 
 ## Input
 
@@ -72,38 +71,75 @@ The user provides a topic or question to research. The harness accepts:
 
 If the question is underspecified (e.g., "what car to buy" without budget, use case, or region), ask 2–3 clarifying questions before launching the harness.
 
+## Source routing table
+
+Deep Search 会根据研究主题类型自动选择最佳数据源。优先使用 Agent Reach 渠道（若已安装并配置），降级到 WebSearch / web_fetch。
+
+| 主题类型 | 信号 | 首选源 | 备选源 | 降级路径 |
+|----------|------|--------|--------|---------|
+| 技术/代码 | technology, code, framework, 技术, 框架 | Exa AI 搜索 (`mcporter`) | GitHub 搜索 (`gh`), WebSearch | WebSearch |
+| 产品评测/口碑 | 产品, review, 评测, 怎么样, 口碑 | 小红书 | B站, V2EX, WebSearch | WebSearch |
+| 学术/论文 | paper, 论文, 文献, DOI, 研究 | Semantic Scholar / arXiv | Exa, WebSearch | WebSearch |
+| 全球热点 | trending, news, 最新, twitter | Twitter/X | Reddit, YouTube, WebSearch | WebSearch |
+| 国内话题 | 国内, 中文社区, bilibili | B站 | V2EX, 雪球, WebSearch | WebSearch |
+| 视频内容 | video, tutorial, 教程, 视频, youtube | YouTube 字幕 (`yt-dlp`) | B站 | WebSearch |
+| 通用网页 | (default) | Jina Reader (`r.jina.ai`) | curl, web_fetch | web_fetch |
+
+### 能力检测与降级
+
+在执行多平台调研前，尝试检测可用源：
+
+```bash
+# 检测 Agent Reach 可用性
+agent-reach doctor --json 2>/dev/null || echo "agent-reach not installed"
+```
+
+- **Agent Reach 可用**：按源路由表选择 2-3 个并行源
+- **Agent Reach 不可用**：退回到标准 `WebSearch` + `web_fetch`
+
 ## Execution workflow
 
 **并行 Agent 编排**：使用并行 agent 执行以下阶段
 （宿主支持时，搜索阶段可并行 fan-out，验证阶段串行），或按以下阶段顺序执行为一个
 紧凑研究流程。
 
-The harness runs as a multi-stage execution using `WebSearch` and `WebFetch` tools:
-- Search and Extract phases use parallel agents for throughput
-- Verify and Synthesize phases run sequentially after evidence is gathered
-
 ### Phase 1: Plan — Decompose into search vectors
 
 1. Analyze the research question and identify 3–5 distinct search angles.
 2. Each angle should target a different aspect: definitions, recent developments, competing viewpoints, data/statistics, expert opinions.
 3. Generate specific, keyword-rich search queries for each angle.
-4. If the topic has a temporal dimension, include date-range constraints.
+4. **Determine source type** from the Source Routing Table above — pick 2-3 parallel sources.
+5. If the topic has a temporal dimension, include date-range constraints.
 
-### Phase 2: Search — Fan out across the web
+### Phase 2: Search — Multi-platform parallel fan-out
 
-1. Execute all search queries in parallel using `WebSearch`.
-2. Collect the top 3 URLs per query (up to 15 candidates).
-3. Deduplicate by URL and filter obviously irrelevant results (e.g., ads, thin content).
-4. Cap at 10 unique URLs for the fetch phase.
+**Capability-aware strategy**:
 
-### Phase 3: Extract — Fetch and read sources
+1. **Source inventory**: Check if Agent Reach channels are available
+   - `agent-reach doctor --json` → available channels with `active_backend`
+   - If Agent Reach is NOT installed → fall back to `WebSearch`
+2. **Source selection**: Based on topic (from phase 1), pick 2-3 parallel sources from the routing table
+3. **Parallel execution**: Run searches across selected sources simultaneously
+   - **Web search**: Exa (`mcporter call 'exa.web_search_exa(...)'`) OR `WebSearch`
+   - **GitHub**: `gh search repos "query" --sort stars --limit 5`
+   - **YouTube**: `yt-dlp --write-sub --skip-download`
+   - Each platform source → platform-specific command
+4. Collect the top 3-5 results per source (up to 15 candidates).
+5. Deduplicate by URL and filter obviously irrelevant results.
+6. Cap at 10 unique URLs for the fetch phase.
 
-1. Fetch each URL in parallel using `WebFetch`.
-2. For each page, extract:
+### Phase 3: Extract — Multi-protocol fetch and read
+
+1. **Primary**: Fetch each URL via Jina Reader (`curl https://r.jina.ai/URL`) — returns clean Markdown
+2. **Fallback**: Use `web_fetch` when Jina Reader is unavailable
+3. **Special formats**:
+   - YouTube subtitles: `yt-dlp --write-sub --skip-download -o "/tmp/%(id)s" "URL"`
+   - GitHub repos: `gh repo view owner/repo`
+4. For each page, extract:
    - **Claims**: factual assertions relevant to the research question.
    - **Evidence**: direct quotes, data points, or specific context supporting each claim.
    - **Source metadata**: author (if available), publication date, domain authority signals.
-3. Discard pages that return errors, are paywalled with no accessible content, or contain no relevant claims.
+5. Discard pages that return errors, are paywalled with no accessible content, or contain no relevant claims.
 
 ### Phase 4: Verify — Adversarial claim verification
 
@@ -122,7 +158,7 @@ The harness runs as a multi-stage execution using `WebSearch` and `WebFetch` too
    - **Executive Summary**: 2–3 paragraph overview.
    - **Detailed Findings**: organized by theme, not by source.
    - **Nuances & Caveats**: contested claims, limitations, open questions.
-   - **References**: list of all cited URLs with brief descriptions.
+   - **Sources**: list of all cited sources with brief descriptions (include platform marker).
 2. Every factual claim must cite its source(s) inline using markdown links.
 3. Write in simplified Chinese (面向用户的可见输出使用简体中文) unless the user requests otherwise.
 4. Do NOT include unverified claims in the main body; mention them only in the caveats section.
@@ -132,24 +168,20 @@ The harness runs as a multi-stage execution using `WebSearch` and `WebFetch` too
 Return:
 
 - `Research objective`: the concrete question being answered.
-- `Search plan`: the search vectors used and why.
-- `Source inventory`: URLs fetched, inclusion criteria, and exclusions.
+- `Search plan`: the search vectors used and why (including platform selection).
+- `Source inventory`: URLs fetched, platforms used, inclusion criteria, and exclusions.
 - `Verified claims`: each with source citations and confidence level.
 - `Contested/refuted claims`: with explanation of why they are disputed.
 - `Report`: the synthesized narrative with inline citations.
 - `Open questions`: gaps in coverage or areas needing deeper investigation.
-- `Recovery trace`: what searches were run, which yielded results, and what was missed.
+- `Recovery trace`: what searches were run, which yielded results, what was missed, and Agent Reach availability status.
 
 ## Verification and failure contract
 
-- Treat the final cited report as the deliverable. All claims in the report body must
-  have at least one source citation.
-- If the web search or fetch fails for a critical source, note the failure and
-  adjust the report scope — do not fabricate claims to fill gaps.
-- If fewer than 3 unique sources are found, warn the user that coverage is thin
-  and the report may be incomplete.
-- Preserve the smallest useful error summary (search returned 0 results, fetch
-  timeout, paywall block) in the recovery trace rather than pasting long logs.
+- Treat the final cited report as the deliverable. All claims in the report body must have at least one source citation.
+- If a critical source fails (Exa API down, Agent Reach unavailable), note the failure and fall back to the next available source — do not fabricate claims to fill gaps.
+- If fewer than 3 unique sources are found, warn the user that coverage is thin and the report may be incomplete.
+- Preserve the smallest useful error summary (search returned 0 results, fetch timeout, paywall block) in the recovery trace rather than pasting long logs.
 
 ## Hard constraints
 
@@ -159,7 +191,9 @@ Return:
 - Do not skip the adversarial verification phase — every claim must pass cross-reference before appearing in the report body.
 - Do not scope-creep into experiment design, literature survey, or manuscript work; hand off to the appropriate skill.
 - Do not bury the next executable step in prose; make it directly actionable.
-- Do not use academic API endpoints (arXiv, OpenAlex, CrossRef, PubMed) unless the research topic specifically requires academic sources; use `WebSearch` as the primary retrieval backbone.
+- Do not use academic API endpoints (arXiv, OpenAlex, CrossRef, PubMed) unless the research topic specifically requires academic sources.
+- **Agent Reach 不是硬依赖**：若不可用，必须降级到 WebSearch/web_fetch。
+- **Jina Reader 不是硬依赖**：若不可用，降级到 web_fetch。
 
 ## Lane handoffs
 
@@ -173,7 +207,8 @@ Return:
 
 ## Cross-references
 
-- Academic sources (when academic APIs are needed): [`../research/references/academic-sources.md`](../research/references/academic-sources.md) — arXiv, OpenAlex, CrossRef, PubMed E-utilities, DOAJ API templates. 仅限于科研需求时查阅。
-- Team orchestration API: `core/session-supervisor/src/team_manager.rs` — team-based multi-agent orchestration.
-- Agent lifecycle tracking: `core/session-supervisor/src/process.rs` — agent health registry.
+- **Source routing detail**: [`references/source-routing.md`](references/source-routing.md) — per-platform command templates and failure patterns.
+- Academic sources (when academic APIs are needed): [`../research/references/academic-sources.md`](../research/references/academic-sources.md)
+- Team orchestration API: `core/session-supervisor/src/team_manager.rs`
+- Agent lifecycle tracking: `core/session-supervisor/src/process.rs`
 - 科研统一前门: [`../research/SKILL.md`](../research/SKILL.md)

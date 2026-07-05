@@ -52,7 +52,10 @@
       "skill_slug": "deep-search",
       "tool_slugs": [
         "web_fetch",
-        "research_literature_search"
+        "research_literature_search",
+        "search_research",
+        "fetch_paper",
+        "find_paper_by_title"
       ]
     },
     {

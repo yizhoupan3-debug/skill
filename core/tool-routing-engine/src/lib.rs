@@ -13,6 +13,13 @@
 //! | Tool Layer | `mcp-tool-registry` | Tool record types, JSON loading, path hooks |
 //! | Routing Layer | `tool-routing-engine` | Scoring pipeline, `route_tool`, `search_tools` |
 //! | Routing Layer | `routing-core` | Shared primitives (fuzzy matching) |
+//!
+//! ## Web task classification
+//!
+//! The `web_task` module encodes the decision tree from `skills/web-tools/SKILL.md`
+//! in Rust. It classifies user queries into web task categories (fetch, browser,
+//! screenshot, academic) using vote-based signal detection, enabling the routing
+//! engine to apply domain-specific post-pick adjustments.
 
 pub mod eval;
 pub mod fuzzy;
@@ -22,6 +29,7 @@ pub mod routing_logger;
 pub mod scoring_config;
 pub mod search;
 pub mod types;
+pub mod web_task;
 
 /// Maximum query length in bytes to prevent abuse.
 pub(crate) const MAX_QUERY_LEN: usize = 4096;
