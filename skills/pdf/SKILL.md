@@ -29,7 +29,7 @@ runtime_requirements:
   commands:
   - pdf
 session_start: required
-source: project
+source: local
 trigger_hints:
 - PDF 转文字
 - pdf layout

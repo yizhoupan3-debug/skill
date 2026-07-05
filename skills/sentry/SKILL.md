@@ -26,7 +26,7 @@ routing_layer: L0
 routing_owner: owner
 routing_priority: P2
 session_start: required
-source: project
+source: local
 trigger_hints:
 - Sentry evidence
 - error monitoring

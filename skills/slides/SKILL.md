@@ -27,7 +27,7 @@ routing_layer: L3
 routing_owner: owner
 routing_priority: P1
 session_start: required
-source: project
+source: local
 trigger_hints:
 - PPT
 - PowerPoint

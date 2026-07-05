@@ -30,7 +30,7 @@ runtime_requirements:
   - gh
   - git
 session_start: required
-source: project
+source: local
 risk: low
 trigger_hints:
 - /gh-fix-ci

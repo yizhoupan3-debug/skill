@@ -22,7 +22,7 @@ routing_layer: L2
 routing_owner: owner
 routing_priority: P2
 session_start: preferred
-source: project
+source: local
 trigger_hints:
 - /simplify
 - clean up code

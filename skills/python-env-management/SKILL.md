@@ -21,7 +21,7 @@ routing_layer: L4
 routing_owner: owner
 routing_priority: P3
 session_start: n/a
-source: project
+source: local
 trigger_hints:
 - '.python-version'
 - astral uv

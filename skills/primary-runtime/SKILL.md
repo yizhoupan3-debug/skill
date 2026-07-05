@@ -1,6 +1,7 @@
 ---
 
 name: primary-runtime
+source: local
 scene: general
 allowed_tools:
 - Read
