@@ -119,8 +119,21 @@ impl Parser {
     }
 
     /// Parse a term (precedence: *, /).
+    ///
+    /// Also handles unary minus/plus at the term level.
+    /// Standard precedence: unary minus binds tighter than +,- but looser than ^.
+    /// So: `-x^2 = -(x^2)`, not `(-x)^2`.
     fn parse_term(&mut self) -> Result<Expr, FrameworkError> {
+        // Handle unary minus/plus for the whole term
+        let start_neg = match self.peek() {
+            Some('-') => { self.pos += 1; true }
+            Some('+') => { self.pos += 1; false }
+            _ => false,
+        };
         let mut left = self.parse_power()?;
+        if start_neg {
+            left = Expr::Neg(Box::new(left));
+        }
         loop {
             self.skip_ws();
             match self.peek() {
@@ -136,7 +149,7 @@ impl Parser {
                 Some(c) if c == '(' || c.is_alphabetic() => {
                     if matches!(
                         &left,
-                        Expr::Const(_) | Expr::Var(_) | Expr::Fn(..) | Expr::Neg(_) | Expr::Pow(..)
+                        Expr::Const(_) | Expr::Var(_) | Expr::Fn(..) | Expr::Neg(_) | Expr::Pow(..) | Expr::Add(..) | Expr::Sub(..)
                     ) {
                         left = Expr::Mul(Box::new(left), Box::new(self.parse_power()?));
                     } else {
@@ -150,15 +163,37 @@ impl Parser {
     }
 
     /// Parse a power expression (right-associative ^).
+    /// Standard math precedence: exponentiation binds tighter than unary minus.
+    /// So `-x^2` = `-(x^2)`, not `(-x)^2`.
     fn parse_power(&mut self) -> Result<Expr, FrameworkError> {
-        let base = self.parse_unary()?;
+        // base is a factor (no unary minus — unary wraps the whole power at term level)
+        let base = self.parse_factor()?;
         self.skip_ws();
         if self.peek() == Some('^') {
             self.pos += 1;
-            let exp = self.parse_power()?; // right-associative
+            // exponent allows unary minus (e.g., x^-1, x^(-2))
+            let exp = self.parse_power_exponent()?;
             Ok(Expr::Pow(Box::new(base), Box::new(exp)))
         } else {
             Ok(base)
+        }
+    }
+
+    /// Parse the exponent side of a power expression.
+    /// Allows unary minus (x^-1) without the implicit multiplication of parse_term.
+    fn parse_power_exponent(&mut self) -> Result<Expr, FrameworkError> {
+        self.skip_ws();
+        match self.peek() {
+            Some('-') => {
+                self.pos += 1;
+                let expr = self.parse_power_exponent()?;
+                Ok(Expr::Neg(Box::new(expr)))
+            }
+            Some('+') => {
+                self.pos += 1;
+                self.parse_power_exponent()
+            }
+            _ => self.parse_power(),
         }
     }
 
@@ -768,6 +803,40 @@ pub fn simplify(expr: &Expr) -> Expr {
     }
 }
 
+/// Normalize commutative multiplication order (a*b and b*a produce same key).
+fn normalize_mul_order(expr: &Expr) -> Expr {
+    match expr {
+        Expr::Mul(..) => {
+            let mut ops: Vec<Expr> = Vec::new();
+            flatten_mul_skip_const(expr, &mut ops);
+            // Sort non-constant operands by display for canonical key
+            ops.sort_by(|a, b| display(a).cmp(&display(b)));
+            // Rebuild as flat chain: a * b * c
+            let mut result = ops.pop().unwrap_or(Expr::Const(1.0));
+            while let Some(op) = ops.pop() {
+                result = Expr::Mul(Box::new(op), Box::new(result));
+            }
+            result
+        }
+        Expr::Add(a, b) => Expr::Add(
+            Box::new(normalize_mul_order(a)),
+            Box::new(normalize_mul_order(b)),
+        ),
+        _ => expr.clone(),
+    }
+}
+
+/// Flatten nested Mul terms, moving the leading coefficient to the last position.
+fn flatten_mul_skip_const(expr: &Expr, out: &mut Vec<Expr>) {
+    match expr {
+        Expr::Mul(a, b) => {
+            flatten_mul_skip_const(a, out);
+            flatten_mul_skip_const(b, out);
+        }
+        _ => out.push(expr.clone()),
+    }
+}
+
 fn simplify_add(items: Vec<Expr>) -> Expr {
     let mut const_sum = 0.0_f64;
     // Group by variable expression using string representation as key
@@ -802,7 +871,9 @@ fn simplify_add(items: Vec<Expr>) -> Expr {
                 }
             }
             other => {
-                let key = display(&other);
+                // Normalize commutative Mul order for grouping: a*b and b*a → same key
+                let normalized = normalize_mul_order(&other);
+                let key = display(&normalized);
                 if let Some(pos) = var_terms.iter().position(|(k, _)| *k == key) {
                     // Combine repeated variable terms: x + x = 2x
                     let (_, ref existing) = var_terms[pos];
@@ -993,11 +1064,32 @@ pub fn trig_simplify(expr: &Expr) -> Expr {
                 if used[i] {
                     continue;
                 }
+                // Try sin² → find matching cos²
                 if let Some(arg) = is_sin_sq(&terms[i]) {
                     let mut found = false;
                     for j in (i + 1)..n {
                         if !used[j] {
                             if let Some(arg2) = is_cos_sq(&terms[j]) {
+                                if arg == arg2 {
+                                    result.push(Expr::Const(1.0));
+                                    used[i] = true;
+                                    used[j] = true;
+                                    found = true;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    if !found {
+                        result.push(trig_simplify(&terms[i]));
+                        used[i] = true;
+                    }
+                // Try cos² → find matching sin² (symmetric of the above)
+                } else if let Some(arg) = is_cos_sq(&terms[i]) {
+                    let mut found = false;
+                    for j in (i + 1)..n {
+                        if !used[j] {
+                            if let Some(arg2) = is_sin_sq(&terms[j]) {
                                 if arg == arg2 {
                                     result.push(Expr::Const(1.0));
                                     used[i] = true;
@@ -2206,7 +2298,7 @@ pub fn leading_term(expr_str: &str, var: &str) -> Result<(String, String), Frame
     // Classify and rank each term by growth class + within-class parameter.
     // The sort key is (rank, class_param) so that within the same rank
     // (e.g. two Power terms) the one with larger exponent sorts first.
-    let mut classified: Vec<(f64, &Expr)> = terms
+    let mut classified: Vec<(f64, f64, &Expr)> = terms
         .iter()
         .map(|t| {
             let class = classify_growth(t, var);
@@ -2219,21 +2311,18 @@ pub fn leading_term(expr_str: &str, var: &str) -> Result<(String, String), Frame
                 GrowthClass::Exp(c) => *c,
                 _ => 0.0,
             };
-            // Encode: primary rank dominates, within-class param is secondary.
-            // Use rank * 1e6 + param so rank always dominates the sort.
-            (rank * 1_000_000.0 + class_param, *t)
+            (rank, class_param, *t)
         })
         .collect();
 
-    // Find dominant term(s) — highest composite key
-    classified.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
-
-    if classified.is_empty() {
-        return Err(FrameworkError::validation("cannot classify expression"));
-    }
-
-    let dominant_class = classify_growth(classified[0].1, var);
-    let leading_str = display(classified[0].1);
+    // Find dominant term(s) — compare (rank, class_param) tuples
+    // to avoid floating-point encoding overflow when exponent >= 1e6.
+    // Sort ascending so the LAST item is the dominant term.
+    classified.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal)
+        .then(a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal)));
+    let dominant = classified.last().ok_or_else(|| FrameworkError::validation("cannot classify expression"))?;
+    let dominant_class = classify_growth(dominant.2, var);
+    let leading_str = display(dominant.2);
     let order_str = growth_to_order(&dominant_class, var);
 
     Ok((leading_str, order_str))
