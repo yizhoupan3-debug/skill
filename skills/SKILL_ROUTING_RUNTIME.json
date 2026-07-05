@@ -1985,7 +1985,19 @@
       [
         "shell",
         "git",
-        "python"
+        "python",
+        "Read",
+        "Write",
+        "Edit",
+        "Grep",
+        "Glob",
+        "Agent",
+        "bash",
+        "skill_read",
+        "skill_route",
+        "skill_search",
+        "search_tools",
+        "tool_registry_status"
       ],
       null,
       "conditional",
@@ -2951,6 +2963,149 @@
       null,
       "conditional",
       null,
+      "general",
+      null
+    ],
+    [
+      "browser-automation",
+      "L3",
+      "owner",
+      "none",
+      "P2",
+      "Browser automation: page navigation, click, fill, screenshot, network monitoring, session management.",
+      "n/a",
+      [
+        "browser",
+        "automation",
+        "screenshot",
+        "截屏",
+        "浏览器",
+        "截图",
+        "输入",
+        "network",
+        "打开网页",
+        "点击",
+        "表单填写",
+        "网络请求",
+        "页面状态",
+        "页面元素",
+        "页面文本",
+        "浏览器会话",
+        "等待",
+        "自动填充",
+        "爬虫",
+        "浏览器持久化",
+        "save session",
+        "restore session",
+        "浏览器诊断",
+        "browser tabs",
+        "标签页",
+        "页面跳转",
+        "网页抓取",
+        "web scrape",
+        "网络监听",
+        "网页操作",
+        "browser session"
+      ],
+      "local",
+      "skills/browser-automation/SKILL.md",
+      null,
+      "skill",
+      [],
+      "浏览器自动化操作：打开页面、点击、填表、截图、网络监听等",
+      [
+        "browser",
+        "automation",
+        "web-scraping",
+        "screenshot"
+      ],
+      "用户需要操作浏览器（打开网页、点击、填表单）、截图、检查网络请求、管理浏览器会话时",
+      "用户需要视觉审查截图内容（走 visual-review）；用户需要将截图转为 TikZ 配图（走 tikz-paper-figure）",
+      {
+        "platforms": [
+          "supported"
+        ],
+        "tags": [
+          "browser",
+          "automation",
+          "web-scraping",
+          "screenshot"
+        ],
+        "version": "1.0.0"
+      },
+      "low",
+      [
+        "shell",
+        "browser"
+      ],
+      null,
+      "required",
+      [],
+      "general",
+      null
+    ],
+    [
+      "financial-data",
+      "L3",
+      "owner",
+      "none",
+      "P2",
+      "Financial data query: stocks, crypto, A-shares OHLCV and capital metrics.",
+      "n/a",
+      [
+        "股票",
+        "股价",
+        "行情",
+        "金融数据",
+        "股票行情",
+        "A股",
+        "加密",
+        "币价",
+        "OHLCV",
+        "收盘价",
+        "开盘价",
+        "成交量",
+        "市值",
+        "stock",
+        "crypto",
+        "financial",
+        "market data",
+        "stock price",
+        "cryptocurrency"
+      ],
+      "local",
+      "skills/financial-data/SKILL.md",
+      null,
+      "skill",
+      [],
+      "金融数据查询：股票/加密市场/A股 OHLCV 和资金指标",
+      [
+        "financial",
+        "stock",
+        "crypto",
+        "market-data"
+      ],
+      "用户查询股票行情、加密币价、A股数据、金融指标时",
+      "用户需要的是非金融类数据爬取（走 browser-automation）；用户需要的是论文的统计分析（走 statistical-analysis）",
+      {
+        "platforms": [
+          "supported"
+        ],
+        "tags": [
+          "financial",
+          "stock",
+          "crypto",
+          "market-data"
+        ],
+        "version": "1.0.0"
+      },
+      "low",
+      [
+        "shell"
+      ],
+      null,
+      "conditional",
+      [],
       "general",
       null
     ]

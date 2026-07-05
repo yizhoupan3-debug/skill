@@ -75,7 +75,7 @@ scope: architecture-reference
 
 | Crate | 路径 | 层标 | 说明 |
 |-------|------|------|------|
-| `tool-routing-engine` | `core/tool-routing-engine` | L4 | 工具路由引擎：8 步评分管道、`route_tool()`、`search_tools()` |
+| `tool-routing-engine` | `core/tool-routing-engine` | L4 | 工具路由引擎：8 步评分管道、`search_tools()`、`search_tools()` |
 | `mcp-tool-registry` | `core/mcp-tool-registry` | L4 | 统一 MCP 工具注册表：`McpToolRecord` 类型、JSON 加载、缓存 |
 
 **独立 MCP 服务器二进制**（在 `rust_tools/` 和 `tools/` 中实现）。
@@ -88,7 +88,7 @@ scope: architecture-reference
 | `TaskOutputTools` | `task_output_write`, `task_output_read`, `task_output_init`, `task_output_pull`, `task_output_validate`, `chain_aggregate` |
 | `ChainDagTools` | `chain_dag_init`, `chain_dag_tick`, `chain_dag_status`, `chain_dag_retry`, `chain_dag_skip`, `chain_dag_resume` |
 | `RoutingTools` | `skill_route`, `skill_search`, `skill_read`, `skill_route_status` |
-| `ToolDomainTools` | `route_tool`, `search_tools`, `tool_registry_status` |
+| `ToolDomainTools` | `search_tools`, `tool_registry_status` |
 | `GoalCloseoutTools` | `closeout_gate`, `closeout_record_write`, `goal_state_manage`, `goal_state_read` |
 
 **配置文件**：

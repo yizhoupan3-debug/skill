@@ -1,0 +1,326 @@
+{
+  "schema_version": "skill-to-tool-map-v1",
+  "entries": [
+    {
+      "skill_slug": "browser-automation",
+      "tool_slugs": [
+        "browser_tabs",
+        "browser_open",
+        "browser_close",
+        "browser_click",
+        "browser_fill",
+        "browser_press",
+        "browser_screenshot",
+        "browser_get_text",
+        "browser_get_state",
+        "browser_get_elements",
+        "browser_wait_for",
+        "browser_get_network",
+        "browser_diagnostics",
+        "browser_save_session",
+        "browser_restore_session"
+      ]
+    },
+    {
+      "skill_slug": "citation-management",
+      "tool_slugs": [
+        "citation_audit",
+        "citation_lint",
+        "search_research",
+        "fetch_paper",
+        "find_paper_by_title"
+      ]
+    },
+    {
+      "skill_slug": "code-review-deep",
+      "tool_slugs": [
+        "codegraph_search",
+        "codegraph_callers",
+        "codegraph_callees",
+        "codegraph_impact",
+        "codegraph_node",
+        "codegraph_status",
+        "codegraph_dead_code",
+        "codegraph_goto_definition"
+      ]
+    },
+    {
+      "skill_slug": "deep-search",
+      "tool_slugs": [
+        "web_fetch",
+        "research_literature_search"
+      ]
+    },
+    {
+      "skill_slug": "doc",
+      "tool_slugs": [
+        "ooxml_parse"
+      ]
+    },
+    {
+      "skill_slug": "financial-data",
+      "tool_slugs": [
+        "financial_data"
+      ]
+    },
+    {
+      "skill_slug": "formal-verification",
+      "tool_slugs": [
+        "research_verification_formal",
+        "math_z3_prove",
+        "math_backend_available",
+        "math_lean_verify"
+      ]
+    },
+    {
+      "skill_slug": "gh-address-comments",
+      "tool_slugs": [
+        "gh_source_gate"
+      ]
+    },
+    {
+      "skill_slug": "gh-fix-ci",
+      "tool_slugs": [
+        "gh_source_gate"
+      ]
+    },
+    {
+      "skill_slug": "gitx",
+      "tool_slugs": [
+        "closeout_gate",
+        "closeout_record_write",
+        "task_create",
+        "task_complete",
+        "task_focus",
+        "task_chain_advance"
+      ]
+    },
+    {
+      "skill_slug": "goalx",
+      "tool_slugs": [
+        "goal_state_read",
+        "goal_state_manage",
+        "task_create",
+        "task_list",
+        "task_complete",
+        "task_focus",
+        "task_chain_advance",
+        "closeout_gate",
+        "closeout_record_write",
+        "record_evidence",
+        "session_checkpoint",
+        "task_output_write",
+        "task_output_read",
+        "task_output_init",
+        "task_output_pull",
+        "task_output_validate"
+      ]
+    },
+    {
+      "skill_slug": "literature-verification",
+      "tool_slugs": [
+        "research_verification_literature",
+        "citation_audit",
+        "citation_lint"
+      ]
+    },
+    {
+      "skill_slug": "math-explore",
+      "tool_slugs": [
+        "math_asymptotic_estimate",
+        "math_sympy_verify",
+        "math_sympy_simplify",
+        "math_sympy_trig_simplify",
+        "math_sympy_subs",
+        "math_sympy_limit",
+        "math_sympy_lambdify",
+        "math_sympy_expand",
+        "math_sympy_factor",
+        "math_sympy_series",
+        "math_sympy_differentiate",
+        "math_sympy_integrate",
+        "math_sympy_solve"
+      ]
+    },
+    {
+      "skill_slug": "math-modeling",
+      "tool_slugs": [
+        "math_asymptotic_estimate",
+        "math_asymptotic_chain",
+        "math_prove_inequality",
+        "math_auto_prove",
+        "math_identity_chain",
+        "math_tighten_bounds",
+        "math_witness_consistency",
+        "math_check_homomorphism",
+        "math_proof_trace_record",
+        "math_perturbation_expand",
+        "math_sympy_simplify",
+        "math_sympy_subs",
+        "math_sympy_lambdify",
+        "math_sympy_expand",
+        "math_sympy_factor",
+        "math_sympy_series",
+        "math_sympy_solve",
+        "math_sympy_dimension_propagate",
+        "math_z3_optimize",
+        "math_z3_check_system"
+      ]
+    },
+    {
+      "skill_slug": "math-verify",
+      "tool_slugs": [
+        "math_asymptotic_estimate",
+        "math_asymptotic_chain",
+        "math_backend_available",
+        "math_lean_verify",
+        "math_proof_dag_init",
+        "math_proof_dag_decompose",
+        "math_proof_dag_verify",
+        "math_proof_dag_status",
+        "math_prove_inequality",
+        "math_auto_prove",
+        "math_identity_chain",
+        "math_tighten_bounds",
+        "math_witness_consistency",
+        "math_check_homomorphism",
+        "math_proof_trace_record",
+        "math_perturbation_expand",
+        "math_sympy_verify",
+        "math_sympy_simplify",
+        "math_sympy_trig_simplify",
+        "math_sympy_subs",
+        "math_sympy_limit",
+        "math_sympy_lambdify",
+        "math_sympy_expand",
+        "math_sympy_factor",
+        "math_sympy_series",
+        "math_sympy_differentiate",
+        "math_sympy_integrate",
+        "math_sympy_solve",
+        "math_sympy_dimension_propagate",
+        "math_z3_prove",
+        "math_z3_solver_push",
+        "math_z3_solver_pop",
+        "math_z3_solver_add",
+        "math_z3_solver_check",
+        "math_z3_solver_reset",
+        "math_z3_solver_batch",
+        "math_z3_optimize",
+        "math_z3_check_system"
+      ]
+    },
+    {
+      "skill_slug": "paper-workbench",
+      "tool_slugs": [
+        "web_fetch",
+        "search_research",
+        "fetch_paper",
+        "find_paper_by_title",
+        "research_aigc_check",
+        "research_aigc_humanize",
+        "research_review_dimensions",
+        "research_claim_drift",
+        "research_review_loop",
+        "research_verification_prose",
+        "citation_audit",
+        "citation_lint"
+      ]
+    },
+    {
+      "skill_slug": "pdf",
+      "tool_slugs": [
+        "pdf_read",
+        "pdf_info"
+      ]
+    },
+    {
+      "skill_slug": "prose-verification",
+      "tool_slugs": [
+        "research_verification_prose"
+      ]
+    },
+    {
+      "skill_slug": "reproducibility-verification",
+      "tool_slugs": [
+        "research_verification_reproducibility"
+      ]
+    },
+    {
+      "skill_slug": "research",
+      "tool_slugs": [
+        "web_fetch",
+        "research_literature_search",
+        "search_research",
+        "fetch_paper",
+        "find_paper_by_title",
+        "research_review_dimensions",
+        "research_review_loop",
+        "research_claim_drift",
+        "research_aigc_check",
+        "research_aigc_humanize",
+        "research_smoke",
+        "math_asymptotic_estimate",
+        "math_prove_inequality"
+      ]
+    },
+    {
+      "skill_slug": "research-discovery",
+      "tool_slugs": [
+        "search_research",
+        "fetch_paper",
+        "find_paper_by_title",
+        "research_literature_search"
+      ]
+    },
+    {
+      "skill_slug": "skill-framework-developer",
+      "tool_slugs": [
+        "skill_read",
+        "skill_route",
+        "skill_search",
+        "skill_route_status",
+        "search_tools",
+        "tool_registry_status",
+        "session_checkpoint",
+        "record_evidence"
+      ]
+    },
+    {
+      "skill_slug": "slides",
+      "tool_slugs": [
+        "pptx_parse"
+      ]
+    },
+    {
+      "skill_slug": "spreadsheets",
+      "tool_slugs": [
+        "ooxml_parse"
+      ]
+    },
+    {
+      "skill_slug": "statistical-verification",
+      "tool_slugs": [
+        "research_verification_statistical"
+      ]
+    },
+    {
+      "skill_slug": "structure-verification",
+      "tool_slugs": [
+        "research_verification_structure"
+      ]
+    },
+    {
+      "skill_slug": "tikz-paper-figure",
+      "tool_slugs": [
+        "browser_screenshot"
+      ]
+    },
+    {
+      "skill_slug": "visual-review",
+      "tool_slugs": [
+        "browser_screenshot"
+      ]
+    }
+  ]
+}

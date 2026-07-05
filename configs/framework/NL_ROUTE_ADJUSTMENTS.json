@@ -1394,6 +1394,305 @@
       "record": {
         "slug": "research-execution"
       }
+    },
+    {
+      "when": {
+        "query_contains": "选题"
+      },
+      "action": {
+        "type": "boost",
+        "delta": 42.0,
+        "reason": "Good-question boost: topic/question selection wording (选题) detected."
+      },
+      "record": {
+        "slug": "good-question"
+      }
+    },
+    {
+      "when": {
+        "query_contains": "研究问题"
+      },
+      "action": {
+        "type": "boost",
+        "delta": 15.0,
+        "reason": "Good-question boost: research question wording (研究问题) detected."
+      },
+      "record": {
+        "slug": "good-question"
+      }
+    },
+    {
+      "when": {
+        "query_contains": "问题诊断"
+      },
+      "action": {
+        "type": "boost",
+        "delta": 40.0,
+        "reason": "Good-question boost: question diagnosis wording (问题诊断) detected."
+      },
+      "record": {
+        "slug": "good-question"
+      }
+    },
+    {
+      "when": {
+        "query_contains": "开题"
+      },
+      "action": {
+        "type": "boost",
+        "delta": 38.0,
+        "reason": "Good-question boost: thesis topic proposal wording (开题) detected."
+      },
+      "record": {
+        "slug": "good-question"
+      }
+    },
+    {
+      "when": {
+        "query_contains": "研究方向模糊"
+      },
+      "action": {
+        "type": "boost",
+        "delta": 40.0,
+        "reason": "Good-question boost: fuzzy research direction wording detected."
+      },
+      "record": {
+        "slug": "good-question"
+      }
+    },
+    {
+      "when": {
+        "query_contains": "想法不成形"
+      },
+      "action": {
+        "type": "boost",
+        "delta": 40.0,
+        "reason": "Good-question boost: unformed idea wording detected."
+      },
+      "record": {
+        "slug": "good-question"
+      }
+    },
+    {
+      "when": {
+        "query_contains": "想法评估"
+      },
+      "action": {
+        "type": "boost",
+        "delta": 35.0,
+        "reason": "Good-question boost: idea evaluation wording detected."
+      },
+      "record": {
+        "slug": "good-question"
+      }
+    },
+    {
+      "when": {
+        "query_contains": "falsifiable"
+      },
+      "action": {
+        "type": "boost",
+        "delta": 45.0,
+        "reason": "Good-question boost: falsifiable question wording detected."
+      },
+      "record": {
+        "slug": "good-question"
+      }
+    },
+    {
+      "when": {
+        "query_contains": "hypothesis generation"
+      },
+      "action": {
+        "type": "boost",
+        "delta": 38.0,
+        "reason": "Good-question boost: hypothesis generation wording detected."
+      },
+      "record": {
+        "slug": "good-question"
+      }
+    },
+    {
+      "when": {
+        "query_contains": "科研想法"
+      },
+      "action": {
+        "type": "boost",
+        "delta": 35.0,
+        "reason": "Good-question boost: research idea wording detected."
+      },
+      "record": {
+        "slug": "good-question"
+      }
+    },
+    {
+      "when": {
+        "query_contains": "提案构思"
+      },
+      "action": {
+        "type": "boost",
+        "delta": 38.0,
+        "reason": "Good-question boost: proposal ideation wording detected."
+      },
+      "record": {
+        "slug": "good-question"
+      }
+    },
+    {
+      "when": {
+        "query_contains": "值得做"
+      },
+      "action": {
+        "type": "boost",
+        "delta": 30.0,
+        "reason": "Good-question boost: worth-doing evaluation wording detected."
+      },
+      "record": {
+        "slug": "good-question"
+      }
+    },
+    {
+      "when": {
+        "query_contains": "故事诊断"
+      },
+      "action": {
+        "type": "boost",
+        "delta": 44.0,
+        "reason": "Good-story boost: story diagnosis wording detected."
+      },
+      "record": {
+        "slug": "good-story"
+      }
+    },
+    {
+      "when": {
+        "query_contains": "怎么讲故事"
+      },
+      "action": {
+        "type": "boost",
+        "delta": 40.0,
+        "reason": "Good-story boost: how-to-tell-story wording detected."
+      },
+      "record": {
+        "slug": "good-story"
+      }
+    },
+    {
+      "when": {
+        "query_contains": "有结果写不出"
+      },
+      "action": {
+        "type": "boost",
+        "delta": 42.0,
+        "reason": "Good-story boost: results-without-writing wording detected."
+      },
+      "record": {
+        "slug": "good-story"
+      }
+    },
+    {
+      "when": {
+        "query_contains": "故事太弱"
+      },
+      "action": {
+        "type": "boost",
+        "delta": 36.0,
+        "reason": "Good-story boost: weak story wording detected."
+      },
+      "record": {
+        "slug": "good-story"
+      }
+    },
+    {
+      "when": {
+        "query_contains": "改故事线"
+      },
+      "action": {
+        "type": "boost",
+        "delta": 40.0,
+        "reason": "Good-story boost: story-line rewrite wording detected."
+      },
+      "record": {
+        "slug": "good-story"
+      }
+    },
+    {
+      "when": {
+        "query_contains": "主线不清晰"
+      },
+      "action": {
+        "type": "boost",
+        "delta": 38.0,
+        "reason": "Good-story boost: unclear storyline wording detected."
+      },
+      "record": {
+        "slug": "good-story"
+      }
+    },
+    {
+      "when": {
+        "query_contains": "story spine"
+      },
+      "action": {
+        "type": "boost",
+        "delta": 42.0,
+        "reason": "Good-story boost: story spine wording detected."
+      },
+      "record": {
+        "slug": "good-story"
+      }
+    },
+    {
+      "when": {
+        "query_contains": "narrative arc"
+      },
+      "action": {
+        "type": "boost",
+        "delta": 38.0,
+        "reason": "Good-story boost: narrative arc wording detected."
+      },
+      "record": {
+        "slug": "good-story"
+      }
+    },
+    {
+      "when": {
+        "query_contains": "evidence ladder"
+      },
+      "action": {
+        "type": "boost",
+        "delta": 40.0,
+        "reason": "Good-story boost: evidence ladder wording detected."
+      },
+      "record": {
+        "slug": "good-story"
+      }
+    },
+    {
+      "when": {
+        "query_contains": "scientific story"
+      },
+      "action": {
+        "type": "boost",
+        "delta": 38.0,
+        "reason": "Good-story boost: scientific story wording detected."
+      },
+      "record": {
+        "slug": "good-story"
+      }
+    },
+    {
+      "when": {
+        "query_contains": "story diagnosis"
+      },
+      "action": {
+        "type": "boost",
+        "delta": 42.0,
+        "reason": "Good-story boost: story diagnosis wording detected."
+      },
+      "record": {
+        "slug": "good-story"
+      }
     }
   ],
   "visual_evidence_markers": [

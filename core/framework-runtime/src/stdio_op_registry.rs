@@ -78,10 +78,10 @@ const FRAMEWORK_STDIO_OPS: &[&str] = &[
 ];
 
 const TOOL_STDIO_OPS: &[&str] = &[
-    "route_tool",
     "search_tools",
     "tool_registry_status",
     // tool_decision_report and tool_eval removed: stubs never implemented
+    // route_tool removed: unified into skill_route entry point
 ];
 
 fn op_in_domain(op: &str, domain_ops: &[&str]) -> bool {

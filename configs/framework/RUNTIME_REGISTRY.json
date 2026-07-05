@@ -515,7 +515,6 @@
         "goal_state_manage",
         "goal_state_read",
         "record_evidence",
-        "route_tool",
         "search_tools",
         "session_checkpoint",
         "skill_read",

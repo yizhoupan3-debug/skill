@@ -211,7 +211,7 @@ manifest_retry_logic ──→ should_retry_with_manifest / should_accept_manife
 |------|------|------|
 | `route_task()` | `routing.rs:336` | 主路由入口：评分 → 选择 → overlay → 日志 |
 | `search_skills()` | `routing.rs:199` | 搜索模式：评分 + top-k 返回 |
-| `route_tool()` | `tool-routing-engine/routing.rs:25` | 工具路由入口 |
+| `route_tool()` (内部) | `tool-routing-engine/routing.rs:25` | 工具路由入口（内部 API，不再以 MCP 工具暴露） |
 | `should_retry_with_manifest()` | `routing.rs:775` | 判断是否需要 manifest fallback |
 | `should_accept_manifest_fallback()` | `routing.rs:975` | 判断 manifest fallback 决策是否可接受 |
 | `evaluate_routing_cases()` | `eval.rs:34` | 评估框架 |

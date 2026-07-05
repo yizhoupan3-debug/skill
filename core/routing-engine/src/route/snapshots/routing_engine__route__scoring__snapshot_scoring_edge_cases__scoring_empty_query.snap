@@ -110,5 +110,13 @@ expression: results
   [
     "primary-runtime",
     100.0
+  ],
+  [
+    "browser-automation",
+    100.0
+  ],
+  [
+    "financial-data",
+    100.0
   ]
 ]

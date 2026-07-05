@@ -45,7 +45,7 @@ trigger_hints:
 - 调试
 ---
 
-> Agent: 使用 `route_tool(query)` 查找此 skill 域内的 MCP 工具。使用 `search_tools(query, top_k)` 探索所有可用工具。
+> Agent: 使用 `search_tools(query, top_k)` 探索此 skill 域内的 MCP 工具。
 # Systematic Debugging
 
 This skill owns **investigation before repair**. When root cause is still

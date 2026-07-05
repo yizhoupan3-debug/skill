@@ -795,7 +795,6 @@ fn handle_prompts_get(
                  - 我知道要做什么任务 → skill_route(query)\n\
                    → 响应含 recommended_tools + skill_summary, 读完即用\n\
                  - 想搜索有什么可用 → skill_search(query, limit)\n\
-                 - 需要单个 MCP 工具 → route_tool(query)\n\
                  - 探索工具生态 → search_tools(query, top_k)\n\n\
                  Framework root: core/router-rs/"
             )

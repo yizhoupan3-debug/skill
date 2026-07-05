@@ -4,6 +4,18 @@ allowed_tools:
 - shell
 - git
 - python
+- Read
+- Write
+- Edit
+- Grep
+- Glob
+- Agent
+- bash
+- skill_read
+- skill_route
+- skill_search
+- search_tools
+- tool_registry_status
 approval_required_tools:
 - git push
 description: Design and tune cross-host skill routing and framework behavior

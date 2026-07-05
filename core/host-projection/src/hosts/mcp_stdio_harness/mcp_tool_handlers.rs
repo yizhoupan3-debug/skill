@@ -106,7 +106,7 @@ impl ToolHandler for RoutingTools {
 pub struct ToolDomainTools;
 impl ToolHandler for ToolDomainTools {
     fn tool_names(&self) -> &[&'static str] {
-        &["route_tool", "search_tools", "tool_registry_status"]
+        &["search_tools", "tool_registry_status"]
     }
     fn dispatch(
         &self,
@@ -115,7 +115,6 @@ impl ToolHandler for ToolDomainTools {
         ctx: &ToolCallContext,
     ) -> Result<String, FrameworkError> {
         match tool_name {
-            "route_tool" => tool_route_tool(args, &ctx.repo_root, &ctx.host_id),
             "search_tools" => tool_search_tools(args, &ctx.repo_root, &ctx.host_id),
             "tool_registry_status" => tool_registry_status(),
             _ => Err(FrameworkError::not_found(format!(
@@ -267,34 +266,6 @@ fn resolve_tool_registry_path(repo_root: &std::path::Path) -> std::path::PathBuf
 }
 
 // ---------------------------------------------------------------------------
-
-/// route_tool: route a natural language query to the best-matching MCP tool.
-/// Uses the connection-level host_id by default; args can override with `host_id`.
-fn tool_route_tool(
-    args: &Value,
-    ctx_repo_root: &std::path::Path,
-    host_id: &str,
-) -> Result<String, FrameworkError> {
-    let query = args
-        .get("query")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| FrameworkError::from("route_tool: missing 'query' parameter".to_string()))?;
-    // P2 #03: reject caller-supplied host_id override; always use connection-level identity.
-    if let Some(override_host) = args.get("host_id").and_then(Value::as_str).filter(|h| !h.is_empty()) {
-        if override_host != host_id {
-            tracing::warn!("host_id override rejected: caller tried to override '{host_id}' with '{override_host}'");
-        }
-    }
-    let registry_path = resolve_tool_registry_path(ctx_repo_root);
-    let decision =
-        tool_routing_engine::routing::route_tool(query, &registry_path)?
-            .ok_or_else(|| {
-                FrameworkError::from(format!(
-                    "route_tool: no matching tool found for query '{query}'"
-                ))
-            })?;
-    serde_json::to_string(&decision).map_err(|e| FrameworkError::from(e.to_string()))
-}
 
 /// search_tools: search the tool registry and return top-k results.
 /// Uses the connection-level host_id by default; args can override with `host_id`.

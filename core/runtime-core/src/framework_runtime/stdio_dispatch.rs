@@ -450,17 +450,6 @@ fn dispatch_framework_stdio_request(op: &str, payload: Value) -> Result<Value, F
 
 fn dispatch_tool_stdio_request(op: &str, payload: Value) -> Result<Value, FrameworkError> {
     match op {
-        "route_tool" => {
-            let query = required_non_empty_string(&payload, "query", "stdio route_tool")?;
-            let registry_path = resolve_tool_registry_path_from_payload(&payload)?;
-            let decision = tool_routing_engine::routing::route_tool(&query, &registry_path)?
-                .ok_or_else(|| {
-                    FrameworkError::not_found(format!(
-                        "route_tool: no matching tool found for query '{query}'"
-                    ))
-                })?;
-            serde_json::to_value(&decision).map_err(|e| FrameworkError::validation(e.to_string()))
-        }
         "search_tools" => {
             let query = required_non_empty_string(&payload, "query", "stdio search_tools")?;
             let top_k = payload.get("top_k").and_then(|v| v.as_u64()).unwrap_or(5) as usize;

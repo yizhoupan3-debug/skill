@@ -28,8 +28,8 @@
 | 输入类型 | 路由路径 |
 |----------|---------|
 | `/gitx`、`/goalx` 等 slash command | `~/.claude/skills/<name>/SKILL.md`（Claude 原生，不经过 MCP） |
-| 自然语言任务 | `skill_route(query)` → 响应含 `recommended_tools` + `skill_summary` |
-| 查找 MCP 工具 | `route_tool(query)` / `search_tools(query, top_k)` |
+| 自然语言任务（统一入口） | `skill_route(query)` → 响应含 `recommended_tools` + `selected_skill` + `skill_summary` |
+| 探索 MCP 工具生态 | `search_tools(query, top_k)` |
 
 **新增 personal command checklist**: 创建 `~/.claude/skills/<name>/SKILL.md` → 确认 `configs/framework/RUNTIME_REGISTRY.json` 无同名 → 确认 `skills/SKILL_ROUTING_RUNTIME.json` 无同名（除非需 NL 路由）。
 

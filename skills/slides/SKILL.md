@@ -39,7 +39,7 @@ trigger_hints:
 - 生成演示文稿
 ---
 
-> Agent: 使用 `route_tool(query)` 查找此 skill 域内的 MCP 工具。使用 `search_tools(query, top_k)` 探索所有可用工具。
+> Agent: 使用 `search_tools(query, top_k)` 探索此 skill 域内的 MCP 工具。
 ## Quick Ref
 - **Purpose**: PPT/PPTX 演示文稿的 artifact-first 生成门控，Rust CLI 驱动，从 deck.plan.json 确定性构建
 - **Key Rules**: 视觉优先内容 ≤45 词/slide；body ≥18pt；anti-ugly 黑名单硬拦；CLI-first 单命令门控；已存在 .pptx 先 intake 再改

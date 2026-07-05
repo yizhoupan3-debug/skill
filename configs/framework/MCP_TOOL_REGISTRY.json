@@ -488,40 +488,6 @@
       }
     },
     {
-      "slug": "route_tool",
-      "display_name": "工具路由",
-      "description": "自然语言查询 → 路由到最佳匹配 MCP 工具。返回 McpToolDecision（含 selected_tool、score、reasons、dispatch_domain、fuzzy_match）。与 skill_route 不同：路由的是单个 MCP 工具而非 skill。当 Agent 明确需要某个工具时使用。",
-      "layer": "builtin",
-      "dispatch_domain": "domain:framework",
-      "owner": "framework",
-      "trigger_hints": [
-        "路由",
-        "route",
-        "工具"
-      ],
-      "mcp_server": "router-rs-framework",
-      "tool_flags": [
-        "no_routing",
-        "readonly"
-      ],
-      "input_schema": {
-        "type": "object",
-        "required": [
-          "query"
-        ],
-        "properties": {
-          "query": {
-            "type": "string",
-            "description": "自然语言查询文本"
-          },
-          "host_id": {
-            "type": "string",
-            "description": "宿主平台 ID（可选，默认使用连接级 host_id）"
-          }
-        }
-      }
-    },
-    {
       "slug": "search_tools",
       "display_name": "工具搜索",
       "description": "搜索工具注册表",
