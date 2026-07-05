@@ -107,6 +107,18 @@ pub struct MagnitudeEstimate {
     pub order: String,
 }
 
+/// Result of comparing two expressions' growth magnitudes.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MagnitudeCompare {
+    pub f: String,
+    pub g: String,
+    pub var: String,
+    pub regime: String,
+    pub relation: OrderRelation,
+    pub f_class: String,
+    pub g_class: String,
+}
+
 // ===========================================================================
 // Chain composition (pure Rust, no subprocess)
 // ===========================================================================
@@ -175,6 +187,47 @@ pub fn magnitude_estimate_with_name(
             details: format!("estimate error: {e}"),
             evidence_path: None,
         },
+    }
+}
+
+/// Compare two expressions' growth magnitudes.
+///
+/// Returns which grows faster and the relation between them, using the
+/// symbolic growth classification engine. Handles regime transformation
+/// (n→0, n→c) internally.
+pub fn compare_magnitudes(f: &str, g: &str, var: &str, regime: &str) -> MagnitudeCompare {
+    let tf = transform_regime(f, var, regime);
+    let tg = transform_regime(g, var, regime);
+
+    // Parse and classify both expressions
+    let gf = crate::verification::symbolic::parse(&tf)
+        .ok()
+        .map(|e| crate::verification::symbolic::classify_growth(&e, var));
+    let gg = crate::verification::symbolic::parse(&tg)
+        .ok()
+        .map(|e| crate::verification::symbolic::classify_growth(&e, var));
+
+    let (relation, f_class, g_class) = match (gf, gg) {
+        (Some(ref gf), Some(ref gg)) => {
+            let cmp = crate::verification::symbolic::compare_growth_classes(gf, gg);
+            let rel = match cmp {
+                std::cmp::Ordering::Less => OrderRelation::MuchLess,
+                std::cmp::Ordering::Equal => OrderRelation::Asymp,
+                std::cmp::Ordering::Greater => OrderRelation::MuchGreater,
+            };
+            (rel, format!("{gf:?}"), format!("{gg:?}"))
+        }
+        _ => (OrderRelation::Asymp, "unknown".into(), "unknown".into()),
+    };
+
+    MagnitudeCompare {
+        f: f.into(),
+        g: g.into(),
+        var: var.into(),
+        regime: regime.into(),
+        relation,
+        f_class,
+        g_class,
     }
 }
 

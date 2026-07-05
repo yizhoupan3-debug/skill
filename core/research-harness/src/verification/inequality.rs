@@ -506,6 +506,21 @@ fn is_nonlinear(expr: &str) -> bool {
                 return true;
             }
         }
+
+        // Variable in denominator → nonlinear (e.g. `x/y`, `1/x`, `(x+1)/y`)
+        if bytes[i] == b'/' {
+            let mut k = i + 1;
+            while k < bytes.len() && bytes[k] == b' ' {
+                k += 1;
+            }
+            if k < bytes.len() {
+                let after = bytes[k] as char;
+                if after.is_ascii_alphabetic() || after == '(' {
+                    return true;
+                }
+            }
+        }
+
         i += 1;
     }
 

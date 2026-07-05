@@ -68,7 +68,8 @@ pub fn tool_definitions() -> Vec<Value> {
                     "consecutive_stable_required": {"type": "integer", "minimum": 1, "maximum": 50, "description": "连续稳定轮次要求"},
                     "round": {"type": "integer", "minimum": 0, "description": "当前轮次号"},
                     "findings": {"type": "array", "items": {"type": "object"}, "description": "本轮审稿发现"}
-                }
+                },
+                "required": ["operation"]
             }),
         ),
         tool_def(
@@ -111,7 +112,7 @@ pub fn tool_definitions() -> Vec<Value> {
         ),
         tool_def(
             "math_proof_dag_verify",
-            "验证证明 DAG 结构完备性（调用后端验证叶子节点）",
+            "验证证明 DAG 结构完备性，返回通过/失败及详情",
             json!({
                 "type": "object",
                 "properties": {
@@ -121,7 +122,7 @@ pub fn tool_definitions() -> Vec<Value> {
         ),
         tool_def(
             "math_proof_dag_status",
-            "查看证明 DAG 进度摘要",
+            "查看证明 DAG 进度摘要，含已完成节点数/总节点数/状态",
             json!({
                 "type": "object",
                 "properties": {
@@ -209,7 +210,7 @@ pub fn tool_definitions() -> Vec<Value> {
         ),
         tool_def(
             "math_prove_inequality",
-            "证明数学不等式：Z3 (非线性/SMT) + minilp (线性), 自动降级",
+            "证明数学不等式：Z3 (非线性/SMT) + minilp (线性), 自动降级（底层使用 Z3 SMT 求解器）",
             json!({
                 "type": "object",
                 "properties": {
@@ -256,7 +257,8 @@ pub fn tool_definitions() -> Vec<Value> {
                         "enum": ["z3", "sympy", "lean", "all"],
                         "description": "要检查的后端（默认 all）"
                     }
-                }
+                },
+                "required": []
             }),
         ),
         tool_def(
@@ -419,7 +421,8 @@ pub fn tool_definitions() -> Vec<Value> {
             "重置 Z3 求解器状态（清空全部约束）",
             json!({
                 "type": "object",
-                "properties": {}
+                "properties": {},
+                "required": []
             }),
         ),
         tool_def(
@@ -631,7 +634,7 @@ pub fn tool_definitions() -> Vec<Value> {
         ),
         tool_def(
             "math_tighten_bounds",
-            "Z3 不等式边界细化：对单变量约束逐步收紧变量范围，返回更精确的区间",
+            "Z3 不等式边界细化：对单变量约束逐步收紧变量范围，返回更精确的区间（底层使用 Z3 二分搜索迭代）",
             json!({
                 "type": "object",
                 "required": ["expression", "variable", "lower", "upper"],
@@ -756,20 +759,20 @@ fn tool_def(name: &str, description: &str, input_schema: Value) -> Value {
 fn tool_literature_search() -> Value {
     tool_def(
         "research_literature_search",
-        "Search academic literature across arXiv and Semantic Scholar. Supports fuzzy matching and authoritative filtering.",
+        "跨 arXiv 和 Semantic Scholar 搜索学术文献，支持模糊匹配和权威排序",
         json!({
             "type": "object",
             "properties": {
-                "query": {"type": "string", "description": "Search query (plain text)"},
-                "limit": {"type": "integer", "minimum": 1, "maximum": 100, "description": "Max results per source (default 20, max 100)"},
-                "source": {"type": "string", "enum": ["all", "semantic-scholar", "arxiv"], "description": "Source to search (default all)"},
-                "year_from": {"type": "integer", "description": "Minimum publication year (inclusive)"},
-                "year_to": {"type": "integer", "description": "Maximum publication year (inclusive)"},
-                "sort_by": {"type": "string", "enum": ["relevance", "date"], "description": "Sort order (default relevance)"},
-                "categories": {"type": "string", "description": "arXiv category filter, comma-separated (e.g. 'cs.AI,cs.LG')"},
-                "advanced_query": {"type": "string", "description": "Advanced arXiv native query (e.g. 'au:vaswani AND ti:attention'). Overrides 'query' for arXiv only."},
-                "fuzzy_query": {"type": "boolean", "description": "Enable fuzzy/broad matching — arXiv uses raw text with OR expansion instead of all: keyword (default false)"},
-                "prefer_authoritative": {"type": "boolean", "description": "Enable two-pass authoritative ranking — fetches up to 3x results, scores by DOI/venue/citations/recency, demotes preprints (default false)"}
+                "query": {"type": "string", "description": "搜索查询（纯文本）"},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 100, "description": "每源最大结果数（默认 20，最大 100）"},
+                "source": {"type": "string", "enum": ["all", "semantic-scholar", "arxiv"], "description": "搜索源（默认 all）"},
+                "year_from": {"type": "integer", "description": "最早出版年份（含）"},
+                "year_to": {"type": "integer", "description": "最晚出版年份（含）"},
+                "sort_by": {"type": "string", "enum": ["relevance", "date"], "description": "排序方式（默认 relevance）"},
+                "categories": {"type": "string", "description": "arXiv 分类过滤，逗号分隔（如 'cs.AI,cs.LG'）"},
+                "advanced_query": {"type": "string", "description": "arXiv 高级原生查询（如 'au:vaswani AND ti:attention'）。覆盖 query（仅 arXiv）"},
+                "fuzzy_query": {"type": "boolean", "description": "启用模糊/宽泛匹配 — arXiv 使用原始文本 OR 展开而非 all: 关键词（默认 false）"},
+                "prefer_authoritative": {"type": "boolean", "description": "启用双通道权威排序 — 获取多达 3 倍结果，按 DOI/venue/引用量/时效性评分，降低预印本优先级（默认 false）"}
             },
             "required": ["query"]
         }),

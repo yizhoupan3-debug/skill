@@ -4,24 +4,27 @@
 
 use crate::types::{VerificationResult, VerificationStatus};
 use serde_json::json;
-use std::sync::{Mutex, OnceLock};
+use std::cell::RefCell;
+use std::hash::{Hash, Hasher};
 use z3::ast::Ast;
 
 /// Z3 is always available (bundled via z3 crate).
 pub fn z3_available() -> bool { true }
 
-/// Wrapper to make z3::Solver Send+Sync-safe.
-/// z3's C API solver is thread-safe when protected by a Mutex,
-/// but the Rust bindings' `NonNull` pointer fields prevent auto-derived Send/Sync.
-struct SendSyncSolver(Mutex<z3::Solver>);
-unsafe impl Send for SendSyncSolver {}
-unsafe impl Sync for SendSyncSolver {}
+thread_local! {
+    /// Per-thread cached solver to avoid re-creating Z3 solver for each call.
+    /// Thread-local eliminates contention and avoids Send/Sync issues with
+    /// the z3 crate's interior mutability.
+    static THREAD_SOLVER: RefCell<z3::Solver> = RefCell::new(z3::Solver::new());
+}
 
-/// A shared solver instance for the single-step solver API.
-/// Ensures push/pop/add/check/reset operate on the same solver context.
-fn shared_solver() -> &'static Mutex<z3::Solver> {
-    static SOLVER: OnceLock<SendSyncSolver> = OnceLock::new();
-    &SOLVER.get_or_init(|| SendSyncSolver(Mutex::new(z3::Solver::new()))).0
+/// Run `f` with the thread-local solver (reset to clean state).
+fn with_thread_solver<T>(f: impl FnOnce(&mut z3::Solver) -> T) -> T {
+    THREAD_SOLVER.with(|cell| {
+        let mut solver = cell.borrow_mut();
+        solver.reset();
+        f(&mut *solver)
+    })
 }
 
 /// Known math functions the parser recognizes.
@@ -38,7 +41,7 @@ const KNOWN_FUNCTIONS: &[&str] = &[
 /// Top-level: parse a relational/boolean expression into a z3 Bool.
 ///
 /// Supports quantifiers: `ForAll([x, y], body)` and `Exists([x, y], body)`.
-fn parse_z3_bool(solver: &z3::Solver, expr: &str) -> Result<z3::ast::Bool, String> {
+pub(crate) fn parse_z3_bool(solver: &z3::Solver, expr: &str) -> Result<z3::ast::Bool, String> {
     let expr = expr.trim();
     if let Some(inner) = strip_prefix_parens(expr, "And") {
         let parts = split_top_level_args(inner)?;
@@ -383,7 +386,12 @@ fn parse_atom_depth(solver: &z3::Solver, expr: &str, depth: i32) -> Result<z3::a
                         // Create a fresh Z3 variable as an uninterpreted function
                         // placeholder, with basic inequality bounds to prevent
                         // the most egregious false positives (e.g., sin(x) ∈ [-1,1]).
-                        let guard = format!("__uf_{name}");
+                        // Include argument hash so sin(x) ≠ sin(y) as UF.
+                        let guard = {
+                            let mut hasher = std::collections::hash_map::DefaultHasher::new();
+                            inner.hash(&mut hasher);
+                            format!("__uf_{name}_{}", hasher.finish())
+                        };
                         let uf_var = z3::ast::Real::new_const(guard.as_str());
                         // Assert basic domain/range constraints for known functions
                         match name {
@@ -600,94 +608,87 @@ pub struct SolverBatchStep {
 }
 
 pub fn solver_batch(steps: &[SolverBatchStep]) -> Result<serde_json::Value, String> {
-    let solver = z3::Solver::new();
-    let mut results = Vec::new();
-    for step in steps {
-        let r = match step.action.as_str() {
-            "push" => { solver.push(); json!({"result": "ok"}) }
-            "pop" => { solver.pop(step.n.unwrap_or(1) as u32); json!({"result": "ok"}) }
-            "add" => {
-                match &step.expression {
-                    Some(e) => match parse_z3_bool(&solver, e) {
-                        Ok(b) => { solver.assert(&b); json!({"result": "ok"}) }
-                        Err(e) => json!({"result": "error", "error": e}),
-                    },
-                    None => json!({"result": "error", "error": "missing expression"}),
+    with_thread_solver(|solver| {
+        let mut results = Vec::new();
+        for step in steps {
+            let r = match step.action.as_str() {
+                "push" => { solver.push(); json!({"result": "ok"}) }
+                "pop" => { solver.pop(step.n.unwrap_or(1) as u32); json!({"result": "ok"}) }
+                "add" => {
+                    match &step.expression {
+                        Some(e) => match parse_z3_bool(solver, e) {
+                            Ok(b) => { solver.assert(&b); json!({"result": "ok"}) }
+                            Err(e) => json!({"result": "error", "error": e}),
+                        },
+                        None => json!({"result": "error", "error": "missing expression"}),
+                    }
                 }
-            }
-            "check" => {
-                let mut p = z3::Params::new();
-                p.set_u32("timeout", step.timeout_ms.unwrap_or(5000) as u32);
-                solver.set_params(&p);
-                match solver.check() {
-                    z3::SatResult::Sat => json!({"result": "sat", "model": solver.get_model().map(|m| model_to_json(&m)).unwrap_or_default()}),
-                    z3::SatResult::Unsat => json!({"result": "unsat"}),
-                    z3::SatResult::Unknown => json!({"result": "unknown"}),
+                "check" => {
+                    let mut p = z3::Params::new();
+                    p.set_u32("timeout", step.timeout_ms.unwrap_or(5000) as u32);
+                    solver.set_params(&p);
+                    match solver.check() {
+                        z3::SatResult::Sat => json!({"result": "sat", "model": solver.get_model().map(|m| model_to_json(&m)).unwrap_or_default()}),
+                        z3::SatResult::Unsat => json!({"result": "unsat"}),
+                        z3::SatResult::Unknown => json!({"result": "unknown"}),
+                    }
                 }
-            }
-            "reset" => { solver.reset(); json!({"result": "ok"}) }
-            _ => json!({"result": "error", "error": format!("unknown action: {}", step.action)}),
-        };
-        results.push(r);
-    }
-    Ok(json!({"steps": results}))
+                "reset" => { solver.reset(); json!({"result": "ok"}) }
+                _ => json!({"result": "error", "error": format!("unknown action: {}", step.action)}),
+            };
+            results.push(r);
+        }
+        Ok(json!({"steps": results}))
+    })
 }
 
 pub fn solver_push(_n: usize) -> VerificationResult {
-    match shared_solver().lock() {
-        Ok(s) => {
-            s.push();
-            VerificationResult { check_name: "math_z3_solver_push".into(), status: VerificationStatus::Pass, details: "pushed 1".into(), evidence_path: None }
-        }
-        Err(e) => VerificationResult { check_name: "math_z3_solver_push".into(), status: VerificationStatus::Fail, details: format!("lock error: {e}"), evidence_path: None },
-    }
+    THREAD_SOLVER.with(|cell| {
+        let solver = &mut *cell.borrow_mut();
+        solver.push();
+        VerificationResult { check_name: "math_z3_solver_push".into(), status: VerificationStatus::Pass, details: "pushed 1".into(), evidence_path: None }
+    })
 }
 
 pub fn solver_pop(n: usize) -> VerificationResult {
-    match shared_solver().lock() {
-        Ok(s) => {
-            s.pop(n as u32);
-            VerificationResult { check_name: "math_z3_solver_pop".into(), status: VerificationStatus::Pass, details: format!("popped {n}"), evidence_path: None }
-        }
-        Err(e) => VerificationResult { check_name: "math_z3_solver_pop".into(), status: VerificationStatus::Fail, details: format!("lock error: {e}"), evidence_path: None },
-    }
+    THREAD_SOLVER.with(|cell| {
+        let solver = &mut *cell.borrow_mut();
+        solver.pop(n as u32);
+        VerificationResult { check_name: "math_z3_solver_pop".into(), status: VerificationStatus::Pass, details: format!("popped {n}"), evidence_path: None }
+    })
 }
 
 pub fn solver_add(expr: &str) -> VerificationResult {
-    match shared_solver().lock() {
-        Ok(s) => match parse_z3_bool(&s, expr) {
-            Ok(b) => { s.assert(&b); VerificationResult { check_name: "math_z3_solver_add".into(), status: VerificationStatus::Pass, details: format!("added {expr}"), evidence_path: None } }
+    THREAD_SOLVER.with(|cell| {
+        let solver = &mut *cell.borrow_mut();
+        match parse_z3_bool(solver, expr) {
+            Ok(b) => { solver.assert(&b); VerificationResult { check_name: "math_z3_solver_add".into(), status: VerificationStatus::Pass, details: format!("added {expr}"), evidence_path: None } }
             Err(e) => VerificationResult { check_name: "math_z3_solver_add".into(), status: VerificationStatus::Fail, details: e, evidence_path: None },
-        },
-        Err(e) => VerificationResult { check_name: "math_z3_solver_add".into(), status: VerificationStatus::Fail, details: format!("lock error: {e}"), evidence_path: None },
-    }
+        }
+    })
 }
 
 pub fn solver_check(timeout_ms: Option<u64>) -> VerificationResult {
-    match shared_solver().lock() {
-        Ok(s) => {
-            if let Some(ms) = timeout_ms { let mut p = z3::Params::new(); p.set_u32("timeout", ms as u32); s.set_params(&p); }
-            match s.check() {
-                z3::SatResult::Sat => {
-                    let model_str = s.get_model().map(|m| model_to_string(&m)).unwrap_or_default();
-                    VerificationResult { check_name: "math_z3_solver_check".into(), status: VerificationStatus::Pass, details: format!("SAT: {model_str}"), evidence_path: None }
-                }
-                z3::SatResult::Unsat => VerificationResult { check_name: "math_z3_solver_check".into(), status: VerificationStatus::Fail, details: "UNSAT".into(), evidence_path: None },
-                z3::SatResult::Unknown => VerificationResult { check_name: "math_z3_solver_check".into(), status: VerificationStatus::Warn, details: "unknown".into(), evidence_path: None },
+    THREAD_SOLVER.with(|cell| {
+        let solver = &mut *cell.borrow_mut();
+        if let Some(ms) = timeout_ms { let mut p = z3::Params::new(); p.set_u32("timeout", ms as u32); solver.set_params(&p); }
+        match solver.check() {
+            z3::SatResult::Sat => {
+                let model_str = solver.get_model().map(|m| model_to_string(&m)).unwrap_or_default();
+                VerificationResult { check_name: "math_z3_solver_check".into(), status: VerificationStatus::Pass, details: format!("SAT: {model_str}"), evidence_path: None }
             }
+            z3::SatResult::Unsat => VerificationResult { check_name: "math_z3_solver_check".into(), status: VerificationStatus::Fail, details: "UNSAT".into(), evidence_path: None },
+            z3::SatResult::Unknown => VerificationResult { check_name: "math_z3_solver_check".into(), status: VerificationStatus::Warn, details: "unknown".into(), evidence_path: None },
         }
-        Err(e) => VerificationResult { check_name: "math_z3_solver_check".into(), status: VerificationStatus::Fail, details: format!("lock error: {e}"), evidence_path: None },
-    }
+    })
 }
 
 pub fn solver_reset() -> VerificationResult {
-    match shared_solver().lock() {
-        Ok(s) => {
-            s.reset();
-            VerificationResult { check_name: "math_z3_solver_reset".into(), status: VerificationStatus::Pass, details: "cleared".into(), evidence_path: None }
-        }
-        Err(e) => VerificationResult { check_name: "math_z3_solver_reset".into(), status: VerificationStatus::Fail, details: format!("lock error: {e}"), evidence_path: None },
-    }
+    THREAD_SOLVER.with(|cell| {
+        let mut solver = cell.borrow_mut();
+        solver.reset();
+        VerificationResult { check_name: "math_z3_solver_reset".into(), status: VerificationStatus::Pass, details: "cleared".into(), evidence_path: None }
+    })
 }
 
 pub fn optimize_formula(objective: &str, constraints: &[String], _vars: Option<&[String]>, direction: &str) -> Result<serde_json::Value, String> {
@@ -737,6 +738,28 @@ pub fn check_inequality(expr: &str) -> VerificationResult {
         }
         Err(e) => VerificationResult { check_name: "math_prove_inequality".into(), status: VerificationStatus::Fail, details: format!("parse error: {e}"), evidence_path: None },
     }
+}
+
+/// Evaluate a constraint with push/pop isolation on a given solver.
+/// Returns `Ok(Some(true))` for SAT, `Ok(Some(false))` for UNSAT, `Ok(None)` for Unknown.
+pub(crate) fn solver_pushpop_check(solver: &z3::Solver, expr: &str, timeout_ms: u64) -> Result<Option<bool>, String> {
+    solver.push();
+    let result = match parse_z3_bool(solver, expr) {
+        Ok(b) => {
+            solver.assert(&b);
+            let mut p = z3::Params::new();
+            p.set_u32("timeout", timeout_ms as u32);
+            solver.set_params(&p);
+            match solver.check() {
+                z3::SatResult::Sat => Ok(Some(true)),
+                z3::SatResult::Unsat => Ok(Some(false)),
+                z3::SatResult::Unknown => Ok(None),
+            }
+        }
+        Err(e) => Err(e),
+    };
+    solver.pop(1);
+    result
 }
 
 #[cfg(test)]

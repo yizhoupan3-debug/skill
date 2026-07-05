@@ -441,9 +441,6 @@ pub fn tighten_bounds(expr: &str, var: &str, lo: f64, hi: f64, timeout_ms: Optio
         };
     }
 
-    // Get all variables in the expression
-    let _all_vars = extract_variables(expr);
-
     // Build SMT query: check sat of (expr AND var >= candidate)
     // We use binary search for each bound
     let mut current_lo = lo;
@@ -452,56 +449,39 @@ pub fn tighten_bounds(expr: &str, var: &str, lo: f64, hi: f64, timeout_ms: Optio
     let max_iterations = 40; // enough for double precision
     let tolerance = 1e-8 * (hi - lo).abs().max(1.0);
 
-    // First, verify the range is feasible at all
-    {
-        // Check feasibility: is there a model satisfying the constraint within [lo, hi]?
-        let mut constraints = format!("And({} >= {}, {} <= {}", var, lo, var, hi);
+    // Create solver once, reuse with push/pop for all checks
+    let solver = z3::Solver::new();
+
+    // Helper: build And constraint and check with push/pop isolation
+    let check_feasible = |low_val: f64, high_val: f64, check_ms: u64| -> Result<Option<bool>, String> {
+        let mut constraints = format!("And({} >= {}, {} <= {}", var, low_val, var, high_val);
         if !expr.is_empty() {
             constraints.push_str(&format!(", {}", expr));
         }
         constraints.push(')');
+        crate::verification::z3_bridge::solver_pushpop_check(&solver, &constraints, check_ms)
+    };
 
-        let z3_steps = vec![
-            crate::verification::z3_bridge::SolverBatchStep {
-                action: "add".into(),
-                n: None,
-                expression: Some(constraints),
-                timeout_ms: Some(timeout),
-            },
-            crate::verification::z3_bridge::SolverBatchStep {
-                action: "check".into(),
-                n: None,
-                expression: None,
-                timeout_ms: Some(timeout),
-            },
-        ];
-
-        match crate::verification::z3_bridge::solver_batch(&z3_steps) {
-            Ok(result) => {
-                let check_result = result.get("steps")
-                    .and_then(|v| v.as_array())
-                    .and_then(|arr| arr.get(1))
-                    .and_then(|v| v.get("result"))
-                    .and_then(|v| v.as_str());
-                if check_result != Some("sat") {
-                    return TightenBoundsResult {
-                        lower_bound: lo,
-                        upper_bound: hi,
-                        iterations: 0,
-                        feasible: false,
-                        details: format!("Range [{lo}, {hi}] is infeasible for `{expr}`"),
-                    };
-                }
-            }
-            Err(e) => {
-                return TightenBoundsResult {
-                    lower_bound: lo,
-                    upper_bound: hi,
-                    iterations: 0,
-                    feasible: true,
-                    details: format!("Z3 batch error: {e}"),
-                };
-            }
+    // First, verify the range is feasible at all
+    match check_feasible(lo, hi, timeout) {
+        Ok(Some(true)) => {} // feasible, continue
+        Ok(_) => {
+            return TightenBoundsResult {
+                lower_bound: lo,
+                upper_bound: hi,
+                iterations: 0,
+                feasible: false,
+                details: format!("Range [{lo}, {hi}] is infeasible for `{expr}`"),
+            };
+        }
+        Err(e) => {
+            return TightenBoundsResult {
+                lower_bound: lo,
+                upper_bound: hi,
+                iterations: 0,
+                feasible: true,
+                details: format!("Z3 error: {e}"),
+            };
         }
     }
 
@@ -520,37 +500,9 @@ pub fn tighten_bounds(expr: &str, var: &str, lo: f64, hi: f64, timeout_ms: Optio
         let mid = (low_lo + low_hi) / 2.0;
 
         // Check sat of (expr AND var >= lo AND var <= mid)
-        let mut constraints = format!("And({} >= {}, {} <= {}", var, lo, var, mid);
-        if !expr.is_empty() {
-            constraints.push_str(&format!(", {}", expr));
-        }
-        constraints.push(')');
-
-        let steps = vec![
-            crate::verification::z3_bridge::SolverBatchStep {
-                action: "add".into(), n: None, expression: Some(constraints),
-                timeout_ms: None,
-            },
-            crate::verification::z3_bridge::SolverBatchStep {
-                action: "check".into(), n: None, expression: None,
-                timeout_ms: Some(timeout / 2),
-            },
-        ];
-
-        if let Ok(result) = crate::verification::z3_bridge::solver_batch(&steps) {
-            let is_sat = result.get("steps")
-                .and_then(|v| v.as_array())
-                .and_then(|arr| arr.get(1))
-                .and_then(|v| v.get("result"))
-                .and_then(|v| v.as_str())
-                == Some("sat");
-            if is_sat {
-                // Feasible region reaches `mid` → narrow upper bound
-                low_hi = mid;
-            } else {
-                // Not feasible at `mid` → raise lower bound
-                low_lo = mid;
-            }
+        match check_feasible(lo, mid, timeout / 2) {
+            Ok(Some(true)) => low_hi = mid, // Feasible at mid → narrow upper bound
+            _ => low_lo = mid,              // Not feasible → raise lower bound
         }
     }
     current_lo = low_hi;
@@ -570,37 +522,9 @@ pub fn tighten_bounds(expr: &str, var: &str, lo: f64, hi: f64, timeout_ms: Optio
         let mid = (up_lo + up_hi) / 2.0;
 
         // Check sat of (expr AND var >= mid AND var <= hi)
-        let mut constraints = format!("And({} >= {}, {} <= {}", var, mid, var, hi);
-        if !expr.is_empty() {
-            constraints.push_str(&format!(", {}", expr));
-        }
-        constraints.push(')');
-
-        let steps = vec![
-            crate::verification::z3_bridge::SolverBatchStep {
-                action: "add".into(), n: None, expression: Some(constraints),
-                timeout_ms: None,
-            },
-            crate::verification::z3_bridge::SolverBatchStep {
-                action: "check".into(), n: None, expression: None,
-                timeout_ms: Some(timeout / 2),
-            },
-        ];
-
-        if let Ok(result) = crate::verification::z3_bridge::solver_batch(&steps) {
-            let is_sat = result.get("steps")
-                .and_then(|v| v.as_array())
-                .and_then(|arr| arr.get(1))
-                .and_then(|v| v.get("result"))
-                .and_then(|v| v.as_str())
-                == Some("sat");
-            if is_sat {
-                // Feasible region extends to `mid` → try higher
-                up_lo = mid;
-            } else {
-                // Not feasible at `mid` → narrow upper bound
-                up_hi = mid;
-            }
+        match check_feasible(mid, hi, timeout / 2) {
+            Ok(Some(true)) => up_lo = mid, // Feasible at mid → try higher
+            _ => up_hi = mid,              // Not feasible → narrow upper bound
         }
     }
     current_hi = up_lo;
