@@ -19,7 +19,6 @@ metadata:
   network_access: local
   risk: medium
   routing_layer: L0
-  source: local
   version: '3.2.0'
 name: update
 routing_gate: none

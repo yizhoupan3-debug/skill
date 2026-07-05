@@ -129,9 +129,9 @@ mod tests {
     #[test]
     fn parses_manifest_into_skill_and_keyword_nodes() {
         let json = r#"{
-            "keys": ["slug","layer","owner","gate","priority","description","session_start","trigger_hints","source","skill_path","host_platforms","kind","allowed_tools","model"],
+            "keys": ["slug","layer","owner","gate","priority","description","session_start","trigger_hints","skill_path","host_platforms","kind","model"],
             "skills": [
-                ["test-skill","L0","owner","none","P1","A test skill description","n/a",["keyword1","测试关键词","/test-skill"],"project","skills/test-skill/SKILL.md",["claude"],"skill",null,null]
+                ["test-skill","L0","owner","none","P1","A test skill description","n/a",["keyword1","测试关键词","/test-skill"],"skills/test-skill/SKILL.md",["claude"],"skill",null]
             ]
         }"#;
         let parsed = parse_manifest_content(json, 1, "hash".to_string()).expect("should parse");

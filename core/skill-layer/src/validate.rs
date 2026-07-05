@@ -443,18 +443,7 @@ fn frontmatter_field_to_value(
             .short_description
             .as_ref()
             .map(|s| Value::String(s.clone())),
-        "risk" => fm.risk.as_ref().map(|v| Value::String(v.clone())),
         "metadata" => fm.metadata.clone(),
-        "allowed_tools" => fm
-            .allowed_tools
-            .as_ref()
-            .map(|v| Value::Array(v.iter().map(|s| Value::String(s.clone())).collect())),
-        "runtime_requirements" => fm.runtime_requirements.clone(),
-        "network_access" => fm.network_access.as_ref().map(|v| Value::String(v.clone())),
-        "approval_required_tools" => fm
-            .approval_required_tools
-            .as_ref()
-            .map(|v| Value::Array(v.iter().map(|s| Value::String(s.clone())).collect())),
         "kind" => fm.kind.map(|k| Value::String(k.as_str().to_string())),
         "scene" => fm.scene.as_ref().map(|s| Value::String(s.clone())),
         "sub_scene" => fm.sub_scene.as_ref().map(|s| Value::String(s.clone())),

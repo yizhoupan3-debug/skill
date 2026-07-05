@@ -107,7 +107,7 @@ fn manifest_sidecar_applies_declarative_negative_triggers_to_runtime_records() {
         ]]
     });
     let manifest_payload = json!({
-        "keys": ["slug", "layer", "owner", "gate", "priority", "description", "session_start", "trigger_hints", "source", "skill_path"],
+        "keys": ["slug", "layer", "owner", "gate", "priority", "description", "session_start", "trigger_hints", "skill_path"],
         "skills": [[
             "sample-skill",
             "L1",
@@ -116,9 +116,7 @@ fn manifest_sidecar_applies_declarative_negative_triggers_to_runtime_records() {
             "P1",
             "Sample skill",
             "n/a",
-            ["sample"],
-            "project",
-            "skills/sample-skill/SKILL.md"
+            ["sample"], "skills/sample-skill/SKILL.md"
         ]]
     });
     let metadata_payload = json!({
@@ -449,7 +447,7 @@ fn stdio_route_cache_refreshes_when_metadata_sidecar_changes() {
     fs::write(
             &manifest_path,
             serde_json::to_string(&json!({
-                "keys": ["slug", "layer", "owner", "gate", "priority", "description", "session_start", "trigger_hints", "source", "skill_path"],
+                "keys": ["slug", "layer", "owner", "gate", "priority", "description", "session_start", "trigger_hints", "skill_path"],
                 "skills": [[
                     "sample-skill",
                     "L1",
@@ -458,9 +456,7 @@ fn stdio_route_cache_refreshes_when_metadata_sidecar_changes() {
                     "P1",
                     "Sample skill",
                     "n/a",
-                    ["sample"],
-                    "project",
-                    "skills/sample-skill/SKILL.md"
+                    ["sample"], "skills/sample-skill/SKILL.md"
                 ]]
             }))
             .unwrap(),
@@ -508,7 +504,7 @@ fn load_records_prefers_default_runtime_even_with_explicit_manifest() {
     fs::write(
             &manifest_path,
             serde_json::to_string(&json!({
-                "keys": ["slug", "layer", "owner", "gate", "priority", "description", "session_start", "trigger_hints", "source", "skill_path"],
+                "keys": ["slug", "layer", "owner", "gate", "priority", "description", "session_start", "trigger_hints", "skill_path"],
                 "skills": [[
                     "manifest-owner",
                     "L1",

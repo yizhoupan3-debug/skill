@@ -6,8 +6,7 @@
 //! preserved (backfill is null-only).
 //!
 //! Columns that can be backfilled from SKILL.md frontmatter:
-//!   short_description, metadata, tags, risk, allowed_tools,
-//!   runtime_requirements, network_access, approval_required_tools
+//!   short_description, metadata, tags, kind, scene, sub_scene
 //!
 //! Columns NOT backfilled (no frontmatter source): when_to_use, do_not_use
 
@@ -44,11 +43,6 @@ const BACKFILLABLE_FIELDS: &[(&str, &str)] = &[
     ("short_description", "short_description"),
     ("metadata", "metadata"),
     ("tags", "tags"),
-    ("risk", "risk"),
-    ("allowed_tools", "allowed_tools"),
-    ("runtime_requirements", "runtime_requirements"),
-    ("network_access", "network_access"),
-    ("approval_required_tools", "approval_required_tools"),
     ("kind", "kind"),
     ("scene", "scene"),
     ("sub_scene", "sub_scene"),
@@ -82,17 +76,6 @@ fn frontmatter_field_to_value(
             .and_then(|m| m.get("tags"))
             .filter(|v| v.is_array())
             .map(|v| v.clone()),
-        "risk" => fm.risk.as_ref().map(|v| Value::String(v.clone())),
-        "allowed_tools" => fm
-            .allowed_tools
-            .as_ref()
-            .map(|v| Value::Array(v.iter().map(|s| Value::String(s.clone())).collect())),
-        "runtime_requirements" => fm.runtime_requirements.clone(),
-        "network_access" => fm.network_access.as_ref().map(|v| Value::String(v.clone())),
-        "approval_required_tools" => fm
-            .approval_required_tools
-            .as_ref()
-            .map(|v| Value::Array(v.iter().map(|s| Value::String(s.clone())).collect())),
         "kind" => fm.kind.map(|k| Value::String(k.as_str().to_string())),
         "scene" => fm.scene.as_ref().map(|v| Value::String(v.clone())),
         "sub_scene" => fm.sub_scene.as_ref().map(|v| Value::String(v.clone())),

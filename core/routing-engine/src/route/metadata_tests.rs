@@ -109,7 +109,7 @@ mod route_metadata_tests {
             ]]
         });
         let manifest_payload = json!({
-            "keys": ["slug", "layer", "owner", "gate", "priority", "description", "session_start", "trigger_hints", "source", "skill_path"],
+            "keys": ["slug", "layer", "owner", "gate", "priority", "description", "session_start", "trigger_hints", "skill_path"],
             "skills": [[
                 "sample-skill",
                 "L1",
@@ -453,7 +453,7 @@ mod route_metadata_tests {
         fs::write(
             &manifest_path,
             serde_json::to_string(&json!({
-                "keys": ["slug", "layer", "owner", "gate", "priority", "description", "session_start", "trigger_hints", "source", "skill_path"],
+                "keys": ["slug", "layer", "owner", "gate", "priority", "description", "session_start", "trigger_hints", "skill_path"],
                 "skills": [[
                     "sample-skill",
                     "L1",
@@ -512,7 +512,7 @@ mod route_metadata_tests {
         fs::write(
             &manifest_path,
             serde_json::to_string(&json!({
-                "keys": ["slug", "layer", "owner", "gate", "priority", "description", "session_start", "trigger_hints", "source", "skill_path"],
+                "keys": ["slug", "layer", "owner", "gate", "priority", "description", "session_start", "trigger_hints", "skill_path"],
                 "skills": [[
                     "manifest-owner",
                     "L1",

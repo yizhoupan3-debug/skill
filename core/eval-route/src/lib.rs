@@ -547,7 +547,7 @@ mod tests {
         let runtime_json = serde_json::json!({
             "keys": [
                 "slug", "layer", "owner", "gate", "priority", "description",
-                "session_start", "trigger_hints", "source", "skill_path",
+                "session_start", "trigger_hints", "skill_path",
                 "host_platforms", "kind", "skill_flags"
             ],
             "skills": [

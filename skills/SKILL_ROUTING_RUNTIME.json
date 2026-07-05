@@ -17,11 +17,6 @@
     "when_to_use",
     "do_not_use",
     "metadata",
-    "risk",
-    "allowed_tools",
-    "runtime_requirements",
-    "network_access",
-    "approval_required_tools",
     "scene",
     "sub_scene"
   ],
@@ -86,19 +81,6 @@
         ],
         "version": "1.0.0"
       },
-      "low",
-      [
-        "Read",
-        "Write",
-        "Edit",
-        "Bash",
-        "Grep",
-        "WebSearch",
-        "WebFetch"
-      ],
-      null,
-      "conditional",
-      null,
       "research",
       null
     ],
@@ -151,16 +133,6 @@
         ],
         "version": "4.0.0"
       },
-      "medium",
-      [
-        "Agent",
-        "Read",
-        "Bash",
-        "Grep"
-      ],
-      null,
-      "conditional",
-      null,
       "general",
       null
     ],
@@ -227,17 +199,6 @@
         ],
         "version": "1.0.0"
       },
-      "low",
-      [
-        "Read",
-        "Write",
-        "Edit",
-        "Bash",
-        "Grep"
-      ],
-      null,
-      "conditional",
-      null,
       "research",
       null
     ],
@@ -292,17 +253,6 @@
         ],
         "version": "2.4.0"
       },
-      "low",
-      [
-        "Read",
-        "Write",
-        "Edit",
-        "Bash",
-        "Grep"
-      ],
-      null,
-      "conditional",
-      null,
       "research",
       null
     ],
@@ -361,23 +311,6 @@
         ],
         "version": "2.2.0"
       },
-      "medium",
-      [
-        "Read",
-        "Bash",
-        "Agent",
-        "mcp__mcp-codegraph__codegraph_search",
-        "mcp__mcp-codegraph__codegraph_callers",
-        "mcp__mcp-codegraph__codegraph_callees",
-        "mcp__mcp-codegraph__codegraph_impact",
-        "mcp__mcp-codegraph__codegraph_node",
-        "mcp__mcp-codegraph__codegraph_status",
-        "mcp__mcp-codegraph__codegraph_dead_code",
-        "mcp__mcp-codegraph__codegraph_goto_definition"
-      ],
-      null,
-      "local",
-      null,
       "code_review",
       null
     ],
@@ -431,16 +364,6 @@
         ],
         "version": "1.1.0"
       },
-      "low",
-      [
-        "WebSearch",
-        "WebFetch",
-        "Read",
-        "Bash"
-      ],
-      null,
-      "approve",
-      null,
       "general",
       null
     ],
@@ -501,16 +424,6 @@
         ],
         "version": "1.0.0"
       },
-      "low",
-      [
-        "shell",
-        "browser"
-      ],
-      null,
-      "conditional",
-      [
-        "network install"
-      ],
       "general",
       null
     ],
@@ -562,22 +475,6 @@
         ],
         "version": "2.0.0"
       },
-      "low",
-      [
-        "shell",
-        "rust"
-      ],
-      {
-        "commands": [
-          "cargo",
-          "soffice",
-          "pdftoppm"
-        ]
-      },
-      "conditional",
-      [
-        "file overwrite"
-      ],
       "general",
       null
     ],
@@ -635,18 +532,6 @@
         ],
         "version": "1.0.3"
       },
-      "low",
-      [
-        "Read",
-        "Write",
-        "Edit",
-        "Bash",
-        "Grep",
-        "Glob"
-      ],
-      null,
-      "local",
-      null,
       "research",
       "reproducibility"
     ],
@@ -696,15 +581,6 @@
         ],
         "version": "1.0.0"
       },
-      "low",
-      [
-        "Read",
-        "Bash",
-        "Grep"
-      ],
-      null,
-      "local",
-      null,
       "research",
       null
     ],
@@ -761,23 +637,6 @@
         ],
         "version": "2.0.0"
       },
-      "medium",
-      [
-        "shell",
-        "git",
-        "rust"
-      ],
-      {
-        "commands": [
-          "cargo",
-          "gh",
-          "git"
-        ]
-      },
-      "conditional",
-      [
-        "git push"
-      ],
       "code_review",
       null
     ],
@@ -840,23 +699,6 @@
         ],
         "version": "2.0.0"
       },
-      "low",
-      [
-        "shell",
-        "git",
-        "rust"
-      ],
-      {
-        "commands": [
-          "cargo",
-          "gh",
-          "git"
-        ]
-      },
-      "conditional",
-      [
-        "git push"
-      ],
       "code_review",
       null
     ],
@@ -902,17 +744,6 @@
         ],
         "version": "1.0.0"
       },
-      "low",
-      [
-        "Read",
-        "WebFetch",
-        "WebSearch",
-        "Bash",
-        "Grep"
-      ],
-      null,
-      "required",
-      null,
       "research",
       null
     ],
@@ -969,19 +800,6 @@
         ],
         "version": "1.0.0"
       },
-      "low",
-      [
-        "Read",
-        "Write",
-        "Edit",
-        "Bash",
-        "Grep",
-        "WebSearch",
-        "WebFetch"
-      ],
-      null,
-      "local",
-      null,
       "research",
       null
     ],
@@ -1038,19 +856,6 @@
         ],
         "version": "1.0.0"
       },
-      "low",
-      [
-        "Read",
-        "Write",
-        "Edit",
-        "Bash",
-        "Grep",
-        "WebSearch",
-        "WebFetch"
-      ],
-      null,
-      "local",
-      null,
       "research",
       null
     ],
@@ -1133,19 +938,6 @@
         ],
         "version": "1.0.0"
       },
-      "low",
-      [
-        "Read",
-        "Write",
-        "Edit",
-        "Bash",
-        "Grep",
-        "WebSearch",
-        "WebFetch"
-      ],
-      null,
-      "local",
-      null,
       "research",
       "execution"
     ],
@@ -1195,18 +987,6 @@
         ],
         "version": "1.0.0"
       },
-      "low",
-      [
-        "Read",
-        "Write",
-        "Edit",
-        "Bash",
-        "Grep",
-        "Glob"
-      ],
-      null,
-      "conditional",
-      null,
       "general",
       null
     ],
@@ -1293,21 +1073,6 @@
         ],
         "version": "1.16.0"
       },
-      "medium",
-      [
-        "Read",
-        "Write",
-        "Edit",
-        "Bash",
-        "Agent",
-        "Glob",
-        "Grep"
-      ],
-      null,
-      "conditional",
-      [
-        "git push"
-      ],
       "research",
       null
     ],
@@ -1358,21 +1123,6 @@
         ],
         "version": "2.1.0"
       },
-      "low",
-      [
-        "shell",
-        "rust",
-        "python"
-      ],
-      {
-        "commands": [
-          "pdf"
-        ]
-      },
-      "conditional",
-      [
-        "file overwrite"
-      ],
       "general",
       null
     ],
@@ -1417,17 +1167,6 @@
         ],
         "version": "2.0.0"
       },
-      "low",
-      [
-        "Read",
-        "Write",
-        "Edit",
-        "Bash",
-        "Grep"
-      ],
-      null,
-      "local",
-      null,
       "general",
       null
     ],
@@ -1475,15 +1214,6 @@
         ],
         "version": "1.0.0"
       },
-      "low",
-      [
-        "Read",
-        "Bash",
-        "Grep"
-      ],
-      null,
-      "local",
-      null,
       "research",
       null
     ],
@@ -1541,15 +1271,6 @@
         ],
         "version": "1.1.1"
       },
-      "medium",
-      [
-        "Read",
-        "Bash",
-        "Grep"
-      ],
-      null,
-      "conditional",
-      null,
       "general",
       null
     ],
@@ -1594,15 +1315,6 @@
         ],
         "version": "1.0.0"
       },
-      "low",
-      [
-        "Read",
-        "Bash",
-        "Grep"
-      ],
-      null,
-      "local",
-      null,
       "research",
       "reproducibility"
     ],
@@ -1668,16 +1380,6 @@
         ],
         "version": "1.0.0"
       },
-      "low",
-      [
-        "WebSearch",
-        "WebFetch",
-        "Read",
-        "Bash"
-      ],
-      null,
-      "required",
-      null,
       "research",
       null
     ],
@@ -1742,18 +1444,6 @@
         ],
         "version": "1.0.0"
       },
-      "low",
-      [
-        "Read",
-        "Write",
-        "Edit",
-        "Bash",
-        "Grep",
-        "Glob"
-      ],
-      null,
-      "conditional",
-      null,
       "research",
       null
     ],
@@ -1811,17 +1501,6 @@
         ],
         "version": "2.1.0"
       },
-      "medium",
-      [
-        "shell",
-        "python",
-        "web"
-      ],
-      null,
-      "required",
-      [
-        "authenticated web access"
-      ],
       "code_review",
       null
     ],
@@ -1878,17 +1557,6 @@
         ],
         "version": "1.0.0"
       },
-      "medium",
-      [
-        "Read",
-        "Bash",
-        "Glob",
-        "Grep",
-        "Agent"
-      ],
-      null,
-      "local",
-      null,
       "code_quality",
       null
     ],
@@ -1952,29 +1620,6 @@
         ],
         "version": "3.3.1"
       },
-      "low",
-      [
-        "shell",
-        "git",
-        "python",
-        "Read",
-        "Write",
-        "Edit",
-        "Grep",
-        "Glob",
-        "Agent",
-        "bash",
-        "skill_read",
-        "skill_route",
-        "skill_search",
-        "search_tools",
-        "tool_registry_status"
-      ],
-      null,
-      "conditional",
-      [
-        "git push"
-      ],
       "general",
       null
     ],
@@ -2031,17 +1676,6 @@
         ],
         "version": "2.5.0"
       },
-      "low",
-      [
-        "shell",
-        "browser",
-        "python"
-      ],
-      null,
-      "conditional",
-      [
-        "gui automation"
-      ],
       "code_review",
       null
     ],
@@ -2098,16 +1732,6 @@
         ],
         "version": "2.7.0"
       },
-      "medium",
-      [
-        "shell",
-        "cargo"
-      ],
-      null,
-      "conditional",
-      [
-        "file overwrite"
-      ],
       "slides",
       null
     ],
@@ -2158,19 +1782,6 @@
       {
         "version": "2.0.0"
       },
-      "low",
-      [
-        "Read",
-        "Write",
-        "Edit",
-        "Bash",
-        "Grep"
-      ],
-      null,
-      "local",
-      [
-        "file overwrite"
-      ],
       "general",
       null
     ],
@@ -2233,17 +1844,6 @@
         ],
         "version": "1.0.2"
       },
-      "low",
-      [
-        "Read",
-        "Write",
-        "Edit",
-        "Bash",
-        "Grep"
-      ],
-      null,
-      "conditional",
-      null,
       "research",
       null
     ],
@@ -2289,15 +1889,6 @@
         ],
         "version": "1.0.0"
       },
-      "low",
-      [
-        "Read",
-        "Bash",
-        "Grep"
-      ],
-      null,
-      "local",
-      null,
       "research",
       null
     ],
@@ -2345,15 +1936,6 @@
         ],
         "version": "1.0.0"
       },
-      "low",
-      [
-        "Read",
-        "Bash",
-        "Grep"
-      ],
-      null,
-      "local",
-      null,
       "research",
       "structure"
     ],
@@ -2412,14 +1994,6 @@
         ],
         "version": "1.0.0"
       },
-      "low",
-      [
-        "shell",
-        "browser"
-      ],
-      null,
-      "local",
-      null,
       "slides",
       null
     ],
@@ -2480,16 +2054,6 @@
         ],
         "version": "2.2.1"
       },
-      "low",
-      [
-        "shell",
-        "browser"
-      ],
-      null,
-      "conditional",
-      [
-        "gui automation"
-      ],
       "visual",
       null
     ],
@@ -2564,19 +2128,6 @@
         ],
         "version": "1.0.0"
       },
-      "low",
-      [
-        "Read",
-        "Write",
-        "Edit",
-        "Bash",
-        "Agent",
-        "WebSearch",
-        "WebFetch"
-      ],
-      null,
-      "conditional",
-      null,
       "research",
       null
     ],
@@ -2653,19 +2204,6 @@
         ],
         "version": "1.0.0"
       },
-      "low",
-      [
-        "Read",
-        "Write",
-        "Edit",
-        "Bash",
-        "Agent",
-        "WebSearch",
-        "WebFetch"
-      ],
-      null,
-      "conditional",
-      null,
       "research",
       null
     ],
@@ -2704,15 +2242,6 @@
         ],
         "version": "1.0.0"
       },
-      "medium",
-      [
-        "Read",
-        "Bash",
-        "Agent"
-      ],
-      null,
-      "local",
-      null,
       "general",
       null
     ],
@@ -2782,16 +2311,6 @@
         ],
         "version": "2.1.0"
       },
-      "medium",
-      [
-        "Bash",
-        "Read",
-        "Write",
-        "Edit"
-      ],
-      null,
-      "conditional",
-      null,
       "general",
       null
     ],
@@ -2911,26 +2430,16 @@
         ],
         "version": "1.0.0"
       },
-      "low",
-      [
-        "Bash",
-        "Read",
-        "Write",
-        "Edit"
-      ],
-      null,
-      "conditional",
-      null,
       "general",
       null
     ],
     [
-      "browser-automation",
+      "web-tools",
       "L3",
       "owner",
       "none",
       "P2",
-      "Browser automation: page navigation, click, fill, screenshot, network monitoring, session management.",
+      "通用联网工具 — web_fetch 抓取、浏览器操作、文献调研一体路由",
       "n/a",
       [
         "browser",
@@ -2963,9 +2472,12 @@
         "web scrape",
         "网络监听",
         "网页操作",
-        "browser session"
+        "browser session",
+        "外部调研",
+        "外部项目调研",
+        "调研外部"
       ],
-      "skills/browser-automation/SKILL.md",
+      "skills/web-tools/SKILL.md",
       null,
       "skill",
       [],
@@ -2990,14 +2502,6 @@
         ],
         "version": "1.0.0"
       },
-      "low",
-      [
-        "shell",
-        "browser"
-      ],
-      null,
-      "required",
-      [],
       "general",
       null
     ],
@@ -3042,7 +2546,7 @@
         "market-data"
       ],
       "用户查询股票行情、加密币价、A股数据、金融指标时",
-      "用户需要的是非金融类数据爬取（走 browser-automation）；用户需要的是论文的统计分析（走 statistical-analysis）",
+      "用户需要的是非金融类数据爬取（走 web-tools）；用户需要的是论文的统计分析（走 statistical-analysis）",
       {
         "platforms": [
           "supported"
@@ -3055,13 +2559,6 @@
         ],
         "version": "1.0.0"
       },
-      "low",
-      [
-        "shell"
-      ],
-      null,
-      "conditional",
-      [],
       "general",
       null
     ],
@@ -3112,15 +2609,6 @@
         ],
         "version": "1.0.0"
       },
-      "low",
-      [
-        "shell",
-        "git",
-        "python"
-      ],
-      null,
-      "conditional",
-      null,
       "general",
       null
     ],
@@ -3172,16 +2660,6 @@
         ],
         "version": "3.2.0"
       },
-      "medium",
-      [
-        "shell",
-        "git"
-      ],
-      null,
-      "local",
-      [
-        "git push"
-      ],
       "general",
       null
     ]

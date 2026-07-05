@@ -130,7 +130,7 @@
 
 **Design & Figures**: `$design-md` · `$visual-review` · `$tikz-paper-figure`
 
-**Infrastructure**: `$research-workspace` · `$browser-automation` · `$mcp-server-management` · `$python-env-management` · `$plan-mode` · `$deepinterview` · `$goalx`
+**Infrastructure**: `$research-workspace` · `$web-tools` · `$mcp-server-management` · `$python-env-management` · `$plan-mode` · `$deepinterview` · `$goalx`
 
 **Framework Core**: `$agent-swarm-orchestration` · `$skill-framework-developer` · `$primary-runtime`
 

@@ -48,7 +48,7 @@ tags:
 - crypto
 - market-data
 when_to_use: 用户查询股票行情、加密币价、A股数据、金融指标时
-do_not_use: 用户需要的是非金融类数据爬取（走 browser-automation）；用户需要的是论文的统计分析（走 statistical-analysis）
+do_not_use: 用户需要的是非金融类数据爬取（走 web-tools）；用户需要的是论文的统计分析（走 statistical-analysis）
 ---
 # Financial Data
 
@@ -74,5 +74,5 @@ Specify period (e.g. `1d`, `1mo`, `3mo`, `1y`) and metric (`ohlcv` or `capital`)
 
 ## Do not use
 
-- User needs non-financial data scraping → use `browser-automation` or `deep-search`
+- User needs non-financial data scraping → use `web-tools` or `deep-search`
 - User needs statistical analysis of financial data → first get data here, then use `statistical-analysis`
