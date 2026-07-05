@@ -75,7 +75,7 @@ scope: architecture-reference
 
 | Crate | 路径 | 层标 | 说明 |
 |-------|------|------|------|
-| `tool-routing-engine` | `core/tool-routing-engine` | L4 | 工具路由引擎：8 步评分管道、`search_tools()`、`search_tools()` |
+| `tool-routing-engine` | `core/tool-routing-engine` | L4 | 工具路由引擎：8 步评分管道、`route_tool()` / `search_tools()` |
 | `mcp-tool-registry` | `core/mcp-tool-registry` | L4 | 统一 MCP 工具注册表：`McpToolRecord` 类型、JSON 加载、缓存 |
 
 **独立 MCP 服务器二进制**（在 `rust_tools/` 和 `tools/` 中实现）。

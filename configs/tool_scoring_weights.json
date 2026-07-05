@@ -17,5 +17,9 @@
     "independent": -1.0
   },
   "fuzzy_min_similarity": 0.25,
-  "skill_context_boost": 50.0
+  "skill_context_boost": 50.0,
+  "web_task_boost": {
+    "category_boost": 5.0,
+    "academic_min_signals": 2
+  }
 }
