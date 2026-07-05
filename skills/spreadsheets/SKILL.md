@@ -45,7 +45,6 @@ framework_contracts:
   consumes_execution_items: false
   emits_verification_results: true
 risk: low
-source: local
 allowed_tools:
   - shell
   - node

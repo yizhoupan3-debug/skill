@@ -20,7 +20,6 @@ routing_owner: owner
 routing_priority: P2
 session_start: preferred
 short_description: 通用深度搜索引擎 — web 多源覆盖+事实核查+综合报告
-source: local
 trigger_hints:
 - deep research
 - deep-search

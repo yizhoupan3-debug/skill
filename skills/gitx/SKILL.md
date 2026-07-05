@@ -27,7 +27,6 @@ routing_owner: owner
 routing_priority: P1
 session_start: n/a
 short_description: 'Git 自主收口——review-fix-tidy-commit-branch-merge 全流程'
-source: local
 trigger_hints:
 - /gitx
 - gitx

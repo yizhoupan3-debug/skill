@@ -111,7 +111,6 @@ impl SkillFrontmatterSpec {
         "short_description",
         "metadata",
         "risk",
-        "source",
         "allowed_tools",
         "runtime_requirements",
         "network_access",
@@ -154,8 +153,6 @@ pub struct SkillFrontmatter {
     pub short_description: Option<String>,
     #[serde(default)]
     pub risk: Option<String>,
-    #[serde(default)]
-    pub source: Option<String>,
     #[serde(default)]
     pub metadata: Option<Value>,
     #[serde(default)]

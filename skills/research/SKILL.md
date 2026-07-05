@@ -21,7 +21,6 @@ routing_owner: owner
 routing_priority: P2
 session_start: preferred
 short_description: 统一科研前门——文献调研、实验设计、手稿审改、研究工作区
-source: local
 trigger_hints:
 - 科研
 - 研究

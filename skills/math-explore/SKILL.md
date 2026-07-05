@@ -26,7 +26,6 @@ routing_owner: owner
 routing_priority: P2
 session_start: preferred
 short_description: Explore and discover new mathematical properties, relations, and structures
-source: local
 trigger_hints:
 - 探索数学性质
 - 猜猜这个有没有什么性质

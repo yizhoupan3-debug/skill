@@ -51,7 +51,6 @@ const BACKFILLABLE_FIELDS: &[(&str, &str)] = &[
     ("approval_required_tools", "approval_required_tools"),
     ("kind", "kind"),
     ("scene", "scene"),
-    ("source", "source"),
     ("sub_scene", "sub_scene"),
 ];
 
@@ -96,7 +95,6 @@ fn frontmatter_field_to_value(
             .map(|v| Value::Array(v.iter().map(|s| Value::String(s.clone())).collect())),
         "kind" => fm.kind.map(|k| Value::String(k.as_str().to_string())),
         "scene" => fm.scene.as_ref().map(|v| Value::String(v.clone())),
-        "source" => fm.source.as_ref().map(|v| Value::String(v.clone())),
         "sub_scene" => fm.sub_scene.as_ref().map(|v| Value::String(v.clone())),
         _ => None,
     }

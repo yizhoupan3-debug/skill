@@ -21,7 +21,6 @@ routing_layer: L3
 routing_owner: owner
 routing_priority: P2
 session_start: preferred
-source: local
 trigger_hints:
 - DVC
 - MLflow tracking

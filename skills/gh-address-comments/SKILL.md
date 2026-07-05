@@ -32,7 +32,6 @@ runtime_requirements:
   - gh
   - git
 session_start: required
-source: local
 trigger_hints:
 - /gh-address-comments
 - PR comments

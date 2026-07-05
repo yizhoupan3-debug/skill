@@ -16,7 +16,6 @@ routing_layer: L1
 routing_owner: owner
 routing_priority: P2
 session_start: preferred
-source: local
 trigger_hints:
 - Plan 模式
 - 策划文档闸门

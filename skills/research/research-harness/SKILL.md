@@ -21,7 +21,6 @@ routing_owner: owner
 routing_priority: P2
 session_start: optional
 short_description: 科研工作区 CLI — claim/假设/实验记录/smoke test/barrier 升级
-source: local
 trigger_hints:
 - 研究工作区
 - 科研工作区

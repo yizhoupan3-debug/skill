@@ -23,7 +23,6 @@ routing_owner: owner
 routing_priority: P2
 session_start: n/a
 short_description: Convert AI/raster drafts into paper-ready TikZ standalone figures
-source: local
 trigger_hints:
 - AI image to TikZ
 - AI 图转 TikZ

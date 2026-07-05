@@ -8,7 +8,6 @@
     "description",
     "session_start",
     "trigger_hints",
-    "source",
     "skill_path",
     "host_platforms",
     "kind",
@@ -56,7 +55,6 @@
         "研究问题",
         "文献调研"
       ],
-      "local",
       "skills/research/SKILL.md",
       null,
       "skill",
@@ -126,7 +124,6 @@
         "多 agent 执行",
         "agent-swarm-orchestration"
       ],
-      "project",
       "skills/agent-swarm-orchestration/SKILL.md",
       null,
       "skill",
@@ -201,7 +198,6 @@
         "自动突破",
         "autoresearch"
       ],
-      "local",
       "skills/research/research-harness/SKILL.md",
       null,
       "skill",
@@ -267,7 +263,6 @@
         "文献引用管理",
         "citation-management"
       ],
-      "project",
       "skills/citation-management/SKILL.md",
       null,
       "skill",
@@ -336,7 +331,6 @@
         "深度 code review",
         "深度代码审查"
       ],
-      "project",
       "skills/code-review-deep/SKILL.md",
       null,
       "skill",
@@ -410,7 +404,6 @@
         "investigate claims",
         "verify claims"
       ],
-      "local",
       "skills/deep-search/SKILL.md",
       null,
       "skill",
@@ -476,7 +469,6 @@
         "/DESIGN.md",
         "design-md"
       ],
-      "project",
       "skills/design-md/SKILL.md",
       null,
       "skill",
@@ -541,7 +533,6 @@
         "表格或版式修复",
         "doc"
       ],
-      "project",
       "skills/doc/SKILL.md",
       null,
       "skill",
@@ -615,7 +606,6 @@
         "预注册",
         "experiment-reproducibility"
       ],
-      "project",
       "skills/experiment-reproducibility/SKILL.md",
       null,
       "skill",
@@ -677,7 +667,6 @@
         "量纲检查",
         "formal-verification"
       ],
-      "local",
       "quality-gates/formal-verification/SKILL.md",
       null,
       "skill",
@@ -743,7 +732,6 @@
         "reviewer feedback digest",
         "reviewer 意见处理"
       ],
-      "project",
       "skills/gh-address-comments/SKILL.md",
       null,
       "skill",
@@ -823,7 +811,6 @@
         "模板编译失败",
         "编译失败"
       ],
-      "project",
       "skills/gh-fix-ci/SKILL.md",
       null,
       "skill",
@@ -890,7 +877,6 @@
         "文献验证",
         "literature-verification"
       ],
-      "local",
       "quality-gates/literature-verification/SKILL.md",
       null,
       "skill",
@@ -950,7 +936,6 @@
         "证明反例",
         "形式验证"
       ],
-      "project",
       "skills/math-verify/SKILL.md",
       null,
       "skill",
@@ -1021,7 +1006,6 @@
         "数学探索",
         "数学实验"
       ],
-      "project",
       "skills/math-explore/SKILL.md",
       null,
       "skill",
@@ -1116,7 +1100,6 @@
         "推导方程",
         "math-modeling"
       ],
-      "project",
       "skills/math-modeling/SKILL.md",
       null,
       "skill",
@@ -1185,7 +1168,6 @@
         "创建 MCP",
         "mcp-server-management"
       ],
-      "project",
       "skills/mcp-server-management/SKILL.md",
       null,
       "skill",
@@ -1276,7 +1258,6 @@
         "论文改稿",
         "$paper-workbench"
       ],
-      "project",
       "skills/research/paper-workbench/SKILL.md",
       null,
       "skill",
@@ -1348,7 +1329,6 @@
         "合并 PDF",
         "编辑 PDF"
       ],
-      "project",
       "skills/pdf/SKILL.md",
       null,
       "skill",
@@ -1414,7 +1394,6 @@
         "调研计划",
         "plan-mode"
       ],
-      "project",
       "skills/plan-mode/SKILL.md",
       null,
       "skill",
@@ -1469,7 +1448,6 @@
         "风格检查",
         "prose-verification"
       ],
-      "local",
       "quality-gates/prose-verification/SKILL.md",
       null,
       "skill",
@@ -1532,7 +1510,6 @@
         "全局 python 包",
         "python-env-management"
       ],
-      "project",
       "skills/python-env-management/SKILL.md",
       null,
       "skill",
@@ -1592,7 +1569,6 @@
         "种子检查",
         "reproducibility-verification"
       ],
-      "local",
       "quality-gates/reproducibility-verification/SKILL.md",
       null,
       "skill",
@@ -1663,7 +1639,6 @@
         "非手稿科研",
         "research-discovery"
       ],
-      "local",
       "skills/research/lanes/discovery.md",
       null,
       "skill",
@@ -1736,7 +1711,6 @@
         "量纲分析",
         "research-execution"
       ],
-      "local",
       "skills/research/lanes/execution.md",
       null,
       "skill",
@@ -1804,7 +1778,6 @@
         "异常排查",
         "线上问题"
       ],
-      "project",
       "skills/sentry/SKILL.md",
       null,
       "skill",
@@ -1876,7 +1849,6 @@
         "消除重复",
         "简化这段代码"
       ],
-      "project",
       "skills/simplify/SKILL.md",
       null,
       "skill",
@@ -1946,7 +1918,6 @@
         "边界重叠",
         "skill-framework-developer"
       ],
-      "project",
       "skills/skill-framework-developer/SKILL.md",
       null,
       "skill",
@@ -2031,7 +2002,6 @@
         "根因分析",
         "调试"
       ],
-      "local",
       "skills/systematic-debugging/SKILL.md",
       null,
       "skill",
@@ -2093,7 +2063,6 @@
         "做个PPT",
         "生成演示文稿"
       ],
-      "project",
       "skills/slides/SKILL.md",
       null,
       "skill",
@@ -2165,7 +2134,6 @@
         "excel 表格",
         "工作簿"
       ],
-      "local",
       "skills/spreadsheets/SKILL.md",
       null,
       "skill",
@@ -2232,7 +2200,6 @@
         "需要多少样本量",
         "statistical-analysis"
       ],
-      "project",
       "skills/statistical-analysis/SKILL.md",
       null,
       "skill",
@@ -2297,7 +2264,6 @@
         "统计审查",
         "statistical-verification"
       ],
-      "local",
       "quality-gates/statistical-verification/SKILL.md",
       null,
       "skill",
@@ -2352,7 +2318,6 @@
         "结构验证",
         "structure-verification"
       ],
-      "local",
       "quality-gates/structure-verification/SKILL.md",
       null,
       "skill",
@@ -2420,7 +2385,6 @@
         "论文 TikZ",
         "论文配图"
       ],
-      "project",
       "skills/tikz-paper-figure/SKILL.md",
       null,
       "skill",
@@ -2481,7 +2445,6 @@
         "visual-review",
         "/visual-review"
       ],
-      "project",
       "skills/visual-review/SKILL.md",
       null,
       "skill",
@@ -2574,7 +2537,6 @@
         "研究想法",
         "问题细化"
       ],
-      "project",
       "skills/good-question/SKILL.md",
       null,
       "skill",
@@ -2664,7 +2626,6 @@
         "figure order",
         "$good-story"
       ],
-      "project",
       "skills/good-story/SKILL.md",
       null,
       "skill",
@@ -2717,7 +2678,6 @@
       "Primary runtime entry point — framework lifecycle orchestration. Spawned by the host to handle goal drive, quality gate, and session supervision.",
       "n/a",
       [],
-      "framework",
       "skills/primary-runtime/SKILL.md",
       null,
       "runtime",
@@ -2795,7 +2755,6 @@
         "提交上去",
         "推上去"
       ],
-      "local",
       "skills/gitx/SKILL.md",
       null,
       "skill",
@@ -2858,7 +2817,6 @@
         "设立目标",
         "创建 goal"
       ],
-      "runtime",
       null,
       null,
       "skill",
@@ -3007,7 +2965,6 @@
         "网页操作",
         "browser session"
       ],
-      "local",
       "skills/browser-automation/SKILL.md",
       null,
       "skill",
@@ -3073,7 +3030,6 @@
         "stock price",
         "cryptocurrency"
       ],
-      "local",
       "skills/financial-data/SKILL.md",
       null,
       "skill",
@@ -3106,6 +3062,126 @@
       null,
       "conditional",
       [],
+      "general",
+      null
+    ],
+    [
+      "deepinterview",
+      "L1",
+      "owner",
+      "none",
+      "P2",
+      "Native repo deep-interview workflow for evidence-first clarification and convergence review.",
+      "n/a",
+      [
+        "/deepinterview",
+        "先问清楚",
+        "深度采访",
+        "澄清需求",
+        "需求分析",
+        "需求澄清",
+        "clarify requirements",
+        "访谈",
+        "深入理解",
+        "需求不清晰",
+        "需求太模糊",
+        "需要澄清"
+      ],
+      "skills/deepinterview/SKILL.md",
+      null,
+      "skill",
+      [],
+      "Native repo deep-interview workflow — evidence-first clarification and convergence review.",
+      [
+        "deepinterview",
+        "review",
+        "alias",
+        "convergence"
+      ],
+      "用于用户需求不清晰、需要深度核查或 review 到收敛的场景。先做澄清再做执行，不跳过需求分析。",
+      "不用于已经有明确文件、函数、验收标准该直接执行的场景。不用于单纯的代码清理或文档刷新。",
+      {
+        "platforms": [
+          "supported"
+        ],
+        "tags": [
+          "deepinterview",
+          "review",
+          "alias",
+          "convergence"
+        ],
+        "version": "1.0.0"
+      },
+      "low",
+      [
+        "shell",
+        "git",
+        "python"
+      ],
+      null,
+      "conditional",
+      null,
+      "general",
+      null
+    ],
+    [
+      "update",
+      "L0",
+      "owner",
+      "none",
+      "P1",
+      "Refresh key docs, git tracking, and stale/dead repo surfaces.",
+      "n/a",
+      [
+        "/update",
+        "更新文档",
+        "刷新文档",
+        "文档同步",
+        "git tracking",
+        "死代码清理",
+        "旧文档清理",
+        "仓库卫生",
+        "仓库维护",
+        "repo maintenance",
+        "文档老化",
+        "清理仓库",
+        "代码清理"
+      ],
+      "skills/update/SKILL.md",
+      null,
+      "skill",
+      [],
+      "仓库知识状态维护：文档刷新，git 跟踪审计，旧代码/旧文档清理。",
+      [
+        "maintenance",
+        "docs",
+        "git-tracking",
+        "cleanup"
+      ],
+      "用户需要刷新关键文档、检查 git 跟踪面、清理旧代码/旧文件/旧文档时使用。文档刷新、git 跟踪审计、死代码清理、仓库卫生。",
+      "不用于普通依赖升级、单一功能修 bug、只改单个文案或单篇文档。不用于 git commit/push/merge 收口（用 gitx）。",
+      {
+        "platforms": [
+          "supported"
+        ],
+        "tags": [
+          "maintenance",
+          "docs",
+          "git-tracking",
+          "cleanup"
+        ],
+        "version": "3.2.0"
+      },
+      "medium",
+      [
+        "shell",
+        "git"
+      ],
+      null,
+      "local",
+      [
+        "git push"
+      ],
       "general",
       null
     ]

@@ -444,7 +444,6 @@ fn frontmatter_field_to_value(
             .as_ref()
             .map(|s| Value::String(s.clone())),
         "risk" => fm.risk.as_ref().map(|v| Value::String(v.clone())),
-        "source" => fm.source.as_ref().map(|v| Value::String(v.clone())),
         "metadata" => fm.metadata.clone(),
         "allowed_tools" => fm
             .allowed_tools

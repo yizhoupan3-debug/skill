@@ -31,7 +31,6 @@ routing_layer: L2
 routing_owner: owner
 routing_priority: P1
 session_start: preferred
-source: local
 trigger_hints:
 - $code-review-deep
 - adversarial code review

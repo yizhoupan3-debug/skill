@@ -20,7 +20,6 @@ routing_layer: L4
 routing_owner: owner
 routing_priority: P2
 session_start: preferred
-source: local
 trigger_hints:
 - A/B 测试怎么做显著性
 - interpreting hypothesis tests

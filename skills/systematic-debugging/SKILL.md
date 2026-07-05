@@ -27,7 +27,6 @@ routing_owner: owner
 routing_priority: P2
 session_start: n/a
 short_description: Investigate unknown failures before fixing
-source: local
 trigger_hints:
 - blind fix
 - debug

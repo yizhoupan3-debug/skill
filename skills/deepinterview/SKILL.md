@@ -22,7 +22,6 @@ routing_layer: L1
 routing_owner: owner
 routing_priority: P2
 session_start: n/a
-source: local
 trigger_hints:
 - /deepinterview
 - 先问清楚

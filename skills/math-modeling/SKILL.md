@@ -24,7 +24,6 @@ routing_owner: owner
 routing_priority: P2
 session_start: preferred
 short_description: 物理/工程/生物系统的数学建模全流程——问题形式化、先验调研、控制方程构建、无量纲化、模型简化求解、验证与输出
-source: local
 trigger_hints:
 - 建数学模型
 - 控制方程

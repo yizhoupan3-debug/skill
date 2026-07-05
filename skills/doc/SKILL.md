@@ -30,7 +30,6 @@ runtime_requirements:
   - soffice
   - pdftoppm
 session_start: required
-source: local
 trigger_hints:
 - document layout
 - docx

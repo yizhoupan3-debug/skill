@@ -24,7 +24,6 @@ routing_owner: owner
 routing_priority: P2
 session_start: preferred
 short_description: Adversarial review and formal verification of mathematical content
-source: local
 trigger_hints:
 - 数学证明审查
 - 公式正确性验证

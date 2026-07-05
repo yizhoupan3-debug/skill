@@ -20,7 +20,6 @@ routing_layer: L4
 routing_owner: owner
 routing_priority: P2
 session_start: n/a
-source: local
 trigger_hints:
 - $formal-verification
 - CAS验证

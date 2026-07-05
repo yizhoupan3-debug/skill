@@ -17,7 +17,6 @@ routing_layer: L0
 routing_owner: owner
 routing_priority: P1
 session_start: required
-source: local
 trigger_hints:
 - /workflow
 - agent orchestrator

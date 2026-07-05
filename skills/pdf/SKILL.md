@@ -29,7 +29,6 @@ runtime_requirements:
   commands:
   - pdf
 session_start: required
-source: local
 trigger_hints:
 - PDF 转文字
 - pdf layout

@@ -117,7 +117,52 @@ servers = sorted(merged.keys())
 print(f"  -> Generated ~/.claude/mcp.json: {len(servers)} servers: {', '.join(servers)}")
 PYEOF
 
-# ---------- step 3: verify binaries exist ----------
+# ---------- step 3: sync registered project directories ----------
+PROJECT_REGISTRY="$FRAMEWORK_ROOT/configs/framework/PROJECT_REGISTRY.json"
+SYNC_PROJECT="$FRAMEWORK_ROOT/scripts/sync-project.sh"
+if [ -f "$PROJECT_REGISTRY" ] && [ -x "$SYNC_PROJECT" ]; then
+  echo "==> Syncing registered project directories..."
+  python3 << 'PYREG'
+import json, subprocess, sys
+
+FRAMEWORK_ROOT = "/Users/joe/Developer/skill"
+
+with open(f"{FRAMEWORK_ROOT}/configs/framework/PROJECT_REGISTRY.json") as f:
+    registry = json.load(f)
+
+projs = registry.get("projects", [])
+count = 0
+for p in projs:
+    pid = p["id"]
+    path = p["path"]
+    status = p.get("status", {})
+    need_mcp = status.get("mcp_json", "missing") == "missing"
+    need_settings = status.get("settings_json", "missing") == "missing"
+    need_claude_md = status.get("claude_md_framework_ref", "missing") == "missing"
+
+    if not need_mcp and not need_settings and not need_claude_md:
+        print(f"  -> [{pid}] already synced")
+        continue
+
+    print(f"  -> [{pid}] syncing...")
+    result = subprocess.run(
+        [f"{FRAMEWORK_ROOT}/scripts/sync-project.sh", path],
+        capture_output=True, text=True
+    )
+    if result.returncode != 0:
+        print(f"    !! FAILED ({pid}): {result.stderr.strip()}", file=sys.stderr)
+    else:
+        count += 1
+        for line in result.stdout.strip().split("\n"):
+            print(f"    {line}")
+
+print(f"  -> Synced {count} project(s)")
+PYREG
+else
+  echo "==> Skipping project sync (no PROJECT_REGISTRY.json or sync-project.sh found)"
+fi
+
+# ---------- step 4: verify binaries ----------
 echo "  -> Verifying MCP binaries..."
 MISSING=0
 for cmd in router-rs-cli mcp-codegraph mcp-pdf mcp-ooxml mcp-pptx mcp-financial-data mcp-citation mcp-gh-source-gate; do
@@ -130,5 +175,5 @@ if [ "$MISSING" -eq 0 ]; then
   echo "    ✅ All MCP binaries found in PATH"
 fi
 
-echo "==> Done. Framework global config is up to date."
-echo "   (Restart Claude Code for changes to take effect)"
+echo "==> Done. Framework global config + project directories are up to date."
+echo "   (Restart Claude Code for changes to take effect in the skill repo)"

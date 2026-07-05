@@ -321,6 +321,36 @@
       "tool_slugs": [
         "browser_screenshot"
       ]
+    },
+    {
+      "skill_slug": "good-question",
+      "tool_slugs": [
+        "research_review_dimensions",
+        "research_claim_drift",
+        "search_research",
+        "fetch_paper",
+        "find_paper_by_title"
+      ]
+    },
+    {
+      "skill_slug": "good-story",
+      "tool_slugs": [
+        "research_verification_prose",
+        "research_aigc_check",
+        "research_review_dimensions"
+      ]
+    },
+    {
+      "skill_slug": "deepinterview",
+      "tool_slugs": [
+        "record_evidence",
+        "session_checkpoint",
+        "task_focus"
+      ]
+    },
+    {
+      "skill_slug": "update",
+      "tool_slugs": null
     }
   ]
 }

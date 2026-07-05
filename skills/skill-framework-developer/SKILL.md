@@ -41,7 +41,6 @@ routing_owner: owner
 routing_priority: P1
 session_start: preferred
 short_description: Design and tune cross-host skill routing and framework behavior
-source: local
 trigger_hints:
 - owner / gate / overlay
 - skill 库维护

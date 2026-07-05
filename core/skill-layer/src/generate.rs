@@ -45,7 +45,6 @@ pub const FRONTMATTER_KEYS: &[(&str, &str)] = &[
     ("session_start", "session_start"),
     ("trigger_hints", "trigger_hints"),
     ("short_description", "short_description"),
-    ("source", "source"),
     ("risk", "risk"),
     ("metadata", "metadata"),
     ("allowed_tools", "allowed_tools"),

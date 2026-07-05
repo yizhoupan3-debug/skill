@@ -1697,20 +1697,48 @@
     {
       "when": {
         "any": [
-          { "query_contains": "浏览器" },
-          { "query_contains": "截图" },
-          { "query_contains": "截屏" },
-          { "query_contains": "爬虫" },
-          { "query_contains": "web scrape" },
-          { "query_contains": "网页操作" },
-          { "query_contains": "打开网页" },
-          { "query_contains": "填表单" },
-          { "query_contains": "网络请求" },
-          { "query_contains": "保存会话" },
-          { "query_contains": "恢复会话" },
-          { "query_contains": "browser" },
-          { "query_contains": "screenshot" },
-          { "query_contains": "scrape" }
+          {
+            "query_contains": "浏览器"
+          },
+          {
+            "query_contains": "截图"
+          },
+          {
+            "query_contains": "截屏"
+          },
+          {
+            "query_contains": "爬虫"
+          },
+          {
+            "query_contains": "web scrape"
+          },
+          {
+            "query_contains": "网页操作"
+          },
+          {
+            "query_contains": "打开网页"
+          },
+          {
+            "query_contains": "填表单"
+          },
+          {
+            "query_contains": "网络请求"
+          },
+          {
+            "query_contains": "保存会话"
+          },
+          {
+            "query_contains": "恢复会话"
+          },
+          {
+            "query_contains": "browser"
+          },
+          {
+            "query_contains": "screenshot"
+          },
+          {
+            "query_contains": "scrape"
+          }
         ]
       },
       "action": {
@@ -1725,22 +1753,54 @@
     {
       "when": {
         "any": [
-          { "query_contains": "股票" },
-          { "query_contains": "股价" },
-          { "query_contains": "行情" },
-          { "query_contains": "市盈率" },
-          { "query_contains": "财务数据" },
-          { "query_contains": "pe" },
-          { "query_contains": "pb" },
-          { "query_contains": "roe" },
-          { "query_contains": "市净率" },
-          { "query_contains": "流通市值" },
-          { "query_contains": "stock" },
-          { "query_contains": "financial" },
-          { "query_contains": "ticker" },
-          { "query_contains": "a share" },
-          { "query_contains": "ohlcv" },
-          { "query_contains": "capital" }
+          {
+            "query_contains": "股票"
+          },
+          {
+            "query_contains": "股价"
+          },
+          {
+            "query_contains": "行情"
+          },
+          {
+            "query_contains": "市盈率"
+          },
+          {
+            "query_contains": "财务数据"
+          },
+          {
+            "query_contains": "pe"
+          },
+          {
+            "query_contains": "pb"
+          },
+          {
+            "query_contains": "roe"
+          },
+          {
+            "query_contains": "市净率"
+          },
+          {
+            "query_contains": "流通市值"
+          },
+          {
+            "query_contains": "stock"
+          },
+          {
+            "query_contains": "financial"
+          },
+          {
+            "query_contains": "ticker"
+          },
+          {
+            "query_contains": "a share"
+          },
+          {
+            "query_contains": "ohlcv"
+          },
+          {
+            "query_contains": "capital"
+          }
         ]
       },
       "action": {
@@ -1750,6 +1810,149 @@
       },
       "record": {
         "slug": "financial-data"
+      }
+    },
+    {
+      "when": {
+        "any": [
+          {
+            "query_contains": "先问清楚"
+          },
+          {
+            "query_contains": "深度采访"
+          },
+          {
+            "query_contains": "deep interview"
+          }
+        ]
+      },
+      "action": {
+        "type": "boost",
+        "delta": 45.0,
+        "reason": "Deepinterview boost: clarification/interview wording detected."
+      },
+      "record": {
+        "slug": "deepinterview"
+      }
+    },
+    {
+      "when": {
+        "query_contains": "澄清需求"
+      },
+      "action": {
+        "type": "boost",
+        "delta": 40.0,
+        "reason": "Deepinterview boost: requirement clarification wording detected."
+      },
+      "record": {
+        "slug": "deepinterview"
+      }
+    },
+    {
+      "when": {
+        "any": [
+          {
+            "query_contains": "需求不清晰"
+          },
+          {
+            "query_contains": "需求太模糊"
+          },
+          {
+            "query_contains": "需要澄清"
+          },
+          {
+            "query_contains": "clarify"
+          }
+        ]
+      },
+      "action": {
+        "type": "boost",
+        "delta": 35.0,
+        "reason": "Deepinterview boost: ambiguous requirement wording detected."
+      },
+      "record": {
+        "slug": "deepinterview"
+      }
+    },
+    {
+      "when": {
+        "query_contains": "更新文档"
+      },
+      "action": {
+        "type": "boost",
+        "delta": 42.0,
+        "reason": "Update boost: document refresh wording detected."
+      },
+      "record": {
+        "slug": "update"
+      }
+    },
+    {
+      "when": {
+        "query_contains": "死代码清理"
+      },
+      "action": {
+        "type": "boost",
+        "delta": 40.0,
+        "reason": "Update boost: dead code cleanup wording detected."
+      },
+      "record": {
+        "slug": "update"
+      }
+    },
+    {
+      "when": {
+        "any": [
+          {
+            "query_contains": "文档同步"
+          },
+          {
+            "query_contains": "刷新文档"
+          },
+          {
+            "query_contains": "仓库卫生"
+          },
+          {
+            "query_contains": "仓库维护"
+          },
+          {
+            "query_contains": "repo maintenance"
+          }
+        ]
+      },
+      "action": {
+        "type": "boost",
+        "delta": 35.0,
+        "reason": "Update boost: repo maintenance/document refresh wording detected."
+      },
+      "record": {
+        "slug": "update"
+      }
+    },
+    {
+      "when": {
+        "any": [
+          {
+            "query_contains": "旧文档清理"
+          },
+          {
+            "query_contains": "文档老化"
+          },
+          {
+            "query_contains": "清理仓库"
+          },
+          {
+            "query_contains": "代码清理"
+          }
+        ]
+      },
+      "action": {
+        "type": "boost",
+        "delta": 30.0,
+        "reason": "Update boost: stale doc/code cleanup wording detected."
+      },
+      "record": {
+        "slug": "update"
       }
     }
   ],

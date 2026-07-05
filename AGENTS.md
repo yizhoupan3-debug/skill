@@ -116,11 +116,11 @@
 
 ---
 
-## Skill 目录（40 项）
+## Skill 目录（43 项）
 
 通过 `skill_route(query)` 路由；详情通过 `skill_read(slug)` 读取。
 
-**Research**: `$research`(统一前门) · `$good-question` · `$good-story` · `$deep-search` · `$paper-workbench` · `$citation-management` · `$experiment-reproducibility` · `$statistical-analysis` · `$math-verify` · `$math-explore` · `$math-modeling`
+**Research**: `$research`(统一前门) · `$good-question` · `$good-story` · `$deep-search` · `$paper-workbench` · `$citation-management` · `$experiment-reproducibility` · `$statistical-analysis` · `$financial-data` · `$math-verify` · `$math-explore` · `$math-modeling`
 
 **Code & Review**: `$code-review-deep` · `$simplify` · `$systematic-debugging` · `$sentry` · `$gh-fix-ci`
 
@@ -130,7 +130,7 @@
 
 **Design & Figures**: `$design-md` · `$visual-review` · `$tikz-paper-figure`
 
-**Infrastructure**: `$research-workspace` · `$mcp-server-management` · `$python-env-management` · `$plan-mode` · `$deepinterview` · `$goalx`
+**Infrastructure**: `$research-workspace` · `$browser-automation` · `$mcp-server-management` · `$python-env-management` · `$plan-mode` · `$deepinterview` · `$goalx`
 
 **Framework Core**: `$agent-swarm-orchestration` · `$skill-framework-developer` · `$primary-runtime`
 
