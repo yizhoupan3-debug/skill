@@ -1693,6 +1693,64 @@
       "record": {
         "slug": "good-story"
       }
+    },
+    {
+      "when": {
+        "any": [
+          { "query_contains": "浏览器" },
+          { "query_contains": "截图" },
+          { "query_contains": "截屏" },
+          { "query_contains": "爬虫" },
+          { "query_contains": "web scrape" },
+          { "query_contains": "网页操作" },
+          { "query_contains": "打开网页" },
+          { "query_contains": "填表单" },
+          { "query_contains": "网络请求" },
+          { "query_contains": "保存会话" },
+          { "query_contains": "恢复会话" },
+          { "query_contains": "browser" },
+          { "query_contains": "screenshot" },
+          { "query_contains": "scrape" }
+        ]
+      },
+      "action": {
+        "type": "boost",
+        "delta": 35.0,
+        "reason": "Browser-automation boost: browser/screenshot/scraping wording detected."
+      },
+      "record": {
+        "slug": "browser-automation"
+      }
+    },
+    {
+      "when": {
+        "any": [
+          { "query_contains": "股票" },
+          { "query_contains": "股价" },
+          { "query_contains": "行情" },
+          { "query_contains": "市盈率" },
+          { "query_contains": "财务数据" },
+          { "query_contains": "pe" },
+          { "query_contains": "pb" },
+          { "query_contains": "roe" },
+          { "query_contains": "市净率" },
+          { "query_contains": "流通市值" },
+          { "query_contains": "stock" },
+          { "query_contains": "financial" },
+          { "query_contains": "ticker" },
+          { "query_contains": "a share" },
+          { "query_contains": "ohlcv" },
+          { "query_contains": "capital" }
+        ]
+      },
+      "action": {
+        "type": "boost",
+        "delta": 35.0,
+        "reason": "Financial-data boost: stock/financial-market wording detected."
+      },
+      "record": {
+        "slug": "financial-data"
+      }
     }
   ],
   "visual_evidence_markers": [

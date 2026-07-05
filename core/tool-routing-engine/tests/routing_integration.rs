@@ -98,7 +98,7 @@ mod routing_integration_tests {
     #[test]
     fn search_returns_ranked() {
         let records = make_records();
-        let results = tool_routing_engine::search::search_tools("PDF 文档", &records, 3);
+        let results = tool_routing_engine::search::search_tools("PDF 文档", &records, 3, None);
         assert!(!results.is_empty());
         assert_eq!(results[0].selected_tool, "pdf-read");
     }
@@ -162,7 +162,7 @@ mod routing_integration_tests {
     #[test]
     fn search_top_k_overflow() {
         let records = make_records();
-        let results = tool_routing_engine::search::search_tools("pdf", &records, 9999);
+        let results = tool_routing_engine::search::search_tools("pdf", &records, 9999, None);
         assert!(!results.is_empty(), "should still return results");
         assert!(results.len() <= 100, "top_k should be clamped to MAX_TOP_K");
         assert!(

@@ -64,7 +64,7 @@ pub fn route_tool_from_records(
         })
         .map(|record| {
             let (score, reasons, matched_token_count) =
-                score_tool(record, &query_lower, &query_tokens, &weights);
+                score_tool(record, &query_lower, &query_tokens, &weights, None);
             ToolCandidate {
                 record,
                 score,
@@ -132,14 +132,16 @@ pub fn route_tool_from_records(
     Some(decision)
 }
 
-/// 6-step scoring pipeline. Steps 1-5 produce the primary score;
-/// step 6 (layer penalty) is applied as an adjustment.
+/// 7-step scoring pipeline. Steps 1-4 produce the primary score;
+/// steps 5-6 apply description matching and layer penalty;
+/// step 7 applies skill-context boost (from SKILL_TO_TOOL_MAP).
 /// Steps 1-4 use the shared pipeline from `routing_core`.
 pub(crate) fn score_tool(
     record: &McpToolRecord,
     query_lower: &str,
     query_tokens: &[String],
     weights: &crate::scoring_config::ToolScoringWeights,
+    boost_slugs: Option<&std::collections::HashSet<String>>,
 ) -> (f64, Vec<String>, usize) {
     // Use precomputed token sets (populated at load time in mcp-tool-registry).
     // Fall back to inline computation when precomputed fields are empty
@@ -225,6 +227,15 @@ pub(crate) fn score_tool(
             score = 0.0;
         }
         reasons.push(format!("layer:{layer_penalty}"));
+    }
+
+    // Step 7: Skill-context boost (from SKILL_TO_TOOL_MAP)
+    if let Some(slugs) = boost_slugs {
+        if slugs.contains(&record.slug) {
+            let boost = weights.skill_context_boost;
+            score += boost;
+            reasons.push(format!("skill_context_boost:+{boost}"));
+        }
     }
 
     (score, reasons, matched_token_count)
@@ -352,12 +363,14 @@ mod tests {
             "ext_tool",
             &query_tokens,
             &weights,
+            None,
         );
         let (score_external, reasons, _) = score_tool(
             &make_record(ToolLayer::External),
             "ext_tool",
             &query_tokens,
             &weights,
+            None,
         );
         assert!(
             reasons.iter().any(|r| r.contains("layer")),
@@ -377,7 +390,7 @@ mod tests {
         let mut record = test_tool_record("pdf_read", &[]);
         record.display_name = "PDF 文本提取".to_string();
         let query_tokens = tokenize_text("文本提取");
-        let (score, reasons, _) = score_tool(&record, "文本提取", &query_tokens, &weights);
+        let (score, reasons, _) = score_tool(&record, "文本提取", &query_tokens, &weights, None);
         assert!(
             reasons.iter().any(|r| r.contains("alias")),
             "alias matching should fire when keywords=0"
@@ -392,7 +405,7 @@ mod tests {
         record.display_name = "".to_string();
         record.description = "extract text and images from PDF files".to_string();
         let query_tokens = tokenize_text("extract images");
-        let (score, reasons, _) = score_tool(&record, "extract images", &query_tokens, &weights);
+        let (score, reasons, _) = score_tool(&record, "extract images", &query_tokens, &weights, None);
         assert!(
             reasons.iter().any(|r| r.contains("description")),
             "description matching should fire"

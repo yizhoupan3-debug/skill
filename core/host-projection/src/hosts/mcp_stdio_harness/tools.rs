@@ -140,6 +140,29 @@ pub(super) fn tool_skill_route(
 
     if let Some(obj) = response.as_object_mut() {
         if !no_hit {
+            // --- Skill-context boost slugs from SKILL_TO_TOOL_MAP ---
+            // Load the skill-to-tool map to find which tools to boost for the
+            // selected skill. This enables context-aware recommended_tools
+            // even when the raw query doesn't match trigger tokens directly.
+            let boost_slugs: Option<std::collections::HashSet<String>> = (|| {
+                let map_path = repo_root
+                    .join(framework_core::constants::SKILL_TO_TOOL_MAP_RELATIVE_PATH);
+                let content = std::fs::read_to_string(map_path).ok()?;
+                let map: serde_json::Value = serde_json::from_str(&content).ok()?;
+                let entries = map.get("entries")?.as_array()?;
+                let entry = entries.iter().find(|e| {
+                    e.get("skill_slug").and_then(|v| v.as_str())
+                        == Some(&decision.selected_skill)
+                })?;
+                let slugs: std::collections::HashSet<String> = entry
+                    .get("tool_slugs")?
+                    .as_array()?
+                    .iter()
+                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                    .collect();
+                if slugs.is_empty() { None } else { Some(slugs) }
+            })();
+
             // --- recommended_tools (top-3, excluding no_routing) ---
             let registry_path = mcp_tool_registry::resolve_tool_registry_path()
                 .unwrap_or_else(|| {
@@ -154,7 +177,9 @@ pub(super) fn tool_skill_route(
                 if filtered.is_empty() {
                     return None;
                 }
-                let results = tool_routing_engine::search::search_tools(query, &filtered, 3);
+                let results = tool_routing_engine::search::search_tools(
+                    query, &filtered, 3, boost_slugs.as_ref(),
+                );
                 if results.is_empty() {
                     return None;
                 }
@@ -167,9 +192,30 @@ pub(super) fn tool_skill_route(
                     "reasons": d.reasons,
                 })).collect())
             })();
-            if let Some(t) = tools {
+            if let Some(t) = &tools {
                 obj.insert("recommended_tools".to_string(), json!(t));
             }
+
+            // --- Audit: log recommended_tools outcome ---
+            // Log the recommendation to `logs/skill-routing/recommend_audit.ndjson`
+            // for offline quality analysis (P3 #01).
+            let audit_entry = serde_json::json!({
+                "ts": crate::hooks::current_local_timestamp(),
+                "query": query,
+                "selected_skill": decision.selected_skill,
+                "recommended_tools": tools.as_ref().map(|t| {
+                    t.iter().map(|v| json!({
+                        "slug": v["slug"],
+                        "score": v["score"],
+                    })).collect::<Vec<_>>()
+                }),
+            });
+            static RECOMMEND_LOG: routing_core::audit_log::AuditLog =
+                routing_core::audit_log::AuditLog::new();
+            RECOMMEND_LOG.write_entry_with_rotation(
+                "logs/skill-routing/recommend_audit.ndjson",
+                &audit_entry,
+            );
 
             // --- skill_summary: inline SKILL.md first N chars ---
             if let Ok(path) = skill_body_path(repo_root, &decision.selected_skill) {

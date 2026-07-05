@@ -288,7 +288,7 @@ fn tool_search_tools(
     let records = mcp_tool_registry::load_tool_records_cached(&registry_path)
         .map_err(|e| FrameworkError::from(format!("search_tools: failed to load registry: {e}")))?;
     let results =
-        tool_routing_engine::search::search_tools(query, &records, top_k);
+        tool_routing_engine::search::search_tools(query, &records, top_k, None);
     serde_json::to_string(&results).map_err(|e| FrameworkError::from(e.to_string()))
 }
 

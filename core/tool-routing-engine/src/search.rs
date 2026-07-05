@@ -22,10 +22,15 @@ const MAX_TOP_K: usize = 100;
 /// Uses the same scoring pipeline as route_tool for consistency.
 /// Falls back to fuzzy trigram matching on trigger hints when scoring
 /// produces no results.
+///
+/// `boost_slugs`: optional set of tool slugs to boost when they match
+/// the selected skill's SKILL_TO_TOOL_MAP entry. Pass `None` when no
+/// skill context is available.
 pub fn search_tools(
     query: &str,
     records: &[McpToolRecord],
     top_k: usize,
+    boost_slugs: Option<&std::collections::HashSet<String>>,
 ) -> Vec<McpToolDecision> {
     if records.is_empty() || query.trim().is_empty() || top_k == 0 {
         return Vec::new();
@@ -53,7 +58,7 @@ pub fn search_tools(
             }
 
             let (score, reasons, matched_token_count) =
-                score_tool(record, &query_lower, &query_tokens, &weights);
+                score_tool(record, &query_lower, &query_tokens, &weights, boost_slugs);
 
             if score.is_nan() || score <= 0.0 {
                 return None;
@@ -145,7 +150,7 @@ mod tests {
             test_tool_record("browser_screenshot", &["截图", "浏览器"]),
             test_tool_record("browser_click", &["点击", "浏览器"]),
         ];
-        let results = search_tools("pdf", &records, 2);
+        let results = search_tools("pdf", &records, 2, None);
         assert_eq!(results.len(), 2);
         assert!(results[0].selected_tool.contains("pdf"));
     }
@@ -153,13 +158,13 @@ mod tests {
     #[test]
     fn search_empty_query() {
         let records = vec![test_tool_record("pdf_read", &["pdf"])];
-        assert!(search_tools("", &records, 10).is_empty());
+        assert!(search_tools("", &records, 10, None).is_empty());
     }
 
     #[test]
     fn search_zero_top_k() {
         let records = vec![test_tool_record("pdf_read", &["pdf"])];
-        assert!(search_tools("pdf", &records, 0).is_empty());
+        assert!(search_tools("pdf", &records, 0, None).is_empty());
     }
 
     #[test]
@@ -170,7 +175,7 @@ mod tests {
         )];
         // "screeenshot" is a typo that scores 0 in token-based scoring but
         // fuzzy-matches "screenshot" via trigram Jaccard
-        let results = search_tools("screeenshot", &records, 5);
+        let results = search_tools("screeenshot", &records, 5, None);
         assert!(!results.is_empty(), "typo should fuzzy-match in search");
         assert!(results[0].fuzzy_match, "should be flagged as fuzzy match");
         assert_eq!(results[0].selected_tool, "browser_screenshot");
@@ -181,7 +186,7 @@ mod tests {
         let mut record = test_tool_record("old_tool", &["legacy", "old"]);
         record.tool_flags = vec!["deprecated".to_string()];
         let records = vec![record];
-        let results = search_tools("legacy old_tool", &records, 5);
+        let results = search_tools("legacy old_tool", &records, 5, None);
         assert!(
             results.is_empty(),
             "deprecated tool must be excluded from search"
@@ -193,7 +198,7 @@ mod tests {
         let mut record = test_tool_record("task_create", &["task", "创建"]);
         record.tool_flags = vec!["no_routing".to_string()];
         let records = vec![record];
-        let results = search_tools("task_create", &records, 5);
+        let results = search_tools("task_create", &records, 5, None);
         assert!(
             results.is_empty(),
             "no_routing tool must be excluded from search"

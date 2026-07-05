@@ -1556,6 +1556,7 @@ dependencies = [
  "mcp-tool-registry",
  "regex",
  "reqwest",
+ "routing-core",
  "routing-engine",
  "serde",
  "serde_json",

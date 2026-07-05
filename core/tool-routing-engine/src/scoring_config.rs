@@ -32,6 +32,11 @@ pub struct ToolScoringWeights {
     /// Minimum Jaccard similarity for fuzzy rescue (0.0–1.0).
     #[serde(default = "default_fuzzy_min")]
     pub fuzzy_min_similarity: f64,
+    /// Boost applied to tools listed in SKILL_TO_TOOL_MAP for the selected skill.
+    /// This enables `recommended_tools` to return context-appropriate tools even
+    /// when the raw query doesn't contain matching trigger tokens.
+    #[serde(default)]
+    pub skill_context_boost: f64,
 }
 
 fn default_fuzzy_min() -> f64 {
