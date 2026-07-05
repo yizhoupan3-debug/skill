@@ -1,0 +1,91 @@
+{
+  "schema_version": "research-project-registry-v1",
+  "description": "全框架管理的科研项目目录注册表，用于 skill 更新后自动同步到各项目",
+  "_note": "fields: path, mcp_json, settings_json, claude_md_framework_ref, last_sync",
+  "projects": [
+    {
+      "id": "made",
+      "name": "MADE (Multi-Asset Diversification Engine)",
+      "path": "/Users/joe/Documents/research/made",
+      "status": {
+        "mcp_json": "present",
+        "settings_json": "present",
+        "claude_md_framework_ref": "present",
+        "last_sync": "2026-07-05T12:00:00+08:00"
+      },
+      "framework_role": "research-execution"
+    },
+    {
+      "id": "pi-ekan",
+      "name": "PI-EKAN (Physics-Informed Kolmogorov-Arnold Network)",
+      "path": "/Users/joe/Documents/research/pi-ekan",
+      "status": {
+        "mcp_json": "present",
+        "settings_json": "present",
+        "claude_md_framework_ref": "present",
+        "last_sync": "2026-07-05T12:00:00+08:00"
+      },
+      "framework_role": "research-execution"
+    },
+    {
+      "id": "data_twin",
+      "name": "Data Twin",
+      "path": "/Users/joe/Documents/research/data_twin",
+      "status": {
+        "mcp_json": "present",
+        "settings_json": "present",
+        "claude_md_framework_ref": "present",
+        "last_sync": "2026-07-05T12:00:00+08:00"
+      },
+      "framework_role": "research-execution"
+    },
+    {
+      "id": "tso-seat-allocator",
+      "name": "TSO Seat Allocator — CSP/ILP",
+      "path": "/Users/joe/Documents/research/TSO-Seat-Allocator-CSP-AI",
+      "status": {
+        "mcp_json": "present",
+        "settings_json": "present",
+        "claude_md_framework_ref": "present",
+        "last_sync": "2026-07-05T12:00:00+08:00"
+      },
+      "framework_role": "general"
+    },
+    {
+      "id": "lsm",
+      "name": "LSM",
+      "path": "/Users/joe/Documents/research/LSM",
+      "status": {
+        "mcp_json": "present",
+        "settings_json": "present",
+        "claude_md_framework_ref": "missing",
+        "last_sync": "2026-07-05T12:00:00+08:00"
+      },
+      "framework_role": "other"
+    },
+    {
+      "id": "jiao-research",
+      "name": "焦老师合作",
+      "path": "/Users/joe/Documents/research/科研--焦老师",
+      "status": {
+        "mcp_json": "present",
+        "settings_json": "present",
+        "claude_md_framework_ref": "missing",
+        "last_sync": "2026-07-05T12:00:00+08:00"
+      },
+      "framework_role": "research-execution"
+    },
+    {
+      "id": "ma-research",
+      "name": "马老师合作",
+      "path": "/Users/joe/Documents/research/科研_马老师",
+      "status": {
+        "mcp_json": "present",
+        "settings_json": "present",
+        "claude_md_framework_ref": "missing",
+        "last_sync": "2026-07-05T12:00:00+08:00"
+      },
+      "framework_role": "research-execution"
+    }
+  ]
+}
