@@ -1143,7 +1143,40 @@ pub fn trig_simplify(expr: &Expr) -> Expr {
                 }
             }
 
-            simplify(&make_add(result))
+            // ── Sum-to-product: combine sin/sin, cos/cos pairs ──
+            let mut used_st = vec![false; result.len()];
+            let mut st_result = Vec::new();
+            for i in 0..result.len() {
+                if used_st[i] { continue; }
+                let mut paired = false;
+                for j in (i + 1)..result.len() {
+                    if used_st[j] { continue; }
+                    match (&result[i], &result[j]) {
+                        (Expr::Fn(na, aa), Expr::Fn(nb, ab))
+                            if aa.len() == 1 && ab.len() == 1 => {
+                            let a = &aa[0]; let b = &ab[0];
+                            match (na.as_str(), nb.as_str()) {
+                                ("sin", "sin") if display(a) != display(b) => {
+                                    st_result.push(st_formula(a, b, "sin", "cos", 2.0));
+                                    used_st[i] = true; used_st[j] = true; paired = true;
+                                }
+                                ("cos", "cos") if display(a) != display(b) => {
+                                    st_result.push(st_formula(a, b, "cos", "cos", 2.0));
+                                    used_st[i] = true; used_st[j] = true; paired = true;
+                                }
+                                _ => {}
+                            }
+                        }
+                        _ => {}
+                    }
+                    if paired { break; }
+                }
+                if !paired {
+                    st_result.push(result[i].clone());
+                }
+            }
+
+            simplify(&make_add(st_result))
         }
         Expr::Sub(a, b) => {
             let ta = trig_simplify(a);
@@ -1349,6 +1382,24 @@ pub fn trig_simplify(expr: &Expr) -> Expr {
         }
         _ => expr.clone(),
     }
+}
+
+/// Build a sum-to-product expression: `k * fn1((a+b)/2) * fn2((a-b)/2)`.
+fn st_formula(a: &Expr, b: &Expr, fn1: &str, fn2: &str, k: f64) -> Expr {
+    let sum = Expr::Add(Box::new(a.clone()), Box::new(b.clone()));
+    let diff = Expr::Sub(Box::new(a.clone()), Box::new(b.clone()));
+    let half = Expr::Const(0.5);
+    Expr::Mul(
+        Box::new(Expr::Const(k)),
+        Box::new(Expr::Mul(
+            Box::new(Expr::Fn(fn1.into(), vec![
+                simplify(&Expr::Mul(Box::new(half.clone()), Box::new(sum))),
+            ])),
+            Box::new(Expr::Fn(fn2.into(), vec![
+                simplify(&Expr::Mul(Box::new(half), Box::new(diff))),
+            ])),
+        )),
+    )
 }
 
 /// Check if an expression is `sin(arg)^2`.
