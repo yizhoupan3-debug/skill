@@ -71,6 +71,16 @@ impl AuditLog {
         let root = std::env::var("FRAMEWORK_ROOT")
             .or_else(|_| std::env::var("CARGO_MANIFEST_DIR"))
             .unwrap_or_else(|_| ".".to_string());
+        // Sanitize: reject paths that contain suspicious traversal sequences.
+        if root.contains("..") || root.contains('\0') {
+            // Sanitize: reject paths with traversal or null bytes.
+            eprintln!("audit_log: rejected FRAMEWORK_ROOT with traversal: {:?}, falling back to current dir", root);
+            let p = Path::new(".").join(log_subpath);
+            if let Some(parent) = p.parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+            return p;
+        }
         let p = Path::new(&root).join(log_subpath);
         if let Some(parent) = p.parent() {
             let _ = std::fs::create_dir_all(parent);

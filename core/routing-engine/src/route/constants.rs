@@ -2,6 +2,8 @@ pub const ROUTE_DECISION_SCHEMA_VERSION: &str = "router-rs-route-decision-v1";
 pub const SEARCH_RESULTS_SCHEMA_VERSION: &str = "router-rs-search-results-v1";
 pub const ROUTE_POLICY_SCHEMA_VERSION: &str = "router-rs-route-policy-v1";
 pub const ROUTE_SNAPSHOT_SCHEMA_VERSION: &str = "router-rs-route-snapshot-v1";
+/// v2: added `primary_engine` + `evidence_kind` fields to RouteDiffReportPayload.
+/// v2 schema: added `primary_engine` + `evidence_kind` fields.
 pub const ROUTE_REPORT_SCHEMA_VERSION: &str = "router-rs-route-report-v2";
 pub const ROUTE_RESOLUTION_SCHEMA_VERSION: &str = "router-rs-route-resolution-v1";
 pub const ROUTE_AUTHORITY: &str = "rust-route-core";

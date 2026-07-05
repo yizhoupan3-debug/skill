@@ -36,7 +36,6 @@ fn route_decision_skeleton(
 ) -> RouteDecision {
     RouteDecision {
         decision_schema_version: ROUTE_DECISION_SCHEMA_VERSION.to_string(),
-        authority: ROUTE_AUTHORITY.to_string(),
         task: query.to_string(),
         session_id: session_id.to_string(),
         selected_skill: NO_SKILL_SELECTED.to_string(),
@@ -224,6 +223,7 @@ pub fn search_skills_subset(
 
     let scan_len = indices.map(|idxs| idxs.len()).unwrap_or(records.len());
     let w = scoring_weights();
+    let ngram_cache = super::ngram::NgramCache::new(&normalized_query);
     let score_record = |record: &SkillRecord| {
         let candidate = score_route_candidate(
             record,
@@ -232,6 +232,7 @@ pub fn search_skills_subset(
             &query_tokens,
             true,
             w,
+            Some(&ngram_cache),
         );
         if candidate.score <= 0.0 {
             return None;
@@ -385,6 +386,7 @@ pub fn route_task(
     }
 
     let w = scoring_weights();
+    let ngram_cache = super::ngram::NgramCache::new(&normalized_query);
     let score = |record| {
         score_route_candidate(
             record,
@@ -393,6 +395,7 @@ pub fn route_task(
             &query_tokens,
             first_turn,
             w,
+            Some(&ngram_cache),
         )
     };
     let viable = if records.len() < PARALLEL_RECORD_SCAN_MIN {
@@ -696,7 +699,6 @@ pub fn literal_framework_alias_decision(
     let reasons = compact_route_reasons(&["Framework alias entrypoint matched explicitly."]);
     Some(RouteDecision {
         decision_schema_version: ROUTE_DECISION_SCHEMA_VERSION.to_string(),
-        authority: ROUTE_AUTHORITY.to_string(),
         task: query.to_string(),
         session_id: session_id.to_string(),
         selected_skill: record.slug.clone(),
@@ -748,24 +750,43 @@ fn has_skill_flag(record: &SkillRecord, flag: &str) -> bool {
     record.skill_flags.iter().any(|f| f == flag)
 }
 
+/// Truncate and redact sensitive patterns so audit logs never store raw credentials.
+/// Caps at 512 chars, then strips common secret prefixes.
+fn sanitize_query_for_log(q: &str) -> String {
+    let truncated: String = q.chars().take(512).collect();
+    truncated
+        .replace("sk-", "sk-REDACTED")
+        .replace("Bearer ", "Bearer REDACTED")
+        .replace("password=", "password=REDACTED")
+        .replace("passwd=", "passwd=REDACTED")
+        .replace("token=", "token=REDACTED")
+        .replace("api_key=", "api_key=REDACTED")
+        .replace("secret=", "secret=REDACTED")
+}
+
 /// Wrapper that logs every routing decision to `logs/skill-routing/routing_audit.ndjson`.
-/// Logger auto-initializes on first call (creates directory + file).
+/// Uses rotation (10 MB cap) and query sanitization.
 fn log_decision(decision: RouteDecision, query: &str) -> RouteDecision {
     static LOG: AuditLog = AuditLog::new();
 
+    let safe_query = sanitize_query_for_log(query);
     let entry = serde_json::json!({
         "ts": routing_core::audit_log::iso_timestamp_now(),
-        "query": query,
+        "query": safe_query,
+        "query_char_count": query.chars().count(),
+        "truncated": query.chars().count() > 512,
+        "decision_schema_version": decision.decision_schema_version,
         "selected_skill": decision.selected_skill,
         "score": decision.score,
         "layer": decision.layer,
         "fuzzy_match": decision.fuzzy_match,
         "overlay_skill": decision.overlay_skill,
         "matched_token_count": decision.matched_token_count,
+        "checker_id": decision.checker_id,
         "top_3_reasons": &decision.reasons.iter().take(3).cloned().collect::<Vec<_>>(),
     });
 
-    LOG.write_entry("logs/skill-routing/routing_audit.ndjson", &entry);
+    LOG.write_entry_with_rotation("logs/skill-routing/routing_audit.ndjson", &entry);
 
     decision
 }

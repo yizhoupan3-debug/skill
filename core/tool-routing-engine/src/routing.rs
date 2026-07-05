@@ -20,7 +20,7 @@ use crate::routing_logger::log_tool_decision;
 #[cfg(test)]
 use mcp_tool_registry::{DispatchDomain, ToolLayer, ToolOwner};
 
-const DECISION_SCHEMA_VERSION: &str = "1.0.0";
+const DECISION_SCHEMA_VERSION: &str = "router-rs-tool-decision-v1";
 
 /// Route a natural language query to the best-matching tool.
 ///

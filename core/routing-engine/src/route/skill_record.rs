@@ -74,7 +74,7 @@ pub fn skill_record_from_raw(raw: RawSkillRecord) -> SkillRecord {
         metadata_positive_triggers: Vec::new(),
         host_platforms,
         record_kind,
-        primary_allowed: true,
+        primary_allowed: !skill_flags.iter().any(|f| f == "no_routing"),
         fallback_policy_mode: "eligible-in-runtime".to_string(),
         skill_flags,
     }

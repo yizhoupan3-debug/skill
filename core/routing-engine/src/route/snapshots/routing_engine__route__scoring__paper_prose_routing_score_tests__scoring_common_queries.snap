@@ -12,10 +12,9 @@ expression: results
           "keywords:2",
           "Trigger hint matched: SCI润色.",
           "ngram_similarity:0.7",
-          "keywords:2",
           "Session-start preferred boost applied (+3)."
         ],
-        "score": 95.65278757377182,
+        "score": 89.65278757377182,
         "slug": "paper-workbench"
       },
       {
@@ -51,20 +50,18 @@ expression: results
         "reasons": [
           "keywords:1",
           "ngram_similarity:0.3",
-          "keywords:1",
           "Session-start required boost applied (+8)."
         ],
-        "score": 19.330893028056757,
+        "score": 16.330893028056757,
         "slug": "doc"
       },
       {
         "reasons": [
           "keywords:1",
           "ngram_similarity:0.3",
-          "keywords:1",
           "Session-start required boost applied (+8)."
         ],
-        "score": 19.288131891144317,
+        "score": 16.288131891144317,
         "slug": "pdf"
       }
     ]

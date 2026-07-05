@@ -13,7 +13,7 @@ use mcp_tool_registry::McpToolRecord;
 #[cfg(test)]
 use mcp_tool_registry::{DispatchDomain, ToolLayer, ToolOwner};
 
-const DECISION_SCHEMA_VERSION: &str = "1.0.0";
+const DECISION_SCHEMA_VERSION: &str = "router-rs-tool-decision-v1";
 
 /// Maximum top_k value to prevent abuse.
 const MAX_TOP_K: usize = 100;

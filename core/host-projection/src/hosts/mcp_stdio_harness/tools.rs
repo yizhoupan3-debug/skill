@@ -134,6 +134,8 @@ pub(super) fn tool_skill_route(
         "fuzzy_match": decision.fuzzy_match,
         "overlay_skill": decision.overlay_skill,
         "route_context": decision.route_context,
+        "selected_skill_path": decision.selected_skill_path,
+        "checker_id": decision.checker_id,
     });
 
     if let Some(obj) = response.as_object_mut() {
@@ -159,6 +161,8 @@ pub(super) fn tool_skill_route(
                 Some(results.into_iter().map(|d| json!({
                     "slug": d.selected_tool, "score": d.score,
                     "dispatch_domain": d.dispatch_domain,
+                    "mcp_server": d.mcp_server,
+                    "matched_token_count": d.matched_token_count,
                     "fuzzy_match": d.fuzzy_match,
                     "reasons": d.reasons,
                 })).collect())

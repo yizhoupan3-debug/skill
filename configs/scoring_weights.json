@@ -32,6 +32,6 @@
   "codegraph_boost": 12.0,
   "overlay_suppression_factor": 0.5,
   "agent_swarm_candidate_threshold": 60.0,
-  "top_owner_score_threshold": 60.0,
+  "top_owner_score_threshold": 45.0,
   "gate_before_owner_threshold": 30.0
 }

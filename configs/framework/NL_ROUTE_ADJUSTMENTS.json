@@ -310,6 +310,84 @@
             },
             {
               "query_contains": "回撤"
+            },
+            {
+              "query_contains": "A/B测试"
+            },
+            {
+              "query_contains": "AB测试"
+            },
+            {
+              "query_contains": "t检验"
+            },
+            {
+              "query_contains": "t test"
+            },
+            {
+              "query_contains": "t-test"
+            },
+            {
+              "query_contains": "卡方"
+            },
+            {
+              "query_contains": "chi-square"
+            },
+            {
+              "query_contains": "方差分析"
+            },
+            {
+              "query_contains": "ANOVA"
+            },
+            {
+              "query_contains": "标准差"
+            },
+            {
+              "query_contains": "standard deviation"
+            },
+            {
+              "query_contains": "相关性"
+            },
+            {
+              "query_contains": "correlation"
+            },
+            {
+              "query_contains": "正态分布"
+            },
+            {
+              "query_contains": "normal distribution"
+            },
+            {
+              "query_contains": "中位数"
+            },
+            {
+              "query_contains": "median"
+            },
+            {
+              "query_contains": "四分位"
+            },
+            {
+              "query_contains": "quartile"
+            },
+            {
+              "query_contains": "交叉验证"
+            },
+            {
+              "query_contains": "cross-validation"
+            },
+            {
+              "query_contains": "Friedman"
+            },
+            {
+              "query_contains": "Mann-Whitney"
+            },
+            {
+              "query_contains": "Wilcoxon"
+            },
+            {
+              "query_contains": "主成分"
+            },
+            {
+              "query_contains": "PCA"
             }
           ]
         }
@@ -1082,7 +1160,16 @@
     },
     {
       "when": {
-        "query_contains": "查一下"
+        "all": [
+          {
+            "query_contains": "查一下"
+          },
+          {
+            "not": {
+              "query_contains": "论文"
+            }
+          }
+        ]
       },
       "action": {
         "type": "boost",

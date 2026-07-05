@@ -852,10 +852,10 @@ expression: json
       "resume_command_examples": [
         "Continue in Claude in this workspace"
       ],
-      "session_supervisor_driver": "mcp_bridge",
+      "session_supervisor_driver": "claude_driver",
       "session_supervisor_status": {
         "bridge": "browser-mcp session tools (session_launch/session_list/session_inspect/session_terminate)",
-        "rationale": "Claude bridges session supervision through browser-mcp MCP tools. SubagentStart/Stop hooks provide native lifecycle events.",
+        "rationale": "Claude hooks (subagentStart/subagentStop) route agent lifecycle events to session-supervisor for health tracking. Worker launch/resume is handled via browser-mcp session tools directly.",
         "supported": true
       },
       "settings_paths": [
@@ -1253,12 +1253,7 @@ expression: json
       },
       "display_name": "Test Profile",
       "framework_profile_version": "0.1.0",
-      "host_alias_entrypoints": {
-        "deepinterview": "/deepinterview",
-        "gitx": "/gitx",
-        "goalx": "/goalx",
-        "update": "/update"
-      },
+      "host_alias_entrypoints": {},
       "host_family": "shared-rust-core",
       "host_payload": {
         "capabilities": [
@@ -1310,10 +1305,10 @@ expression: json
         "resume_command_examples": [
           "Continue in Claude in this workspace"
         ],
-        "session_supervisor_driver": "mcp_bridge",
+        "session_supervisor_driver": "claude_driver",
         "session_supervisor_status": {
           "bridge": "browser-mcp session tools (session_launch/session_list/session_inspect/session_terminate)",
-          "rationale": "Claude bridges session supervision through browser-mcp MCP tools. SubagentStart/Stop hooks provide native lifecycle events.",
+          "rationale": "Claude hooks (subagentStart/subagentStop) route agent lifecycle events to session-supervisor for health tracking. Worker launch/resume is handled via browser-mcp session tools directly.",
           "supported": true
         },
         "settings_paths": [
@@ -1529,12 +1524,7 @@ expression: json
       },
       "display_name": "Test Profile",
       "framework_profile_version": "0.1.0",
-      "host_alias_entrypoints": {
-        "deepinterview": "/deepinterview",
-        "gitx": "/gitx",
-        "goalx": "/goalx",
-        "update": "/update"
-      },
+      "host_alias_entrypoints": {},
       "host_family": "shared-rust-core",
       "host_payload": {
         "capabilities": [
@@ -1803,12 +1793,7 @@ expression: json
       },
       "display_name": "Test Profile",
       "framework_profile_version": "0.1.0",
-      "host_alias_entrypoints": {
-        "deepinterview": "/deepinterview",
-        "gitx": "/gitx",
-        "goalx": "/goalx",
-        "update": "/update"
-      },
+      "host_alias_entrypoints": {},
       "host_family": "shared-rust-core",
       "host_payload": {
         "capabilities": [
@@ -2075,12 +2060,7 @@ expression: json
       },
       "display_name": "Test Profile",
       "framework_profile_version": "0.1.0",
-      "host_alias_entrypoints": {
-        "deepinterview": "/deepinterview",
-        "gitx": "/gitx",
-        "goalx": "/goalx",
-        "update": "/update"
-      },
+      "host_alias_entrypoints": {},
       "host_family": "shared-rust-core",
       "host_payload": {
         "capabilities": [

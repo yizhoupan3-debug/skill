@@ -462,6 +462,9 @@ pub fn has_plan_mode_owner_context(query_text: &str, query_token_list: &[String]
         || text_matches_phrase(query_token_list, "计划对照实际")
         || text_matches_phrase(query_token_list, "独立上下文 review 计划")
         || (query_text.contains("可验收") && query_text.contains("todo"))
+        || query_text.contains(" plan ")
+        || query_text.ends_with(" plan")
+        || query_text.starts_with("plan ")
 }
 
 pub(crate) fn detect_research_directory(cwd: &std::path::Path) -> bool {

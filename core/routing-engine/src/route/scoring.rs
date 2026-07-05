@@ -54,9 +54,11 @@ fn score_agent_swarm_signals(
     if !has_skill_flag(record, "scoring:agent_swarm") {
         return 0.0;
     }
+    // Cache to avoid double evaluation (used in both the guard and the boost)
+    let has_parallel_review = has_parallel_review_candidate_context(query_text, query_token_list);
     if !(bounded_subagent_context
         || workflow_orchestration_context
-        || has_parallel_review_candidate_context(query_text, query_token_list)
+        || has_parallel_review
         || parallel_execution_context)
     {
         return 0.0;
@@ -73,7 +75,7 @@ fn score_agent_swarm_signals(
                 .to_string(),
         );
     }
-    if has_parallel_review_candidate_context(query_text, query_token_list) {
+    if has_parallel_review {
         delta += w.parallel_review_boost;
         reasons.push(
             "Parallel-review boost applied: broad review scope should run subagent admission before a single-lane review."
@@ -128,7 +130,12 @@ fn score_design_md_signals(
     if !has_skill_flag(record, "scoring:design_md") {
         return 0.0;
     }
-    if !has_design_contract_context(query_text, query_token_list) {
+    if !cached_signal(
+        "has_design_contract_context",
+        query_text,
+        query_token_list,
+        || has_design_contract_context(query_text, query_token_list),
+    ) {
         return 0.0;
     }
     if has_design_output_audit_context(query_text, query_token_list)
@@ -271,7 +278,7 @@ fn score_gate_name_token_signals(
 #[inline]
 fn score_metadata_trigger_signals(
     record: &SkillRecord,
-    query_text: &str,
+    _query_text: &str,
     query_token_list: &[String],
     w: &ScoringWeights,
     reasons: &mut Vec<String>,
@@ -298,43 +305,6 @@ fn score_metadata_trigger_signals(
         ));
         for phrase in &matched_metadata_triggers {
             matched_count += count_single_token_hits(phrase, query_token_list);
-        }
-    }
-
-    // Keyword + alias tokens via shared pipeline (includes dedup against
-    // the unique_matched set from score_gate_name_token_signals above).
-    // We build fresh weights so the shared function only contributes the
-    // keyword + alias portions (name_tokens matched in gate step already
-    // contribute zero due to dedup).
-    let shared = routing_core::scoring::score_shared_token_matches(
-        query_text,
-        query_token_list,
-        &record.slug_lower,
-        "",
-        &record.name_tokens,
-        &[],
-        &record.keyword_tokens,
-        &record.alias_tokens,
-        &routing_core::scoring::TokenScoreWeights::from_skill_weights(
-            w.exact_skill_name_boost,
-            w.name_tokens_base,
-            w.name_tokens_per_token,
-            w.trigger_hint_per_match,
-            w.keywords_per_keyword,
-            w.keywords_max,
-            w.alias_hits_base,
-            w.alias_hits_per_hit,
-        ),
-    );
-    // Dedup against tokens already matched in the gate/name step.
-    // Since routing-core internally tracks unique_matched, the second call
-    // with the same query_tokens will only contribute NEW matches that
-    // weren't hit in gate_name_token_signals.
-    delta += shared.score;
-    matched_count += shared.matched_token_count;
-    for r in &shared.reasons {
-        if !r.starts_with("exact_name") && !r.starts_with("name_tokens") && !r.starts_with("trigger_hints") {
-            reasons.push(r.clone());
         }
     }
 
@@ -488,6 +458,7 @@ pub fn score_route_candidate<'a>(
     query_tokens: &'a HashSet<&'a str>,
     first_turn: bool,
     w: &ScoringWeights,
+    ngram_cache: Option<&super::ngram::NgramCache>,
 ) -> RouteCandidate<'a> {
     let mut score = 0.0f64;
     let mut reasons = Vec::with_capacity(8);
@@ -574,9 +545,11 @@ pub fn score_route_candidate<'a>(
     matched_token_count += gate_count;
 
     // --- n-gram semantic similarity signal (step 7.5) ---
-    let ngram_delta = {
-        let cache = super::ngram::NgramCache::new(query_text);
-        super::ngram::score_ngram_signal(&cache, record, w)
+    let ngram_delta = if let Some(cache) = ngram_cache {
+        super::ngram::score_ngram_signal(cache, record, w)
+    } else {
+        let owned = super::ngram::NgramCache::new(query_text);
+        super::ngram::score_ngram_signal(&owned, record, w)
     };
     if ngram_delta > 0.0 {
         score += ngram_delta;
@@ -621,7 +594,12 @@ pub fn score_route_candidate<'a>(
     // --- design contract override: suppress artifact-gate skills when design contract context ---
     let has_slides_design_contract_flag =
         has_skill_flag(record, "artifact_exception:slides_design_contract");
-    let has_design_ctx = has_design_contract_context(query_text, query_token_list);
+    let has_design_ctx = cached_signal(
+        "has_design_contract_context",
+        query_text,
+        query_token_list,
+        || has_design_contract_context(query_text, query_token_list),
+    );
     let has_design_neg = has_design_contract_negation_context(query_text, query_token_list);
     if has_slides_design_contract_flag && has_design_ctx && !has_design_neg {
         score = 0.0;
@@ -984,7 +962,7 @@ mod paper_prose_routing_score_tests {
         let tokens = tokenize_route_text(q);
         let set: HashSet<&str> = tokens.iter().map(|s| s.as_str()).collect();
         let w = scoring_weights();
-        let wb = score_route_candidate(workbench, q, &tokens, &set, true, w);
+        let wb = score_route_candidate(workbench, q, &tokens, &set, true, w, None);
         assert!(
             wb.score >= 82.0,
             "paper-workbench score {} reasons {:?}",
@@ -992,7 +970,7 @@ mod paper_prose_routing_score_tests {
             wb.reasons
         );
         if let Some(doc) = doc_eng {
-            let de = score_route_candidate(doc, q, &tokens, &set, true, w);
+            let de = score_route_candidate(doc, q, &tokens, &set, true, w, None);
             assert!(
                 wb.score > de.score,
                 "workbench {} must beat doc-eng {}",
@@ -1024,7 +1002,7 @@ mod paper_prose_routing_score_tests {
             let mut scores: Vec<_> = records
                 .iter()
                 .map(|r| {
-                    let s = score_route_candidate(r, q, &tokens, &set, true, w);
+                    let s = score_route_candidate(r, q, &tokens, &set, true, w, None);
                     (r.slug.clone(), s.score, s.reasons)
                 })
                 .filter(|(_, score, _)| *score > 0.0)
@@ -1091,7 +1069,7 @@ mod snapshot_scoring_edge_cases {
         let results: Vec<_> = records
             .iter()
             .map(|r| {
-                let s = score_route_candidate(r, "", &tokens, &set, true, w);
+                let s = score_route_candidate(r, "", &tokens, &set, true, w, None);
                 (r.slug.clone(), s.score)
             })
             .filter(|(_, score)| *score > 0.0)
@@ -1111,7 +1089,7 @@ mod snapshot_scoring_edge_cases {
         let mut scores: Vec<_> = records
             .iter()
             .map(|r| {
-                let s = score_route_candidate(r, q, &tokens, &set, true, w);
+                let s = score_route_candidate(r, q, &tokens, &set, true, w, None);
                 (r.slug.clone(), s.score, s.reasons)
             })
             .filter(|(_, score, _)| *score > 0.0)
@@ -1139,8 +1117,8 @@ mod snapshot_scoring_edge_cases {
         let set_plain: HashSet<&str> = tokens_plain.iter().map(|s| s.as_str()).collect();
 
         for rec in &records {
-            let r = score_route_candidate(rec, q, &tokens, &set, true, w);
-            let r_plain = score_route_candidate(rec, q_plain, &tokens_plain, &set_plain, true, w);
+            let r = score_route_candidate(rec, q, &tokens, &set, true, w, None);
+            let r_plain = score_route_candidate(rec, q_plain, &tokens_plain, &set_plain, true, w, None);
             // Codegraph query should score at least codegraph_boost (12.0) higher
             let has_codegraph_reason = r.reasons.iter().any(|s| s.contains("CodeGraph boost"));
             if has_codegraph_reason {

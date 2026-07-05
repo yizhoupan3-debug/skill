@@ -5,110 +5,110 @@ expression: results
 [
   [
     "research",
-    203.0
+    103.0
   ],
   [
     "agent-swarm-orchestration",
-    213.0
+    113.0
   ],
   [
     "research-workspace",
-    200.0
+    100.0
   ],
   [
     "citation-management",
-    203.0
+    103.0
   ],
   [
     "deep-search",
-    203.0
+    103.0
   ],
   [
     "design-md",
-    213.0
+    113.0
   ],
   [
     "doc",
-    213.0
+    113.0
   ],
   [
     "experiment-reproducibility",
-    203.0
+    103.0
   ],
   [
     "formal-verification",
-    200.0
+    100.0
   ],
   [
     "literature-verification",
-    200.0
+    100.0
   ],
   [
     "math-verify",
-    203.0
+    103.0
   ],
   [
     "math-explore",
-    203.0
+    103.0
   ],
   [
     "math-modeling",
-    203.0
+    103.0
   ],
   [
     "mcp-server-management",
-    200.0
+    100.0
   ],
   [
     "pdf",
-    213.0
+    113.0
   ],
   [
     "plan-mode",
-    203.0
+    103.0
   ],
   [
     "prose-verification",
-    200.0
+    100.0
   ],
   [
     "python-env-management",
-    200.0
+    100.0
   ],
   [
     "reproducibility-verification",
-    200.0
+    100.0
   ],
   [
     "sentry",
-    213.0
+    113.0
   ],
   [
     "skill-framework-developer",
-    203.0
+    103.0
   ],
   [
     "systematic-debugging",
-    205.0
+    105.0
   ],
   [
     "slides",
-    213.0
+    113.0
   ],
   [
     "statistical-verification",
-    200.0
+    100.0
   ],
   [
     "structure-verification",
-    200.0
+    100.0
   ],
   [
     "tikz-paper-figure",
-    200.0
+    100.0
   ],
   [
     "primary-runtime",
-    200.0
+    100.0
   ]
 ]

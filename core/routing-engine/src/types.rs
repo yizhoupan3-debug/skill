@@ -132,9 +132,11 @@ pub struct RouteDecisionSnapshotPayload {
     pub overlay_skill: Option<String>,
     pub layer: String,
     pub score: f64,
+    /// Deprecated: serialization-only, no Rust reader. Kept for JSON backward compat.
     pub score_bucket: String,
     pub reasons: Vec<String>,
     pub matched_token_count: usize,
+    /// Deprecated: serialization-only, no Rust reader. Kept for JSON backward compat.
     pub reasons_class: String,
 }
 
@@ -155,7 +157,6 @@ pub struct RouteDiffReportPayload {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct RouteDecision {
     pub decision_schema_version: String,
-    pub authority: String,
     pub task: String,
     pub session_id: String,
     pub selected_skill: String,

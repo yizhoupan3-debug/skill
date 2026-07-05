@@ -479,6 +479,7 @@ fn dispatch_tool_stdio_request(op: &str, payload: Value) -> Result<Value, Framew
                 "research_count": records.iter().filter(|r| r.layer == "research").count(),
                 "independent_count": records.iter().filter(|r| r.layer == "independent").count(),
                 "external_count": records.iter().filter(|r| r.layer == "external").count(),
+                "registry_path": registry_path,
             });
             Ok(status)
         }
