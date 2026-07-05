@@ -741,6 +741,22 @@
         "codex": "project .codex/config.toml",
         "claude": "project .mcp.json"
       }
+    },
+    "mcp-codegraph": {
+      "server_id": "mcp-codegraph",
+      "process": "external",
+      "binary": null,
+      "crate": "codegraph-rs",
+      "tools": [
+        "codegraph_search",
+        "codegraph_callers",
+        "codegraph_callees",
+        "codegraph_impact",
+        "codegraph_node",
+        "codegraph_status",
+        "codegraph_dead_code",
+        "codegraph_goto_definition"
+      ]
     }
   },
   "host_projections": {

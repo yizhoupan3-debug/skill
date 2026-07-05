@@ -437,7 +437,15 @@ pub fn can_be_primary_owner(record: &SkillRecord) -> bool {
     if !record.primary_allowed {
         return false;
     }
-    record.gate_lower == "none" && !framework_alias_requires_explicit_call(record)
+    if record.gate_lower != "none" {
+        return false;
+    }
+    // Framework alias skills that are nl_exempt can still be primary owners
+    // for NL queries (e.g. $code-review-deep triggers both explicit and NL routes).
+    if !framework_alias_requires_explicit_call(record) {
+        return true;
+    }
+    record.skill_flags.iter().any(|f| f == "behavior:nl_exempt_framework_alias")
 }
 
 pub fn can_be_fallback_owner(record: &SkillRecord) -> bool {

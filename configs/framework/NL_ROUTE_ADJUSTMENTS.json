@@ -192,6 +192,45 @@
         "type": "suppress",
         "reason": "Suppressed: user query contains MCP tool name or tool invocation intent, not a skill request."
       }
+    },
+    {
+      "when": {
+        "query_contains": "代码审查"
+      },
+      "action": {
+        "type": "boost",
+        "delta": 30.0,
+        "reason": "Code review context boosts code-review-deep."
+      },
+      "record": {
+        "slug": "code-review-deep"
+      }
+    },
+    {
+      "when": {
+        "query_contains": "代码简化"
+      },
+      "action": {
+        "type": "boost",
+        "delta": 30.0,
+        "reason": "Code simplification context boosts simplify."
+      },
+      "record": {
+        "slug": "simplify"
+      }
+    },
+    {
+      "when": {
+        "query_contains": "code review"
+      },
+      "action": {
+        "type": "boost",
+        "delta": 30.0,
+        "reason": "English code review context boosts code-review-deep."
+      },
+      "record": {
+        "slug": "code-review-deep"
+      }
     }
   ],
   "post_framework_alias_rules": [
@@ -1189,45 +1228,6 @@
       },
       "record": {
         "slug": "research-execution"
-      }
-    },
-    {
-      "when": {
-        "query_contains": "代码审查"
-      },
-      "action": {
-        "type": "boost",
-        "delta": 30.0,
-        "reason": "Code review context boosts code-review-deep."
-      },
-      "record": {
-        "slug": "code-review-deep"
-      }
-    },
-    {
-      "when": {
-        "query_contains": "代码简化"
-      },
-      "action": {
-        "type": "boost",
-        "delta": 30.0,
-        "reason": "Code simplification context boosts simplify."
-      },
-      "record": {
-        "slug": "simplify"
-      }
-    },
-    {
-      "when": {
-        "query_contains": "code review"
-      },
-      "action": {
-        "type": "boost",
-        "delta": 30.0,
-        "reason": "English code review context boosts code-review-deep."
-      },
-      "record": {
-        "slug": "code-review-deep"
       }
     }
   ],

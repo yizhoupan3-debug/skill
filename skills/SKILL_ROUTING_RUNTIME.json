@@ -2820,6 +2820,69 @@
       null,
       "general",
       null
+    ],
+    [
+      "goalx",
+      "L1",
+      "owner",
+      "none",
+      "P1",
+      "Guaranteed entry point for Goal management — create, checkpoint, amend, resume goals.",
+      "n/a",
+      [
+        "/goalx",
+        "goalx",
+        "goal:",
+        "Goal:",
+        "目标：",
+        "目标:",
+        "goal management",
+        "goal 管理",
+        "goal 模式",
+        "进入 goal",
+        "设立目标",
+        "创建 goal"
+      ],
+      "runtime",
+      null,
+      null,
+      "skill",
+      [
+        "no_routing"
+      ],
+      "Guaranteed entry point for Goal management with goal_state_manage.",
+      [
+        "goal",
+        "goalx",
+        "goal-management",
+        "framework-command"
+      ],
+      null,
+      null,
+      {
+        "platforms": [
+          "supported"
+        ],
+        "tags": [
+          "goal",
+          "goalx",
+          "goal-management",
+          "framework-command"
+        ],
+        "version": "1.0.0"
+      },
+      "low",
+      [
+        "Bash",
+        "Read",
+        "Write",
+        "Edit"
+      ],
+      null,
+      "conditional",
+      null,
+      "general",
+      null
     ]
   ],
   "_comment": "auto-generated — update via migration (2026-07-01). research skill refactoring applied."

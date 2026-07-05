@@ -3,9 +3,6 @@
 //! Only retains tool-specific threshold loading; the n-gram computation
 //! is shared via `routing-core`.
 
-/// Maximum fuzzy score returned (avoids fuzzy outscoring exact matches).
-pub const FUZZY_MAX_SCORE: f64 = 90.0;
-
 /// Compute the best fuzzy score for a query against a list of trigger hint strings.
 /// Uses weighted character n-gram cosine similarity, loaded threshold from config.
 pub fn best_fuzzy_score(query: &str, hints: &[String]) -> Option<f64> {

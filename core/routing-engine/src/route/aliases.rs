@@ -41,7 +41,10 @@ pub fn framework_alias_entrypoints_from_hints(
 }
 
 pub fn framework_alias_requires_explicit_call(record: &SkillRecord) -> bool {
-    !record.framework_alias_entrypoints.is_empty()
+    let result = !record.framework_alias_entrypoints.is_empty();
+    if result {
+    }
+    result
 }
 
 pub fn has_literal_framework_alias_call(query_text: &str, record: &SkillRecord) -> bool {

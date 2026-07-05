@@ -524,20 +524,28 @@ pub fn visual_evidence_markers() -> &'static [String] {
 }
 
 fn matches_record_filter(filter: &RecordFilter, record: &SkillRecord) -> bool {
-    if let Some(s) = &filter.slug
-        && record.slug != *s
-    {
+    // Check slug condition
+    let slug_ok = match &filter.slug {
+        None => true,
+        Some(s) => record.slug == *s,
+    };
+    if !slug_ok {
         return false;
     }
-    if let Some(arr) = &filter.slugs {
-        let ok = arr.iter().any(|s| s == record.slug.as_str());
-        if !ok {
-            return false;
-        }
+    // Check slugs list condition
+    let slugs_ok = match &filter.slugs {
+        None => true,
+        Some(arr) => arr.iter().any(|s| s == record.slug.as_str()),
+    };
+    if !slugs_ok {
+        return false;
     }
-    if let Some(g) = &filter.gate_lower
-        && record.gate_lower != *g
-    {
+    // Check gate condition
+    let gate_ok = match &filter.gate_lower {
+        None => true,
+        Some(g) => record.gate_lower == *g,
+    };
+    if !gate_ok {
         return false;
     }
     true
@@ -623,7 +631,8 @@ fn apply_rule_list<'a>(
     reasons: &mut Vec<String>,
 ) -> Option<RouteCandidate<'a>> {
     let mut nl_boost_accumulated = 0.0f64;
-    for rule in rules {
+
+    for (i, rule) in rules.iter().enumerate() {
         if !matches_record_filter(&rule.record, record) {
             continue;
         }
@@ -846,6 +855,17 @@ mod tests {
         }
     }
 
+    /// Test that the embedded NL adjustments include code review rules.
+    #[test]
+    fn embedded_nl_contains_code_review_rules() {
+        let nl = compiled_nl();
+        // Check that there's at least one post rule with query_contains for "代码审查"
+        let found = nl.post.iter().any(|rule| {
+            matches!(&rule.when, WhenExpr::QueryContains(s) if s == "代码审查")
+        });
+        assert!(found, "compiled NL must include query_contains '代码审查' rules");
+    }
+
     /// Test that query_contains rules fire correctly for code review queries.
     #[test]
     fn query_contains_code_review_suppresses_non_code_skills() {
@@ -909,5 +929,61 @@ mod tests {
         assert!(result.is_some(), "literature-verification should be suppressed for '代码审查'");
         let candidate = result.unwrap();
         assert_eq!(candidate.score, 0.0, "suppressed candidate should have score 0");
+    }
+
+    /// Test that the embedded NL `compiled_nl()` boosts `code-review-deep` for "代码审查".
+    #[test]
+    fn embedded_nl_boosts_code_review_deep() {
+        let nl = compiled_nl();
+        let record = SkillRecord {
+            slug: "code-review-deep".into(),
+            layer: "L2".into(),
+            owner: "owner".into(),
+            gate: "none".into(),
+            gate_lower: "none".into(),
+            summary: "".into(),
+            trigger_hints: vec![],
+            priority: "P2".into(),
+            session_start: "preferred".into(),
+            skill_path: None,
+            host_platforms: vec![],
+            record_kind: "skill".into(),
+            skill_flags: vec![],
+            slug_lower: "code-review-deep".into(),
+            owner_lower: "owner".into(),
+            session_start_lower: "preferred".into(),
+            gate_phrases: vec![],
+            name_tokens: Default::default(),
+            keyword_tokens: Default::default(),
+            alias_tokens: Default::default(),
+            do_not_use_tokens: Default::default(),
+            framework_alias_entrypoints: vec![],
+            metadata_positive_triggers: vec![],
+            primary_allowed: true,
+            fallback_policy_mode: "fallback".into(),
+        };
+        let query = "代码审查";
+        let tokens = vec!["代码".to_string(), "审查".to_string()];
+        let token_set: std::collections::HashSet<&str> = tokens.iter().map(|s| s.as_str()).collect();
+        let mut score = 0.0f64;
+        let mut reasons = Vec::new();
+
+        // Apply pre rules (where the code-review-deep boost now lives)
+        let result = apply_rule_list(
+            &nl.pre,
+            &record,
+            query,
+            &tokens,
+            &token_set,
+            true,
+            &mut score,
+            &mut reasons,
+        );
+
+        // Should be None (boost, not suppress)
+        assert!(result.is_none(), "code-review-deep should NOT be suppressed by pre rules");
+        // Score should be boosted by at least 30.0
+        assert!(score >= 30.0, "code-review-deep should receive at least 30 boost, got {score}");
+        eprintln!("code-review-deep boost score={}, reasons={:?}", score, reasons);
     }
 }
