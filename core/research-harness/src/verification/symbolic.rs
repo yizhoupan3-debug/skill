@@ -447,6 +447,36 @@ pub fn eval(expr: &Expr, vars: &HashMap<String, f64>) -> Result<f64, FrameworkEr
                     }
                     Ok(vals[0].tan())
                 }
+                "cot" => {
+                    if vals.len() != 1 {
+                        return Err(FrameworkError::validation("cot requires 1 argument"));
+                    }
+                    let t = vals[0].tan();
+                    if t.abs() < 1e-15 {
+                        return Err(FrameworkError::validation("cot domain: tan(x) approx 0"));
+                    }
+                    Ok(1.0 / t)
+                }
+                "sec" => {
+                    if vals.len() != 1 {
+                        return Err(FrameworkError::validation("sec requires 1 argument"));
+                    }
+                    let c = vals[0].cos();
+                    if c.abs() < 1e-15 {
+                        return Err(FrameworkError::validation("sec domain: cos(x) approx 0"));
+                    }
+                    Ok(1.0 / c)
+                }
+                "csc" => {
+                    if vals.len() != 1 {
+                        return Err(FrameworkError::validation("csc requires 1 argument"));
+                    }
+                    let s = vals[0].sin();
+                    if s.abs() < 1e-15 {
+                        return Err(FrameworkError::validation("csc domain: sin(x) approx 0"));
+                    }
+                    Ok(1.0 / s)
+                }
                 "asin" => {
                     if vals.len() != 1 {
                         return Err(FrameworkError::validation("asin requires 1 argument"));
@@ -2814,7 +2844,7 @@ pub fn structural_equal(a: &Expr, b: &Expr, commutativity: bool) -> bool {
 ///
 /// Useful for step-dependency verification: ensures a derived expression
 /// contains an expected subexpression.
-pub fn find_subexpression(expr: &Expr, target: &Expr) -> bool {
+pub(crate) fn find_subexpression(expr: &Expr, target: &Expr) -> bool {
     if expr == target {
         return true;
     }
@@ -2835,7 +2865,7 @@ pub fn find_subexpression(expr: &Expr, target: &Expr) -> bool {
 /// Applies: simplify → trig_simplify → expand → simplify → rationalize →
 /// factor_common → canonical ordering (variables sorted alphabetically,
 /// constants placed last, factors sorted).
-pub fn normalize(expr: &Expr) -> Expr {
+pub(crate) fn normalize(expr: &Expr) -> Expr {
     let expr = simplify(expr);
     let expr = trig_simplify(&expr);
     let expr = expand(&expr);
@@ -3178,6 +3208,51 @@ pub fn differentiate(expr: &Expr, var: &str) -> Expr {
                     let tanh_sq = Expr::Pow(Box::new(tanh_f), Box::new(Expr::Const(2.0)));
                     let one_minus = Expr::Sub(Box::new(Expr::Const(1.0)), Box::new(tanh_sq));
                     simplify(&Expr::Mul(Box::new(one_minus), Box::new(df)))
+                } else {
+                    Expr::Const(0.0)
+                }
+            }
+            // d/dx sec(f(x)) = sec(f(x))*tan(f(x)) * f'(x)
+            "sec" => {
+                if args.len() == 1 {
+                    let df = differentiate(&args[0], var);
+                    let sec_f = Expr::Fn("sec".to_string(), vec![args[0].clone()]);
+                    let tan_f = Expr::Fn("tan".to_string(), vec![args[0].clone()]);
+                    simplify(&Expr::Mul(
+                        Box::new(Expr::Mul(Box::new(sec_f), Box::new(tan_f))),
+                        Box::new(df),
+                    ))
+                } else {
+                    Expr::Const(0.0)
+                }
+            }
+            // d/dx csc(f(x)) = -csc(f(x))*cot(f(x)) * f'(x)
+            "csc" => {
+                if args.len() == 1 {
+                    let df = differentiate(&args[0], var);
+                    let csc_f = Expr::Fn("csc".to_string(), vec![args[0].clone()]);
+                    let cot_f = Expr::Fn("cot".to_string(), vec![args[0].clone()]);
+                    simplify(&Expr::Mul(
+                        Box::new(Expr::Neg(Box::new(Expr::Mul(
+                            Box::new(csc_f),
+                            Box::new(cot_f),
+                        )))),
+                        Box::new(df),
+                    ))
+                } else {
+                    Expr::Const(0.0)
+                }
+            }
+            // d/dx cot(f(x)) = -csc(f(x))^2 * f'(x)
+            "cot" => {
+                if args.len() == 1 {
+                    let df = differentiate(&args[0], var);
+                    let csc_f = Expr::Fn("csc".to_string(), vec![args[0].clone()]);
+                    let csc_sq = Expr::Pow(Box::new(csc_f), Box::new(Expr::Const(2.0)));
+                    simplify(&Expr::Mul(
+                        Box::new(Expr::Neg(Box::new(csc_sq))),
+                        Box::new(df),
+                    ))
                 } else {
                     Expr::Const(0.0)
                 }
@@ -3652,6 +3727,47 @@ pub fn integrate(expr: &Expr, var: &str) -> Expr {
                     }
                 }
             }
+            // 1/cos^2(x) -> tan, 1/sin^2(x) -> -cot
+            if let Expr::Pow(base, exp) = b.as_ref() {
+                if let Expr::Const(n) = exp.as_ref() {
+                    if (*n - 2.0).abs() < 1e-12 {
+                        if let Expr::Fn(fname, fargs) = base.as_ref() {
+                            if fargs.len() == 1 && contains_var(&fargs[0], var) {
+                                match fname.as_str() {
+                                    "cos" => { return Expr::Fn("tan".to_string(), vec![fargs[0].clone()]); }
+                                    "sin" => { return Expr::Neg(Box::new(Expr::Fn("cot".to_string(), vec![fargs[0].clone()]))); }
+                                    _ => {}
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            // 1/sqrt(x^2 + a^2) -> ln|x + sqrt(x^2 + a^2)|
+            if let Expr::Fn(fname, fargs) = b.as_ref() {
+                if fname == "sqrt" && fargs.len() == 1 {
+                    if let Expr::Add(lhs, rhs) = &fargs[0] {
+                        if is_x_squared(lhs, var) || is_x_squared(rhs, var) {
+                            return Expr::Fn("ln".to_string(), vec![Expr::Add(
+                                Box::new(Expr::Var(var.to_string())),
+                                Box::new(Expr::Fn("sqrt".to_string(), vec![fargs[0].clone()])),
+                            )]);
+                        }
+                    }
+                    if let Expr::Sub(lhs, rhs) = &fargs[0] {
+                        if is_x_squared(lhs, var) {
+                            if let Expr::Const(c) = rhs.as_ref() {
+                                if *c > 0.0 {
+                                    return Expr::Fn("ln".to_string(), vec![Expr::Add(
+                                        Box::new(Expr::Var(var.to_string())),
+                                        Box::new(Expr::Fn("sqrt".to_string(), vec![fargs[0].clone()])),
+                                    )]);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
             // General division not supported
             expr.clone()
         }
@@ -3773,6 +3889,71 @@ pub fn integrate(expr: &Expr, var: &str) -> Expr {
                             }
                         }
                     }
+                    "cot" => {
+                        if let Expr::Var(v) = &args[0] {
+                            if v == var {
+                                return Expr::Fn("ln".to_string(), vec![
+                                    Expr::Fn("sin".to_string(), vec![Expr::Var(var.to_string())]),
+                                ]);
+                            }
+                        }
+                        if let Some((inner, a)) = extract_linear_coeff(&args[0], var) {
+                            if a.abs() > 1e-15 {
+                                return simplify(&Expr::Div(
+                                    Box::new(Expr::Fn("ln".to_string(), vec![
+                                        Expr::Fn("sin".to_string(), vec![inner]),
+                                    ])),
+                                    Box::new(Expr::Const(a)),
+                                ));
+                            }
+                        }
+                    }
+                    "sec" => {
+                        if let Expr::Var(v) = &args[0] {
+                            if v == var {
+                                let sec_x = Expr::Fn("sec".to_string(), vec![Expr::Var(var.to_string())]);
+                                let tan_x = Expr::Fn("tan".to_string(), vec![Expr::Var(var.to_string())]);
+                                return Expr::Fn("ln".to_string(), vec![
+                                    Expr::Add(Box::new(sec_x), Box::new(tan_x)),
+                                ]);
+                            }
+                        }
+                        if let Some((inner, a)) = extract_linear_coeff(&args[0], var) {
+                            if a.abs() > 1e-15 {
+                                let sec_ax = Expr::Fn("sec".to_string(), vec![inner.clone()]);
+                                let tan_ax = Expr::Fn("tan".to_string(), vec![inner]);
+                                return simplify(&Expr::Div(
+                                    Box::new(Expr::Fn("ln".to_string(), vec![
+                                        Expr::Add(Box::new(sec_ax), Box::new(tan_ax)),
+                                    ])),
+                                    Box::new(Expr::Const(a)),
+                                ));
+                            }
+                        }
+                    }
+                    "csc" => {
+                        if let Expr::Var(v) = &args[0] {
+                            if v == var {
+                                let csc_x = Expr::Fn("csc".to_string(), vec![Expr::Var(var.to_string())]);
+                                let cot_x = Expr::Fn("cot".to_string(), vec![Expr::Var(var.to_string())]);
+                                return Expr::Neg(Box::new(Expr::Fn("ln".to_string(), vec![
+                                    Expr::Add(Box::new(csc_x), Box::new(cot_x)),
+                                ])));
+                            }
+                        }
+                        if let Some((inner, a)) = extract_linear_coeff(&args[0], var) {
+                            if a.abs() > 1e-15 {
+                                let csc_ax = Expr::Fn("csc".to_string(), vec![inner.clone()]);
+                                let cot_ax = Expr::Fn("cot".to_string(), vec![inner]);
+                                return simplify(&Expr::Div(
+                                    Box::new(Expr::Neg(Box::new(Expr::Fn("ln".to_string(), vec![
+                                        Expr::Add(Box::new(csc_ax), Box::new(cot_ax)),
+                                    ])))),
+                                    Box::new(Expr::Const(a)),
+                                ));
+                            }
+                        }
+                    }
                     "ln" | "log" => {
                         if let Expr::Var(v) = &args[0] {
                             if v == var {
@@ -3853,6 +4034,21 @@ pub fn integrate(expr: &Expr, var: &str) -> Expr {
                                         Box::new(Expr::Const(1.5)),
                                     )),
                                 ));
+                            }
+                        }
+                        // sqrt(a^2 - x^2) -> (x/2)*sqrt(a^2 - x^2) + (a^2/2)*asin(x/a)
+                        if let Expr::Sub(lhs, rhs) = &args[0] {
+                            if is_x_squared(lhs, var) && !is_x_squared(rhs, var) {
+                                if let Expr::Const(c) = rhs.as_ref() { if *c > 0.0 {
+                                    let sqrt_part = Expr::Fn("sqrt".to_string(), vec![args[0].clone()]);
+                                    let x_half = Expr::Div(Box::new(Expr::Var(var.to_string())), Box::new(Expr::Const(2.0)));
+                                    let t1 = Expr::Mul(Box::new(x_half), Box::new(sqrt_part));
+                                    let asin_part = Expr::Fn("asin".to_string(), vec![Expr::Div(
+                                        Box::new(Expr::Var(var.to_string())), Box::new(Expr::Const(c.sqrt())),
+                                    )]);
+                                    let t2 = Expr::Mul(Box::new(Expr::Const(*c * 0.5)), Box::new(asin_part));
+                                    return simplify(&Expr::Add(Box::new(t1), Box::new(t2)));
+                                }}
                             }
                         }
                     }
@@ -4163,16 +4359,11 @@ pub fn series(expr: &Expr, var: &str, point: f64, order: u32) -> Expr {
     let mut fact = 1.0_f64;
     for n in 1..order {
         current = differentiate(&current, var);
-        // Check if derivative is identically zero (early stop)
-        let simplified = simplify(&current);
-        if matches!(&simplified, Expr::Const(c) if c.abs() < 1e-15) {
-            break;
-        }
-
-        // Evaluate derivative at point
+        // differentiate already calls simplify on each sub-node;
+        // evaluate directly without redundant top-level simplify.
         let mut vars = HashMap::new();
         vars.insert(var.to_string(), point);
-        match eval(&simplified, &vars) {
+        match eval(&current, &vars) {
             Ok(deriv_val) if deriv_val.abs() > 1e-15 => {
                 fact *= n as f64; // n!
                 let coeff = deriv_val / fact;
@@ -6469,4 +6660,131 @@ mod tests {
         let result = propagate_dimensions_ast("y = sin(x)", &dims);
         assert!(!result.consistent, "sin(L) should be rejected: {} = {}", result.lhs_dim, result.rhs_dim);
     }
+    // ── sec/csc/cot evaluation ──
+
+    #[test]
+    fn test_eval_sec() {
+        let e = parse("sec(0)").unwrap();
+        let v = eval(&e, &HashMap::new()).unwrap();
+        assert!((v - 1.0).abs() < 1e-10, "sec(0) = 1, got {v}");
+    }
+
+    #[test]
+    fn test_eval_csc_pi_2() {
+        let mut vars = HashMap::new();
+        vars.insert("x".into(), std::f64::consts::FRAC_PI_2);
+        let e = parse("csc(x)").unwrap();
+        let v = eval(&e, &vars).unwrap();
+        assert!((v - 1.0).abs() < 1e-10, "csc(pi/2) = 1, got {v}");
+    }
+
+    #[test]
+    fn test_eval_cot_pi_4() {
+        let mut vars = HashMap::new();
+        vars.insert("x".into(), std::f64::consts::FRAC_PI_4);
+        let e = parse("cot(x)").unwrap();
+        let v = eval(&e, &vars).unwrap();
+        assert!((v - 1.0).abs() < 1e-10, "cot(pi/4) = 1, got {v}");
+    }
+
+    // ── sec/csc/cot differentiation ──
+
+    #[test]
+    fn test_diff_sec() {
+        let expr = parse("sec(x)").unwrap();
+        let result = differentiate(&expr, "x");
+        let result_str = display(&result);
+        assert!(result_str.contains("sec") && result_str.contains("tan"),
+            "d/dx sec(x) should involve sec*tan: {result_str}");
+    }
+
+    #[test]
+    fn test_diff_csc() {
+        let expr = parse("csc(x)").unwrap();
+        let result = differentiate(&expr, "x");
+        let result_str = display(&result);
+        assert!(result_str.contains("csc") && result_str.contains("cot"),
+            "d/dx csc(x) should involve csc*cot: {result_str}");
+    }
+
+    #[test]
+    fn test_diff_cot() {
+        let expr = parse("cot(x)").unwrap();
+        let result = differentiate(&expr, "x");
+        let result_str = display(&result);
+        assert!(result_str.contains("csc"),
+            "d/dx cot(x) should involve csc^2: {result_str}");
+    }
+
+    // ── sec/csc/cot integration ──
+
+    #[test]
+    fn test_integrate_sec_sq() {
+        let expr = parse("1/cos(x)^2").unwrap();
+        let result = integrate(&expr, "x");
+        let result_str = display(&result);
+        assert!(result_str.contains("tan"), "integral sec^2(x) = tan(x): {result_str}");
+    }
+
+    #[test]
+    fn test_integrate_csc_sq() {
+        let expr = parse("1/sin(x)^2").unwrap();
+        let result = integrate(&expr, "x");
+        let result_str = display(&result);
+        assert!(result_str.contains("cot"), "integral csc^2(x) = -cot(x): {result_str}");
+    }
+
+    #[test]
+    fn test_integrate_cot() {
+        let expr = parse("cot(x)").unwrap();
+        let result = integrate(&expr, "x");
+        let result_str = display(&result);
+        assert!(result_str.contains("sin") && result_str.contains("ln"),
+            "integral cot(x) = ln|sin(x)|: {result_str}");
+    }
+
+    #[test]
+    fn test_integrate_sec() {
+        let expr = parse("sec(x)").unwrap();
+        let result = integrate(&expr, "x");
+        let result_str = display(&result);
+        assert!(result_str.contains("sec") && result_str.contains("tan") && result_str.contains("ln"),
+            "integral sec(x) = ln|sec+tan|: {result_str}");
+    }
+
+    #[test]
+    fn test_integrate_csc() {
+        let expr = parse("csc(x)").unwrap();
+        let result = integrate(&expr, "x");
+        let result_str = display(&result);
+        assert!(result_str.contains("csc") && result_str.contains("cot") && result_str.contains("ln"),
+            "integral csc(x) = -ln|csc+cot|: {result_str}");
+    }
+
+    #[test]
+    fn test_integrate_sec_ax_chain() {
+        let expr = parse("sec(2*x)").unwrap();
+        let result = integrate(&expr, "x");
+        let result_str = display(&result);
+        assert!(result_str.contains("ln") && result_str.contains("sec") && result_str.contains("tan"),
+            "integral sec(2x) = (1/2)*ln|sec(2x)+tan(2x)|: {result_str}");
+    }
+
+    #[test]
+    fn test_integrate_sqrt_a2_minus_x2() {
+        let expr = parse("sqrt(4 - x^2)").unwrap();
+        let result = integrate(&expr, "x");
+        let result_str = display(&result);
+        assert!(result_str.contains("asin") || result_str.contains("sqrt"),
+            "integral sqrt(4-x^2) should contain asin or sqrt: {result_str}");
+    }
+
+    #[test]
+    fn test_integrate_inv_sqrt_x2_plus_a2() {
+        let expr = parse("1/sqrt(x^2 + 9)").unwrap();
+        let result = integrate(&expr, "x");
+        let result_str = display(&result);
+        assert!(result_str.contains("ln"), "integral 1/sqrt(x^2+9) should contain ln: {result_str}");
+    }
+
 }

@@ -568,36 +568,44 @@ fn model_to_json(model: &z3::Model) -> serde_json::Map<String, serde_json::Value
 // ════════════════════════════════════════════════════════════════════════════
 
 pub fn prove_formula(expr: &str) -> VerificationResult {
-    let solver = z3::Solver::new();
-    match parse_z3_bool(&solver, expr) {
-        Ok(formula) => {
-            solver.assert(&formula.not());
-            match solver.check() {
-                z3::SatResult::Unsat => VerificationResult {
-                    check_name: "math_z3_prove".into(), status: VerificationStatus::Pass,
-                    details: format!("z3_prove({expr}) — proved"), evidence_path: None,
-                },
-                z3::SatResult::Sat => {
-                    let ms = solver.get_model().map(|m| model_to_string(&m)).unwrap_or_default();
-                    VerificationResult {
-                        check_name: "math_z3_prove".into(), status: VerificationStatus::Fail,
-                        details: if ms.is_empty() { format!("z3_prove({expr}) — disproved") }
-                                 else { format!("z3_prove({expr}) — disproved. Counterexample: {{{ms}}}") },
-                        evidence_path: None,
+    THREAD_SOLVER.with(|cell| {
+        let solver = &mut *cell.borrow_mut();
+        solver.push();
+        let result = match parse_z3_bool(solver, expr) {
+            Ok(formula) => {
+                solver.assert(&formula.not());
+                match solver.check() {
+                    z3::SatResult::Unsat => VerificationResult {
+                        check_name: "math_z3_prove".into(), status: VerificationStatus::Pass,
+                        details: format!("z3_prove({expr}) — proved"), evidence_path: None,
+                    },
+                    z3::SatResult::Sat => {
+                        let ms = solver.get_model()
+                            .map(|m| model_to_string(&m))
+                            .unwrap_or_else(|| "model-retrieval-failed".into());
+                        VerificationResult {
+                            check_name: "math_z3_prove".into(), status: VerificationStatus::Fail,
+                            details: if ms == "model-retrieval-failed" { format!("z3_prove({expr}) — disproved (model unavailable)") }
+                                     else { format!("z3_prove({expr}) — disproved. Counterexample: {{{ms}}}") },
+                            evidence_path: None,
+                        }
                     }
+                    z3::SatResult::Unknown => VerificationResult {
+                        check_name: "math_z3_prove".into(), status: VerificationStatus::Warn,
+                        details: format!("z3_prove({expr}) — unknown"), evidence_path: None,
+                    },
                 }
-                z3::SatResult::Unknown => VerificationResult {
-                    check_name: "math_z3_prove".into(), status: VerificationStatus::Warn,
-                    details: format!("z3_prove({expr}) — unknown"), evidence_path: None,
-                },
             }
-        }
-        Err(e) => VerificationResult {
-            check_name: "math_z3_prove".into(), status: VerificationStatus::Fail,
-            details: format!("z3_prove({expr}) parse error: {e}"), evidence_path: None,
-        },
-    }
+            Err(e) => VerificationResult {
+                check_name: "math_z3_prove".into(), status: VerificationStatus::Fail,
+                details: format!("z3_prove({expr}) parse error: {e}"), evidence_path: None,
+            },
+        };
+        solver.pop(1);
+        result
+    })
 }
+
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct SolverBatchStep {
@@ -628,7 +636,12 @@ pub fn solver_batch(steps: &[SolverBatchStep]) -> Result<serde_json::Value, Stri
                     p.set_u32("timeout", step.timeout_ms.unwrap_or(5000) as u32);
                     solver.set_params(&p);
                     match solver.check() {
-                        z3::SatResult::Sat => json!({"result": "sat", "model": solver.get_model().map(|m| model_to_json(&m)).unwrap_or_default()}),
+                        z3::SatResult::Sat => {
+                            let model = solver.get_model()
+                                .map(|m| serde_json::Value::Object(model_to_json(&m)))
+                                .unwrap_or_else(|| serde_json::Value::String("model-retrieval-failed".into()));
+                            json!({"result": "sat", "model": model})
+                        },
                         z3::SatResult::Unsat => json!({"result": "unsat"}),
                         z3::SatResult::Unknown => json!({"result": "unknown"}),
                     }
@@ -674,7 +687,7 @@ pub fn solver_check(timeout_ms: Option<u64>) -> VerificationResult {
         if let Some(ms) = timeout_ms { let mut p = z3::Params::new(); p.set_u32("timeout", ms as u32); solver.set_params(&p); }
         match solver.check() {
             z3::SatResult::Sat => {
-                let model_str = solver.get_model().map(|m| model_to_string(&m)).unwrap_or_default();
+                let model_str = solver.get_model().map(|m| model_to_string(&m)).unwrap_or_else(|| "model-unavailable".into());
                 VerificationResult { check_name: "math_z3_solver_check".into(), status: VerificationStatus::Pass, details: format!("SAT: {model_str}"), evidence_path: None }
             }
             z3::SatResult::Unsat => VerificationResult { check_name: "math_z3_solver_check".into(), status: VerificationStatus::Fail, details: "UNSAT".into(), evidence_path: None },
@@ -715,29 +728,53 @@ pub fn optimize_formula(objective: &str, constraints: &[String], _vars: Option<&
 }
 
 pub fn check_system(constraints: &[String], _vars: Option<&[String]>, timeout_ms: Option<u64>) -> Result<serde_json::Value, String> {
-    let s = z3::Solver::new();
-    if let Some(ms) = timeout_ms { let mut p = z3::Params::new(); p.set_u32("timeout", ms as u32); s.set_params(&p); }
-    for c in constraints { s.assert(&parse_z3_bool(&s, c)?); }
-    match s.check() {
-        z3::SatResult::Sat => Ok(json!({"result": "sat", "model": s.get_model().map(|m| model_to_json(&m)).unwrap_or_default()})),
-        z3::SatResult::Unsat => Ok(json!({"result": "unsat"})),
-        z3::SatResult::Unknown => Ok(json!({"result": "unknown"})),
-    }
+    THREAD_SOLVER.with(|cell| {
+        let solver = &mut *cell.borrow_mut();
+        solver.push();
+        if let Some(ms) = timeout_ms { let mut p = z3::Params::new(); p.set_u32("timeout", ms as u32); solver.set_params(&p); }
+        let mut parse_err = None;
+        for c in constraints {
+            match parse_z3_bool(solver, c) {
+                Ok(b) => solver.assert(&b),
+                Err(e) => { parse_err = Some(e); break; }
+            }
+        }
+        let result = match parse_err {
+            Some(e) => Ok(json!({"result": "parse_error", "error": e})),
+            None => match solver.check() {
+                z3::SatResult::Sat => {
+                    let model = solver.get_model()
+                        .map(|m| serde_json::Value::Object(model_to_json(&m)))
+                        .unwrap_or_else(|| serde_json::Value::String("model-retrieval-failed".into()));
+                    Ok(json!({"result": "sat", "model": model}))
+                }
+                z3::SatResult::Unsat => Ok(json!({"result": "unsat"})),
+                z3::SatResult::Unknown => Ok(json!({"result": "unknown"})),
+            },
+        };
+        solver.pop(1);
+        result
+    })
 }
 
 pub fn check_inequality(expr: &str) -> VerificationResult {
-    let s = z3::Solver::new();
-    match parse_z3_bool(&s, expr) {
-        Ok(b) => {
-            s.assert(&b);
-            match s.check() {
-                z3::SatResult::Sat => VerificationResult { check_name: "math_prove_inequality".into(), status: VerificationStatus::Pass, details: format!("{expr} — satisfiable"), evidence_path: None },
-                z3::SatResult::Unsat => VerificationResult { check_name: "math_prove_inequality".into(), status: VerificationStatus::Fail, details: format!("{expr} — unsatisfiable"), evidence_path: None },
-                z3::SatResult::Unknown => VerificationResult { check_name: "math_prove_inequality".into(), status: VerificationStatus::Warn, details: format!("{expr} — unknown"), evidence_path: None },
+    THREAD_SOLVER.with(|cell| {
+        let solver = &mut *cell.borrow_mut();
+        solver.push();
+        let result = match parse_z3_bool(solver, expr) {
+            Ok(b) => {
+                solver.assert(&b);
+                match solver.check() {
+                    z3::SatResult::Sat => VerificationResult { check_name: "math_prove_inequality".into(), status: VerificationStatus::Pass, details: format!("{expr} — satisfiable"), evidence_path: None },
+                    z3::SatResult::Unsat => VerificationResult { check_name: "math_prove_inequality".into(), status: VerificationStatus::Fail, details: format!("{expr} — unsatisfiable"), evidence_path: None },
+                    z3::SatResult::Unknown => VerificationResult { check_name: "math_prove_inequality".into(), status: VerificationStatus::Warn, details: format!("{expr} — unknown"), evidence_path: None },
+                }
             }
-        }
-        Err(e) => VerificationResult { check_name: "math_prove_inequality".into(), status: VerificationStatus::Fail, details: format!("parse error: {e}"), evidence_path: None },
-    }
+            Err(e) => VerificationResult { check_name: "math_prove_inequality".into(), status: VerificationStatus::Fail, details: format!("parse error: {e}"), evidence_path: None },
+        };
+        solver.pop(1);
+        result
+    })
 }
 
 /// Evaluate a constraint with push/pop isolation on a given solver.

@@ -1,33 +1,32 @@
-<!-- managed_by: skill-framework · claude · keep ≤48 lines -->
+<!-- managed_by: skill-framework · claude · keep ≤30 lines -->
 <!-- projection_id: claude-project-narrative -->
 <!-- host_projection: claude -->
 <!-- install_scope: project -->
 
 # Claude Code（本项目）
 
-跨宿主 **`AGENTS.md`**（策略真源 + Harness 速查卡）。
+框架入口：**`AGENTS.md`**（策略真源 + 速查卡）。路由：`skill_route(query)`。
 
-## 语言（硬约束）
+## 生命周期
 
-- **面向用户的回复必须使用简体中文**（代码/路径/命令/第三方原文除外）；自然学术中文，避免翻译腔。
-- 仅当用户**当轮明确要求英文**时可切换。
-- **子代理 / Task**：spawn 时在 prompt **首行**写「面向用户的可见输出使用简体中文」。
+- **Default lifecycle:** task — Goal/Quality Gate via stdio + manual boards; `router-rs claude hook` 不注入 GOAL_CONTINUE/QUALITY_GATE/digest。REVIEW_GATE advisory-only。Closeout advisory（交互式）。
+- Goal 自动检测（UserPromptSubmit 复杂度分析）→ 自动创建 Goal 合约。scope change 自动触发 `[Goal Amendment]`。
+- Goal complete 自动归档（archived: true）。
+- 严格退出验证：Stop 管线比对 `done_when` 与响应内容。
 
-**Default lifecycle:** task — Goal/Quality Gate via stdio + manual boards; `router-rs claude hook` does not inject GOAL_CONTINUE/QUALITY_GATE/digest. REVIEW_GATE Stop advisory-only (Claude canonical clearance); `task` suppresses review nudge and spawn-first.
+## Hook 集成
 
-## Hook 集成（非 MCP）
+- 四事件：PreToolUse/UserPromptSubmit/PostToolUse/Stop（`.claude/settings.json` → `router-rs claude hook`）。
+- Review 默认 findings-only。REVIEW_GATE 不硬阻断 Stop。
 
-- 四事件：`PreToolUse`、`UserPromptSubmit`、`PostToolUse`、`Stop`（`.claude/settings.json` + `router-rs claude hook`）。
-- Goal/Quality Gate：`framework_goal_drive` / `framework_quality_gate` stdio + `artifacts/current/<task_id>/`。
-- 默认 **交互式模式**：closeout/complete 为 advisory，suppress review Stop nudge；非交互式时 closeout 可 fail-closed（与 REVIEW_GATE advisory 分层，见 `docs/README.md` §Stop/closeout）。
-- 检查点：`session_checkpoint`（非自动）。
-- Goal 自动触发：`UserPromptSubmit` 检测复杂任务（自然语言+启发式）→ 注入 goal 建议上下文；`has_structured_goal_contract` 已扩展为在 regex 失败时回退到复杂度分析。
-- Goal amend：`goal_state_manage(operation="amend")` 更新 goal 字段，保留 checkpoints；scope change 检测自动触发 `[Goal Amendment]` 上下文注入。
-- Goal 完成自动归档：`complete` 操作标记 `archived: true`，不再物理删除 GOAL_STATE.json。
-- 严格退出验证：Stop 管线读取磁盘 `done_when` 与响应内容比对，列出未完成项。
+## 路由
 
-## MCP（可选）
+1) Start from `AGENTS.md`。
+2) NL queries → `skills/SKILL_ROUTING_RUNTIME.json`。Slash command（`/name`）→ 原生 `~/.claude/skills/`，不经过 MCP。
+3) Read only matched `skill_path`。
 
-项目 `.claude/mcp.json` 可注册 `browser-mcp` 等。
+Framework root: `${FRAMEWORK_ROOT}` · Project root: `${PROJECT_ROOT}`。
 
-路由：`skills/SKILL_ROUTING_RUNTIME.json` · 产物：`artifacts/current/`。
+## 产物
+
+`artifacts/current/` · `.claude/mcp.json` 可选注册 MCP servers。

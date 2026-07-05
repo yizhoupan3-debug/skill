@@ -3,9 +3,9 @@
   "source": "framework-surface-policy",
   "loadouts": {
     "default_surface_loadout": {
-      "description": "Default hot routing surface (routing, memory, continuity, host projection).",
+      "description": "Default hot routing surface (routing, memory, continuity, host projection, caveman).",
       "tier_activation": "default",
-      "skill_slugs": []
+      "skill_slugs": ["caveman"]
     },
     "research_loadout": {
       "description": "Default research harness: discovery + execution + workspace + manuscript + citation + stats + repro + deep research + question + story.",
@@ -25,6 +25,9 @@
         "good-story",
         "pdf",
         "plan-mode",
+        "caveman",
+        "caveman-compress",
+        "caveman-commit",
         "formal-verification",
         "literature-verification",
         "prose-verification",
@@ -34,7 +37,7 @@
       ]
     },
     "implementation_loadout": {
-      "description": "My execution stack: code-review-deep, gitx.",
+      "description": "My execution stack: code-review-deep, gitx, caveman.",
       "tier_activation": "explicit_opt_in",
       "skill_slugs": [
         "code-review-deep",
@@ -42,7 +45,9 @@
         "plan-mode",
         "simplify",
         "systematic-debugging",
-        "mcp-server-management"
+        "mcp-server-management",
+        "caveman",
+        "caveman-commit"
       ]
     },
     "audit_loadout": {

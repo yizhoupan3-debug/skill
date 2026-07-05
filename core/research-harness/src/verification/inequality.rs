@@ -70,7 +70,7 @@ impl InequalitySystem {
     }
 }
 
-/// Result of a feasibility check (serializable for Python bridge).
+/// Result of a feasibility check.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum FeasibilityResult {
     Feasible { model: HashMap<String, f64> },

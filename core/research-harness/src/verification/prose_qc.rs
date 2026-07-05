@@ -260,4 +260,55 @@ mod tests {
         assert!(!is_whole_word("mayhem", 0, 3)); // "may" inside "mayhem"
         assert!(!is_whole_word("boot", 1, 2)); // "oo" is not whole
     }
+    #[test]
+    fn terminology_empty_glossary() {
+        let glossary: HashMap<String, String> = HashMap::new();
+        assert!(check_terminology_consistency("some text", &glossary).unwrap().is_empty());
+    }
+
+    #[test]
+    fn terminology_self_consistent() {
+        let mut glossary = HashMap::new();
+        glossary.insert("standard".to_string(), "standard".to_string());
+        let violations = check_terminology_consistency("standard usage", &glossary).unwrap();
+        assert_eq!(violations.len(), 0);
+    }
+
+    #[test]
+    fn hedging_edge_cases() {
+        assert_eq!(count_hedging_words(""), 0);
+        assert_eq!(count_hedging_words("No hedging here."), 0);
+        assert!(count_hedging_words("It may possibly seem potentially unclear.") >= 3);
+    }
+
+    #[test]
+    fn en_slop_no_slop() {
+        assert!(detect_en_slop("").is_empty());
+        assert!(detect_en_slop("clear and direct statement.").is_empty());
+    }
+
+    #[test]
+    fn zh_slop_no_slop() {
+        assert!(detect_zh_slop("").is_empty());
+        assert!(detect_zh_slop("这是一个清晰的陈述。").is_empty());
+    }
+
+    #[test]
+    fn en_slop_case_insensitive() {
+        let hits = detect_en_slop("MOREOVER, Furthermore");
+        assert_eq!(hits.len(), 2, "case-insensitive matching failed: {hits:?}");
+    }
+
+    #[test]
+    fn en_slop_multiple_same_word() {
+        let hits = detect_en_slop("Robust method, robust result, robust analysis.");
+        assert_eq!(hits.len(), 3, "should detect all 3 occurrences: {hits:?}");
+    }
+
+    #[test]
+    fn hedging_extreme() {
+        assert_eq!(count_hedging_words("你好世界"), 0);
+        assert_eq!(count_hedging_words("12345"), 0);
+    }
+
 }

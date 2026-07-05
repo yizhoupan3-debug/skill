@@ -791,4 +791,18 @@ mod extra_tests {
         let r = one_way_anova(&[&g1, &g2]).unwrap();
         assert!(r.eta_squared > 0.8);
     }
+    // -- Multiple comparison correction --
+
+    #[test]
+    fn test_multiple_comparison_correction_gate() {
+        assert!(check_multiple_comparison_correction(1, false));
+        assert!(check_multiple_comparison_correction(2, false));
+        assert!(!check_multiple_comparison_correction(3, false));
+        assert!(!check_multiple_comparison_correction(10, false));
+        assert!(!check_multiple_comparison_correction(100, false));
+        assert!(check_multiple_comparison_correction(3, true));
+        assert!(check_multiple_comparison_correction(10, true));
+        assert!(check_multiple_comparison_correction(100, true));
+    }
+
 }

@@ -49,7 +49,7 @@ impl GateChecker for SympyBridge {
             findings.push(Finding {
                 id: "sympy_no_data".to_string(),
                 severity: Severity::C,
-                description: "No output_data provided — SymPy checks skipped".to_string(),
+                description: "No output_data provided — symbolic checks skipped".to_string(),
                 location: None,
                 suggestion: Some("pass output_data with sympy keys to enable checks".to_string()),
             });

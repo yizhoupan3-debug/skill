@@ -2739,6 +2739,125 @@
       null
     ],
     [
+      "caveman",
+      "L3",
+      "owner",
+      "none",
+      "P2",
+      "超压缩通信模式。减少 65% output token，保持完整技术准确性。支持 lite/full/ultra/wenyan 级强度。Always-on，子代理继承。模式切换/关闭用此技能。",
+      "preferred",
+      [
+        "caveman",
+        "精简输出",
+        "少说点",
+        "简短",
+        "别废话",
+        "压缩输出",
+        "节省 token",
+        "caveman mode",
+        "talk like caveman",
+        "caveman",
+        "less tokens",
+        "be brief",
+        "干练",
+        "原始人模式",
+        "古文模式",
+        "说人话"
+      ],
+      "skills/caveman/SKILL.md",
+      null,
+      "skill",
+      [
+        "always_on"
+      ],
+      "超压缩通信模式 — 节省 65% output token",
+      [
+        "caveman",
+        "compression",
+        "token-saving",
+        "terse",
+        "wenyan"
+      ],
+      "always-on。模式切换/关闭时使用。",
+      "不需要时：`normal mode`。",
+      {
+        "platforms": [
+          "supported"
+        ],
+        "tags": [
+          "communication",
+          "compression"
+        ],
+        "version": "1.0.0"
+      },
+      "communication",
+      "compression"
+    ],
+    [
+      "caveman-compress",
+      "L3",
+      "owner",
+      "none",
+      "P3",
+      "压缩自然语言文件为 caveman 格式节省 input token。纯 Rust CLI。备份 .original.md。覆盖原文件。",
+      "on_demand",
+      [
+        "/caveman-compress",
+        "压缩文件",
+        "compress file",
+        "压缩 memory",
+        "压缩文档",
+        "compress memory"
+      ],
+      "skills/caveman-compress/SKILL.md",
+      null,
+      "skill",
+      [],
+      "压缩自然语言文件为 caveman 格式",
+      [
+        "compression",
+        "file-compression",
+        "token-saving"
+      ],
+      "用户需要压缩已有文档/记忆文件时",
+      "不适合压缩代码/数据文件",
+      {},
+      "file_compression",
+      null
+    ],
+    [
+      "caveman-commit",
+      "L3",
+      "owner",
+      "none",
+      "P4",
+      "Caveman 风格 git commit 消息。Conventional Commits 格式，≤50 字 subject。",
+      "on_demand",
+      [
+        "/caveman-commit",
+        "caveman commit",
+        "压缩提交",
+        "简单提交",
+        "简短 commit"
+      ],
+      "skills/caveman-commit/SKILL.md",
+      null,
+      "skill",
+      [],
+      "Caveman 风格 git commit 消息",
+      [
+        "git",
+        "commit",
+        "compression",
+        "caveman"
+      ],
+      "用户需要简短 commit 消息时",
+      "不适合详细 commit 描述",
+      {},
+      "git",
+      "commit"
+    ],
+    [
       "hallmark",
       "L3",
       "owner",
