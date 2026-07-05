@@ -7,7 +7,9 @@ use framework_core::skill_repo::skill_routing_runtime_json;
 #[cfg(any(test, feature = "test-support"))]
 use serde_json::Map;
 use serde_json::{Value, json};
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
+use std::sync::OnceLock;
 
 /// In-memory fallback for `first_turn` detection — **removed** (P2 #16).
 /// Cross-session state pollution risk from the per-process AtomicBool flag.
@@ -141,27 +143,13 @@ pub(super) fn tool_skill_route(
     if let Some(obj) = response.as_object_mut() {
         if !no_hit {
             // --- Skill-context boost slugs from SKILL_TO_TOOL_MAP ---
-            // Load the skill-to-tool map to find which tools to boost for the
-            // selected skill. This enables context-aware recommended_tools
-            // even when the raw query doesn't match trigger tokens directly.
-            let boost_slugs: Option<std::collections::HashSet<String>> = (|| {
-                let map_path = repo_root
-                    .join(framework_core::constants::SKILL_TO_TOOL_MAP_RELATIVE_PATH);
-                let content = std::fs::read_to_string(map_path).ok()?;
-                let map: serde_json::Value = serde_json::from_str(&content).ok()?;
-                let entries = map.get("entries")?.as_array()?;
-                let entry = entries.iter().find(|e| {
-                    e.get("skill_slug").and_then(|v| v.as_str())
-                        == Some(&decision.selected_skill)
-                })?;
-                let slugs: std::collections::HashSet<String> = entry
-                    .get("tool_slugs")?
-                    .as_array()?
-                    .iter()
-                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
-                    .collect();
-                if slugs.is_empty() { None } else { Some(slugs) }
-            })();
+            // Cached, typed loader with diagnostics for the selected skill
+            // and overlay skill (framework routing may set both).
+            let boost_slugs = compute_boost_slugs(
+                repo_root,
+                &decision.selected_skill,
+                decision.overlay_skill.as_deref().unwrap_or(""),
+            );
 
             // --- recommended_tools (top-3, excluding no_routing) ---
             let registry_path = mcp_tool_registry::resolve_tool_registry_path()
@@ -199,23 +187,28 @@ pub(super) fn tool_skill_route(
             // --- Audit: log recommended_tools outcome ---
             // Log the recommendation to `logs/skill-routing/recommend_audit.ndjson`
             // for offline quality analysis (P3 #01).
+            // NOTE: when log_subpath is an absolute path, write_entry_with_rotation
+            // uses it directly (Path::new(root).join(abs_path) yields abs_path),
+            // so the log lands at repo_root/logs/... regardless of FRAMEWORK_ROOT.
+            let sanitized_query = routing_core::audit_log::sanitize_query_for_log(query);
+            let log_path = repo_root.join("logs/skill-routing/recommend_audit.ndjson");
+            let log_subpath = log_path.to_string_lossy().to_string();
             let audit_entry = serde_json::json!({
                 "ts": crate::hooks::current_local_timestamp(),
-                "query": query,
+                "query": sanitized_query,
                 "selected_skill": decision.selected_skill,
+                "overlay_skill": decision.overlay_skill,
                 "recommended_tools": tools.as_ref().map(|t| {
                     t.iter().map(|v| json!({
                         "slug": v["slug"],
                         "score": v["score"],
+                        "reasons": v["reasons"],
                     })).collect::<Vec<_>>()
                 }),
             });
             static RECOMMEND_LOG: routing_core::audit_log::AuditLog =
                 routing_core::audit_log::AuditLog::new();
-            RECOMMEND_LOG.write_entry_with_rotation(
-                "logs/skill-routing/recommend_audit.ndjson",
-                &audit_entry,
-            );
+            RECOMMEND_LOG.write_entry_with_rotation(&log_subpath, &audit_entry);
 
             // --- skill_summary: inline SKILL.md first N chars ---
             if let Ok(path) = skill_body_path(repo_root, &decision.selected_skill) {
@@ -668,3 +661,84 @@ pub(super) fn tool_session_checkpoint(
 }
 
 // ── Research Harness MCP Tools ──
+
+// ── Typed SKILL_TO_TOOL_MAP loader (cached, with diagnostics) ──
+
+/// Typed entry for SKILL_TO_TOOL_MAP.json
+#[derive(serde::Deserialize)]
+struct SkillToToolMapEntry {
+    skill_slug: String,
+    tool_slugs: Vec<String>,
+}
+
+/// Typed root for SKILL_TO_TOOL_MAP.json
+#[derive(serde::Deserialize)]
+struct SkillToToolMap {
+    #[serde(rename = "schema_version")]
+    _schema_version: String,
+    entries: Vec<SkillToToolMapEntry>,
+}
+
+/// Load SKILL_TO_TOOL_MAP once and cache forever. Returns an empty map on
+/// any error (file not found, parse failure, etc.) with a `tracing::warn!`
+/// diagnostic so misconfiguration is visible.
+fn load_skill_to_tool_map(repo_root: &Path) -> &HashMap<String, HashSet<String>> {
+    static CACHE: OnceLock<HashMap<String, HashSet<String>>> = OnceLock::new();
+    CACHE.get_or_init(|| {
+        let map_path = repo_root
+            .join(framework_core::constants::SKILL_TO_TOOL_MAP_RELATIVE_PATH);
+        match std::fs::read_to_string(&map_path) {
+            Ok(content) => match serde_json::from_str::<SkillToToolMap>(&content) {
+                Ok(map) => map
+                    .entries
+                    .into_iter()
+                    .map(|e| {
+                        (
+                            e.skill_slug,
+                            e.tool_slugs.into_iter().collect::<HashSet<_>>(),
+                        )
+                    })
+                    .collect(),
+                Err(e) => {
+                    tracing::warn!(
+                        "SKILL_TO_TOOL_MAP parse error at {}: {e}",
+                        map_path.display()
+                    );
+                    HashMap::new()
+                }
+            },
+            Err(e) => {
+                tracing::warn!(
+                    "SKILL_TO_TOOL_MAP not found at {}: {e}",
+                    map_path.display()
+                );
+                HashMap::new()
+            }
+        }
+    })
+}
+
+/// Compute boost slugs for a (selected_skill, overlay_skill) pair by looking
+/// up the cached SKILL_TO_TOOL_MAP. Returns `None` when neither skill has
+/// registered tools (so the scoring pipeline applies no boost).
+fn compute_boost_slugs(
+    repo_root: &Path,
+    selected_skill: &str,
+    overlay_skill: &str,
+) -> Option<HashSet<String>> {
+    let map = load_skill_to_tool_map(repo_root);
+    let mut slugs = HashSet::new();
+    if let Some(tools) = map.get(selected_skill) {
+        slugs.extend(tools.iter().cloned());
+    }
+    if !overlay_skill.is_empty() && overlay_skill != selected_skill {
+        if let Some(tools) = map.get(overlay_skill) {
+            slugs.extend(tools.iter().cloned());
+        }
+    }
+    if slugs.is_empty() {
+        None
+    } else {
+        Some(slugs)
+    }
+}

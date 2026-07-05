@@ -147,6 +147,20 @@ pub fn days_to_date(days: i64) -> (i64, i64, i64) {
     (y, m, d)
 }
 
+/// Sanitize a query string for audit-log persistence: truncate to 512 chars
+/// and redact common secret patterns (API keys, tokens, passwords).
+pub fn sanitize_query_for_log(q: &str) -> String {
+    let truncated: String = q.chars().take(512).collect();
+    truncated
+        .replace("sk-", "sk-REDACTED")
+        .replace("Bearer ", "Bearer REDACTED")
+        .replace("password=", "password=REDACTED")
+        .replace("passwd=", "passwd=REDACTED")
+        .replace("token=", "token=REDACTED")
+        .replace("api_key=", "api_key=REDACTED")
+        .replace("secret=", "secret=REDACTED")
+}
+
 /// Current system time as an ISO-8601 UTC timestamp string.
 ///
 /// Uses the shared `days_to_date` Gregorian date conversion.
