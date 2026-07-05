@@ -1,8 +1,8 @@
 {
   "schema_version": "mcp-tool-registry-v2",
   "scope": {
-    "total_count": 107,
-    "builtin_count": 22,
+    "total_count": 113,
+    "builtin_count": 28,
     "research_count": 51,
     "independent_count": 15,
     "external_count": 19,
@@ -244,7 +244,17 @@
           "operation": {
             "type": "string",
             "description": "操作类型",
-            "enum": ["start", "checkpoint", "pause", "resume", "complete", "clear", "block", "amend"]
+            "enum": [
+              "amend",
+              "block",
+              "checkpoint",
+              "clear",
+              "complete",
+              "pause",
+              "resume",
+              "start",
+              "unblock"
+            ]
           },
           "task_id": {
             "type": "string",
@@ -290,7 +300,9 @@
           "goal_type": {
             "type": "string",
             "description": "目标类型，仅支持 'loop'（可选）",
-            "enum": ["loop"]
+            "enum": [
+              "loop"
+            ]
           },
           "drive_until_done": {
             "type": "boolean",
@@ -1095,7 +1107,12 @@
         "归档"
       ],
       "mcp_server": "router-rs-framework",
-      "tool_flags": []
+      "tool_flags": [],
+      "input_schema": {
+        "type": "object",
+        "required": [],
+        "properties": {}
+      }
     },
     {
       "slug": "research_review_dimensions",
@@ -3332,6 +3349,100 @@
           }
         }
       }
+    },
+    {
+      "slug": "task_output_write",
+      "display_name": "任务输出写入",
+      "description": "写入任务输出工件（JSON 或文本）到当前 task output 目录",
+      "layer": "builtin",
+      "dispatch_domain": "domain:framework",
+      "owner": "framework",
+      "trigger_hints": [
+        "task output",
+        "output write",
+        "输出写入",
+        "工件写入"
+      ],
+      "mcp_server": "router-rs-framework",
+      "tool_flags": []
+    },
+    {
+      "slug": "task_output_read",
+      "display_name": "任务输出读取",
+      "description": "读取任务输出的 JSON 或文本工件",
+      "layer": "builtin",
+      "dispatch_domain": "domain:framework",
+      "owner": "framework",
+      "trigger_hints": [
+        "task output",
+        "output read",
+        "输出读取",
+        "读取工件"
+      ],
+      "mcp_server": "router-rs-framework",
+      "tool_flags": []
+    },
+    {
+      "slug": "task_output_init",
+      "display_name": "任务输出初始化",
+      "description": "初始化任务输出目录和文件结构",
+      "layer": "builtin",
+      "dispatch_domain": "domain:framework",
+      "owner": "framework",
+      "trigger_hints": [
+        "task output",
+        "output init",
+        "输出初始化"
+      ],
+      "mcp_server": "router-rs-framework",
+      "tool_flags": []
+    },
+    {
+      "slug": "task_output_pull",
+      "display_name": "任务输出拉取",
+      "description": "从指定路径拉取输出内容到 task output 目录",
+      "layer": "builtin",
+      "dispatch_domain": "domain:framework",
+      "owner": "framework",
+      "trigger_hints": [
+        "task output",
+        "output pull",
+        "输出拉取",
+        "拉取工件"
+      ],
+      "mcp_server": "router-rs-framework",
+      "tool_flags": []
+    },
+    {
+      "slug": "task_output_validate",
+      "display_name": "任务输出验证",
+      "description": "验证任务输出是否符合预期格式",
+      "layer": "builtin",
+      "dispatch_domain": "domain:framework",
+      "owner": "framework",
+      "trigger_hints": [
+        "task output",
+        "output validate",
+        "输出验证"
+      ],
+      "mcp_server": "router-rs-framework",
+      "tool_flags": []
+    },
+    {
+      "slug": "chain_aggregate",
+      "display_name": "任务链聚合",
+      "description": "聚合任务链中各步骤的输出",
+      "layer": "builtin",
+      "dispatch_domain": "domain:framework",
+      "owner": "framework",
+      "trigger_hints": [
+        "chain",
+        "aggregate",
+        "任务链",
+        "链聚合"
+      ],
+      "mcp_server": "router-rs-framework",
+      "tool_flags": []
     }
   ]
 }

@@ -109,12 +109,6 @@ const SIGNAL_DEFS: &[SignalDef] = &[
         "审稿意见", "reviewer comments", "rebuttal", "appendix", "claim",
         "投稿", "期刊",
     ]),
-    sig!("scientific_figure_plotting", markers => &[
-        "scientific figures", "scientific figure", "publication chart",
-        "publication figure", "journal style", "科研出图", "论文图", "期刊风格",
-        "matplotlib", "seaborn", "plotnine", "raincloud", "ridge plot",
-        "statistical annotations", "colorblind-safe", "cjk font",
-    ]),
     sig!("sentry", markers => &[
         "sentry", "production error", "production errors", "线上异常",
     ]),
@@ -154,11 +148,6 @@ const SIGNAL_DEFS: &[SignalDef] = &[
         "markdown slides", "slidev", "marp", "html slides", "source slide formats",
         "source-first slides", "用 markdown 做 slides", "根据大纲做 html slides",
         "browser-matched pdf", "presentation.html",
-    ]),
-    sig!("diagramming", markers => &[
-        "mermaid", "graphviz", "dot diagram", "流程图", "研究流程图",
-        "技术路线图", "方法图", "实验流程", "pipeline 图", "时序图", "架构图",
-        "依赖图", "状态机",
     ]),
     sig!("bounded_subagent", markers => &[
         "sidecar", "sidecars", "subagent", "subagents", "delegation plan",

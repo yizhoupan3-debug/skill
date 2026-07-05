@@ -223,8 +223,8 @@ impl ToolHandler for GoalCloseoutTools {
 }
 
 // ---------------------------------------------------------------------------
-// TaskOutputTools (5 tools: task_output_write, task_output_read, task_output_init,
-//                   task_output_pull)
+// TaskOutputTools (6 tools: task_output_write, task_output_read, task_output_init,
+//                   task_output_pull, task_output_validate, chain_aggregate)
 // ---------------------------------------------------------------------------
 
 pub struct TaskOutputTools;
