@@ -3498,6 +3498,31 @@ pub fn integrate(expr: &Expr, var: &str) -> Expr {
                     return simplify(&result);
                 }
             }
+            // ∫ 1/sqrt(a² - x²) dx = arcsin(x/a)  (a > 0)
+            if let Expr::Fn(fname, fargs) = b.as_ref() {
+                if fname == "sqrt" && fargs.len() == 1 {
+                    if let Expr::Sub(lhs, rhs) = &fargs[0] {
+                        // Determine which operand is the constant (a²) and which is x²
+                        let (const_val, _is_x_sq_rhs) = if is_x_squared(rhs, var) {
+                            (lhs.as_ref(), true)
+                        } else if is_x_squared(lhs, var) {
+                            (rhs.as_ref(), false)
+                        } else {
+                            return expr.clone(); // fallthrough
+                        };
+                        let sqrt_a = match const_val {
+                            Expr::Const(c) if *c > 0.0 => c.sqrt(),
+                            _ => return expr.clone(),
+                        };
+                        return Expr::Fn("asin".into(), vec![
+                            simplify(&Expr::Div(
+                                Box::new(Expr::Var(var.to_string())),
+                                Box::new(Expr::Const(sqrt_a)),
+                            ))
+                        ]);
+                    }
+                }
+            }
             // General division not supported
             expr.clone()
         }
