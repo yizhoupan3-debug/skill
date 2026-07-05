@@ -31,6 +31,9 @@ pub fn grim_test(observed_mean: f64, n: usize, decimals: usize) -> Result<bool> 
 /// 验证观测 p 值是否在预期值的容差范围内。
 /// 返回 `true` 表示通过。
 pub fn verify_p_value(observed: f64, expected: f64, tolerance: f64) -> bool {
+    if tolerance.is_nan() || tolerance < 0.0 {
+        return false;
+    }
     if !(0.0..=1.0).contains(&expected) {
         return false;
     }

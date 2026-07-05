@@ -576,9 +576,17 @@ fn check_inequality_z3(expr: &str) -> VerificationResult {
                     return z3_result;
                 }
 
-                // Generate test points using Latin Hypercube-like strategy:
-                // each variable gets tested at multiple values covering its domain
-                let domain_points = [0.0, 1.0, -1.0, 5.0, -5.0, 0.5, 10.0, -10.0, 0.1, -0.1];
+                // Generate test points across multiple scales:
+                // fine grid near 0, medium grid (±5, ±10), wide grid (±100, ±1000),
+                // and extreme grid (±1e4, ±1e6) to catch large-magnitude solutions.
+                let domain_points = [
+                    0.0,
+                    0.1, -0.1, 0.5, -0.5, 1.0, -1.0, 5.0, -5.0,
+                    10.0, -10.0, 50.0, -50.0, 100.0, -100.0,
+                    500.0, -500.0, 1000.0, -1000.0,
+                    1e4, -1e4, 1e6, -1e6,
+                    1e8, -1e8,
+                ];
 
                 let mut holds_at_any = false;
 
@@ -618,8 +626,8 @@ fn check_inequality_z3(expr: &str) -> VerificationResult {
                         let mut vars = std::collections::HashMap::new();
                         for vn in &var_names {
                             let (lo, hi) = match vn.as_str() {
-                                "n" | "m" | "k" | "i" | "j" | "N" | "M" => (1.0, 100.0),
-                                _ => (-10.0, 10.0),
+                                "n" | "m" | "k" | "i" | "j" | "N" | "M" => (1.0, 1_000_000.0),
+                                _ => (-1_000_000.0, 1_000_000.0),
                             };
                             vars.insert(vn.clone(), rng.next_range(lo, hi));
                         }

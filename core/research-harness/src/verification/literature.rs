@@ -3,6 +3,24 @@
 use anyhow::Result;
 use std::collections::HashSet;
 
+/// 对 DOI 路径中的特殊字符进行百分号编码（最小化实现）。
+/// 覆盖常见 URL 非法字符：空格、方括号、花括号、引号等。
+fn encode_doi_path(doi: &str) -> String {
+    let mut encoded = String::with_capacity(doi.len());
+    for b in doi.bytes() {
+        match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~'
+                | b'/' | b':' | b'%' | b'#' | b'@' | b'!' | b'$' | b'&'
+                | b'\'' | b'(' | b')' | b'*' | b'+' | b',' | b';' | b'=' => {
+                encoded.push(b as char);
+            }
+            b' ' => encoded.push_str("%20"),
+            _ => encoded.push_str(&format!("%{:02X}", b)),
+        }
+    }
+    encoded
+}
+
 /// 验证 DOI 是否可解析（网络可达）。
 ///
 /// 通过向 https://doi.org/<doi> 发送 HEAD 请求，检查 3xx/2xx 响应。
@@ -15,7 +33,7 @@ pub async fn verify_doi_reachable(doi: &str) -> Result<bool> {
     let url = if doi.starts_with("http") {
         doi.to_string()
     } else {
-        format!("https://doi.org/{doi}")
+        format!("https://doi.org/{}", encode_doi_path(doi))
     };
     // SSRF validation + DNS resolution in one pass, returns pinned addresses.
     let (host, addrs) = crate::util::validate_and_resolve_for_fetch(&url)?;

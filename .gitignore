@@ -204,3 +204,4 @@ core/router-rs/artifacts/evolution/.last_idle_trigger
 logs/
 *.snap.new
 .z3-trace
+tmp_report.json

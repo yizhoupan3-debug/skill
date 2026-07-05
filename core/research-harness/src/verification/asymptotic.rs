@@ -499,6 +499,21 @@ pub fn verify_asymptotic_chain_with_name(
         }
     }
 
+    // If any step failed, return Fail regardless of mixed-chain status.
+    // Mixed chain → WARN only if all steps pass.
+    if !all_pass {
+        return VerificationResult {
+            check_name: check_name.to_string(),
+            status: VerificationStatus::Fail,
+            details: format!(
+                "Chain verification FAILED ({} steps): {}",
+                steps.len(),
+                step_details.join("; ")
+            ),
+            evidence_path: None,
+        };
+    }
+
     // Mixed chain → WARN even if all steps pass
     if let Some(warning) = &composition.mixed_chain_warning {
         step_details.push(format!("⚠ Mixed chain: {warning} — human review recommended"));
@@ -514,28 +529,16 @@ pub fn verify_asymptotic_chain_with_name(
         };
     }
 
-    if all_pass {
-        VerificationResult {
-            check_name: check_name.to_string(),
-            status: VerificationStatus::Pass,
-            details: format!(
-                "Chain verified ({} steps): {}",
-                steps.len(),
-                step_details.join("; ")
-            ),
-            evidence_path: None,
-        }
-    } else {
-        VerificationResult {
-            check_name: check_name.to_string(),
-            status: VerificationStatus::Fail,
-            details: format!(
-                "Chain verification FAILED ({} steps): {}",
-                steps.len(),
-                step_details.join("; ")
-            ),
-            evidence_path: None,
-        }
+    // Pure chain, all steps pass
+    VerificationResult {
+        check_name: check_name.to_string(),
+        status: VerificationStatus::Pass,
+        details: format!(
+            "Chain verified ({} steps): {}",
+            steps.len(),
+            step_details.join("; ")
+        ),
+        evidence_path: None,
     }
 }
 

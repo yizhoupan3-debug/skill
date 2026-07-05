@@ -504,17 +504,69 @@ pub fn tighten_bounds(expr: &str, var: &str, lo: f64, hi: f64, timeout_ms: Optio
         }
     }
 
-    // Tighten lower bound: binary search for the smallest feasible value
-    let mut low_feasible = current_lo;
-    let mut low_candidate = current_lo;
-    let mut high_candidate = current_hi;
+    // Tighten lower bound: binary search for the smallest feasible value.
+    // Constraint: does the feasible region reach down to `mid`?
+    // SAT  → region extends at least to `mid` → try lower (`high_candidate = mid`).
+    // UNSAT → region starts above `mid` → try higher (`low_candidate = mid`).
+    let mut low_lo = current_lo;
+    let mut low_hi = current_hi;
 
     for _i in 0..max_iterations {
         iterations += 1;
-        if (high_candidate - low_candidate).abs() < tolerance {
+        if (low_hi - low_lo).abs() < tolerance {
             break;
         }
-        let mid = (low_candidate + high_candidate) / 2.0;
+        let mid = (low_lo + low_hi) / 2.0;
+
+        // Check sat of (expr AND var >= lo AND var <= mid)
+        let mut constraints = format!("And({} >= {}, {} <= {}", var, lo, var, mid);
+        if !expr.is_empty() {
+            constraints.push_str(&format!(", {}", expr));
+        }
+        constraints.push(')');
+
+        let steps = vec![
+            crate::verification::z3_bridge::SolverBatchStep {
+                action: "add".into(), n: None, expression: Some(constraints),
+                timeout_ms: None,
+            },
+            crate::verification::z3_bridge::SolverBatchStep {
+                action: "check".into(), n: None, expression: None,
+                timeout_ms: Some(timeout / 2),
+            },
+        ];
+
+        if let Ok(result) = crate::verification::z3_bridge::solver_batch(&steps) {
+            let is_sat = result.get("steps")
+                .and_then(|v| v.as_array())
+                .and_then(|arr| arr.get(1))
+                .and_then(|v| v.get("result"))
+                .and_then(|v| v.as_str())
+                == Some("sat");
+            if is_sat {
+                // Feasible region reaches `mid` → narrow upper bound
+                low_hi = mid;
+            } else {
+                // Not feasible at `mid` → raise lower bound
+                low_lo = mid;
+            }
+        }
+    }
+    current_lo = low_hi;
+
+    // Tighten upper bound: binary search for the largest feasible value.
+    // Constraint: does the feasible region extend up to `mid`?
+    // SAT  → region extends ≥ `mid` → try higher (`low_candidate = mid`).
+    // UNSAT → region ends before `mid` → try lower (`high_candidate = mid`).
+    let mut up_lo = low_hi;
+    let mut up_hi = current_hi;
+
+    for _i in 0..max_iterations {
+        iterations += 1;
+        if (up_hi - up_lo).abs() < tolerance {
+            break;
+        }
+        let mid = (up_lo + up_hi) / 2.0;
 
         // Check sat of (expr AND var >= mid AND var <= hi)
         let mut constraints = format!("And({} >= {}, {} <= {}", var, mid, var, hi);
@@ -542,65 +594,15 @@ pub fn tighten_bounds(expr: &str, var: &str, lo: f64, hi: f64, timeout_ms: Optio
                 .and_then(|v| v.as_str())
                 == Some("sat");
             if is_sat {
-                // Mid is feasible — try higher
-                low_candidate = mid;
-                low_feasible = mid;
+                // Feasible region extends to `mid` → try higher
+                up_lo = mid;
             } else {
-                // Mid is infeasible — lower the range
-                high_candidate = mid;
+                // Not feasible at `mid` → narrow upper bound
+                up_hi = mid;
             }
         }
     }
-    current_lo = low_feasible;
-
-    // Tighten upper bound: binary search for the largest feasible value
-    low_candidate = low_feasible;
-    high_candidate = current_hi;
-    let mut high_feasible = current_hi;
-
-    for _i in 0..max_iterations {
-        iterations += 1;
-        if (high_candidate - low_candidate).abs() < tolerance {
-            break;
-        }
-        let mid = (low_candidate + high_candidate) / 2.0;
-
-        // Check sat of (expr AND var >= lo AND var <= mid)
-        let mut constraints = format!("And({} >= {}, {} <= {}", var, current_lo, var, mid);
-        if !expr.is_empty() {
-            constraints.push_str(&format!(", {}", expr));
-        }
-        constraints.push(')');
-
-        let steps = vec![
-            crate::verification::z3_bridge::SolverBatchStep {
-                action: "add".into(), n: None, expression: Some(constraints),
-                timeout_ms: None,
-            },
-            crate::verification::z3_bridge::SolverBatchStep {
-                action: "check".into(), n: None, expression: None,
-                timeout_ms: Some(timeout / 2),
-            },
-        ];
-
-        if let Ok(result) = crate::verification::z3_bridge::solver_batch(&steps) {
-            let is_sat = result.get("steps")
-                .and_then(|v| v.as_array())
-                .and_then(|arr| arr.get(1))
-                .and_then(|v| v.get("result"))
-                .and_then(|v| v.as_str())
-                == Some("sat");
-            if is_sat {
-                // Mid is feasible — try higher
-                low_candidate = mid;
-                high_feasible = mid;
-            } else {
-                // Mid is infeasible — lower the range
-                high_candidate = mid;
-            }
-        }
-    }
-    current_hi = high_feasible;
+    current_hi = up_lo;
 
     let reduction = 1.0 - (current_hi - current_lo) / initial_range;
     let pct = (reduction * 100.0).max(0.0);

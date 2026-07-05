@@ -609,6 +609,8 @@ pub fn simplify(expr: &Expr) -> Expr {
                 (_, Expr::Const(c)) if *c == 0.0 => Expr::Const(1.0),
                 (_, Expr::Const(c)) if *c == 1.0 => sa,
                 (Expr::Const(c1), Expr::Const(c2)) => Expr::Const(c1.powf(*c2)),
+                // 0^(-k) for k > 0 is undefined, not 0.
+                (Expr::Const(0.0), Expr::Const(c)) if *c < 0.0 => Expr::Const(f64::NAN),
                 (Expr::Const(0.0), _) => Expr::Const(0.0),
                 (Expr::Const(1.0), _) => Expr::Const(1.0),
                 _ => Expr::Pow(Box::new(sa), Box::new(sb)),
@@ -1867,8 +1869,12 @@ fn equivalent_with_seed(lhs: &str, rhs: &str, seed: u64) -> bool {
     } else if sample_count < INITIAL_SAMPLES / 2 {
         // Too many samples were undefined (e.g., many division-by-zero points) —
         // fall back to comprehensive sampling up to 100 total valid samples.
+        // Bound total iterations to prevent infinite loop on dense singularities.
         let mut fallback_valid = 0_usize;
-        while fallback_valid < (100 - sample_count) {
+        let target = 100 - sample_count;
+        let mut fallback_iters = 0_u32;
+        while fallback_valid < target && fallback_iters < 10_000 {
+            fallback_iters += 1;
             let mut bindings = HashMap::new();
             for v in &vars {
                 let (lo, hi) = match v.as_str() {
@@ -2197,17 +2203,29 @@ pub fn leading_term(expr_str: &str, var: &str) -> Result<(String, String), Frame
         return Err(FrameworkError::validation("empty expression"));
     }
 
-    // Classify each term
+    // Classify and rank each term by growth class + within-class parameter.
+    // The sort key is (rank, class_param) so that within the same rank
+    // (e.g. two Power terms) the one with larger exponent sorts first.
     let mut classified: Vec<(f64, &Expr)> = terms
         .iter()
         .map(|t| {
-            // For the coefficient check, try to extract it
             let class = classify_growth(t, var);
-            (growth_rank(&class) as f64, *t)
+            let rank = growth_rank(&class) as f64;
+            // Within-class ordering parameter: extract the class-specific value
+            // so same-rank terms sort by growth magnitude.
+            let class_param = match &class {
+                GrowthClass::Power(k) => *k,
+                GrowthClass::Log(k) => *k,
+                GrowthClass::Exp(c) => *c,
+                _ => 0.0,
+            };
+            // Encode: primary rank dominates, within-class param is secondary.
+            // Use rank * 1e6 + param so rank always dominates the sort.
+            (rank * 1_000_000.0 + class_param, *t)
         })
         .collect();
 
-    // Find dominant term(s) — highest growth rank
+    // Find dominant term(s) — highest composite key
     classified.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
 
     if classified.is_empty() {
@@ -4376,6 +4394,15 @@ fn format_dimension_exponents(exponents: &std::collections::HashMap<String, f64>
 
 /// Check if two dimension strings are equivalent.
 fn dimensions_equal(a: &str, b: &str) -> bool {
+    // Error-marker dimensions (MISMATCH, FN_REQUIRES_DIMENSIONLESS) are never
+    // equal to anything, including themselves — they represent analysis failures,
+    // not actual consistent dimensions.
+    if a.starts_with("MISMATCH") || a.starts_with("FN_REQUIRES_DIMENSIONLESS")
+        || b.starts_with("MISMATCH") || b.starts_with("FN_REQUIRES_DIMENSIONLESS")
+    {
+        return false;
+    }
+
     let ea = parse_dimension_exponents(a);
     let eb = parse_dimension_exponents(b);
 
@@ -5797,5 +5824,85 @@ mod tests {
         let expr = parse("1e+3").unwrap();
         let val = eval(&expr, &HashMap::new()).unwrap();
         assert!((val - 1000.0).abs() < 1e-10, "1e+3 = 1000, got {val}");
+    }
+
+    // ── perturbation_expand tests (P2 coverage gap fix) ──
+
+    #[test]
+    fn test_perturbation_expand_duffing() {
+        let result = perturbation_expand("u'' + u + eps*u^3", "t", "eps", 1, None);
+        assert!(!result.orders.is_empty());
+        assert!(!result.full_solution.is_empty());
+    }
+
+    #[test]
+    fn test_perturbation_expand_with_bc() {
+        let result = perturbation_expand("u'' + u + eps*u^3", "t", "eps", 1, Some("u(0)=1, u'(0)=0"));
+        assert!(!result.orders.is_empty());
+    }
+
+    #[test]
+    fn test_perturbation_expand_linear() {
+        let result = perturbation_expand("u'' + u + eps*u", "t", "eps", 1, None);
+        assert!(!result.orders.is_empty());
+    }
+
+    #[test]
+    fn test_perturbation_expand_order_2() {
+        let result = perturbation_expand("u'' + u + eps*u^3", "t", "eps", 2, None);
+        assert!(result.orders.len() >= 3);
+    }
+
+    // ── dimension propagation tests (P2 coverage gap fix) ──
+
+    #[test]
+    fn test_dimensions_equal_MISMATCH_never_equal() {
+        assert!(!dimensions_equal("MISMATCH(L,T)", "MISMATCH(L,T)"));
+        assert!(!dimensions_equal("MISMATCH(L,T)", "[L]"));
+    }
+
+    #[test]
+    fn test_dimensions_equal_fn_requires_dimensionless() {
+        assert!(!dimensions_equal("FN_REQUIRES_DIMENSIONLESS(L)", "FN_REQUIRES_DIMENSIONLESS(L)"));
+    }
+
+    #[test]
+    fn test_propagate_dimensions_ast_mul() {
+        let dims = HashMap::from([("x", "L"), ("t", "T")]);
+        let expr = parse("x * t").unwrap();
+        let result = propagate_dimensions_ast(&expr, &dims);
+        assert_eq!(result.as_deref(), Some("L*T"));
+    }
+
+    #[test]
+    fn test_propagate_dimensions_ast_div() {
+        let dims = HashMap::from([("x", "L"), ("t", "T")]);
+        let expr = parse("x / t").unwrap();
+        let result = propagate_dimensions_ast(&expr, &dims);
+        assert_eq!(result.as_deref(), Some("L*T^-1"));
+    }
+
+    #[test]
+    fn test_propagate_dimensions_ast_MISMATCH_on_add() {
+        let dims = HashMap::from([("x", "L"), ("t", "T")]);
+        let expr = parse("x + t").unwrap();
+        let result = propagate_dimensions_ast(&expr, &dims);
+        assert!(result.as_deref().unwrap_or("").contains("MISMATCH"));
+    }
+
+    #[test]
+    fn test_propagate_dimensions_ast_trig_ok() {
+        let dims = HashMap::from([("x", "1")]);
+        let expr = parse("sin(x)").unwrap();
+        let result = propagate_dimensions_ast(&expr, &dims);
+        assert_eq!(result.as_deref(), Some("1"));
+    }
+
+    #[test]
+    fn test_propagate_dimensions_ast_trig_dimensioned() {
+        let dims = HashMap::from([("x", "L")]);
+        let expr = parse("sin(x)").unwrap();
+        let result = propagate_dimensions_ast(&expr, &dims);
+        assert!(result.as_deref().unwrap_or("").contains("REQUIRES_DIMENSIONLESS"));
     }
 }
