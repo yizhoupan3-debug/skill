@@ -175,10 +175,6 @@ pub fn tool_definitions() -> Vec<Value> {
                         "type": "object",
                         "description": "替换映射表 {变量/表达式: 新值}，例如 {\"x\": 2, \"y\": \"a + b\"}",
                         "additionalProperties": true
-                    },
-                    "simultaneous": {
-                        "type": "boolean",
-                        "description": "是否同时替换（避免中间干扰），默认 false"
                     }
                 },
                 "required": ["expression", "substitutions"]
