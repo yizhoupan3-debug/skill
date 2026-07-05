@@ -3293,6 +3293,32 @@ fn extract_const(expr: &Expr) -> Option<f64> {
     }
 }
 
+/// Extract linear coefficients (a, b) from exp(a*x) * sin/cos(b*x) pattern.
+/// Returns (a, b) where exp(a*x) has coefficient a and sin/cos(b*x) has coefficient b.
+fn extract_linear_coeffs(exp_inner: &Expr, fn_inner: &Expr, var: &str) -> Option<(f64, f64)> {
+    let a = match exp_inner {
+        Expr::Var(v) if v == var => 1.0,
+        Expr::Mul(a, b) => {
+            match (a.as_ref(), b.as_ref()) {
+                (Expr::Const(c), Expr::Var(v)) | (Expr::Var(v), Expr::Const(c)) if v == var => *c,
+                _ => return None,
+            }
+        }
+        _ => return None,
+    };
+    let b = match fn_inner {
+        Expr::Var(v) if v == var => 1.0,
+        Expr::Mul(a, b) => {
+            match (a.as_ref(), b.as_ref()) {
+                (Expr::Const(c), Expr::Var(v)) | (Expr::Var(v), Expr::Const(c)) if v == var => *c,
+                _ => return None,
+            }
+        }
+        _ => return None,
+    };
+    if a.abs() < 1e-12 || b.abs() < 1e-12 { None } else { Some((a, b)) }
+}
+
 /// Check if an expression is exactly `1`.
 fn is_const_one(expr: &Expr) -> bool {
     matches!(expr, Expr::Const(c) if (*c - 1.0).abs() < 1e-12)
@@ -3438,6 +3464,58 @@ pub fn integrate(expr: &Expr, var: &str) -> Expr {
                     Box::new(Expr::Const(*c)),
                     Box::new(integrate(a, var)),
                 ));
+            }
+            // ∫ e^(ax)·sin(bx) dx = e^(ax)·(a·sin(bx) - b·cos(bx))/(a²+b²)
+            // ∫ e^(ax)·cos(bx) dx = e^(ax)·(b·sin(bx) + a·cos(bx))/(a²+b²)
+            // These require explicit handling since integration by parts cycles.
+            if let (Expr::Fn(na, aa), Expr::Fn(nb, ab)) = (a.as_ref(), b.as_ref()) {
+                if aa.len() == 1 && ab.len() == 1 && (na == "exp" || nb == "exp") {
+                    let (exp_inner, other_fn, other_name, a_factor) = if na == "exp" {
+                        (&aa[0], &ab[0], nb.as_str(), 1.0)
+                    } else if nb == "exp" {
+                        (&ab[0], &aa[0], na.as_str(), 1.0)
+                    } else {
+                        return expr.clone(); // not our pattern, fall through
+                    };
+                    if (other_name == "sin" || other_name == "cos") && !matches!(exp_inner, &Expr::Const(_)) {
+                        // Extract coefficient: exp(c*x) and sin(k*x)/cos(k*x)
+                        if let Some((a_val, b_val)) = extract_linear_coeffs(exp_inner, other_fn, var) {
+                            let a_sq_plus_b_sq = a_val * a_val + b_val * b_val;
+                            if a_sq_plus_b_sq > 1e-12 {
+                                let exp_term = Expr::Fn("exp".into(), vec![simplify(&Expr::Mul(
+                                    Box::new(Expr::Const(a_val)),
+                                    Box::new(Expr::Var(var.to_string())),
+                                ))]);
+                                let sin_term = Expr::Fn("sin".into(), vec![simplify(&Expr::Mul(
+                                    Box::new(Expr::Const(b_val)),
+                                    Box::new(Expr::Var(var.to_string())),
+                                ))]);
+                                let cos_term = Expr::Fn("cos".into(), vec![simplify(&Expr::Mul(
+                                    Box::new(Expr::Const(b_val)),
+                                    Box::new(Expr::Var(var.to_string())),
+                                ))]);
+                                let (numerator, sign) = if other_name == "sin" {
+                                    // a*sin(bx) - b*cos(bx)
+                                    (Expr::Sub(
+                                        Box::new(Expr::Mul(Box::new(Expr::Const(a_val)), Box::new(sin_term))),
+                                        Box::new(Expr::Mul(Box::new(Expr::Const(b_val)), Box::new(cos_term))),
+                                    ), 1.0)
+                                } else {
+                                    // b*sin(bx) + a*cos(bx)
+                                    (Expr::Add(
+                                        Box::new(Expr::Mul(Box::new(Expr::Const(b_val)), Box::new(sin_term))),
+                                        Box::new(Expr::Mul(Box::new(Expr::Const(a_val)), Box::new(cos_term))),
+                                    ), 1.0)
+                                };
+                                let result = Expr::Div(
+                                    Box::new(Expr::Mul(Box::new(exp_term), Box::new(numerator))),
+                                    Box::new(Expr::Const(a_sq_plus_b_sq)),
+                                );
+                                return simplify(&result);
+                            }
+                        }
+                    }
+                }
             }
             // Integration by parts: ∫ f·g dx = f·G - ∫ f'·G dx
             // Try both orderings (pick the one where differentiation simplifies)
