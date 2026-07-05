@@ -632,7 +632,7 @@ fn apply_rule_list<'a>(
 ) -> Option<RouteCandidate<'a>> {
     let mut nl_boost_accumulated = 0.0f64;
 
-    for (i, rule) in rules.iter().enumerate() {
+    for (_i, rule) in rules.iter().enumerate() {
         if !matches_record_filter(&rule.record, record) {
             continue;
         }

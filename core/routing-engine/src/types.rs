@@ -143,6 +143,8 @@ pub struct RouteDiffReportPayload {
     pub report_schema_version: String,
     pub authority: String,
     pub mode: String,
+    pub primary_engine: String,
+    pub evidence_kind: String,
     pub strict_verification: bool,
     pub verification_passed: bool,
     pub verified_contract_fields: Vec<String>,

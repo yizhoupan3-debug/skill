@@ -231,6 +231,96 @@
       "record": {
         "slug": "code-review-deep"
       }
+    },
+    {
+      "when": {
+        "not": {
+          "any": [
+            {
+              "query_contains": "统计"
+            },
+            {
+              "query_contains": "显著性"
+            },
+            {
+              "query_contains": "p值"
+            },
+            {
+              "query_contains": "p 值"
+            },
+            {
+              "query_contains": "假设检验"
+            },
+            {
+              "query_contains": "效应量"
+            },
+            {
+              "query_contains": "贝叶斯"
+            },
+            {
+              "query_contains": "置信区间"
+            },
+            {
+              "query_contains": "regression"
+            },
+            {
+              "query_contains": "effect size"
+            },
+            {
+              "query_contains": "statistical"
+            },
+            {
+              "query_contains": "统计功效"
+            },
+            {
+              "query_contains": "多重比较"
+            },
+            {
+              "query_contains": "hypothesis test"
+            },
+            {
+              "query_contains": "power analysis"
+            },
+            {
+              "query_contains": "需要多少样本"
+            },
+            {
+              "query_contains": "用什么检验"
+            },
+            {
+              "query_contains": "回归诊断"
+            },
+            {
+              "query_contains": "效应量"
+            },
+            {
+              "query_contains": "显著性"
+            },
+            {
+              "query_contains": "夏普比率"
+            },
+            {
+              "query_contains": "回测"
+            },
+            {
+              "query_contains": "量化"
+            },
+            {
+              "query_contains": "quantitative"
+            },
+            {
+              "query_contains": "回撤"
+            }
+          ]
+        }
+      },
+      "action": {
+        "type": "suppress",
+        "reason": "Suppressed: statistical-analysis requires explicit statistical/research wording."
+      },
+      "record": {
+        "slug": "statistical-analysis"
+      }
     }
   ],
   "post_framework_alias_rules": [

@@ -20,10 +20,6 @@ expression: results
     203.0
   ],
   [
-    "code-review-deep",
-    203.0
-  ],
-  [
     "deep-search",
     203.0
   ],
@@ -42,10 +38,6 @@ expression: results
   [
     "formal-verification",
     200.0
-  ],
-  [
-    "gh-address-comments",
-    213.0
   ],
   [
     "literature-verification",
@@ -92,10 +84,6 @@ expression: results
     213.0
   ],
   [
-    "simplify",
-    203.0
-  ],
-  [
     "skill-framework-developer",
     203.0
   ],
@@ -106,14 +94,6 @@ expression: results
   [
     "slides",
     213.0
-  ],
-  [
-    "spreadsheets",
-    213.0
-  ],
-  [
-    "statistical-analysis",
-    203.0
   ],
   [
     "statistical-verification",
@@ -128,23 +108,7 @@ expression: results
     200.0
   ],
   [
-    "visual-review",
-    106.5
-  ],
-  [
-    "good-question",
-    203.0
-  ],
-  [
-    "good-story",
-    203.0
-  ],
-  [
     "primary-runtime",
-    200.0
-  ],
-  [
-    "gitx",
     200.0
   ]
 ]

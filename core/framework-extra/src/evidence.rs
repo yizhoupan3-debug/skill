@@ -3,6 +3,7 @@
 //! Functions for extracting tool execution metadata, appending evidence to
 //! `EVIDENCE_INDEX.json`, and heuristics for detecting verification commands.
 
+use framework_core::repo_roots::resolve_repo_root_arg;
 use framework_runtime::constants::{
     EVIDENCE_INDEX_FILENAME, EVIDENCE_INDEX_SCHEMA_VERSION,
     TASK_POINTERS_FILENAME,
@@ -249,20 +250,6 @@ pub fn append_evidence_index_merged_row(
     };
     // TASK_STATE.json aggregate was removed in Wave 2b.
     Ok(())
-}
-
-    if entry.get("command_preview").and_then(Value::as_str).map(str::trim).unwrap_or("").is_empty() {
-        issues.push("evidence row missing non-empty 'command_preview'".to_string());
-    }
-
-    // When exit_code is present, it should be a valid integer.
-    if let Some(ec) = entry.get("exit_code") {
-        if coerce_exit_code_value(Some(ec)).is_none() {
-            issues.push(format!("evidence row 'exit_code' is not a valid integer: {ec}"));
-        }
-    }
-
-    Ok(issues)
 }
 
 /// `framework hook-evidence-append`：供 Cursor hook 等外部进程写入一条验证记录。

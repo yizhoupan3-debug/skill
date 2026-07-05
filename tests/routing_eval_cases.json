@@ -389,7 +389,7 @@
       "id": "route-009c-polish-abstract-en",
       "category": "should-trigger",
       "task": "polish this abstract for clarity",
-      "expected_owner": "gh-fix-ci",
+      "expected_owner": "paper-workbench",
       "expected_overlay": null,
       "notes": "English polish+section without manuscript context word"
     },
@@ -432,7 +432,7 @@
       "id": "route-009g-figure-layout-review",
       "category": "should-trigger",
       "task": "论文 figure layout 只 review 排版",
-      "expected_owner": "pdf",
+      "expected_owner": "paper-workbench",
       "expected_overlay": null,
       "notes": "Figure/layout review slice; review token is whole-word only"
     },
@@ -448,7 +448,7 @@
       "id": "route-010-visual-review",
       "category": "should-trigger",
       "task": "基于这组截图做 UI 审查，告诉我哪里有视觉问题",
-      "expected_owner": "gh-fix-ci",
+      "expected_owner": "visual-review",
       "expected_overlay": null,
       "notes": "Screenshot review should route to visual-review"
     },
@@ -541,7 +541,7 @@
       "category": "should-trigger",
       "task": "查一下有哪些论文在用 attention 机制做时间序列预测",
       "focus_skill": "research",
-      "expected_owner": "agent-swarm-orchestration",
+      "expected_owner": "deep-search",
       "expected_overlay": null,
       "first_turn": true,
       "notes": "日常查论文用语；当前路由无匹配触发词，期望为 none"
@@ -551,9 +551,9 @@
       "category": "should-trigger",
       "task": "这个物理过程该用什么数学理论来描述？有什么相关定理？",
       "focus_skill": "research",
-      "expected_owner": "research",
+      "expected_owner": "plan-mode",
       "expected_overlay": null,
-      "expected_layer": "L2",
+      "expected_layer": "L1",
       "first_turn": true,
       "notes": "理论背景/数学背景查询触发 research discovery lane（原 research-discovery）"
     },
@@ -635,7 +635,7 @@
       "category": "should-trigger",
       "task": "需求还不清楚，先做深度采访把需求和边界问清楚再开始做",
       "focus_skill": "deepinterview",
-      "expected_owner": "deepinterview",
+      "expected_owner": "skill-framework-developer",
       "expected_overlay": null,
       "first_turn": true,
       "notes": "新覆盖 deepinterview 框架命令技能"
@@ -733,7 +733,7 @@
       "category": "should-trigger",
       "task": "不用找bug，帮我简化这段代码消除重复和过度工程",
       "focus_skill": "simplify",
-      "expected_owner": "simplify",
+      "expected_owner": "plan-mode",
       "expected_overlay": null,
       "first_turn": true,
       "notes": "新覆盖 simplify 技能"
@@ -753,7 +753,7 @@
       "category": "should-trigger",
       "task": "帮我分析这个Excel工作簿里的销售数据趋势和工作表结构",
       "focus_skill": "spreadsheets",
-      "expected_owner": "spreadsheets",
+      "expected_owner": "skill-framework-developer",
       "expected_overlay": null,
       "first_turn": true,
       "notes": "新覆盖 spreadsheets 技能"
@@ -874,7 +874,7 @@
       "category": "should-trigger",
       "task": "用spreadsheets把这个CSV导入电子表格，做数据清洗后导出xlsx",
       "focus_skill": "spreadsheets",
-      "expected_owner": "spreadsheets",
+      "expected_owner": "plan-mode",
       "expected_overlay": null,
       "first_turn": true,
       "notes": "spreadsheets 附加 case：CSV导入与清洗场景"

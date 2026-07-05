@@ -427,7 +427,7 @@ pub fn route_task(
                     None,
                 ),
                 query,
-            )));
+            ));
         }
         tracing::debug!(query, session_id, "route: no skill hit");
         let fallback_reasons = compact_route_reasons(&[
@@ -507,7 +507,6 @@ pub fn route_task(
             ..skeleton
         },
         query,
-        session_id,
     ))
 }
 

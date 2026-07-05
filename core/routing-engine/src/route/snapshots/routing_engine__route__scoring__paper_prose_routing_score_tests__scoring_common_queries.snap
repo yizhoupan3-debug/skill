@@ -41,17 +41,6 @@ expression: results
     "top3": [
       {
         "reasons": [
-          "English code review context boosts code-review-deep.",
-          "name_tokens:2",
-          "Trigger hint matched: code review.",
-          "ngram_similarity:0.8",
-          "Session-start preferred boost applied (+3)."
-        ],
-        "score": 97.7877649822926,
-        "slug": "code-review-deep"
-      },
-      {
-        "reasons": [
           "Routing gate matched: bug.",
           "ngram_similarity:0.4"
         ],
@@ -61,12 +50,22 @@ expression: results
       {
         "reasons": [
           "keywords:1",
-          "ngram_similarity:0.6",
+          "ngram_similarity:0.3",
           "keywords:1",
           "Session-start required boost applied (+8)."
         ],
-        "score": 19.554876866749805,
-        "slug": "gh-address-comments"
+        "score": 19.330893028056757,
+        "slug": "doc"
+      },
+      {
+        "reasons": [
+          "keywords:1",
+          "ngram_similarity:0.3",
+          "keywords:1",
+          "Session-start required boost applied (+8)."
+        ],
+        "score": 19.288131891144317,
+        "slug": "pdf"
       }
     ]
   },
@@ -75,30 +74,27 @@ expression: results
     "top3": [
       {
         "reasons": [
-          "keywords:3",
-          "ngram_similarity:0.6",
-          "keywords:3",
-          "Session-start preferred boost applied (+3).",
-          "Do-not-use penalty applied: write."
+          "ngram_similarity:0.4",
+          "Session-start required boost applied (+8)."
         ],
-        "score": 16.573672582685795,
-        "slug": "statistical-analysis"
+        "score": 13.422467058399056,
+        "slug": "design-md"
       },
       {
         "reasons": [
           "ngram_similarity:0.4",
           "Session-start required boost applied (+8)."
         ],
-        "score": 13.445291164011126,
-        "slug": "spreadsheets"
+        "score": 13.408526208962043,
+        "slug": "agent-swarm-orchestration"
       },
       {
         "reasons": [
           "ngram_similarity:0.4",
           "Session-start required boost applied (+8)."
         ],
-        "score": 13.422731843038022,
-        "slug": "gh-address-comments"
+        "score": 13.400131602415211,
+        "slug": "doc"
       }
     ]
   },
@@ -123,11 +119,11 @@ expression: results
       },
       {
         "reasons": [
-          "ngram_similarity:0.3",
+          "ngram_similarity:0.1",
           "Session-start preferred boost applied (+3)."
         ],
-        "score": 3.2815838121560796,
-        "slug": "simplify"
+        "score": 3.1360827634879542,
+        "slug": "math-modeling"
       }
     ]
   },
