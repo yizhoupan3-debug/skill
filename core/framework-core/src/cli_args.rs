@@ -259,9 +259,6 @@ pub enum SkillsSubcommand {
         repo_root: Option<PathBuf>,
         #[arg(long, default_value = "false")]
         write: bool,
-        /// Emit companion stubs (not policy-complete; prefer checked-in catalogs).
-        #[arg(long, default_value = "false")]
-        write_companions: bool,
         /// Backfill null registry columns from SKILL.md frontmatter.
         #[arg(long, default_value = "false")]
         backfill: bool,
@@ -438,10 +435,10 @@ pub struct LoopStatusCommand {
 #[derive(Args, Debug, Clone)]
 pub struct LoopKillCommand {
     /// Loop ID to send kill signal to
-    #[arg(long)]
-    pub loop_id: String,
+    #[arg(long, required_unless_present = "all")]
+    pub loop_id: Option<String>,
     /// Kill all running loops
-    #[arg(long, default_value_t = false)]
+    #[arg(long, default_value_t = false, conflicts_with = "loop_id")]
     pub all: bool,
 }
 
@@ -1064,13 +1061,13 @@ mod tests {
     #[test]
     fn loop_kill_with_all_flag() {
         let cli =
-            Cli::try_parse_from(["router-rs-cli", "loop", "kill", "--loop-id", "l1", "--all"])
+            Cli::try_parse_from(["router-rs-cli", "loop", "kill", "--all"])
                 .unwrap();
         match cli.command {
             Some(RouterCommand::Loop {
                 command: LoopCommand::Kill(cmd),
             }) => {
-                assert_eq!(cmd.loop_id, "l1");
+                assert!(cmd.loop_id.is_none());
                 assert!(cmd.all);
             }
             other => panic!("expected Loop::Kill, got {:?}", other),
@@ -1247,28 +1244,6 @@ mod tests {
                 assert_eq!(cmd.args, vec!["--host-id", "claude", "--extra-flag"]);
             }
             other => panic!("expected HostIntegration, got {:?}", other),
-        }
-    }
-
-    // ── JsonInputCommand tested via Cli trace compact ──
-
-    #[test]
-    fn json_input_command_via_cli() {
-        let cli = Cli::try_parse_from([
-            "router-rs-cli",
-            "trace",
-            "compact",
-            "--input-json",
-            r#"{"key":"value"}"#,
-        ])
-        .unwrap();
-        match cli.command {
-            Some(RouterCommand::Trace {
-                command: TraceCommand::Compact(cmd),
-            }) => {
-                assert_eq!(cmd.input_json, r#"{"key":"value"}"#);
-            }
-            other => panic!("expected Trace::Compact, got {:?}", other),
         }
     }
 

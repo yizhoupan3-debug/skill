@@ -248,7 +248,6 @@ pub fn dispatch_framework_skills(command: SkillsSubcommand) -> Result<(), Framew
             backfill,
             dry_run,
             generate,
-            ..
         } => {
             let repo_root = resolve_repo_root_arg(repo_root.as_deref())?;
             refresh_skills(&SkillsCommand {
@@ -879,7 +878,8 @@ pub fn dispatch_loop_command(command: LoopCommand) -> Result<(), FrameworkError>
                     "message": "All kill signals sent",
                 }))
             } else {
-                goal_engine::runner::run_loop_kill(&repo_root, &args.loop_id)
+                let loop_id = args.loop_id.as_deref().unwrap_or_default();
+                goal_engine::runner::run_loop_kill(&repo_root, loop_id)
                     .map_err(|e| FrameworkError::hook(format!("loop kill failed: {e}")))?;
                 print_json_value(&serde_json::json!({
                     "ok": true,

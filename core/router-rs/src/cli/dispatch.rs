@@ -1,6 +1,7 @@
 //! 子命令薄分发壳：解析后的 `RouterCommand` → `cli::router_command_dispatch`。
 
 use core_errors::FrameworkError;
+use std::io::Write;
 
 use super::args::*;
 #[cfg(feature = "codegraph")]
@@ -82,18 +83,20 @@ pub fn dispatch_router_command(command: RouterCommand) -> Result<(), FrameworkEr
 }
 
 fn print_search_results(query: &str, payload: &SearchResultsPayload, rows: Vec<MatchRow>) {
+    let mut out = std::io::stdout().lock();
     if payload.matches.is_empty() {
-        println!("No skills found matching: {}", query);
+        let _ = writeln!(out, "No skills found matching: {}", query);
         return;
     }
 
-    println!("Found {} matches for '{}':", payload.matches.len(), query);
-    println!();
-    println!(
+    let _ = writeln!(out, "Found {} matches for '{}':", payload.matches.len(), query);
+    let _ = writeln!(out);
+    let _ = writeln!(
+        out,
         "{:<30} | {:<5} | {:<10} | {:<6} | Description",
         "Skill", "Layer", "Gate", "Score"
     );
-    println!("{}", "-".repeat(120));
+    let _ = writeln!(out, "{}", "-".repeat(120));
     for row in rows {
         let mut description = row.description.clone();
         if description.chars().count() > 60 {
@@ -104,7 +107,8 @@ fn print_search_results(query: &str, payload: &SearchResultsPayload, rows: Vec<M
                 .unwrap_or(description.len());
             description = description[..cutoff].to_string() + "...";
         }
-        println!(
+        let _ = writeln!(
+            out,
             "{:<30} | {:<5} | {:<10} | {:<6.2} | {}",
             row.slug, row.layer, row.gate, row.score, description
         );

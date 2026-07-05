@@ -658,6 +658,8 @@ pub(crate) fn tool_task_chain_advance(
 /// Write a loop kill-switch signal file with the given action payload.
 /// The file is stored at `.loop-kill/{loop_id}` with JSON content.
 fn write_loop_signal(repo_root: &Path, loop_id: &str, payload: &serde_json::Value) -> Result<String, FrameworkError> {
+    // Guard: reject path-traversal characters in loop_id
+    let sanitized = sanitize_loop_id(loop_id)?;
     let kill_dir = repo_root.join(".loop-kill");
     std::fs::create_dir_all(&kill_dir)
         .map_err(|e| FrameworkError::Io(e))?;
@@ -671,6 +673,20 @@ fn write_loop_signal(repo_root: &Path, loop_id: &str, payload: &serde_json::Valu
         "signal_path": file_path.to_string_lossy().to_string(),
     })
     .to_string())
+}
+
+/// Validate that a loop_id is a safe filesystem component (no path traversal).
+fn sanitize_loop_id(loop_id: &str) -> Result<&str, FrameworkError> {
+    let tid = loop_id.trim();
+    if tid.is_empty() {
+        return Err(FrameworkError::validation("loop_id must not be empty".to_string()));
+    }
+    if tid.contains('/') || tid.contains('\\') || tid.contains("..") || tid.contains('\0') {
+        return Err(FrameworkError::validation(
+            format!("loop_id contains invalid characters (path separators or null byte): {tid:?}")
+        ));
+    }
+    Ok(tid)
 }
 
 /// Pause a running loop. Optionally includes human feedback for the subagent.
