@@ -717,6 +717,7 @@ pub fn verify_lean_theorem(script: &str) -> VerificationResult {
         core_state_utils::atomic_write::write_atomic_text(&script_path, script)?;
         let mut child = std::process::Command::new("lean")
             .arg(&script_path)
+            .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
             .spawn()
@@ -946,7 +947,7 @@ pub fn try_prove_with_all_backends(statement: &str) -> VerificationResult {
     // ── Step 1: Z3 prove ──
     if crate::verification::z3_bridge::z3_available() {
         // Replace `=` with `==` for Z3
-        let z3_expr = trimmed.replace('=', "==").replace("====", "==");
+        let z3_expr = trimmed.replace("!=", " NEQ ").replace("<=", " LE ").replace(">=", " GE ").replace("==", " EQ ").replace('=', "==").replace(" NEQ ", "!=").replace(" LE ", "<=").replace(" GE ", ">=").replace(" EQ ", "==");
         let z3_result = crate::verification::z3_bridge::prove_formula(&z3_expr);
         if z3_result.status == VerificationStatus::Pass {
             return z3_result;
