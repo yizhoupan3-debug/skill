@@ -37,7 +37,6 @@ fn route_decision_skeleton(
     RouteDecision {
         decision_schema_version: ROUTE_DECISION_SCHEMA_VERSION.to_string(),
         authority: ROUTE_AUTHORITY.to_string(),
-        compile_authority: PROFILE_COMPILE_AUTHORITY.to_string(),
         task: query.to_string(),
         session_id: session_id.to_string(),
         selected_skill: NO_SKILL_SELECTED.to_string(),
@@ -703,7 +702,6 @@ pub fn literal_framework_alias_decision(
     Some(RouteDecision {
         decision_schema_version: ROUTE_DECISION_SCHEMA_VERSION.to_string(),
         authority: ROUTE_AUTHORITY.to_string(),
-        compile_authority: PROFILE_COMPILE_AUTHORITY.to_string(),
         task: query.to_string(),
         session_id: session_id.to_string(),
         selected_skill: record.slug.clone(),

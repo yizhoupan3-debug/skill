@@ -143,8 +143,6 @@ pub struct RouteDiffReportPayload {
     pub report_schema_version: String,
     pub authority: String,
     pub mode: String,
-    pub primary_engine: String,
-    pub evidence_kind: String,
     pub strict_verification: bool,
     pub verification_passed: bool,
     pub verified_contract_fields: Vec<String>,
@@ -156,7 +154,6 @@ pub struct RouteDiffReportPayload {
 pub struct RouteDecision {
     pub decision_schema_version: String,
     pub authority: String,
-    pub compile_authority: String,
     pub task: String,
     pub session_id: String,
     pub selected_skill: String,
@@ -196,8 +193,6 @@ pub struct RouteExecutionPolicyPayload {
     pub authority: String,
     pub mode: String,
     pub diagnostic_route_mode: String,
-    pub primary_authority: String,
-    pub route_result_engine: String,
     pub diagnostic_report_required: bool,
     pub strict_verification_required: bool,
 }

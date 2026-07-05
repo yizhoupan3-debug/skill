@@ -5,7 +5,6 @@ pub const ROUTE_SNAPSHOT_SCHEMA_VERSION: &str = "router-rs-route-snapshot-v1";
 pub const ROUTE_REPORT_SCHEMA_VERSION: &str = "router-rs-route-report-v2";
 pub const ROUTE_RESOLUTION_SCHEMA_VERSION: &str = "router-rs-route-resolution-v1";
 pub const ROUTE_AUTHORITY: &str = "rust-route-core";
-pub const PROFILE_COMPILE_AUTHORITY: &str = "rust-route-compiler";
 
 pub(super) const NO_SKILL_SELECTED: &str = "none";
 

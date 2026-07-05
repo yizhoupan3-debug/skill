@@ -1084,10 +1084,19 @@
       ],
       "input_schema": {
         "type": "object",
+        "required": [],
         "properties": {
           "task_id": {
             "type": "string",
-            "description": "任务 ID（可选，默认解析 active/focus 指针）"
+            "description": "任务 ID（可选）"
+          },
+          "reviewer_lane": {
+            "type": "string",
+            "description": "审稿者车道（可选）"
+          },
+          "fork_context": {
+            "type": "string",
+            "description": "分叉上下文（可选）"
           }
         }
       }
@@ -1110,8 +1119,63 @@
       "tool_flags": [],
       "input_schema": {
         "type": "object",
-        "required": [],
-        "properties": {}
+        "required": [
+          "task_id",
+          "summary",
+          "verification_status"
+        ],
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "description": "任务 ID"
+          },
+          "summary": {
+            "type": "string",
+            "description": "收尾摘要"
+          },
+          "verification_status": {
+            "type": "string",
+            "enum": [
+              "passed",
+              "failed",
+              "partial",
+              "not_run"
+            ],
+            "description": "验证状态"
+          },
+          "changed_files": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "变更文件列表（可选）"
+          },
+          "commands_run": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "已执行命令列表（可选）"
+          },
+          "blockers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "阻塞项列表（可选）"
+          },
+          "risks": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "风险项列表（可选）"
+          },
+          "notes": {
+            "type": "string",
+            "description": "备注（可选）"
+          }
+        }
       }
     },
     {
@@ -3415,6 +3479,34 @@
           "summary": {
             "type": "string",
             "description": "任务摘要（可选）"
+          },
+          "verification_status": {
+            "type": "string",
+            "enum": [
+              "passed",
+              "failed",
+              "partial",
+              "not_run"
+            ],
+            "description": "验证状态（可选）"
+          },
+          "changed_files": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "变更文件列表（可选）"
+          },
+          "commands_run": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "已执行命令列表（可选）"
+          },
+          "closeout": {
+            "type": "object",
+            "description": "CloseoutRecord 对象（可选）"
           }
         }
       }

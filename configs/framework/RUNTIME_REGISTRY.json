@@ -531,7 +531,13 @@
         "web_fetch",
         "loop_pause",
         "loop_resume",
-        "loop_redirect"
+        "loop_redirect",
+        "task_output_write",
+        "task_output_read",
+        "task_output_init",
+        "task_output_pull",
+        "task_output_validate",
+        "chain_aggregate"
       ],
       "host_config_keys": {
         "cursor": "mcp_servers.router-rs-framework",

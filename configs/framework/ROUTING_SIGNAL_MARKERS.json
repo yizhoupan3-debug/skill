@@ -62,36 +62,5 @@
     "supervisor",
     "长运行",
     "状态持久化"
-  ],
-  "barrier_escalation_signals": {
-    "description": "Signals indicating research barrier / stuck state needing escalation",
-    "anchor_any_of_substrings": [
-      "研究",
-      "论文",
-      "文献",
-      "查资料",
-      "找文献",
-      "research",
-      "paper",
-      "literature"
-    ],
-    "marker_any_of_substrings": [
-      "瓶颈",
-      "卡住了",
-      "突破不了",
-      "瓶颈期",
-      "停滞",
-      "想不出",
-      "没有进展",
-      "stuck",
-      "blocked",
-      "卡住",
-      "过不去",
-      "解决不了",
-      "不知道怎么",
-      "需要灵感",
-      "方向错了",
-      "思路不对"
-    ]
-  }
+  ]
 }

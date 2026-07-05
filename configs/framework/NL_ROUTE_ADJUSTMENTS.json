@@ -430,18 +430,6 @@
       },
       "action": {
         "type": "suppress",
-        "reason": "Suppressed: professor-outreach slug must not hijack GitHub CI gate queries via the `ci` name token."
-      },
-      "record": {
-        "slug": "tao-ci"
-      }
-    },
-    {
-      "when": {
-        "signal": "should_route_to_gh_fix_ci"
-      },
-      "action": {
-        "type": "suppress",
         "reason": "Suppressed: GitHub CI gate owns failing-check triage before generic debugging lanes."
       },
       "record": {

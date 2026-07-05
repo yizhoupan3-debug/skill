@@ -745,8 +745,6 @@ fn route_diff_report_matches_shadow_compare_contract() {
     assert_eq!(report.report_schema_version, ROUTE_REPORT_SCHEMA_VERSION);
     assert_eq!(report.authority, ROUTE_AUTHORITY);
     assert_eq!(report.mode, "shadow");
-    assert_eq!(report.primary_engine, "rust");
-    assert_eq!(report.evidence_kind, "rust-owned-snapshot");
     assert!(!report.strict_verification);
     assert!(report.verification_passed);
     assert!(report.verified_contract_fields.is_empty());
@@ -758,22 +756,16 @@ fn route_diff_report_matches_shadow_compare_contract() {
 fn route_policy_matches_mode_matrix() {
     let shadow = build_route_policy("shadow").expect("shadow policy");
     assert_eq!(shadow.diagnostic_route_mode, "shadow");
-    assert_eq!(shadow.primary_authority, "rust");
-    assert_eq!(shadow.route_result_engine, "rust");
     assert!(shadow.diagnostic_report_required);
     assert!(!shadow.strict_verification_required);
 
     let verify = build_route_policy("verify").expect("verify policy");
     assert_eq!(verify.diagnostic_route_mode, "verify");
-    assert_eq!(verify.primary_authority, "rust");
-    assert_eq!(verify.route_result_engine, "rust");
     assert!(verify.diagnostic_report_required);
     assert!(verify.strict_verification_required);
 
     let rust = build_route_policy("rust").expect("rust policy");
     assert_eq!(rust.diagnostic_route_mode, "none");
-    assert_eq!(rust.primary_authority, "rust");
-    assert_eq!(rust.route_result_engine, "rust");
     assert!(!rust.diagnostic_report_required);
     assert!(!rust.strict_verification_required);
 

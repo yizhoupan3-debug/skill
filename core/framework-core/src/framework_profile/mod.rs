@@ -233,9 +233,7 @@ fn compile_session_mode(session_policy: &Map<String, Value>) -> Value {
         "history_policy": session_policy.get("history_policy"),
         "takeover": session_policy.get("takeover"),
         "extras": extras,
-    }) else {
-        unreachable!()
-    };
+    })
     // json! serializes `None` (from .get() for a missing key) as `Value::Null`.
     // Replace Null entries with the defaults that the old code applied.
     if matches!(result.get("mode"), Some(Value::Null)) {
@@ -299,9 +297,7 @@ fn build_shared_contract(
             "mode": "shared-rust-core",
             "metadata": profile.metadata,
         },
-    }) else {
-        unreachable!()
-    };
+    })
     contract
 }
 
@@ -434,9 +430,7 @@ fn build_host_profile(
             "framework_profile_version": profile.framework_profile_version,
             "runtime_family": profile.runtime_family,
             "host_family": profile.host_family,
-        }) else {
-            unreachable!()
-        };
+        })
         map
     };
     profile_map.insert(

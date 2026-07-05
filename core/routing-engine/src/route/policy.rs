@@ -132,8 +132,6 @@ pub fn build_route_policy(mode: &str) -> Result<RouteExecutionPolicyPayload, Fra
         authority: ROUTE_AUTHORITY.to_string(),
         mode: normalized_mode.clone(),
         diagnostic_route_mode: "none".to_string(),
-        primary_authority: "rust".to_string(),
-        route_result_engine: "rust".to_string(),
         diagnostic_report_required: false,
         strict_verification_required: false,
     };
