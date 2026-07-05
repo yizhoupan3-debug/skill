@@ -224,6 +224,7 @@ impl ToolDispatchTable {
                 "router-rs" | "router-rs-framework" => Some(McpDispatchTarget::Builtin),
                 "research-harness" => Some(McpDispatchTarget::ResearchHarness),
                 "router-rs-cli" => Some(McpDispatchTarget::CliSubprocess),
+                "mcp-codegraph" => None,
                 _ => None,
             };
             if let Some(t) = target {
@@ -368,9 +369,18 @@ pub(super) fn dispatch_tool(
     if let Some(dispatch) = crate::hooks::get_research_tool_dispatch() {
         dispatch(tool_name, args).map_err(|e| FrameworkError::validation(e.to_string()))
     } else {
-        Err(FrameworkError::not_found(format!(
-            "Unknown tool: {tool_name}"
-        )))
+        // Check if tool belongs to an unregistered external MCP server
+        let is_codegraph_tool = tool_name.starts_with("codegraph_");
+        if is_codegraph_tool {
+            Err(FrameworkError::from(format!(
+                "codegraph MCP server not available — install codegraph-rs and start the codegraph service. \
+                 Tool '{tool_name}' requires a running mcp-codegraph server."
+            )))
+        } else {
+            Err(FrameworkError::not_found(format!(
+                "Unknown tool: {tool_name}"
+            )))
+        }
     }
 }
 
@@ -706,7 +716,7 @@ fn build_tools_from_registry() -> Vec<Value> {
         .filter(|r| {
             matches!(
                 r.mcp_server.as_str(),
-                "router-rs" | "router-rs-framework" | "research-harness" | "router-rs-cli"
+                "router-rs" | "router-rs-framework" | "research-harness" | "router-rs-cli" | "mcp-codegraph"
             )
         })
         .filter(|r| !r.tool_flags.iter().any(|f| f == "deprecated"))

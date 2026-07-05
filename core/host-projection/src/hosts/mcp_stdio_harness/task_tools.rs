@@ -178,7 +178,7 @@ pub(crate) fn tool_task_list(repo_root: &Path) -> std::result::Result<String, Fr
         // Read from GOAL_STATE.json (TASK_STATE.json removed in Wave 2b).
         let goal_path = task_dir.join("GOAL_STATE.json");
 
-        let (status, goal_summary, has_evidence, goal_type, iteration_count) =
+        let (status, goal_summary, has_evidence, iteration_count) =
             if goal_path.is_file() {
                 let raw = fs::read_to_string(&goal_path).unwrap_or_default();
                 let v: Value = serde_json::from_str(&raw).unwrap_or(json!({}));
@@ -203,11 +203,6 @@ pub(crate) fn tool_task_list(repo_root: &Path) -> std::result::Result<String, Fr
                                 .map(|a| !a.is_empty())
                         })
                         .unwrap_or(false);
-                let goal_type = v
-                    .get("goal_type")
-                    .and_then(Value::as_str)
-                    .unwrap_or("")
-                    .to_string();
                 let iteration_count = v
                     .get("iteration_count")
                     .and_then(Value::as_u64)
@@ -216,7 +211,6 @@ pub(crate) fn tool_task_list(repo_root: &Path) -> std::result::Result<String, Fr
                     status,
                     goal_summary,
                     has_evidence,
-                    goal_type,
                     iteration_count,
                 )
             } else {
@@ -224,7 +218,6 @@ pub(crate) fn tool_task_list(repo_root: &Path) -> std::result::Result<String, Fr
                     "created".to_string(),
                     String::new(),
                     false,
-                    String::new(),
                     0,
                 )
             };
@@ -234,7 +227,6 @@ pub(crate) fn tool_task_list(repo_root: &Path) -> std::result::Result<String, Fr
             "status": status,
             "goal_summary": goal_summary,
             "has_evidence": has_evidence,
-            "goal_type": goal_type,
             "iteration_count": iteration_count,
             "is_active": is_active,
             "is_focus": is_focus,
@@ -329,9 +321,8 @@ pub(crate) fn tool_task_complete(
         let transition_v = validate_transition(&repo_root_owned, &id, TaskTransition::Complete);
         if !transition_v.passed {
             return Err(FrameworkError::validation(format!(
-                "task_complete blocked by evidence gate: {} (goal={}, evidence={})",
+                "task_complete blocked by evidence gate: {} (evidence={})",
                 transition_v.reason,
-                transition_v.goal_type.as_deref().unwrap_or("none"),
                 transition_v.evidence_count,
             )));
         }
@@ -499,12 +490,7 @@ pub(crate) fn tool_task_chain_advance(
                     .join("artifacts/current")
                     .join(active_tid)
                     .join("GOAL_STATE.json");
-                let is_loop_goal = goal_path.is_file()
-                    && std::fs::read_to_string(goal_path)
-                        .ok()
-                        .and_then(|raw| serde_json::from_str::<serde_json::Value>(&raw).ok())
-                        .and_then(|v| v.get("goal_type").and_then(|g| g.as_str()).map(|g| g == "loop"))
-                        .unwrap_or(false);
+                let is_loop_goal = goal_path.is_file(); // All goals have loop semantics
                 if is_loop_goal {
                     return Ok(json!({
                         "ok": true,
@@ -955,7 +941,7 @@ mod tests {
     }
 
     #[test]
-    fn task_list_shows_goal_type_and_iteration_for_loop_goal() {
+    fn task_list_shows_iteration_count_for_loop_goal() {
         let repo = unique_test_dir("list-loop-gt");
         let rr = repo.display().to_string();
 
@@ -965,7 +951,6 @@ mod tests {
             "operation": "start",
             "task_id": "loop-list",
             "goal": "loop list test",
-            "goal_type": "loop",
             "drive_until_done": false,
         }))
         .expect("start loop goal");
@@ -987,13 +972,12 @@ mod tests {
         }))
         .expect("complete iter");
 
-        // task_list should expose goal_type and iteration_count
+        // task_list should expose iteration_count
         let result = tool_task_list(&repo).expect("list");
         let v: Value = serde_json::from_str(&result).expect("parse");
         assert_eq!(v["count"], json!(1));
         let task = &v["tasks"][0];
         assert_eq!(task["task_id"], json!("loop-list"));
-        assert_eq!(task["goal_type"], json!("loop"));
         assert_eq!(task["iteration_count"], json!(1));
         assert_eq!(task["status"], json!("running"));
 
@@ -1011,7 +995,6 @@ mod tests {
             "operation": "start",
             "task_id": "loop-task",
             "goal": "loop chain test",
-            "goal_type": "loop",
             "drive_until_done": false,
         }))
         .expect("start loop goal");
@@ -1055,7 +1038,6 @@ mod tests {
             "operation": "start",
             "task_id": "loop-task",
             "goal": "loop chain test",
-            "goal_type": "loop",
             "drive_until_done": false,
             "set_focus": true,
         }))
@@ -1099,7 +1081,6 @@ mod tests {
             "operation": "start",
             "task_id": "loop-other",
             "goal": "separate loop",
-            "goal_type": "loop",
             "drive_until_done": false,
         }))
         .expect("start loop other");
@@ -1140,7 +1121,6 @@ mod tests {
             "operation": "start",
             "task_id": "loop-other",
             "goal": "separate loop",
-            "goal_type": "loop",
             "drive_until_done": false,
         }))
         .expect("start loop other");

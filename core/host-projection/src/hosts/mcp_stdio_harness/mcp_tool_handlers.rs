@@ -198,6 +198,8 @@ impl ToolHandler for GoalCloseoutTools {
             "closeout_record_write",
             "goal_state_manage",
             "goal_state_read",
+            "record_evidence",
+            "session_checkpoint",
         ]
     }
     fn dispatch(
@@ -211,6 +213,8 @@ impl ToolHandler for GoalCloseoutTools {
             "closeout_record_write" => tool_closeout_record_write(args, &ctx.repo_root, &ctx.host_id),
             "goal_state_manage" => tool_goal_state_manage(args, &ctx.repo_root, &ctx.connection_session_id),
             "goal_state_read" => tool_goal_state_read(args, &ctx.repo_root),
+            "record_evidence" => tool_record_evidence(args, &ctx.repo_root),
+            "session_checkpoint" => tool_session_checkpoint(&ctx.repo_root),
             _ => Err(FrameworkError::not_found(format!(
                 "GoalCloseoutTools: unknown tool: {tool_name}"
             ))),

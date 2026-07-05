@@ -272,7 +272,6 @@ fn base_goal_object(
     validation_commands: Vec<Value>,
     drive_until_done: bool,
     requires_completion_evidence: bool,
-    current_horizon: Option<String>,
     session_id: String,
 ) -> Map<String, Value> {
     use super::GOAL_STATE_SCHEMA_VERSION;
@@ -294,10 +293,6 @@ fn base_goal_object(
     m.insert(
         "validation_commands".to_string(),
         Value::Array(validation_commands),
-    );
-    m.insert(
-        "current_horizon".to_string(),
-        json!(current_horizon.unwrap_or_default()),
     );
     m.insert("checkpoints".to_string(), json!([]));
     m.insert("blocker".to_string(), Value::Null);
@@ -400,22 +395,6 @@ fn apply_optional_goal_fields_from_payload(
     obj: &mut Map<String, Value>,
     payload: &Value,
 ) -> Result<(), FrameworkError> {
-    // lifecycle_profile was removed in Wave 2a (v10). Runtime profile is now
-    // determined solely by RUNTIME_REGISTRY.json lifecycle_profiles config.
-    if let Some(gt) = payload
-        .get("goal_type")
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-    {
-        if gt == "loop" {
-            obj.insert("goal_type".to_string(), json!(gt));
-        } else {
-            return Err(FrameworkError::validation(format!(
-                "v10 only supports goal_type=\"loop\", got \"{gt}\""
-            )));
-        }
-    }
     if let Some(st) = payload
         .get("status")
         .and_then(Value::as_str)
@@ -664,10 +643,6 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
                 validation_commands,
                 drive_until_done,
                 requires_completion_evidence,
-                payload
-                    .get("current_horizon")
-                    .and_then(Value::as_str)
-                    .map(|s| s.to_string()),
                 session_id,
             );
             if let Some(extra) = payload.get("metadata").cloned() {
@@ -682,7 +657,16 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
             ensure_task_directory(&repo_root, &task_id)?;
             let mut value = Value::Object(obj);
             commit_goal_mutation(&repo_root, &task_id, &mut value, "goal_state")?;
-            sync_task_pointers_after_goal_drive(&repo_root, &task_id, goal, &payload)?;
+            // Pointer sync is best-effort: goal state already committed.
+            // Log warning on failure but don't block — subsequent operations
+            // can fall back to read_goal_state or discover_goal_state.
+            if let Err(e) = sync_task_pointers_after_goal_drive(&repo_root, &task_id, goal, &payload) {
+                tracing::warn!(
+                    task_id = %task_id,
+                    error = %e,
+                    "goal start: TASK_POINTERS sync failed (non-fatal) — goal state committed"
+                );
+            }
             Ok(json!({
                 "ok": true,
                 "operation": "start",
@@ -1089,7 +1073,14 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
                 .get("goal")
                 .and_then(Value::as_str)
                 .unwrap_or(task_id.as_str());
-            sync_task_pointers_after_goal_drive(&repo_root, &task_id, goal_label, &payload)?;
+            // Pointer sync is best-effort (non-fatal).
+            if let Err(e) = sync_task_pointers_after_goal_drive(&repo_root, &task_id, goal_label, &payload) {
+                tracing::warn!(
+                    task_id = %task_id,
+                    error = %e,
+                    "goal retry: TASK_POINTERS sync failed (non-fatal)"
+                );
+            }
             Ok(json!({
                 "ok": true,
                 "operation": "retry",
@@ -1192,21 +1183,6 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
                     .collect();
                 merge_or_replace_array(obj, "validation_commands", &cleaned, merge);
                 has_amend = true;
-            }
-            if let Some(gt) = payload
-                .get("goal_type")
-                .and_then(Value::as_str)
-                .map(str::trim)
-                .filter(|s| !s.is_empty())
-            {
-                if gt == "loop" {
-                    obj.insert("goal_type".to_string(), json!(gt));
-                    has_amend = true;
-                } else {
-                    return Err(FrameworkError::validation(format!(
-                        "v10 only supports goal_type=\"loop\", got \"{gt}\""
-                    )));
-                }
             }
 
             // P3-014: Amend metadata and completion_gates
@@ -1443,7 +1419,14 @@ fn resume_goal_running(
         .get("goal")
         .and_then(Value::as_str)
         .unwrap_or(task_id.as_str());
-    sync_task_pointers_after_goal_drive(repo_root, &task_id, goal_label, payload)?;
+    // Pointer sync is best-effort (non-fatal).
+    if let Err(e) = sync_task_pointers_after_goal_drive(repo_root, &task_id, goal_label, payload) {
+        tracing::warn!(
+            task_id = %task_id,
+            error = %e,
+            "goal resume: TASK_POINTERS sync failed (non-fatal)"
+        );
+    }
     Ok(json!({
         "ok": true,
         "operation": "resume",
@@ -2289,8 +2272,7 @@ mod tests {
             "operation": "start",
             "task_id": task_id,
             "goal": "loop goal test",
-            "goal_type": "loop",
-            "drive_until_done": false,
+                        "drive_until_done": false,
         }))
         .expect("start loop goal");
     }
@@ -2416,8 +2398,7 @@ mod tests {
             "operation": "start",
             "task_id": "t-lev",
             "goal": "loop with evidence",
-            "goal_type": "loop",
-            "drive_until_done": true,
+                        "drive_until_done": true,
             "non_goals": ["n1"],
             "done_when": ["d1", "d2"],
             "validation_commands": ["echo ok"],

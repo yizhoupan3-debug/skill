@@ -462,8 +462,153 @@ pub(super) fn tool_goal_state_read(
         .filter(|s| !s.trim().is_empty());
     let state = core_state::state_manager::read_goal_state(repo_root, task_id)
         .map_err(|e| FrameworkError::from(format!("goal_state_read: {e}")))?;
-    Ok(serde_json::to_string_pretty(&state)
+    let response = match state {
+        Some(s) => json!({"ok": true, "goal_state": s}),
+        None => json!({
+            "ok": false,
+            "goal_state": null,
+            "message": "No active goal state found. Use 'goal_state_manage(operation=\"start\", ...)' to create one, or provide an explicit 'task_id' parameter."
+        }),
+    };
+    Ok(serde_json::to_string_pretty(&response)
         .map_err(|e| FrameworkError::from(e.to_string()))?)
+}
+
+// ── Record Evidence ──
+
+/// Record evidence: append a claim-evidence pair to EVIDENCE_INDEX.json.
+pub(super) fn tool_record_evidence(
+    arguments: &Value,
+    repo_root: &Path,
+) -> Result<String, FrameworkError> {
+    let claim = arguments
+        .get("claim")
+        .and_then(Value::as_str)
+        .filter(|s| !s.trim().is_empty())
+        .ok_or_else(|| FrameworkError::validation("record_evidence: 'claim' is required"))?;
+    let evidence_text = arguments
+        .get("evidence")
+        .and_then(Value::as_str)
+        .filter(|s| !s.trim().is_empty())
+        .ok_or_else(|| FrameworkError::validation("record_evidence: 'evidence' is required"))?;
+    let source = arguments
+        .get("source")
+        .and_then(Value::as_str)
+        .filter(|s| !s.trim().is_empty())
+        .ok_or_else(|| FrameworkError::validation("record_evidence: 'source' is required"))?;
+    let confidence = arguments.get("confidence").and_then(Value::as_f64);
+
+    // Resolve current task from TASK_POINTERS
+    let (active, focus) = core_state::state_manager::read_task_pointer_pair(repo_root);
+    let task_id = active.as_deref().or(focus.as_deref()).ok_or_else(|| {
+        FrameworkError::validation(
+            "record_evidence: no active task (TASK_POINTERS.json is empty). Create a task or goal first.",
+        )
+    })?;
+    let tid = core_state_utils::path_guard::validate_task_id_component(task_id)
+        .map_err(|_| FrameworkError::validation(format!("record_evidence: invalid task_id '{task_id}'")))?;
+
+    let task_dir = repo_root.join("artifacts/current").join(tid);
+    std::fs::create_dir_all(&task_dir).map_err(FrameworkError::Io)?;
+    let evidence_path = task_dir.join("EVIDENCE_INDEX.json");
+
+    // Read existing, append, write back
+    let existing_raw = std::fs::read_to_string(&evidence_path).unwrap_or_else(|_| "{}".to_string());
+    let mut index: Value = serde_json::from_str(&existing_raw).unwrap_or_else(|_| json!({
+        "schema_version": "evidence-index-v2",
+        "artifacts": [],
+    }));
+    let artifacts = index
+        .as_object_mut()
+        .and_then(|o| o.get_mut("artifacts"))
+        .and_then(Value::as_array_mut)
+        .ok_or_else(|| FrameworkError::validation("EVIDENCE_INDEX.json: missing 'artifacts' array"))?;
+
+    let mut entry = serde_json::Map::new();
+    entry.insert("claim".to_string(), json!(claim));
+    entry.insert("evidence".to_string(), json!(evidence_text));
+    entry.insert("source".to_string(), json!(source));
+    entry.insert("kind".to_string(), json!("mcp_record_evidence"));
+    entry.insert("recorded_at".to_string(), json!(framework_core::time::now_iso()));
+    // Self-attested evidence is recorded as successful by default.
+    // Add exit_code to override or provide mechanical verification.
+    let exit_code = arguments.get("exit_code").and_then(Value::as_i64);
+    if let Some(ec) = exit_code {
+        entry.insert("exit_code".to_string(), json!(ec));
+        if !arguments.get("success").and_then(Value::as_bool).unwrap_or(false) {
+            entry.insert("success".to_string(), json!(ec == 0));
+        }
+    } else {
+        entry.insert("success".to_string(), json!(true));
+    }
+    if let Some(s) = arguments.get("success").and_then(Value::as_bool) {
+        entry.insert("success".to_string(), json!(s));
+    }
+    if let Some(c) = confidence {
+        entry.insert("confidence".to_string(), json!(c));
+    }
+    artifacts.push(Value::Object(entry));
+    let evidence_count = artifacts.len();
+
+    // Drop mutable borrow before write_atomic_json
+    let _ = artifacts;
+    core_state_utils::atomic_write::write_atomic_json(&evidence_path, &index)?;
+
+    Ok(json!({
+        "ok": true,
+        "task_id": task_id,
+        "evidence_count": evidence_count,
+    })
+    .to_string())
+}
+
+// ── Session Checkpoint ──
+
+/// Save a session checkpoint snapshot.
+pub(super) fn tool_session_checkpoint(
+    repo_root: &Path,
+) -> Result<String, FrameworkError> {
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    let (active, focus) = core_state::state_manager::read_task_pointer_pair(repo_root);
+    let checkpoint = json!({
+        "schema_version": "session-checkpoint-v1",
+        "snapshot_at": framework_core::time::now_iso(),
+        "active_task_id": active,
+        "focus_task_id": focus,
+    });
+
+    let cp_dir = repo_root.join("artifacts/current/.checkpoints");
+    std::fs::create_dir_all(&cp_dir).map_err(FrameworkError::Io)?;
+    let ts = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let cp_path = cp_dir.join(format!("checkpoint-{ts}.json"));
+
+    core_state_utils::atomic_write::write_atomic_json(&cp_path, &checkpoint)?;
+
+    // Keep max 5 checkpoints
+    let mut entries: Vec<std::path::PathBuf> = std::fs::read_dir(&cp_dir)
+        .ok()
+        .into_iter()
+        .flatten()
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .filter(|p| p.extension().and_then(|e| e.to_str()) == Some("json"))
+        .collect();
+    entries.sort();
+    while entries.len() > 5 {
+        if let Some(old) = entries.first() {
+            let _ = std::fs::remove_file(old);
+            entries.remove(0);
+        }
+    }
+
+    Ok(json!({
+        "ok": true,
+        "checkpoint_path": cp_path.to_string_lossy().to_string(),
+    })
+    .to_string())
 }
 
 // ── Research Harness MCP Tools ──

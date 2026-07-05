@@ -1814,8 +1814,7 @@ mod tests {
     fn loop_goal_requests_continuation_when_running() {
         let state = json!({
             "status": "running",
-            "goal_type": "loop",
-            "drive_until_done": false,
+                        "drive_until_done": false,
         });
         assert!(
             goal_state_requests_continuation(&state),
@@ -1827,8 +1826,7 @@ mod tests {
     fn loop_goal_does_not_request_continuation_when_not_running() {
         let paused = json!({
             "status": "paused",
-            "goal_type": "loop",
-        });
+                    });
         assert!(
             !goal_state_requests_continuation(&paused),
             "paused loop goal must NOT request continuation"
@@ -1836,8 +1834,7 @@ mod tests {
 
         let blocked = json!({
             "status": "blocked",
-            "goal_type": "loop",
-        });
+                    });
         assert!(
             !goal_state_requests_continuation(&blocked),
             "blocked loop goal must NOT request continuation"
@@ -1845,8 +1842,7 @@ mod tests {
 
         let completed = json!({
             "status": "completed",
-            "goal_type": "loop",
-            "archived": true,
+                        "archived": true,
         });
         assert!(
             !goal_state_requests_continuation(&completed),
@@ -1858,8 +1854,7 @@ mod tests {
     fn loop_goal_stale_does_not_request_continuation() {
         let state = json!({
             "status": "running",
-            "goal_type": "loop",
-            "stale": true,
+                        "stale": true,
         });
         assert!(
             !goal_state_requests_continuation(&state),

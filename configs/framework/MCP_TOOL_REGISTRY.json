@@ -1118,13 +1118,17 @@
       ],
       "input_schema": {
         "type": "object",
+        "required": [
+          "round"
+        ],
         "properties": {
-          "language": {
+          "round": {
+            "type": "integer",
+            "description": "审稿轮次"
+          },
+          "manuscript_summary": {
             "type": "string",
-            "enum": [
-              "en",
-              "zh"
-            ]
+            "description": "手稿摘要（可选）"
           }
         }
       }
@@ -1150,10 +1154,24 @@
       ],
       "input_schema": {
         "type": "object",
+        "required": [
+          "original_claims",
+          "current_claims"
+        ],
         "properties": {
-          "manuscript": {
-            "type": "string",
-            "description": "手稿路径"
+          "original_claims": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            },
+            "description": "原始声明数组"
+          },
+          "current_claims": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            },
+            "description": "当前声明数组"
           }
         }
       }
@@ -1175,11 +1193,37 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "max_rounds": {
-            "type": "integer"
+          "operation": {
+            "type": "string",
+            "enum": [
+              "start",
+              "submit_round",
+              "status"
+            ],
+            "description": "操作类型（默认 start）"
           },
-          "focus": {
-            "type": "string"
+          "max_rounds": {
+            "type": "integer",
+            "description": "最大审稿轮次"
+          },
+          "min_rounds": {
+            "type": "integer",
+            "description": "最小审稿轮次"
+          },
+          "consecutive_stable_required": {
+            "type": "integer",
+            "description": "连续稳定所需轮次"
+          },
+          "round": {
+            "type": "integer",
+            "description": "当前审稿轮次（submit_round/status 时使用）"
+          },
+          "findings": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            },
+            "description": "本轮审稿发现（submit_round 时使用）"
           }
         }
       }
@@ -1250,12 +1294,9 @@
             "type": "string",
             "description": "证明目标"
           },
-          "assumptions": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "description": "假设"
+          "name": {
+            "type": "string",
+            "description": "DAG 名称（默认 proof）"
           }
         }
       }
@@ -1277,19 +1318,24 @@
       "input_schema": {
         "type": "object",
         "required": [
-          "node_id"
+          "parent_id",
+          "children"
         ],
         "properties": {
-          "node_id": {
+          "parent_id": {
             "type": "string",
-            "description": "节点 ID"
+            "description": "父节点 ID"
           },
-          "subgoals": {
+          "children": {
             "type": "array",
             "items": {
-              "type": "string"
+              "type": "object"
             },
-            "description": "子目标"
+            "description": "子节点数组"
+          },
+          "and": {
+            "type": "boolean",
+            "description": "是否为 AND 分解（默认 false，即 OR 分解）"
           }
         }
       }
@@ -1313,13 +1359,9 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "dag_id": {
+          "name": {
             "type": "string",
-            "description": "DAG ID"
-          },
-          "deep": {
-            "type": "boolean",
-            "description": "是否深入验证"
+            "description": "DAG 名称（默认 default）"
           }
         }
       }
@@ -1343,9 +1385,9 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "dag_id": {
+          "name": {
             "type": "string",
-            "description": "DAG ID"
+            "description": "DAG 名称（默认 default）"
           }
         }
       }
@@ -1371,12 +1413,17 @@
       "input_schema": {
         "type": "object",
         "required": [
-          "expression"
+          "lhs",
+          "rhs"
         ],
         "properties": {
-          "expression": {
+          "lhs": {
             "type": "string",
-            "description": "代数恒等式"
+            "description": "等式左侧表达式"
+          },
+          "rhs": {
+            "type": "string",
+            "description": "等式右侧表达式"
           }
         }
       }
@@ -1408,6 +1455,13 @@
           "expression": {
             "type": "string",
             "description": "待化简表达式"
+          },
+          "assumptions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "化简假设（可选）"
           }
         }
       }
@@ -1615,12 +1669,9 @@
             "type": "string",
             "description": "不等式表达式"
           },
-          "assumptions": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "description": "假设"
+          "timeout_ms": {
+            "type": "integer",
+            "description": "Z3 超时毫秒数（可选）"
           }
         }
       }
@@ -1644,15 +1695,24 @@
       "input_schema": {
         "type": "object",
         "required": [
-          "steps"
+          "steps",
+          "variable"
         ],
         "properties": {
           "steps": {
             "type": "array",
             "items": {
-              "type": "string"
+              "type": "object"
             },
-            "description": "渐近关系链"
+            "description": "渐近关系链（每个元素含 premise/conclusion/relation/justification）"
+          },
+          "variable": {
+            "type": "string",
+            "description": "自变量"
+          },
+          "regime": {
+            "type": "string",
+            "description": "渐近区域（默认 oo）"
           }
         }
       }
@@ -1710,12 +1770,12 @@
       "input_schema": {
         "type": "object",
         "required": [
-          "code"
+          "script"
         ],
         "properties": {
-          "code": {
+          "script": {
             "type": "string",
-            "description": "Lean 代码"
+            "description": "Lean 脚本代码"
           }
         }
       }
@@ -1738,14 +1798,33 @@
       ],
       "input_schema": {
         "type": "object",
+        "required": [
+          "template",
+          "params"
+        ],
         "properties": {
-          "source": {
+          "template": {
             "type": "string",
-            "enum": [
-              "arxiv",
-              "semantic-scholar",
-              "all"
-            ]
+            "description": "模板名称（可执行实验模板文件名）"
+          },
+          "params": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            },
+            "description": "实验参数组合数组"
+          },
+          "concurrency": {
+            "type": "integer",
+            "description": "并发数（默认 4，范围 1-32）"
+          },
+          "timeout_ms": {
+            "type": "integer",
+            "description": "每个实验的超时毫秒数（默认 60000）"
+          },
+          "no_cache": {
+            "type": "boolean",
+            "description": "是否跳过缓存（默认 false）"
           }
         }
       }
@@ -2188,7 +2267,14 @@
           },
           "path": {
             "type": "string",
-            "description": "实验目录路径"
+            "description": "实验目录路径（seed/environment/data_versioned/checkpoint/full_audit 时使用）"
+          },
+          "run_paths": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "运行路径数组（deterministic/full_audit 时使用）"
           }
         }
       }
@@ -2215,8 +2301,7 @@
       "input_schema": {
         "type": "object",
         "required": [
-          "check",
-          "equation"
+          "check"
         ],
         "properties": {
           "check": {
@@ -2226,11 +2311,29 @@
               "witness",
               "step_dependency"
             ],
-            "description": "验证类型：dimensional=量纲一致性"
+            "description": "验证类型：dimensional=量纲一致性, witness=见证一致性, step_dependency=步骤依赖"
           },
           "equation": {
             "type": "string",
-            "description": "数学表达式字符串"
+            "description": "数学表达式（check=dimensional 时使用）"
+          },
+          "expression": {
+            "type": "string",
+            "description": "验证表达式（check=witness 时使用）"
+          },
+          "witnesses": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            },
+            "description": "witness 值数组（check=witness 时使用）"
+          },
+          "steps": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            },
+            "description": "步骤数组（check=step_dependency 时使用）"
           }
         }
       }
@@ -2298,10 +2401,6 @@
           "substitutions": {
             "type": "object",
             "description": "替换映射 {变量: 值}"
-          },
-          "simultaneous": {
-            "type": "boolean",
-            "description": "是否同时替换"
           }
         }
       }
@@ -2328,8 +2427,7 @@
         "type": "object",
         "required": [
           "expression",
-          "variable",
-          "value"
+          "point"
         ],
         "properties": {
           "expression": {
@@ -2338,11 +2436,11 @@
           },
           "variable": {
             "type": "string",
-            "description": "自变量"
+            "description": "自变量（默认 x）"
           },
-          "value": {
+          "point": {
             "type": "string",
-            "description": "极限值"
+            "description": "极限值（如 '0'、'oo'、'-oo'）"
           },
           "direction": {
             "type": "string",
@@ -2350,7 +2448,7 @@
               "+",
               "-"
             ],
-            "description": "方向"
+            "description": "方向（可选）"
           }
         }
       }
@@ -2375,8 +2473,7 @@
       "input_schema": {
         "type": "object",
         "required": [
-          "expression",
-          "variables"
+          "expression"
         ],
         "properties": {
           "expression": {
@@ -2388,7 +2485,14 @@
             "items": {
               "type": "string"
             },
-            "description": "变量列表"
+            "description": "变量列表（默认 [\"x\"]）"
+          },
+          "values": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "description": "数值求值点（可选）"
           }
         }
       }
@@ -2449,10 +2553,6 @@
           "expression": {
             "type": "string",
             "description": "待分解表达式"
-          },
-          "modulus": {
-            "type": "integer",
-            "description": "模数域分解（可选）"
           }
         }
       }
@@ -2564,8 +2664,7 @@
       "input_schema": {
         "type": "object",
         "required": [
-          "expression",
-          "variable"
+          "expression"
         ],
         "properties": {
           "expression": {
@@ -2574,14 +2673,15 @@
           },
           "variable": {
             "type": "string",
-            "description": "积分变量"
+            "description": "积分变量（默认 x）"
           },
-          "limits": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "description": "积分限"
+          "lower": {
+            "type": "number",
+            "description": "积分下限（可选，省略时作不定积分）"
+          },
+          "upper": {
+            "type": "number",
+            "description": "积分上限（可选，省略时作不定积分）"
           }
         }
       }
@@ -2608,17 +2708,16 @@
       "input_schema": {
         "type": "object",
         "required": [
-          "expression",
-          "variable"
+          "equation"
         ],
         "properties": {
-          "expression": {
+          "equation": {
             "type": "string",
-            "description": "方程表达式"
+            "description": "方程表达式（如 \"x^2 - 4 = 0\"）"
           },
           "variable": {
             "type": "string",
-            "description": "求解变量"
+            "description": "求解变量（默认 x）"
           }
         }
       }
@@ -2644,15 +2743,15 @@
       "input_schema": {
         "type": "object",
         "required": [
-          "expression",
-          "mapping"
+          "equation",
+          "dimensions"
         ],
         "properties": {
-          "expression": {
+          "equation": {
             "type": "string",
             "description": "待分析的符号表达式"
           },
-          "mapping": {
+          "dimensions": {
             "type": "object",
             "description": "变量→量纲映射"
           }
@@ -2680,19 +2779,21 @@
       "input_schema": {
         "type": "object",
         "required": [
-          "goal"
+          "lhs",
+          "rhs"
         ],
         "properties": {
-          "goal": {
+          "lhs": {
             "type": "string",
-            "description": "待证明目标"
+            "description": "左侧表达式"
           },
-          "assumptions": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "description": "已知假设"
+          "rhs": {
+            "type": "string",
+            "description": "右侧表达式"
+          },
+          "timeout_ms": {
+            "type": "integer",
+            "description": "超时毫秒数（可选）"
           }
         }
       }
@@ -2718,15 +2819,15 @@
       "input_schema": {
         "type": "object",
         "required": [
-          "steps"
+          "chain"
         ],
         "properties": {
-          "steps": {
+          "chain": {
             "type": "array",
             "items": {
               "type": "string"
             },
-            "description": "恒等式链"
+            "description": "恒等式链（字符串数组）"
           }
         }
       }
@@ -2753,7 +2854,9 @@
         "type": "object",
         "required": [
           "expression",
-          "variable"
+          "variable",
+          "lower",
+          "upper"
         ],
         "properties": {
           "expression": {
@@ -2764,12 +2867,17 @@
             "type": "string",
             "description": "变量"
           },
-          "constraints": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "description": "额外约束"
+          "lower": {
+            "type": "number",
+            "description": "下界初始值"
+          },
+          "upper": {
+            "type": "number",
+            "description": "上界初始值"
+          },
+          "timeout_ms": {
+            "type": "integer",
+            "description": "Z3 超时毫秒数（可选）"
           }
         }
       }
@@ -2795,19 +2903,32 @@
       "input_schema": {
         "type": "object",
         "required": [
-          "expression"
+          "lhs",
+          "rhs"
         ],
         "properties": {
-          "expression": {
+          "lhs": {
             "type": "string",
-            "description": "验证表达式"
+            "description": "左侧表达式"
+          },
+          "rhs": {
+            "type": "string",
+            "description": "右侧表达式"
           },
           "witnesses": {
             "type": "array",
             "items": {
-              "type": "string"
+              "type": "object"
             },
-            "description": "witness 值"
+            "description": "witness 值数组（可选，不传时自动生成随机 witness）"
+          },
+          "num_random": {
+            "type": "integer",
+            "description": "自动生成随机 witness 数量（默认 50）"
+          },
+          "seed": {
+            "type": "integer",
+            "description": "随机种子（默认 42）"
           }
         }
       }
@@ -2833,22 +2954,17 @@
       "input_schema": {
         "type": "object",
         "required": [
-          "source",
-          "target",
-          "mapping"
+          "f",
+          "g"
         ],
         "properties": {
-          "source": {
+          "f": {
             "type": "string",
-            "description": "源结构"
+            "description": "映射 f 的定义"
           },
-          "target": {
+          "g": {
             "type": "string",
-            "description": "目标结构"
-          },
-          "mapping": {
-            "type": "string",
-            "description": "映射定义"
+            "description": "映射 g 的定义"
           }
         }
       }
@@ -2874,21 +2990,17 @@
       "input_schema": {
         "type": "object",
         "required": [
-          "step_id",
-          "claim"
+          "lhs",
+          "rhs"
         ],
         "properties": {
-          "step_id": {
+          "lhs": {
             "type": "string",
-            "description": "步骤 ID"
+            "description": "左侧表达式"
           },
-          "claim": {
+          "rhs": {
             "type": "string",
-            "description": "声明"
-          },
-          "evidence": {
-            "type": "string",
-            "description": "证据"
+            "description": "右侧表达式"
           }
         }
       }
@@ -2917,7 +3029,7 @@
         "type": "object",
         "required": [
           "equation",
-          "variable"
+          "parameter"
         ],
         "properties": {
           "equation": {
@@ -2926,22 +3038,19 @@
           },
           "variable": {
             "type": "string",
-            "description": "自变量名"
+            "description": "自变量名（默认 x）"
           },
           "parameter": {
             "type": "string",
-            "description": "小参数名（默认 epsilon）"
+            "description": "小参数名（如 eps、epsilon）"
           },
           "order": {
             "type": "integer",
             "description": "展开阶数（1-5，默认 2）"
           },
-          "boundary_conditions": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "description": "边界条件"
+          "bc": {
+            "type": "string",
+            "description": "边界条件（可选字符串）"
           }
         }
       }

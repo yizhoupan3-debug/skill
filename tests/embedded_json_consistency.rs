@@ -51,17 +51,9 @@ fn nl_route_adjustments_embedded_matches_disk() {
     );
 }
 
-#[test]
-fn hook_observation_rules_embedded_matches_disk() {
-    let embedded = runtime_core::hook_observation_rules::embedded_schema_version();
-    let disk = disk_schema_version(
-        &repo_root().join("configs/framework/ROUTER_RS_HOOK_OBSERVATION_RULES.json"),
-    );
-    assert_eq!(
-        embedded, disk,
-        "ROUTER_RS_HOOK_OBSERVATION_RULES.json schema_version mismatch: embedded={embedded}, disk={disk}"
-    );
-}
+// hook_observation_rules module was removed — HPM-11 cleanup.
+// The ROUTER_RS_HOOK_OBSERVATION_RULES.json file on disk is kept for
+// schema-drift cross-reference only.
 
 #[test]
 fn scoring_weights_embedded_matches_disk() {

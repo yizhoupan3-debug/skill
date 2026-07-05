@@ -871,7 +871,6 @@ mod tests {
                 "non_goals": [],
                 "done_when": [],
                 "validation_commands": [],
-                "current_horizon": "",
                 "checkpoints": [],
                 "blocker": null,
                 "updated_at": "2026-01-01T00:00:00Z"
@@ -958,7 +957,6 @@ mod tests {
                 "non_goals": [],
                 "done_when": [],
                 "validation_commands": [],
-                "current_horizon": "",
                 "checkpoints": [],
                 "blocker": null,
                 "updated_at": "2026-01-01T00:00:00Z"
@@ -1175,7 +1173,6 @@ mod tests {
                 "non_goals": [],
                 "done_when": [],
                 "validation_commands": [],
-                "current_horizon": "",
                 "checkpoints": [{"note": "step 1"}],
                 "blocker": null,
                 "updated_at": "2026-01-01T00:00:00Z"

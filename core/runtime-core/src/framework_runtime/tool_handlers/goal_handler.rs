@@ -25,10 +25,25 @@ pub(crate) fn goal_state_manage_dispatch(
     );
 
     // Auto-resolve task_id from TASK_POINTERS.json
+    // For start: auto-generate from goal text when TASK_POINTERS has no active task_id.
+    let is_start = operation.trim().to_ascii_lowercase() == "start";
     let task_id = match arguments.get("task_id").and_then(Value::as_str).filter(|s| !s.trim().is_empty()) {
         Some(tid) => tid.to_string(),
-        None => core_state::state_manager::read_primary_task_id(repo_root)
-            .ok_or_else(|| FrameworkError::validation("No active task_id in TASK_POINTERS.json (start a task first or provide task_id explicitly)"))?,
+        None => {
+            if is_start {
+                let goal = arguments.get("goal").and_then(Value::as_str).unwrap_or("unnamed");
+                slugify_goal_text(goal)
+            } else {
+                // Fallback: try TASK_POINTERS, then discover from filesystem
+                core_state::state_manager::read_primary_task_id(repo_root)
+                    .or_else(|| discover_most_recent_goal_task_id(repo_root))
+                    .ok_or_else(|| FrameworkError::validation(
+                        "No active task_id in TASK_POINTERS.json and no task_id provided. \
+                         No goal states found on disk either. \
+                         Provide task_id explicitly or create a goal first."
+                    ))?
+            }
+        }
     };
     core_state_utils::path_guard::validate_task_id_component(&task_id)?;
 
@@ -92,22 +107,6 @@ pub(crate) fn goal_state_manage_dispatch(
                 .unwrap_or(connection_session_id);
             payload["session_id"] = json!(session_id);
 
-            if let Some(gt) = arguments.get("goal_type").and_then(Value::as_str) {
-                if gt == "loop" {
-                    payload["goal_type"] = json!("loop");
-                } else if gt == "linear" {
-                    return Err(FrameworkError::validation(
-                        "goal_type=linear was removed in v10 — all goals follow loop semantics. Remove goal_type or set goal_type=loop.",
-                    ));
-                } else {
-                    return Err(FrameworkError::validation(format!(
-                        "Invalid goal_type: {gt}. Only goal_type=loop is supported in v10."
-                    )));
-                }
-            }
-            if let Some(ch) = arguments.get("current_horizon").and_then(Value::as_str) {
-                payload["current_horizon"] = json!(ch);
-            }
             if let Some(cg) = arguments.get("completion_gates") {
                 payload["completion_gates"] = cg.clone();
             }
@@ -211,19 +210,85 @@ pub(crate) fn goal_state_manage_dispatch(
     Ok(serde_json::to_string_pretty(&result).map_err(|e| e.to_string())?)
 }
 
+/// Generate a kebab-case task_id from a Chinese/English goal text.
+/// E.g., "修复权限检查bug" → "fix-permission-check-bug"
+/// Falls back to "goal-{timestamp}" if no recognizable words.
+fn slugify_goal_text(goal: &str) -> String {
+    // 1. Try to extract meaningful Chinese chars (not punctuation)
+    let has_chinese = goal.chars().any(|c| c >= '\u{4e00}' && c <= '\u{9fff}');
+    if has_chinese {
+        let slug: String = goal
+            .chars()
+            .filter(|c| {
+                c.is_ascii_alphanumeric() || (*c >= '\u{4e00}' && *c <= '\u{9fff}')
+            })
+            .take(40)
+            .collect();
+        if !slug.is_empty() {
+            return slug;
+        }
+    }
+
+    // 2. English path: take first 3 meaningful words, kebab-case
+    let en_words: Vec<&str> = goal
+        .split(|c: char| !c.is_ascii_alphanumeric())
+        .filter(|w| !w.is_empty() && w.len() > 1)
+        .collect();
+    if !en_words.is_empty() {
+        let limit = en_words.len().min(3);
+        return en_words[..limit].join("-").to_ascii_lowercase();
+    }
+
+    // 3. Fallback: timestamp-based
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let ts = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    format!("goal-{ts}")
+}
+
+/// Fallback: scan `artifacts/current/` for any GOAL_STATE.json and return
+/// the directory name (used as task_id) of the most recently modified one.
+fn discover_most_recent_goal_task_id(repo_root: &Path) -> Option<String> {
+    let current_dir = repo_root.join("artifacts/current");
+    let dir = std::fs::read_dir(&current_dir).ok()?;
+    let mut candidates: Vec<(String, std::time::SystemTime)> = dir
+        .filter_map(|e| e.ok())
+        .filter_map(|e| {
+            let path = e.path();
+            if !path.is_dir() {
+                return None;
+            }
+            let tid = path.file_name()?.to_str()?;
+            if core_state_utils::path_guard::safe_task_id_component(tid).is_none() {
+                return None;
+            }
+            let goal_path = path.join("GOAL_STATE.json");
+            if !goal_path.is_file() {
+                return None;
+            }
+            let mtime = std::fs::metadata(&goal_path).ok()?.modified().ok()?;
+            Some((tid.to_string(), mtime))
+        })
+        .collect();
+    candidates.sort_by(|a, b| b.1.cmp(&a.1)); // most recent first
+    candidates.into_iter().next().map(|(tid, _)| tid)
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
-    /// goal_type=loop is the only valid type in v10
+    /// Basic goal start should succeed without goal_type
     #[test]
-    fn accepts_loop_goal_type() {
+    fn accepts_goal_start() {
         let suffix = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_nanos())
             .unwrap_or(0);
-        let repo = std::env::temp_dir().join(format!("goal-handler-loop-{suffix}"));
+        let repo = std::env::temp_dir().join(format!("goal-handler-basic-{suffix}"));
         let _ = std::fs::remove_dir_all(&repo);
         std::fs::create_dir_all(repo.join("artifacts/current")).expect("mkdir");
 
@@ -232,12 +297,11 @@ mod tests {
                 "operation": "start",
                 "goal": "loop task",
                 "task_id": "t-loop",
-                "goal_type": "loop",
             }),
             &repo,
             "test-session",
         )
-        .expect("loop goal_type should be accepted");
+        .expect("goal start should be accepted");
         assert!(result.contains("\"ok\": true"), "result: {result}");
 
         let _ = std::fs::remove_dir_all(&repo);
