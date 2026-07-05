@@ -104,7 +104,7 @@ context:
 
 - 链路协议：详见 [`../references/research-lane-routing.md`](../references/research-lane-routing.md)
 - Math reasoning harness：[docs/math-reasoning-harness.md](../../../docs/math-reasoning-harness.md)
-- 研究工作区 CLI：详见 [`../research-harness/SKILL.md`](../research-harness/SKILL.md)
+- 研究工作区 CLI：详见 [`../../research-harness/SKILL.md`](../../research-harness/SKILL.md)
 - Quality gates（退出门）：
   - `math_verification` / `math_modeling` → `$formal-verification`
   - math_modeling 必须经过 (A) 先验调研和 (E) 验证阶段方可称完成，见 `$math-modeling` SKILL.md

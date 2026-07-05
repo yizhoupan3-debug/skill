@@ -161,6 +161,15 @@ for scope in "${scopes[@]}"; do
   install_host claude "$scope"
 done
 
+# ---------- sync project-level MCP .mcp.json + settings + CLAUDE.md ----------
+if [[ "$SCOPE" == "project" || "$SCOPE" == "both" ]]; then
+  SYNC_SCRIPT="$FRAMEWORK_ROOT/scripts/sync-project.sh"
+  if [ -x "$SYNC_SCRIPT" ]; then
+    echo "==> Syncing project MCP bridge + settings + framework ref..." >&2
+    "$SYNC_SCRIPT" --force "$PROJECT_ROOT"
+  fi
+fi
+
 echo "==> status" >&2
 "$ROUTER_RS" framework host-integration status \
   --framework-root "$FRAMEWORK_ROOT" \

@@ -406,7 +406,17 @@
     },
     {
       "skill_slug": "research-workspace",
-      "tool_slugs": null
+      "tool_slugs": [
+        "research_smoke",
+        "research_claim_drift",
+        "research_review_dimensions",
+        "research_review_loop",
+        "research_verification_prose",
+        "research_verification_statistical",
+        "research_verification_literature",
+        "research_verification_reproducibility",
+        "research_verification_structure"
+      ]
     },
     {
       "skill_slug": "sentry",

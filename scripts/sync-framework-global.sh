@@ -124,9 +124,9 @@ SYNC_PROJECT="$FRAMEWORK_ROOT/scripts/sync-project.sh"
 if [ -f "$PROJECT_REGISTRY" ] && [ -x "$SYNC_PROJECT" ]; then
   echo "==> Syncing registered project directories..."
   python3 << 'PYREG'
-import json, subprocess, sys
+import json, os, subprocess, sys
 
-# FRAMEWORK_ROOT is exported by the shell at the top of this script
+FRAMEWORK_ROOT = os.environ.get('FRAMEWORK_ROOT', '/Users/joe/Developer/skill')
 
 with open(f"{FRAMEWORK_ROOT}/configs/framework/PROJECT_REGISTRY.json") as f:
     registry = json.load(f)

@@ -103,6 +103,7 @@
 | 统计声明验证（GRIM/p值） | `research_verification_statistical(check="grim"/"p_value")` |
 | 实验可复现性验证 | `research_verification_reproducibility(check=...)` |
 | 文本质控（术语/套话） | `research_verification_prose(check=...)` |
+| 文本 AI 痕迹检测/降重 | `research_aigc_check` / `research_aigc_humanize` / `skill_route("humanizer-v2")` |
 | 形式验证（量纲/见证） | `research_verification_formal(check=...)` |
 
 ### G. 框架运维
@@ -113,14 +114,17 @@
 | MCP server 创建/调试 | `skill_route("mcp server")` |
 | 设计系统 contract | `skill_route("design-md")` |
 | 视觉审查 | `skill_route("visual review")` |
+| 数据→出版级科研图表 | `skill_route("scipilot figure")` |
+| HTML 原型/动画/品牌资产 | `skill_route("huashu design")` |
+| 反 AI slop 设计/UI 审计 | `skill_route("hallmark")` |
 
 ---
 
-## Skill 目录（43 项）
+## Skill 目录（47 项，顶刊专版 +ajs-* 通配符扩展）
 
 通过 `skill_route(query)` 路由；详情通过 `skill_read(slug)` 读取。
 
-**Research**: `$research`(统一前门) · `$good-question` · `$good-story` · `$deep-search` · `$paper-workbench` · `$citation-management` · `$experiment-reproducibility` · `$statistical-analysis` · `$financial-data` · `$math-verify` · `$math-explore` · `$math-modeling`
+**Research**: `$research`(统一前门) · `$good-question` · `$good-story` · `$deep-search` · `$paper-workbench` · `$citation-management` · `$experiment-reproducibility` · `$statistical-analysis` · `$financial-data` · `$math-verify` · `$math-explore` · `$math-modeling` · `$ajs-*` (顶刊专版 9 本)
 
 **Code & Review**: `$code-review-deep` · `$simplify` · `$systematic-debugging` · `$sentry` · `$gh-fix-ci`
 
@@ -128,13 +132,13 @@
 
 **Documents**: `$doc` · `$pdf` · `$slides` · `$spreadsheets`
 
-**Design & Figures**: `$design-md` · `$visual-review` · `$tikz-paper-figure`
+**Design & Figures**: `$design-md` · `$visual-review` · `$tikz-paper-figure` · `$scipilot-figure` · `$huashu-design` · `$hallmark`
 
-**Infrastructure**: `$research-workspace` · `$web-tools` · `$mcp-server-management` · `$python-env-management` · `$plan-mode` · `$deepinterview` · `$goalx`
+**Infrastructure**: `$research-workspace` · `$web-tools` · `$mcp-server-management` · `$python-env-management` · `$plan-mode` · `$deepinterview` · `$goalx` · `$initx`
 
 **Framework Core**: `$agent-swarm-orchestration` · `$skill-framework-developer` · `$primary-runtime`
 
-**Quality Gates**: `$formal-verification` · `$literature-verification` · `$prose-verification` · `$reproducibility-verification` · `$statistical-verification` · `$structure-verification`
+**Quality Gates**: `$formal-verification` · `$literature-verification` · `$prose-verification` · `$reproducibility-verification` · `$statistical-verification` · `$structure-verification` · `$humanizer-v2`
 
 ---
 

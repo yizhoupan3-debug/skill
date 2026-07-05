@@ -1,7 +1,10 @@
 //! Text humanizer — reduce AIGC signals through vocabulary swap, syntactic rewrite,
-//! sentence variation, and clause restructuring.
+//! sentence variation, clause restructuring, filler removal,
+//! clarity demotion, and self-check loop.
 //!
-//! All strategies are pure-local rule-based transforms; no API calls.
+//! Strategies 1-4 are pure-local rule-based transforms; no API calls.
+//! Strategy 5 (FillerRemoval) and 6 (ClarityDemotion) are inspired by
+//! blader/humanizer's 33-pattern taxonomy, adapted for deterministic execution.
 
 use anyhow::Result;
 use regex::Regex;
@@ -29,8 +32,10 @@ impl Default for HumanizeConfig {
     fn default() -> Self {
         Self {
             strategies: vec![
+                HumanizeStrategy::FillerRemoval,
                 HumanizeStrategy::VocabularySwap,
                 HumanizeStrategy::SyntacticRewrite,
+                HumanizeStrategy::ClarityDemotion,
                 HumanizeStrategy::SentenceVariation,
                 HumanizeStrategy::ClauseRestructure,
             ],
@@ -54,6 +59,10 @@ pub enum HumanizeStrategy {
     SentenceVariation,
     /// Clause restructure — simplify nested clauses, split compound sentences.
     ClauseRestructure,
+    /// Filler removal - strip AI filler words (basically, essentially, notably).
+    FillerRemoval,
+    /// Clarity demotion - decompose complex parallel structures.
+    ClarityDemotion,
 }
 
 // ── Public API ──
@@ -99,6 +108,20 @@ pub fn humanize_with_config(text: &str, config: &HumanizeConfig) -> Result<Human
                 if count > 0 {
                     current = new_text;
                     applied.push(format!("sentence_variation({count} adjustments)"));
+                }
+            }
+            HumanizeStrategy::FillerRemoval => {
+                let (new_text, count) = filler_removal(&current, config.language, config.preserve_academic_tone);
+                if count > 0 {
+                    current = new_text;
+                    applied.push(format!("filler_removal({count} removed)"));
+                }
+            }
+            HumanizeStrategy::ClarityDemotion => {
+                let (new_text, count) = clarity_demotion(&current, config.language);
+                if count > 0 {
+                    current = new_text;
+                    applied.push(format!("clarity_demotion({count} decomposed)"));
                 }
             }
             HumanizeStrategy::ClauseRestructure => {
@@ -211,6 +234,23 @@ fn english_replacement_table() -> &'static [(&'static str, &'static str)] {
             ("pivotal", "key"),
             ("in conclusion", "to summarize"),
             ("in summary", "taken together"),
+            ("it serves as", "it is"),
+            ("serve as", "act as"),
+            ("a plethora of", "many"),
+            ("myriad", "many"),
+            ("paramount", "vital"),
+            ("meticulous", "careful"),
+            ("burgeoning", "growing"),
+            ("seminal", "foundational"),
+            ("elucidate", "explain"),
+            ("synthesize", "combine"),
+            ("in the realm of", "in"),
+            ("with respect to", "regarding"),
+            ("in terms of", "for"),
+            ("aforementioned", "above"),
+            ("accordingly", "so"),
+            ("consequently", "thus"),
+            ("notwithstanding", "despite this"),
         ];
         // Sort once: longer strings first prevents substring overlap
         table.sort_by(|a, b| b.0.len().cmp(&a.0.len()));
@@ -234,6 +274,19 @@ fn chinese_replacement_table() -> &'static [(&'static str, &'static str)] {
             ("毋庸置疑", "显而易见"),
             ("不可或缺", "必要"),
             ("日益凸显", "逐渐突出"),
+            ("值得注意的是，", ""),
+            ("需要指出的是，", ""),
+            ("值得一提的是，", ""),
+            ("不可忽视的是，", ""),
+            ("不难看出", "可以看出"),
+            ("不难发现", "可以发现"),
+            ("显而易见的是", "明显的是"),
+            ("众所周知", "大家知道"),
+            ("界定了", "定义了"),
+            ("探讨了", "讨论了"),
+            ("深入分析了", "分析了"),
+            ("揭示了", "说明了"),
+            ("表征了", "描述了"),
             ("此外", "同时"),
         ]
     });
@@ -490,6 +543,99 @@ fn clause_restructure_zh(text: &str) -> (String, usize) {
     (result, count)
 }
 
+// ── Strategy 5: Filler Removal (from blader/humanizer patterns #7, #23-25) ──
+
+/// Strip AI filler words and hedging phrases.
+fn filler_removal(text: &str, language: Language, preserve_academic: bool) -> (String, usize) {
+    let mut result = text.to_string();
+    let mut count = 0;
+
+    let patterns: &[&str] = match language {
+        Language::English => {
+            if preserve_academic {
+                &[
+                    r"(?i)\bbasically\b",
+                    r"(?i)\bessentially\b",
+                    r"(?i)\breally\b",
+                    r"(?i)\bquite\b",
+                    r"(?i)\brather\b",
+                    r"(?i)\bin order to\b",
+                    r"(?i)\bimportantly\b",
+                ]
+            } else {
+                &[
+                    r"(?i)\bbasically\b",
+                    r"(?i)\bessentially\b",
+                    r"(?i)\breally\b",
+                    r"(?i)\bquite\b",
+                    r"(?i)\brather\b",
+                    r"(?i)\bjust\b",
+                ]
+            }
+        }
+        Language::Chinese => &[
+            "基本上",
+            "本质上",
+            "非常重要的一点是",
+            "值得注意的是，",
+            "需要指出的是，",
+            "不可否认的是",
+            "值得一提的是",
+        ],
+    };
+
+    for pat in patterns {
+        if let Ok(re) = Regex::new(pat) {
+            let new_result = re.replace_all(&result, "").to_string();
+            if new_result != result {
+                result = new_result;
+                count += 1;
+            }
+        }
+    }
+
+    (result, count)
+}
+
+// ── Strategy 6: Clarity Demotion (from blader/humanizer pattern #9, #11) ──
+
+/// Decompose complex parallel structures into simpler sentences.
+fn clarity_demotion(text: &str, language: Language) -> (String, usize) {
+    let mut result = text.to_string();
+    let mut count = 0;
+
+    if language == Language::English {
+        // Decompose "not only A but also B" when A is long
+        if let Ok(re) = Regex::new(r"(?i)(?:not only )(.{20,}?)(?:,\s+but also )(.*)") {
+            if let Some(caps) = re.captures(&result) {
+                let a = caps.get(1).map(|m| m.as_str().trim()).unwrap_or("");
+                let b = caps.get(2).map(|m| m.as_str().trim()).unwrap_or("");
+                if !a.is_empty() && !b.is_empty() {
+                    let b_cap = capitalize_first(b);
+                    result = format!("{}. Also, {}", ensure_ending(a), b_cap);
+                    count += 1;
+                }
+            }
+        }
+    }
+
+    if language == Language::Chinese {
+        // Decompose 不仅A，而且B  where A > 15 chars
+        if let Ok(re) = Regex::new(r"\u4e0d\u4ec5(.{15,}?)(?:\uff0c|,)\s*\u800c\u4e14(.+)") {
+            if let Some(caps) = re.captures(&result) {
+                let a = caps.get(1).map(|m| m.as_str().trim()).unwrap_or("");
+                let b = caps.get(2).map(|m| m.as_str().trim()).unwrap_or("");
+                if !a.is_empty() && !b.is_empty() {
+                    result = format!("{}。此外，{}", ensure_ending(a), b);
+                    count += 1;
+                }
+            }
+        }
+    }
+
+    (result, count)
+}
+
 // ── Helpers ──
 
 /// Estimate the AIGC score improvement from text transformation.
@@ -538,6 +684,10 @@ fn estimate_improvement(original: &str, rewritten: &str, language: Language) -> 
 
     let reduction = (orig_count as f64 - new_count as f64) / orig_count as f64;
     (reduction * 30.0).max(0.0) // max ~30 points improvement
+
+    // Note: target_score in HumanizeConfig is NOT enforced here by default.
+    // For iterative refinement (humanize -> detect -> humanize until target_score),
+    // use the top-level humanize_until_target() function (defined in loop.rs).
 }
 
 fn split_sentences(text: &str, language: Language) -> Vec<String> {

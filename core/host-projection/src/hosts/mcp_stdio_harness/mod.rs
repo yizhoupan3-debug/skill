@@ -796,6 +796,11 @@ fn handle_prompts_get(
                    → 响应含 recommended_tools + skill_summary, 读完即用\n\
                  - 想搜索有什么可用 → skill_search(query, limit)\n\
                  - 探索工具生态 → search_tools(query, top_k)\n\n\
+                 项目同步（skill 更新后传播到所有项目）:\n\
+                 - bash scripts/sync-framework-global.sh   # 用户级 + 全部项目\n\
+                 - bash scripts/sync-project.sh <dir>      # 单项目\n\
+                 - 注册表见 configs/framework/PROJECT_REGISTRY.json\n\
+                 - /initx 安装后自动注册到同步机制\n\n\
                  Framework root: core/router-rs/"
             )
         }

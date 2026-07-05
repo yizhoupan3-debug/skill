@@ -377,7 +377,8 @@
         "entrypoint_filename": "framework.md",
         "capabilities": [
           "external_session_supervisor"
-        ]
+        ],
+        "entrypoint_trailer": "\n项目注册: 见 configs/framework/PROJECT_REGISTRY.json\nskill 更新后同步: bash scripts/sync-framework-global.sh\n单项目同步: bash scripts/sync-project.sh <project-dir>\n"
       }
     },
     "host_providers": {
