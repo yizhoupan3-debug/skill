@@ -221,4 +221,90 @@ mod tests {
         assert_eq!(UsedBackend::PureRust.to_string(), "pure_rust");
         assert_eq!(UsedBackend::None.to_string(), "none");
     }
+
+    #[test]
+    fn test_timed_verify_records_time() {
+        let trace = ProofTrace::new(UsedBackend::PureRust);
+        let (new_trace, result) = timed_verify(trace, || {
+            crate::types::VerificationResult {
+                check_name: "test".into(),
+                status: crate::types::VerificationStatus::Pass,
+                details: "ok".into(),
+                evidence_path: None,
+            }
+        });
+        assert!(new_trace.verification_time_ms > 0);
+        assert_eq!(result.status, crate::types::VerificationStatus::Pass);
+    }
+
+    #[test]
+    fn test_timed_verify_with_fail_result() {
+        let trace = ProofTrace::new(UsedBackend::Z3);
+        let (new_trace, result) = timed_verify(trace, || {
+            crate::types::VerificationResult {
+                check_name: "fail_test".into(),
+                status: crate::types::VerificationStatus::Fail,
+                details: "expected failure".into(),
+                evidence_path: None,
+            }
+        });
+        assert_eq!(result.status, crate::types::VerificationStatus::Fail);
+        assert!(new_trace.verification_time_ms > 0);
+    }
+
+    #[test]
+    fn test_add_assumptions_multiple() {
+        let mut trace = ProofTrace::new(UsedBackend::SymPy);
+        trace.add_assumption("x > 0");
+        trace.add_assumption("y > 0");
+        trace.add_assumption("z = x + y");
+        assert_eq!(trace.assumptions.len(), 3);
+        let summary = trace.summary();
+        assert!(summary.contains("3 assumption"));
+    }
+
+    #[test]
+    fn test_describe_empty_trace() {
+        let trace = ProofTrace::new(UsedBackend::None);
+        let desc = trace.describe();
+        assert!(desc.contains("Backend: none"));
+        assert!(desc.contains("Steps (0)"));
+    }
+
+    #[test]
+    fn test_proof_step_new_into_string() {
+        let step = ProofStep::new("rule", "premise", "conclusion");
+        assert_eq!(step.rule_applied, "rule");
+        assert_eq!(step.premise, "premise");
+        assert_eq!(step.conclusion, "conclusion");
+    }
+
+    #[test]
+    fn test_set_time_ms_overwrites() {
+        let mut trace = ProofTrace::new(UsedBackend::Minilp);
+        trace.set_time_ms(100);
+        assert_eq!(trace.verification_time_ms, 100);
+        trace.set_time_ms(200);
+        assert_eq!(trace.verification_time_ms, 200);
+    }
+
+    #[test]
+    fn test_clone_and_serde_roundtrip() {
+        let mut trace = ProofTrace::new(UsedBackend::Lean);
+        trace.record_step("prove", "a = b", "a = b");
+        trace.add_assumption("a = b");
+        trace.set_time_ms(50);
+
+        let cloned = trace.clone();
+        assert_eq!(cloned.steps.len(), 1);
+        assert_eq!(cloned.backend, UsedBackend::Lean);
+        assert_eq!(cloned.verification_time_ms, 50);
+
+        let json = serde_json::to_string(&trace).unwrap();
+        let deserialized: ProofTrace = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.backend, UsedBackend::Lean);
+        assert_eq!(deserialized.steps.len(), 1);
+        assert_eq!(deserialized.assumptions.len(), 1);
+        assert_eq!(deserialized.verification_time_ms, 50);
+    }
 }

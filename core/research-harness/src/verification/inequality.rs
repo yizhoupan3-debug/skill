@@ -11,7 +11,7 @@
 use crate::types::{VerificationResult, VerificationStatus};
 use core_errors::FrameworkError;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 
 // ===========================================================================
 // Core types
@@ -563,44 +563,94 @@ fn check_inequality_z3(expr: &str) -> VerificationResult {
                 crate::verification::symbolic::parse(lhs_str.trim()),
                 crate::verification::symbolic::parse(rhs_str.trim()),
             ) {
-                let test_points = [
-                    ("x", 0.0), ("x", 1.0), ("x", -1.0),
-                    ("x", 5.0), ("x", -5.0), ("x", 0.5),
-                ];
+                // Dynamically extract variable names from the expression
+                let mut var_names = super::auto_prover::extract_variables(lhs_str);
+                var_names.extend(super::auto_prover::extract_variables(rhs_str));
 
-                let mut all_fail = true;
-                for &(var, val) in &test_points {
-                    let mut vars = std::collections::HashMap::new();
-                    vars.insert(var.to_string(), val);
-                    for (v, vv) in [("y", 0.0), ("z", 0.0), ("t", 0.0)] {
-                        vars.insert(v.to_string(), vv);
-                    }
-                    if let (Ok(lv), Ok(rv)) = (
-                        crate::verification::symbolic::eval(&lhs_parsed, &vars),
-                        crate::verification::symbolic::eval(&rhs_parsed, &vars),
-                    ) {
-                        let holds = match op {
-                            "<=" => lv <= rv + 1e-12,
-                            "<" => lv < rv + 1e-12,
-                            ">=" => lv >= rv - 1e-12,
-                            ">" => lv > rv - 1e-12,
-                            "==" | "=" => (lv - rv).abs() < 1e-10,
-                            "!=" => (lv - rv).abs() >= 1e-10,
-                            _ => true,
-                        };
-                        if holds {
-                            all_fail = false;
-                            break;
+                let var_names: Vec<String> = {
+                    let mut seen = std::collections::BTreeSet::new();
+                    var_names.into_iter().filter(|v| seen.insert(v.clone())).collect()
+                };
+
+                if var_names.is_empty() {
+                    return z3_result;
+                }
+
+                // Generate test points using Latin Hypercube-like strategy:
+                // each variable gets tested at multiple values covering its domain
+                let domain_points = [0.0, 1.0, -1.0, 5.0, -5.0, 0.5, 10.0, -10.0, 0.1, -0.1];
+
+                let mut holds_at_any = false;
+
+                // Strategy 1: each variable independently at multiple values, others at 0
+                'outer: for var_idx in 0..var_names.len() {
+                    for &val in &domain_points {
+                        let mut vars = std::collections::HashMap::new();
+                        for (i, vn) in var_names.iter().enumerate() {
+                            let v = if i == var_idx { val } else { 0.0 };
+                            vars.insert(vn.clone(), v);
+                        }
+                        if let (Ok(lv), Ok(rv)) = (
+                            crate::verification::symbolic::eval(&lhs_parsed, &vars),
+                            crate::verification::symbolic::eval(&rhs_parsed, &vars),
+                        ) {
+                            let holds = match op {
+                                "<=" => lv <= rv + 1e-12,
+                                "<" => lv < rv + 1e-12,
+                                ">=" => lv >= rv - 1e-12,
+                                ">" => lv > rv - 1e-12,
+                                "==" | "=" => (lv - rv).abs() < 1e-10,
+                                "!=" => (lv - rv).abs() >= 1e-10,
+                                _ => true,
+                            };
+                            if holds {
+                                holds_at_any = true;
+                                break 'outer;
+                            }
                         }
                     }
                 }
 
-                if all_fail {
+                // Strategy 2: random sampling of all variables simultaneously
+                if !holds_at_any {
+                    let mut rng = crate::verification::symbolic::SimpleRng::new(42);
+                    'random: for _ in 0..50 {
+                        let mut vars = std::collections::HashMap::new();
+                        for vn in &var_names {
+                            let (lo, hi) = match vn.as_str() {
+                                "n" | "m" | "k" | "i" | "j" | "N" | "M" => (1.0, 100.0),
+                                _ => (-10.0, 10.0),
+                            };
+                            vars.insert(vn.clone(), rng.next_range(lo, hi));
+                        }
+                        if let (Ok(lv), Ok(rv)) = (
+                            crate::verification::symbolic::eval(&lhs_parsed, &vars),
+                            crate::verification::symbolic::eval(&rhs_parsed, &vars),
+                        ) {
+                            let holds = match op {
+                                "<=" => lv <= rv + 1e-12,
+                                "<" => lv < rv + 1e-12,
+                                ">=" => lv >= rv - 1e-12,
+                                ">" => lv > rv - 1e-12,
+                                "==" | "=" => (lv - rv).abs() < 1e-10,
+                                "!=" => (lv - rv).abs() >= 1e-10,
+                                _ => true,
+                            };
+                            if holds {
+                                holds_at_any = true;
+                                break 'random;
+                            }
+                        }
+                    }
+                }
+
+                if !holds_at_any {
                     return VerificationResult {
                         check_name: z3_result.check_name,
                         status: crate::types::VerificationStatus::Fail,
                         details: format!(
-                            "{expr} — Z3 said SAT but numerical cross-check failed at all test points"
+                            "{expr} — Z3 said SAT but numerical cross-check failed at all test points (vars={})",
+                            var_names.join(", ")
                         ),
                         evidence_path: None,
                     };

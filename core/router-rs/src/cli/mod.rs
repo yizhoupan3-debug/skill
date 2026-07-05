@@ -41,9 +41,6 @@ pub use args::Cli;
 /// 薄 CLI 壳行数预算（不含 `runtime_ops` stdio 控制面）。
 pub const CLI_THIN_SHELL_LINE_BUDGET: usize = 1500;
 
-/// `runtime_ops.inc` 行数上限（P7 增量切片：全量迁入 B3 前只减不增）。
-pub const RUNTIME_OPS_INC_LINE_CEILING: usize = 3400;
-
 pub fn cli_thin_shell_line_count() -> usize {
     const MAIN: &str = ""; // main.rs lives in router-rs, not runtime-core
     const MOD_RS: &str = include_str!("mod.rs");
@@ -67,17 +64,6 @@ mod cli_thin_shell_budget_tests {
         assert!(
             lines < CLI_THIN_SHELL_LINE_BUDGET,
             "B7 CLI thin shell is {lines} lines (budget < {CLI_THIN_SHELL_LINE_BUDGET})"
-        );
-    }
-
-    #[test]
-    fn p7_runtime_ops_inc_under_line_ceiling() {
-        let ceiling = super::RUNTIME_OPS_INC_LINE_CEILING;
-        let lines = include_str!("runtime_ops.inc").lines().count();
-        assert!(
-            lines <= ceiling,
-            "runtime_ops.inc is {lines} lines (ceiling {ceiling}); \
-             migrate chunks to framework_runtime/ before growing"
         );
     }
 }

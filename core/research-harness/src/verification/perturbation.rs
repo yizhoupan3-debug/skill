@@ -160,4 +160,63 @@ mod tests {
         assert_eq!(result.status, VerificationStatus::Pass);
         assert!(result.orders.len() >= 3, "should have orders 0, 1, 2");
     }
+
+    #[test]
+    fn test_perturbation_high_order_4() {
+        let result = regular_perturbation("u''+u+eps*u^3", "t", "eps", 4, None);
+        assert_eq!(result.status, VerificationStatus::Pass);
+        assert!(result.orders.len() >= 5, "should have orders 0..4");
+    }
+
+    #[test]
+    fn test_perturbation_with_epsilon_param() {
+        let result = regular_perturbation("u'' + u + epsilon*u^2", "t", "epsilon", 1, None);
+        assert_eq!(result.status, VerificationStatus::Pass);
+    }
+
+    #[test]
+    fn test_perturbation_parameter_not_in_equation() {
+        // Perturbation parameter absent → zeroth-order solution of the base ODE
+        let result = regular_perturbation("u'' + u", "t", "eps", 1, None);
+        // Should not crash; at minimum the base ODE solves
+        assert_eq!(
+            result.status,
+            VerificationStatus::Pass,
+            "even without perturbation term, base ODE should solve: {}",
+            result.details
+        );
+    }
+
+    #[test]
+    fn test_perturbation_order_3_with_bc() {
+        let result = regular_perturbation(
+            "u'' + u + eps*u^3",
+            "t",
+            "eps",
+            3,
+            Some("u(0)=1, u'(0)=0"),
+        );
+        assert_eq!(result.status, VerificationStatus::Pass);
+        assert!(result.orders.len() >= 4);
+        assert!(result.full_solution.contains("eps^3") || result.details.contains("3"));
+    }
+
+    #[test]
+    fn test_perturbation_linear_different_variable() {
+        // Use x as independent variable to verify variable independence
+        let result = regular_perturbation("u'' + u + eps*u^2", "x", "eps", 1, None);
+        assert_eq!(result.status, VerificationStatus::Pass);
+    }
+
+    #[test]
+    fn test_perturbation_solution_contains_parameter() {
+        // The full solution should reference the perturbation parameter
+        let result = regular_perturbation("u'' + u + eps*u", "t", "eps", 2, None);
+        assert_eq!(result.status, VerificationStatus::Pass);
+        assert!(
+            result.full_solution.contains("eps") || result.details.contains("order"),
+            "full solution should reference perturbation parameter or valid orders: {}",
+            result.full_solution
+        );
+    }
 }

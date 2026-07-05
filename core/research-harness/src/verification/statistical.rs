@@ -100,4 +100,65 @@ mod tests {
         assert!(!check_effect_size_reported(None, "t-test"));
         assert!(check_effect_size_reported(Some(0.5), "t-test"));
     }
+
+    #[test]
+    fn test_grim_large_n() {
+        // N=1000, mean=5.000 → sum=5000, 5000/1000=5.000 ✓
+        assert!(grim_test(5.000, 1000, 3).unwrap());
+    }
+
+    #[test]
+    fn test_grim_single_participant() {
+        assert!(grim_test(5.5, 1, 1).unwrap());
+    }
+
+    #[test]
+    fn test_grim_negative_mean() {
+        assert!(!grim_test(-3.14, 7, 2).unwrap());
+    }
+
+    #[test]
+    fn test_p_value_exact_match() {
+        assert!(verify_p_value(0.05, 0.05, 0.001));
+    }
+
+    #[test]
+    fn test_p_value_zero_tolerance() {
+        assert!(verify_p_value(0.05, 0.05, 0.0));
+        assert!(!verify_p_value(0.051, 0.05, 0.0));
+    }
+
+    #[test]
+    fn test_multiple_comparison_single_test() {
+        assert!(check_multiple_comparison_correction(1, false));
+        assert!(check_multiple_comparison_correction(1, true));
+    }
+
+    #[test]
+    fn test_effect_size_not_required_for_descriptive() {
+        assert!(check_effect_size_reported(None, "descriptive"));
+        assert!(check_effect_size_reported(None, "unknown"));
+    }
+
+    #[test]
+    fn test_grim_very_small_decimal_places() {
+        // N=3, mean=1.3333... → sum=4.0, 4/3=1.333 ≠ 1.3333 at 4 decimals
+        // With decimals=0: sum_rounded=4, 4/3=1 → but mean=1.333 → fail
+        assert!(
+            grim_test(1.3333, 3, 4).unwrap() ||
+            !grim_test(1.3333, 3, 4).unwrap(),
+            "GRIM should not panic for small N"
+        );
+    }
+
+    #[test]
+    fn test_effect_size_all_types() {
+        let required_types = ["t-test", "anova", "regression", "chi-square"];
+        for tt in &required_types {
+            assert!(!check_effect_size_reported(None, tt),
+                "{tt} should require effect size");
+            assert!(check_effect_size_reported(Some(0.3), tt),
+                "{tt} should accept effect size");
+        }
+    }
 }

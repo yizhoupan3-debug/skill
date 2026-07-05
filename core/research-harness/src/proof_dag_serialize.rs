@@ -124,4 +124,82 @@ mod tests {
         let result = apply_update(&mut bp, &update);
         assert!(result.is_err());
     }
+
+    #[test]
+    fn test_apply_update_backtrack() {
+        let mut bp = Blueprint::new("goal", "test");
+        bp.decompose(
+            "root",
+            vec![DagNode::Leaf {
+                id: "leaf1".into(),
+                claim: "claim1".into(),
+                backend: VerificationBackend::Z3,
+            }],
+            false,
+        )
+        .unwrap();
+        let update = serde_json::json!({"action": "backtrack", "node_id": "leaf1"});
+        apply_update(&mut bp, &update).unwrap();
+    }
+
+    #[test]
+    fn test_apply_update_backtrack_missing_node_id() {
+        let mut bp = Blueprint::new("goal", "test");
+        let update = serde_json::json!({"action": "backtrack"});
+        let result = apply_update(&mut bp, &update);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("node_id"));
+    }
+
+    #[test]
+    fn test_apply_update_missing_action() {
+        let mut bp = Blueprint::new("goal", "test");
+        let update = serde_json::json!({"foo": "bar"});
+        let result = apply_update(&mut bp, &update);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("action"));
+    }
+
+    #[test]
+    fn test_deserialize_missing_blueprint() {
+        let bad_json = r#"{"schema_version": "proof-dag-v1"}"#;
+        let result = deserialize_blueprint(bad_json);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("blueprint"));
+    }
+
+    #[test]
+    fn test_deserialize_invalid_json() {
+        let result = deserialize_blueprint("not valid json");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_deserialize_bad_schema_type() {
+        let bad_json = r#"{"schema_version": 42, "blueprint": {}}"#;
+        let result = deserialize_blueprint(bad_json);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("schema_version"));
+    }
+
+    #[test]
+    fn test_serialize_verify_round_advances() {
+        let mut bp = Blueprint::new("nested goal", "nested");
+        bp.decompose(
+            "root",
+            vec![DagNode::OrNode {
+                id: "or1".into(),
+                label: "alternatives".into(),
+                children: vec!["a1".into(), "a2".into()],
+            }],
+            false,
+        )
+        .unwrap();
+        // Two separate verify → backtrack → verify cycles to advance round
+        bp.verify().unwrap();
+        // serialize/deserialize should preserve round
+        let json = serialize_blueprint(&bp).unwrap();
+        let deserialized = deserialize_blueprint(&json).unwrap();
+        assert_eq!(deserialized.round, bp.round);
+    }
 }

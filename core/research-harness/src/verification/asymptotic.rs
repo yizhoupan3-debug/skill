@@ -474,17 +474,8 @@ pub fn verify_asymptotic_chain_with_name(
     let chain = AsymptoticChain::new(steps.to_vec());
     let composition = compose_asymptotic_chain(&chain);
 
-    // Mixed chain → WARN regardless of individual step results
-    if let Some(warning) = &composition.mixed_chain_warning {
-        return VerificationResult {
-            check_name: check_name.to_string(),
-            status: VerificationStatus::Warn,
-            details: format!("{warning} — human review required for mixed relation chain"),
-            evidence_path: None,
-        };
-    }
-
-    // Pure chain: verify each step's growth ordering using the symbolic engine
+    // Verify each step's growth ordering using the symbolic engine
+    // (even for mixed chains — provide step-level feedback)
     let mut step_details = Vec::new();
     let mut all_pass = true;
 
@@ -506,6 +497,21 @@ pub fn verify_asymptotic_chain_with_name(
                 step_details.push(format!("Step {}: {:?} — {}", i + 1, vr.status, vr.details));
             }
         }
+    }
+
+    // Mixed chain → WARN even if all steps pass
+    if let Some(warning) = &composition.mixed_chain_warning {
+        step_details.push(format!("⚠ Mixed chain: {warning} — human review recommended"));
+        return VerificationResult {
+            check_name: check_name.to_string(),
+            status: VerificationStatus::Warn,
+            details: format!(
+                "{}\n{}",
+                warning,
+                step_details.join("\n"),
+            ),
+            evidence_path: None,
+        };
     }
 
     if all_pass {

@@ -148,4 +148,88 @@ mod tests {
             "error should mention reason (empty/invalid/host/URL): {err}"
         );
     }
+
+    #[test]
+    fn verify_doi_reachable_rejects_malformed() {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let result = rt.block_on(verify_doi_reachable("  \n  "));
+        assert!(result.is_err() || result.unwrap_or(false) == false);
+    }
+
+    #[test]
+    fn claim_coverage_partial_multiple_claims() {
+        let claims = vec![
+            "deep learning improves accuracy".into(),
+            "unrelated claim about cooking".into(),
+        ];
+        let refs = vec![
+            "deep neural networks achieve high accuracy".into(),
+        ];
+        let coverage = verify_claim_coverage(&claims, &refs).unwrap();
+        // First claim covered (overlap: deep, accuracy), second not
+        assert!((coverage - 0.5).abs() < 0.01,
+            "expected ~0.5 coverage, got {coverage}");
+    }
+
+    #[test]
+    fn claim_coverage_full_overlap_with_many_refs() {
+        let claims = vec!["neural network trains data".into()];
+        let refs = vec![
+            "neural network".into(),
+            "training data for neural networks".into(),
+            "data processing for neural nets".into(),
+        ];
+        let coverage = verify_claim_coverage(&claims, &refs).unwrap();
+        assert!(coverage > 0.8, "should be well covered: {coverage}");
+    }
+
+    #[test]
+    fn claim_coverage_empty_refs_returns_zero() {
+        let claims = vec!["some claim".into()];
+        let coverage = verify_claim_coverage(&claims, &[]).unwrap();
+        assert!((coverage - 0.0).abs() < 0.01, "no refs → 0 coverage: {coverage}");
+    }
+
+    #[test]
+    fn claim_coverage_empty_both_returns_one() {
+        let coverage = verify_claim_coverage(&[], &[]).unwrap();
+        assert!((coverage - 1.0).abs() < 0.01, "both empty → 1.0: {coverage}");
+    }
+
+    #[test]
+    fn claim_coverage_case_insensitive() {
+        let claims = vec!["Transformer Model".into()];
+        let refs = vec!["transformer model achieves results".into()];
+        let coverage = verify_claim_coverage(&claims, &refs).unwrap();
+        assert!(coverage > 0.8, "should be case-insensitive: {coverage}");
+    }
+
+    #[test]
+    fn claim_coverage_long_claims_properly_padded() {
+        // Edge case: very short claim (2 chars after normalization)
+        let claims = vec!["hi".into()];
+        let refs = vec!["hi there everybody".into()];
+        let coverage = verify_claim_coverage(&claims, &refs).unwrap();
+        // "hi" is <3 chars so extract_content_words produces nothing
+        assert!((coverage - 0.0).abs() < 0.01, "short claim not covered: {coverage}");
+    }
+
+    #[test]
+    fn extract_content_words_basic() {
+        let words = extract_content_words("Hello World Test");
+        assert!(words.contains("hello"));
+        assert!(words.contains("world"));
+        assert!(words.contains("test"));
+    }
+
+    #[test]
+    fn extract_content_words_short_words_excluded() {
+        let words = extract_content_words("a an the is it at");
+        for w in &words {
+            assert!(w.len() >= 3, "short word '{}' should be excluded", w);
+        }
+    }
 }

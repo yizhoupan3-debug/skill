@@ -715,12 +715,52 @@ pub fn verify_lean_theorem(script: &str) -> VerificationResult {
 
     let result = (|| -> Result<std::process::Output, core_errors::FrameworkError> {
         core_state_utils::atomic_write::write_atomic_text(&script_path, script)?;
-        std::process::Command::new("lean")
+        let mut child = std::process::Command::new("lean")
             .arg(&script_path)
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
-            .output()
-            .map_err(core_errors::FrameworkError::Io)
+            .spawn()
+            .map_err(core_errors::FrameworkError::Io)?;
+        // Timeout: wait up to 60s for Lean to complete
+        let timeout = std::time::Duration::from_secs(60);
+        let start = std::time::Instant::now();
+        loop {
+            match child.try_wait() {
+                Ok(Some(status)) => {
+                    // Process finished
+                    let stdout = child.stdout.take()
+                        .map_or_else(Vec::new, |mut h| {
+                            let mut buf = Vec::new();
+                            let _ = std::io::Read::read_to_end(&mut h, &mut buf);
+                            buf
+                        });
+                    let stderr = child.stderr.take()
+                        .map_or_else(Vec::new, |mut h| {
+                            let mut buf = Vec::new();
+                            let _ = std::io::Read::read_to_end(&mut h, &mut buf);
+                            buf
+                        });
+                    return Ok(std::process::Output {
+                        status,
+                        stdout,
+                        stderr,
+                    });
+                }
+                Ok(None) => {
+                    if start.elapsed() > timeout {
+                        let _ = child.kill();
+                        let _ = child.wait();
+                        return Err(core_errors::FrameworkError::validation(
+                            "Lean process timed out after 60s",
+                        ));
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(100));
+                }
+                Err(e) => {
+                    return Err(core_errors::FrameworkError::Io(e));
+                }
+            }
+        }
     })();
 
     // Clean up both file and directory (Drop guard also handles this, but eager

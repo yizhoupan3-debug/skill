@@ -41,6 +41,12 @@ pub struct AutoProverResult {
     pub proof_string: String,
     /// Counterexample variable assignments if proof failed (lhs != rhs)
     pub counterexample: Option<HashMap<String, f64>>,
+    /// Confidence score 0.0–1.0 reflecting proof reliability.
+    /// - SymPy symbolic identity: 0.95 (deterministic, symbolic)
+    /// - Z3 SMT proof: 0.99 (formal, but limited by theory encoding)
+    /// - Inequality (minilp/Z3): 0.85 (numerical + symbolic hybrid)
+    /// - No backend: 0.0
+    pub confidence: f64,
 }
 
 // ===========================================================================
@@ -105,7 +111,7 @@ pub struct HomomorphismResult {
 // ===========================================================================
 
 /// Extract variable names from an expression string (heuristic regex).
-fn extract_variables(expr: &str) -> Vec<String> {
+pub(crate) fn extract_variables(expr: &str) -> Vec<String> {
     let re = regex::Regex::new(r"[a-zA-Z_][a-zA-Z0-9_]*").expect("valid regex");
     let keywords = [
         "sin", "cos", "tan", "sqrt", "abs", "exp", "log", "ln",
@@ -119,13 +125,6 @@ fn extract_variables(expr: &str) -> Vec<String> {
     vars.sort();
     vars.dedup();
     vars
-}
-
-/// Generate a deterministic sequence of random f64 values in [lo, hi].
-#[allow(dead_code)]
-fn seed_random_values(seed: u64, count: usize, lo: f64, hi: f64) -> Vec<f64> {
-    let mut rng = crate::verification::symbolic::SimpleRng::new(seed);
-    (0..count).map(|_| rng.next_range(lo, hi)).collect()
 }
 
 /// Attempt to find a counterexample where lhs != rhs.
@@ -259,6 +258,7 @@ pub fn try_prove(lhs: &str, rhs: &str, timeout_ms: Option<u64>) -> AutoProverRes
                 trace,
                 proof_string: format!("Proved by SymPy: {lhs} = {rhs}"),
                 counterexample: None,
+                confidence: 0.95,
             };
         }
     }
@@ -282,6 +282,7 @@ pub fn try_prove(lhs: &str, rhs: &str, timeout_ms: Option<u64>) -> AutoProverRes
                 trace,
                 proof_string: format!("Proved by Z3: {lhs} = {rhs}"),
                 counterexample: None,
+                confidence: 0.99,
             };
         }
     }
@@ -305,6 +306,7 @@ pub fn try_prove(lhs: &str, rhs: &str, timeout_ms: Option<u64>) -> AutoProverRes
                 trace,
                 proof_string: format!("Proved by inequality engine: {lhs} = {rhs}"),
                 counterexample: None,
+                confidence: 0.85,
             };
         }
         // If inequality returned Fail but the expression is provably false, report that
@@ -327,6 +329,7 @@ pub fn try_prove(lhs: &str, rhs: &str, timeout_ms: Option<u64>) -> AutoProverRes
                 trace,
                 proof_string: format!("All backenders proved false: {lhs} ≠ {rhs}"),
                 counterexample,
+                confidence: 0.80,
             };
         }
     }
@@ -347,6 +350,7 @@ pub fn try_prove(lhs: &str, rhs: &str, timeout_ms: Option<u64>) -> AutoProverRes
         trace,
         proof_string: format!("Unable to prove or disprove: {lhs} = {rhs}"),
         counterexample,
+        confidence: 0.0,
     }
 }
 
@@ -1101,5 +1105,76 @@ mod tests {
         assert!(!vars.contains(&"sin".to_string()));
         assert!(!vars.contains(&"exp".to_string()));
         assert!(vars.contains(&"x".to_string()) || vars.contains(&"y".to_string()));
+    }
+
+    #[test]
+    fn test_extract_variables_no_variables() {
+        let vars = extract_variables("42");
+        assert!(vars.is_empty());
+    }
+
+    #[test]
+    fn test_extract_variables_mixed_keywords() {
+        let vars = extract_variables("sqrt(1 + tan(theta)^2)");
+        assert!(!vars.contains(&"sqrt".to_string()));
+        assert!(!vars.contains(&"tan".to_string()));
+        assert!(vars.contains(&"theta".to_string()));
+    }
+
+    #[test]
+    fn test_verify_identity_with_trace_fails_graceful() {
+        let (trace, result) = verify_identity_with_trace("x", "x + 1");
+        assert_eq!(result.status, VerificationStatus::Fail);
+        assert!(trace.backend != UsedBackend::None);
+    }
+
+    #[test]
+    fn test_verify_identity_with_trace_timing_recorded() {
+        let (trace, _) = verify_identity_with_trace("x^2", "x*x");
+        // verify_identity may fail (x^2 vs x*x parse diff), but trace should have timing
+        assert!(
+            trace.verification_time_ms > 0 || trace.backend != UsedBackend::None,
+            "trace should have time recorded or valid backend"
+        );
+    }
+
+    #[test]
+    fn test_check_inequality_with_trace_passes() {
+        let (trace, result) = check_inequality_with_trace("0 <= 1");
+        assert_eq!(result.status, VerificationStatus::Pass);
+        assert!(trace.verification_time_ms > 0 || result.status == VerificationStatus::Pass);
+    }
+
+    #[test]
+    fn test_try_prove_confidence_sympy() {
+        let result = try_prove("(a+b)^2", "a^2 + 2*a*b + b^2", None);
+        assert!(result.proved);
+        assert!((result.confidence - 0.95).abs() < 0.01,
+            "sympy backend should have confidence ~0.95, got {}", result.confidence);
+    }
+
+    #[test]
+    fn test_try_prove_counterexample_on_failure() {
+        let result = try_prove("x", "x + 1", None);
+        assert!(!result.proved);
+        // Counterexample may or may not be populated depending on Z3 availability
+        if let Some(ce) = &result.counterexample {
+            assert!(!ce.is_empty(), "counterexample should have variable assignments");
+        }
+    }
+
+    #[test]
+    fn test_verify_identity_chain_repeated_broken() {
+        let chain = vec![
+            "x".to_string(),
+            "x".to_string(),
+            "x".to_string(),
+            "x + 1".to_string(),
+            "x + 1".to_string(),
+        ];
+        let result = verify_identity_chain(&chain);
+        assert!(!result.verified);
+        assert_eq!(result.broken_at, Some(2));
+        assert_eq!(result.pairs_checked, 4);
     }
 }

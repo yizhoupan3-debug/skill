@@ -17,8 +17,6 @@ pub(crate) use test_prelude::*;
 // ── router-rs-only modules (NOT in runtime-core) ──
 #[cfg(feature = "codegraph")]
 pub use runtime_core::codegraph_mcp;
-#[cfg(feature = "codegraph")]
-pub(crate) mod mcp_common;
 
 // ── proxy modules (thin re-exports kept in router-rs, used only by tests) ──
 #[cfg(test)]
@@ -29,10 +27,6 @@ mod path_guard {
 mod atomic_write {
     pub use core_state_utils::atomic_write::*;
 }
-
-// ── hook_status (inline, test-only) ──
-#[cfg(test)]
-pub(crate) mod hook_status {}
 
 // ── crate-level re-exports ──
 
@@ -85,10 +79,6 @@ static TEST_KERNEL_BOOTSTRAP: std::sync::LazyLock<()> =
 pub(crate) fn touch_test_kernel_bootstrap() {
     let _ = &*TEST_KERNEL_BOOTSTRAP;
 }
-
-#[cfg(test)]
-#[path = "integration_test_prelude.rs"]
-mod integration_test_prelude;
 
 #[cfg(test)]
 #[path = "../tests/main_tests.rs"]
