@@ -5,8 +5,8 @@ use super::has_signal_by_name;
 /// has 113 tools), but enough to catch the high-signal patterns without
 /// introducing a full registry dependency at signal-evaluation time.
 const KNOWN_TOOL_SLUGS: &[&str] = &[
-    // Meta-routing
-    "route_tool", "search_tools", "tool_registry_status",
+    // Meta-routing (note: route_tool MCP was removed in Phase 3)
+    "search_tools", "tool_registry_status",
     // PDF / documents
     "pdf_read", "pdf_info", "ooxml_parse", "pptx_parse",
     // Browser
@@ -59,7 +59,6 @@ mod tests {
     #[test]
     fn known_tool_slug_meta_routing() {
         assert!(has_mcp_tool_invocation_intent("调用 search_tools 搜索工具"));
-        assert!(has_mcp_tool_invocation_intent("用 route_tool 查一下"));
         assert!(has_mcp_tool_invocation_intent("查 tool_registry_status"));
     }
 

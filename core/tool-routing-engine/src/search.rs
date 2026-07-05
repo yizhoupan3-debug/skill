@@ -103,6 +103,21 @@ pub fn search_tools(
                 });
             }
         }
+
+        // Apply skill-context boost to fuzzy rescue results
+        if let Some(slugs) = boost_slugs {
+            for decision in results.iter_mut() {
+                if slugs.contains(&decision.selected_tool) && !decision.fuzzy_match {
+                    // boost already applied via score_tool in primary path
+                    continue;
+                }
+                if slugs.contains(&decision.selected_tool) {
+                    let boost = tool_scoring_weights().skill_context_boost;
+                    decision.score += boost;
+                    decision.reasons.push(format!("skill_context_boost:+{boost}"));
+                }
+            }
+        }
     }
 
     results.sort_by(|a, b| {

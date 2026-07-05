@@ -668,6 +668,8 @@ pub(super) fn tool_session_checkpoint(
 #[derive(serde::Deserialize)]
 struct SkillToToolMapEntry {
     skill_slug: String,
+    // null → empty Vec (skills without mapped tools use null in JSON)
+    #[serde(default)]
     tool_slugs: Vec<String>,
 }
 
@@ -730,6 +732,10 @@ fn compute_boost_slugs(
     let mut slugs = HashSet::new();
     if let Some(tools) = map.get(selected_skill) {
         slugs.extend(tools.iter().cloned());
+    } else {
+        tracing::warn!(
+            "compute_boost_slugs: selected_skill '{selected_skill}' not found in SKILL_TO_TOOL_MAP"
+        );
     }
     if !overlay_skill.is_empty() && overlay_skill != selected_skill {
         if let Some(tools) = map.get(overlay_skill) {

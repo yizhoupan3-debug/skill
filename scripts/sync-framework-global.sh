@@ -15,6 +15,7 @@
 set -euo pipefail
 
 FRAMEWORK_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+export FRAMEWORK_ROOT
 CLAUDE_USER_DIR="$HOME/.claude"
 MCP_FILE="$CLAUDE_USER_DIR/mcp.json"   # generated, NOT a symlink
 SKILL_MCP="$FRAMEWORK_ROOT/.mcp.json"
@@ -125,7 +126,7 @@ if [ -f "$PROJECT_REGISTRY" ] && [ -x "$SYNC_PROJECT" ]; then
   python3 << 'PYREG'
 import json, subprocess, sys
 
-FRAMEWORK_ROOT = "/Users/joe/Developer/skill"
+# FRAMEWORK_ROOT is exported by the shell at the top of this script
 
 with open(f"{FRAMEWORK_ROOT}/configs/framework/PROJECT_REGISTRY.json") as f:
     registry = json.load(f)
