@@ -202,3 +202,5 @@ core/router-rs/artifacts/evolution/.last_idle_trigger
 /toctou_test
 /toctou_test2
 logs/
+*.snap.new
+.z3-trace
