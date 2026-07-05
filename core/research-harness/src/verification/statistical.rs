@@ -218,3 +218,271 @@ mod tests {
     }
     #[test] fn test_grim_n_zero() { assert!(grim_test(5.0, 0, 2).is_err()); }
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// 描述性统计
+// ═══════════════════════════════════════════════════════════════════════
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct DescriptiveStats {
+    pub n: usize,
+    pub mean: f64,
+    pub variance: f64,
+    pub std_dev: f64,
+    pub min: f64,
+    pub max: f64,
+}
+
+pub fn compute_descriptive_stats(data: &[f64]) -> DescriptiveStats {
+    let n = data.len();
+    if n == 0 {
+        return DescriptiveStats { n: 0, mean: 0.0, variance: 0.0, std_dev: 0.0, min: 0.0, max: 0.0 };
+    }
+    let min = data.iter().copied().fold(f64::INFINITY, f64::min);
+    let max = data.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+    let sum: f64 = data.iter().sum();
+    let mean = sum / n as f64;
+    let variance = data.iter().map(|v| (v - mean).powi(2)).sum::<f64>() / n as f64;
+    let std_dev = variance.sqrt();
+    DescriptiveStats { n, mean, variance, std_dev, min, max }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// 相关性分析
+// ═══════════════════════════════════════════════════════════════════════
+
+pub fn compute_pearson_r(x: &[f64], y: &[f64]) -> Option<f64> {
+    if x.len() != y.len() || x.len() < 3 { return None; }
+    let n = x.len() as f64;
+    let sx: f64 = x.iter().sum();
+    let sy: f64 = y.iter().sum();
+    let sxx: f64 = x.iter().map(|v| v * v).sum();
+    let syy: f64 = y.iter().map(|v| v * v).sum();
+    let sxy: f64 = x.iter().zip(y.iter()).map(|(a, b)| a * b).sum();
+    let num = n * sxy - sx * sy;
+    let den = ((n * sxx - sx * sx) * (n * syy - sy * sy)).sqrt();
+    if den.abs() < 1e-15 { None } else { Some((num / den).clamp(-1.0, 1.0)) }
+}
+
+pub fn compute_spearman_rho(x: &[f64], y: &[f64]) -> Option<f64> {
+    if x.len() != y.len() || x.len() < 3 { return None; }
+    fn rank(v: &[f64]) -> Vec<f64> {
+        let mut indexed: Vec<(usize, f64)> = v.iter().copied().enumerate().collect();
+        indexed.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+        let mut ranks = vec![0.0_f64; v.len()];
+        for (i, (orig_idx, _)) in indexed.iter().enumerate() {
+            ranks[*orig_idx] = i as f64 + 1.0;
+        }
+        let mut i = 0;
+        while i < indexed.len() {
+            let mut j = i + 1;
+            while j < indexed.len() && (indexed[j].1 - indexed[i].1).abs() < 1e-12 { j += 1; }
+            if j - i > 1 {
+                let avg_rank = (i + j + 1) as f64 / 2.0;
+                for k in i..j {
+                    ranks[indexed[k].0] = avg_rank;
+                }
+            }
+            i = j;
+        }
+        ranks
+    }
+    let rx = rank(x);
+    let ry = rank(y);
+    compute_pearson_r(&rx, &ry)
+}
+
+pub fn pearson_p_value(r: f64, n: usize) -> Option<f64> {
+    if n < 3 || !r.is_finite() { return None; }
+    let df = n - 2;
+    if df <= 0 { return None; }
+    let r = r.clamp(-0.99999, 0.99999);
+    let t = r * (df as f64 / (1.0 - r * r)).sqrt();
+    let p = compute_p_value_from_t(t, df as u32);
+    Some(p.min(1.0))
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// 独立性检验
+// ═══════════════════════════════════════════════════════════════════════
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ChiSquareIndependenceResult {
+    pub chi_sq: f64,
+    pub df: u32,
+    pub p_value: f64,
+    pub independent: bool,
+    pub min_expected: f64,
+}
+
+pub fn chi_square_test_independence(observed: &[&[f64]], alpha: f64) -> Option<ChiSquareIndependenceResult> {
+    if observed.is_empty() || observed[0].is_empty() { return None; }
+    let rows = observed.len();
+    let cols = observed[0].len();
+    if rows < 2 || cols < 2 { return None; }
+    for row in observed {
+        if row.len() != cols { return None; }
+    }
+    let row_sums: Vec<f64> = observed.iter().map(|r| r.iter().sum()).collect();
+    let col_sums: Vec<f64> = (0..cols).map(|c| observed.iter().map(|r| r[c]).sum()).collect();
+    let total: f64 = row_sums.iter().sum();
+    if total < 1.0 { return None; }
+    let mut min_expected = f64::INFINITY;
+    for i in 0..rows {
+        for j in 0..cols {
+            let expected = row_sums[i] * col_sums[j] / total;
+            if expected < min_expected { min_expected = expected; }
+        }
+    }
+    let mut chi_sq = 0.0;
+    for i in 0..rows {
+        for j in 0..cols {
+            let exp = row_sums[i] * col_sums[j] / total;
+            if exp > 0.0 { chi_sq += (observed[i][j] - exp).powi(2) / exp; }
+        }
+    }
+    let df = (rows as u32 - 1) * (cols as u32 - 1);
+    let p_value = compute_p_value_from_chi_sq(chi_sq, df);
+    Some(ChiSquareIndependenceResult {
+        chi_sq, df, p_value, min_expected,
+        independent: p_value >= alpha,
+    })
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// 置信区间
+// ═══════════════════════════════════════════════════════════════════════
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ConfidenceInterval {
+    pub lower: f64,
+    pub upper: f64,
+    pub mean: f64,
+    pub margin: f64,
+    pub confidence_level: f64,
+}
+
+pub fn compute_confidence_interval_mean(data: &[f64], confidence_level: f64) -> Option<ConfidenceInterval> {
+    let n = data.len();
+    if n < 2 { return None; }
+    let stats = compute_descriptive_stats(data);
+    let z = match (confidence_level * 100.0).round() as u32 {
+        90 => 1.645, 95 => 1.96, 99 => 2.576,
+        _ => 1.96,
+    };
+    let sem = stats.std_dev / (n as f64).sqrt();
+    let margin = z * sem;
+    Some(ConfidenceInterval {
+        lower: stats.mean - margin, upper: stats.mean + margin,
+        mean: stats.mean, margin, confidence_level,
+    })
+}
+
+pub fn pearson_confidence_interval(r: f64, n: usize, confidence_level: f64) -> Option<ConfidenceInterval> {
+    if n < 4 || !r.is_finite() { return None; }
+    let r = r.clamp(-0.99999, 0.99999);
+    let z = 0.5 * ((1.0 + r) / (1.0 - r)).ln();
+    let se = 1.0 / (n as f64 - 3.0).sqrt();
+    let z_crit = match (confidence_level * 100.0).round() as u32 {
+        90 => 1.645, 95 => 1.96, 99 => 2.576, _ => 1.96,
+    };
+    let z_low = z - z_crit * se;
+    let z_high = z + z_crit * se;
+    let r_low = ((2.0 * z_low).exp() - 1.0) / ((2.0 * z_low).exp() + 1.0);
+    let r_high = ((2.0 * z_high).exp() - 1.0) / ((2.0 * z_high).exp() + 1.0);
+    Some(ConfidenceInterval { lower: r_low, upper: r_high, mean: r, margin: r_high - r, confidence_level })
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// 效应量
+// ═══════════════════════════════════════════════════════════════════════
+
+pub fn compute_cohens_d(mean1: f64, sd1: f64, n1: usize, mean2: f64, sd2: f64, n2: usize) -> Option<f64> {
+    if n1 == 0 || n2 == 0 || sd1 < 0.0 || sd2 < 0.0 { return None; }
+    let pooled_sd = (((n1 as f64 - 1.0) * sd1 * sd1 + (n2 as f64 - 1.0) * sd2 * sd2) / (n1 + n2 - 2) as f64).sqrt();
+    if pooled_sd.abs() < 1e-15 { return None; }
+    Some((mean1 - mean2).abs() / pooled_sd)
+}
+
+#[cfg(test)]
+mod corr_tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
+    use super::*;
+
+    #[test] fn test_descriptive_stats_basic() {
+        let data = vec![1.0, 2.0, 3.0, 4.0, 5.0];
+        let s = compute_descriptive_stats(&data);
+        assert!((s.mean - 3.0).abs() < 1e-10);
+        assert!((s.variance - 2.0).abs() < 1e-10);
+        assert!((s.min - 1.0).abs() < 1e-10);
+        assert!((s.max - 5.0).abs() < 1e-10);
+    }
+    #[test] fn test_descriptive_stats_empty() {
+        let s = compute_descriptive_stats(&[]);
+        assert_eq!(s.n, 0);
+    }
+    #[test] fn test_pearson_perfect_positive() {
+        let x = vec![1.0, 2.0, 3.0];
+        let y = vec![2.0, 4.0, 6.0];
+        let r = compute_pearson_r(&x, &y).unwrap();
+        assert!((r - 1.0).abs() < 1e-10);
+    }
+    #[test] fn test_pearson_perfect_negative() {
+        let x = vec![1.0, 2.0, 3.0];
+        let y = vec![3.0, 2.0, 1.0];
+        let r = compute_pearson_r(&x, &y).unwrap();
+        assert!((r - (-1.0)).abs() < 1e-10);
+    }
+    #[test] fn test_pearson_too_short() {
+        assert_eq!(compute_pearson_r(&[1.0], &[2.0]), None);
+    }
+    #[test] fn test_spearman_perfect_positive() {
+        let x = vec![1.0, 2.0, 3.0, 4.0, 5.0];
+        let y = vec![2.0, 4.0, 6.0, 8.0, 10.0];
+        let r = compute_spearman_rho(&x, &y).unwrap();
+        assert!((r - 1.0).abs() < 1e-10);
+    }
+    #[test] fn test_pearson_p_value_significant() {
+        let r = 0.8; let n = 30;
+        let p = pearson_p_value(r, n).unwrap();
+        assert!(p < 0.01);
+    }
+    #[test] fn test_pearson_p_value_not_significant() {
+        let r = 0.1; let n = 10;
+        let p = pearson_p_value(r, n).unwrap();
+        assert!(p > 0.05);
+    }
+    #[test] fn test_chi_square_independence() {
+        let row1 = vec![50.0, 50.0];
+        let row2 = vec![50.0, 50.0];
+        let table = vec![row1.as_slice(), row2.as_slice()];
+        let result = chi_square_test_independence(&table, 0.05).unwrap();
+        assert!(result.independent);
+        assert!((result.chi_sq - 0.0).abs() < 1.0);
+    }
+    #[test] fn test_chi_square_dependent() {
+        let row1 = vec![90.0, 10.0];
+        let row2 = vec![10.0, 90.0];
+        let table = vec![row1.as_slice(), row2.as_slice()];
+        let result = chi_square_test_independence(&table, 0.05).unwrap();
+        assert!(!result.independent);
+        assert!(result.chi_sq > 10.0);
+    }
+    #[test] fn test_confidence_interval_basic() {
+        let data = vec![1.0, 2.0, 3.0, 4.0, 5.0];
+        let ci = compute_confidence_interval_mean(&data, 0.95).unwrap();
+        assert!(ci.lower < ci.mean && ci.mean < ci.upper);
+    }
+    #[test] fn test_cohens_d_equal() {
+        let d = compute_cohens_d(0.0, 1.0, 10, 0.0, 1.0, 10).unwrap();
+        assert!((d - 0.0).abs() < 1e-10);
+    }
+    #[test] fn test_cohens_d_large() {
+        let d = compute_cohens_d(10.0, 2.0, 10, 0.0, 2.0, 10).unwrap();
+        assert!(d > 4.0); // (10-0)/pooled_sd ≈ 5
+    }
+    #[test] fn test_pearson_ci() {
+        let ci = pearson_confidence_interval(0.8, 30, 0.95).unwrap();
+        assert!(ci.lower < ci.mean && ci.mean < ci.upper);
+    }
+}
