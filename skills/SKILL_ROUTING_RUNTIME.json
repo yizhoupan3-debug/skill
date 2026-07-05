@@ -1877,7 +1877,9 @@
       "skills/simplify/SKILL.md",
       null,
       "skill",
-      [],
+      [
+        "scoring:simplify"
+      ],
       "Three-dimension parallel code simplification (reuse/quality/efficiency)",
       [
         "code-quality",
@@ -1904,8 +1906,6 @@
       "medium",
       [
         "Read",
-        "Write",
-        "Edit",
         "Bash",
         "Glob",
         "Grep",
@@ -1914,7 +1914,7 @@
       null,
       "local",
       null,
-      "code_review",
+      "code_quality",
       null
     ],
     [

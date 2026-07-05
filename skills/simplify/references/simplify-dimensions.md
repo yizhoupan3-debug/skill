@@ -1,7 +1,7 @@
 # Simplify Dimensions (Lens Catalog)
 
 > 可扩展的简化审查维度目录。
-> `/simplify` 的三个子代理（复用/质量/效率）从本目录选择适用维度。
+> `/simplify` 的两个子代理（复用/质量）从本目录选择适用维度。
 > 新维度可随时追加到对应章节；添加时必须填写所有字段（维度 ID、名称、审查要点、正例、反例、严重程度）。
 
 ---
@@ -136,7 +136,6 @@ v.sort();
 // 不应替换：自定义排序有特定业务语义
 fn priority_sort(tasks: &mut Vec<Task>) {
     // 先按紧急程度，再按截止日期，最后按创建时间
-    // 标准库 sort() 无法一步表达这个三级排序的业务规则
     tasks.sort_by(|a, b| a.urgency.cmp(&b.urgency)
         .then(a.deadline.cmp(&b.deadline))
         .then(a.created.cmp(&b.created)));
@@ -273,11 +272,9 @@ func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
             if s.rateLimit(r) {
                 s.handleWrite(w, r)
             } else {
-                // 需要在这里记录限流日志，包含 auth 信息
                 s.logRateLimit(r)
             }
         } else {
-            // 需要记录未授权尝试
             s.logAuthFailure(r)
         }
     }
@@ -366,190 +363,6 @@ class PostgresUserRepository implements UserRepository { ... }
 
 ---
 
-## 效率维度 (Efficiency)
-
-### E1: 冗余计算
-
-**名称**: 消除重复计算
-
-**审查要点**:
-1. 循环内不变量：循环体内计算不依赖迭代变量的值
-2. 重复调用：同一函数在短时间内被多次调用且结果不变（可用缓存/memo）
-3. 过度序列化：同一数据被序列化/反序列化多次
-4. 重复构建：每次请求都构建相同的正则/模式对象
-5. 未利用前一次计算结果：如排序后又过滤再重新排序
-
-**正例**:
-```rust
-// Before: 循环内重复计算
-for item in &items {
-    let threshold = config.max_value * 0.8; // 每次迭代都重新计算
-    if item.score > threshold { ... }
-}
-
-// After: 提到循环外
-let threshold = config.max_value * 0.8;
-for item in &items {
-    if item.score > threshold { ... }
-}
-```
-
-**反例**:
-```rust
-// 不应优化：值在循环中可能被修改
-let mut threshold = config.base;
-for item in &items {
-    threshold += item.bonus; // threshold 依赖迭代
-    if item.score > threshold { ... }
-}
-```
-
-**严重程度**: P1（性能关键路径中的明显冗余）、P2（一般路径中的冗余计算）、P3（微优化）
-
----
-
-### E2: N+1 查询模式
-
-**名称**: 消除 N+1 数据访问
-
-**审查要点**:
-1. 循环内数据库查询：遍历列表时对每个元素执行 DB 查询
-2. 循环内网络调用：遍历时逐个发起 HTTP 请求（可批量）
-3. 循环内文件 I/O：逐行读写而非批量操作
-4. 懒加载触发风暴：首次访问时级联加载大量关联数据
-5. 未预加载关联数据：ORM 中缺少 `include`/`eager loading`
-
-**正例**:
-```sql
--- Before: N+1 (循环内查询)
--- for each user_id:
---   SELECT * FROM orders WHERE user_id = ?
-
--- After: 批量查询
-SELECT * FROM orders WHERE user_id IN (?, ?, ?, ...)
-```
-
-**反例**:
-```sql
--- 不应批量：数据量极大，IN 子句会导致查询计划退化
--- 应使用游标/分页而非 IN（百万级 ID 列表）
-SELECT * FROM orders WHERE user_id IN (/* 100万个ID */)
--- 正确做法：分页查询或使用临时表
-```
-
-**严重程度**: P1（循环内 DB/网络调用）、P2（可优化的懒加载）
-
----
-
-### E3: 不必要的分配
-
-**名称**: 减少内存分配
-
-**审查要点**:
-1. 频繁创建临时对象：循环内创建的短生命周期对象可用重用/池化
-2. `String` vs `&str`（Rust）：不必要的堆分配，借用即可
-3. `Vec` 未预分配：已知大小但未调用 `with_capacity`
-4. 不必要的 `clone()`：仅为满足借用检查而克隆（应调整生命周期）
-5. 频繁拼接字符串：应使用 `StringBuilder` / `BufWriter` / `format!`
-
-**正例**:
-```rust
-// Before
-let mut results = Vec::new();
-for i in 0..1000 {
-    results.push(format!("item_{}", i)); // 每次 push 可能 realloc
-}
-
-// After
-let mut results = Vec::with_capacity(1000);
-for i in 0..1000 {
-    results.push(format!("item_{}", i));
-}
-```
-
-**反例**:
-```rust
-// 不应优化：clone 是为了语义正确性
-fn update_config(&mut self, new_cfg: Config) {
-    self.history.push(self.current_config.clone()); // 历史快照必须独立副本
-    self.current_config = new_cfg;
-}
-```
-
-**严重程度**: P1（热路径中的频繁分配）、P2（一般路径）、P3（微优化）
-
----
-
-### E4: 并发机会
-
-**名称**: 利用并发/并行
-
-**审查要点**:
-1. 独立 I/O 操作可并行：多个 API 调用之间无依赖
-2. CPU 密集任务可分线程：图像处理、大量计算可用线程池
-3. 异步未充分利用：同步等待本可异步执行的操作
-4. 批处理可分片：大数组可并行处理（如 `rayon`、`Promise.all`）
-5. 流水线化：读取-处理-写入可使用 producer-consumer 模式
-
-**正例**:
-```typescript
-// Before: 串行调用
-const users = await fetchUsers();
-const orders = await fetchOrders();
-const products = await fetchProducts();
-
-// After: 并行调用
-const [users, orders, products] = await Promise.all([
-    fetchUsers(), fetchOrders(), fetchProducts()
-]);
-```
-
-**反例**:
-```typescript
-// 不应并行：存在数据依赖
-const user = await fetchUser(id);
-const orders = await fetchOrders(user.region); // 依赖 user 的数据
-```
-
-**严重程度**: P2（明显的并发机会）、P3（收益不确定的并行化）
-
----
-
-### E5: 前端渲染优化
-
-**名称**: 减少不必要的渲染开销
-
-**审查要点**:
-1. 不必要的 re-render：父组件更新导致未变化的子组件重新渲染
-2. 大列表未虚拟化：超过 100 项的列表未使用虚拟滚动
-3. 图片未懒加载：首屏外的图片应使用 `loading="lazy"` 或 IntersectionObserver
-4. 过大的 bundle：可代码分割的模块被整体加载
-5. 频繁重计算：昂贵的派生值未使用 `useMemo`/`computed` 缓存
-
-**正例**:
-```tsx
-// Before
-function List({ items }) {
-    return items.map(item => <ExpensiveItem key={item.id} item={item} />);
-}
-
-// After: React.memo 防止未变化的 item 重渲染
-const ExpensiveItem = React.memo(function ExpensiveItem({ item }) {
-    return <div>{/* ... */}</div>;
-});
-```
-
-**反例**:
-```tsx
-// 不应 memo：组件极轻量，memo 的比较开销 > 重渲染开销
-const Badge = React.memo(({ count }) => <span>{count}</span>);
-// 一个 span 的渲染成本几乎为零，memo 反而增加内存和比较成本
-```
-
-**严重程度**: P2（明显的渲染浪费）、P3（微优化）
-
----
-
 ## Rust 特化 (Rust-specific)
 
 ### RS1: Clippy Lints
@@ -565,24 +378,15 @@ const Badge = React.memo(({ count }) => <span>{count}</span>);
 
 **正例**:
 ```rust
-// Before
-let result = match opt_val {
-    Some(v) => Some(transform(v)),
-    None => None,
-};
-
-// After
 let result = opt_val.map(transform);
 ```
 
 **反例**:
 ```rust
-// 不应改写：match 保留是为了可读性和未来扩展
+// 不应改写：团队约定状态机始终用 match 方便后续扩展
 match state {
     Running => handle_running(),
     Stopped => handle_stopped(),
-    // 团队约定：状态机始终用 match 而非 if-let
-    // 方便后续添加新状态
 }
 ```
 
@@ -596,19 +400,13 @@ match state {
 
 **审查要点**:
 1. 不必要的 `'static`：数据不需要整个程序生命周期，但被标注为 `'static`
-2. 可省略的生命周期标注：符合省略规则（lifetime elision rules）的显式标注
+2. 可省略的生命周期标注：符合省略规则的显式标注
 3. `&String` → `&str`：函数参数接受 `&String` 而非 `&str`
 4. `&Vec<T>` → `&[T]`：函数参数接受 `&Vec<T>` 而非 `&[T]`
 5. `&Box<T>` → `&T`：不必要的间接引用
 
 **正例**:
 ```rust
-// Before
-fn greet(name: &String) -> String {
-    format!("Hello, {}", name)
-}
-
-// After
 fn greet(name: &str) -> String {
     format!("Hello, {}", name)
 }
@@ -620,7 +418,6 @@ fn greet(name: &str) -> String {
 trait DataStore: Send + Sync + 'static {
     fn get(&self, key: &str) -> Option<Vec<u8>>;
 }
-// 'static 约束确保 trait object 可安全跨线程传递
 fn spawn_worker(store: &'static dyn DataStore) {
     std::thread::spawn(move || { store.get("key"); });
 }
@@ -643,14 +440,6 @@ fn spawn_worker(store: &'static dyn DataStore) {
 
 **正例**:
 ```rust
-// Before
-fn process(data: Vec<u8>) {
-    let first = data[0];
-    // 只读取第一个字节，却拿走了整个 Vec 的所有权
-    println!("{}", first);
-}
-
-// After
 fn process(data: &[u8]) {
     let first = data[0];
     println!("{}", first);
@@ -661,7 +450,6 @@ fn process(data: &[u8]) {
 ```rust
 // 不应优化：所有权转移是有意的——消费后不再需要
 fn consume_task(task: Task) -> TaskResult {
-    // task 被消费，内部状态被转移，不应改为 &Task
     TaskResult { id: task.id, status: task.execute() }
 }
 ```
@@ -683,21 +471,16 @@ fn consume_task(task: Task) -> TaskResult {
 
 **正例**:
 ```rust
-// Before: 不必要的 dyn dispatch
-fn process(handler: &dyn Handler) { handler.handle(); }
-
-// After: 只有一个实现时，直接使用具体类型
 fn process(handler: &ConcreteHandler) { handler.handle(); }
 ```
 
 **反例**:
 ```rust
-// 不应移除 dyn：合理的 trait object 用于插件系统
+// 合理的 trait object：多个运行时加载的插件实现
 trait Plugin {
     fn name(&self) -> &str;
     fn execute(&self, ctx: &mut Context);
 }
-// 多个运行时加载的插件实现，dyn 是正确选择
 fn run_plugins(plugins: &[Box<dyn Plugin>]) { ... }
 ```
 
@@ -709,8 +492,8 @@ fn run_plugins(plugins: &[Box<dyn Plugin>]) { ... }
 
 ### 添加新维度
 
-1. **选择章节**：确定新维度属于复用(Reuse)、质量(Quality)、效率(Efficiency) 或语言特化
-2. **分配 ID**：使用章节前缀 + 递增数字（如 `R5`、`Q6`、`E6`、`RS5`）
+1. **选择章节**：确定新维度属于复用(Reuse)、质量(Quality) 或语言特化
+2. **分配 ID**：使用章节前缀 + 递增数字（如 `R5`、`Q6`、`RS5`）
 3. **填写所有字段**：维度 ID、名称、审查要点(3-5条)、正例、反例、严重程度
 4. **正例必须可操作**：包含 before/after 代码对比，而非抽象描述
 5. **反例必须有理由**：说明为什么在该场景下不应简化，避免误用

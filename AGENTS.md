@@ -80,7 +80,7 @@
 | 场景 | 行动 |
 |------|------|
 | 深度代码审查（只审不改） | `skill_route("code review")` |
-| 代码简化（三维并行） | `skill_route("simplify")` |
+| 代码简化（双维并行：复用/质量） | `skill_route("simplify")` |
 | 根因未知的故障排查 | `skill_route("systematic debugging")` |
 | CI 失败修复 | `skill_route("gh-fix-ci")` |
 | PR 评论回复 | `skill_route("gh-address-comments")` |

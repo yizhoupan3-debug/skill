@@ -274,6 +274,7 @@ Review lane **只读**；图谱用于定位与 call-chain 证据，不替代 Rea
 
 ## Integration / boundaries
 
+- Code quality/simplification: `/simplify` (scene: `code_quality`) focuses on reuse/quality simplification — building‑block complement to this adversarial depth review. Use `/code-review-deep → /simplify` in sequence.
 - Repo closeout Git operations: `$gitx` owns staging history; reuse this lane for diff critique only.
 - Screenshots/UI decks: `$visual-review` complements but does not replace correctness/security lanes.
 - Paper/manuscript judgment or PR comment triage: prefer narrower owners (`paper-workbench`, `gh-address-comments`) when routing applies.
