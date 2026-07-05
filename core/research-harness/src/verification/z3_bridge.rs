@@ -381,11 +381,44 @@ fn parse_atom_depth(solver: &z3::Solver, expr: &str, depth: i32) -> Result<z3::a
                     _ => {
                         // Transcendental functions (sin, cos, exp, log, etc.):
                         // Create a fresh Z3 variable as an uninterpreted function
-                        // placeholder. This preserves the "unknown function"
-                        // semantics without triggering Z3 C API abort.
-                        // The variable name encodes the function for traceability.
+                        // placeholder, with basic inequality bounds to prevent
+                        // the most egregious false positives (e.g., sin(x) ∈ [-1,1]).
                         let guard = format!("__uf_{name}");
-                        z3::ast::Real::new_const(guard.as_str())
+                        let uf_var = z3::ast::Real::new_const(guard.as_str());
+                        // Assert basic domain/range constraints for known functions
+                        match name {
+                            "sin" | "cos" => {
+                                let one = z3::ast::Real::from_rational(1, 1);
+                                let neg_one = z3::ast::Real::from_rational(-1, 1);
+                                solver.assert(&uf_var.ge(&neg_one));
+                                solver.assert(&uf_var.le(&one));
+                            }
+                            "exp" => {
+                                let zero = z3::ast::Real::from_rational(0, 1);
+                                solver.assert(&uf_var.gt(&zero));
+                            }
+                            "log" | "ln" => {
+                                // log/ln domain: argument > 0 (enforced at parse/eval)
+                                // Range is all reals — no bound to add
+                            }
+                            "asin" | "acos" => {
+                                // asin/acos range: [-π/2, π/2] for asin, [0, π] for acos
+                                // Conservative bound: [-π, π] for both
+                                let pi = z3::ast::Real::from_rational(355, 113);
+                                let neg_pi = z3::ast::Real::from_rational(-355, 113);
+                                solver.assert(&uf_var.ge(&neg_pi));
+                                solver.assert(&uf_var.le(&pi));
+                            }
+                            "atan" => {
+                                // atan range: (-π/2, π/2); conservative: [-π, π]
+                                let pi = z3::ast::Real::from_rational(355, 113);
+                                let neg_pi = z3::ast::Real::from_rational(-355, 113);
+                                solver.assert(&uf_var.ge(&neg_pi));
+                                solver.assert(&uf_var.le(&pi));
+                            }
+                            _ => {}
+                        }
+                        uf_var
                     }
                 };
 

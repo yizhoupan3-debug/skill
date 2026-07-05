@@ -287,49 +287,55 @@ pub fn try_prove(lhs: &str, rhs: &str, timeout_ms: Option<u64>) -> AutoProverRes
         }
     }
 
-    // ── Strategy 3: Inequality check (difference = 0) ──
+    // ── Strategy 3: Z3 prove difference (=0) ──
+    // Uses prove_formula (universal check) not check_inequality (existence check).
+    // This avoids the false-positive path where x²+1=2x at x=1 would be "proved".
     {
-        trace = ProofTrace::new(UsedBackend::Minilp);
+        trace = ProofTrace::new(UsedBackend::Z3);
         let diff_expr = format!("abs(({lhs}) - ({rhs})) <= 1e-10");
-        let vr = crate::verification::inequality::check_inequality(&diff_expr, timeout_ms);
-        eprintln!("[try_prove] Strategy 3 (inequality) result: {:?}, expr={}", vr.status, diff_expr);
-        let elapsed = start.elapsed().as_millis() as u64;
-        trace.set_time_ms(elapsed);
-        trace.record_step("inequality_check", &diff_expr, "");
-
-        if vr.status == VerificationStatus::Pass {
-            trace.backend = UsedBackend::Minilp;
-            return AutoProverResult {
-                proved: true,
-                backend: UsedBackend::Minilp,
-                verification_result: vr.clone(),
-                trace,
-                proof_string: format!("Proved by inequality engine: {lhs} = {rhs}"),
-                counterexample: None,
-                confidence: 0.85,
-            };
-        }
-        // If inequality returned Fail but the expression is provably false, report that
-        if vr.status == VerificationStatus::Fail {
+        let vr = crate::verification::z3_bridge::prove_formula(&diff_expr);
+        // For the exact equality case, also try subtracting and proving = 0
+        let eq_expr = format!("{lhs} == {rhs}");
+        let vr_eq = crate::verification::z3_bridge::prove_formula(&eq_expr);
+        let combined = if vr_eq.status == VerificationStatus::Pass {
+            vr_eq
+        } else if vr.status == VerificationStatus::Pass {
+            vr
+        } else {
+            // Fall back to inequality check only for documentation purposes,
+            // but with low confidence and clear warning.
+            let diff_vr = crate::verification::inequality::check_inequality(&diff_expr, timeout_ms);
+            eprintln!("[try_prove] Strategy 3 (inequality fallback) result: {:?}", diff_vr.status);
             let elapsed = start.elapsed().as_millis() as u64;
             trace.set_time_ms(elapsed);
-            let counterexample = find_counterexample(lhs, rhs);
+            trace.record_step("inequality_fallback", &diff_expr, "existential_only");
             return AutoProverResult {
                 proved: false,
-                backend: UsedBackend::None,
-                verification_result: VerificationResult {
-                    check_name: "math_auto_prove".into(),
-                    status: VerificationStatus::Fail,
-                    details: format!(
-                        "All backends failed. SymPy: -, Z3: -, inequality: {}",
-                        vr.details
-                    ),
-                    evidence_path: None,
-                },
+                backend: UsedBackend::Minilp,
+                verification_result: diff_vr.clone(),
                 trace,
-                proof_string: format!("All backenders proved false: {lhs} ≠ {rhs}"),
-                counterexample,
-                confidence: 0.80,
+                proof_string: format!(
+                    "Inequality engine found a witness for {diff_expr} but cannot prove it holds for all values. Manual verification required."
+                ),
+                counterexample: None,
+                confidence: 0.3,
+            };
+        };
+        eprintln!("[try_prove] Strategy 3 (Z3 prove) result: {:?}", combined.status);
+        let elapsed = start.elapsed().as_millis() as u64;
+        trace.set_time_ms(elapsed);
+        trace.record_step("z3_prove_diff", &diff_expr, "proved");
+
+        if combined.status == VerificationStatus::Pass {
+            trace.backend = UsedBackend::Z3;
+            return AutoProverResult {
+                proved: true,
+                backend: UsedBackend::Z3,
+                verification_result: combined.clone(),
+                trace,
+                proof_string: format!("Proved by Z3: {lhs} = {rhs}"),
+                counterexample: None,
+                confidence: 0.99,
             };
         }
     }
