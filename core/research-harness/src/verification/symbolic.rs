@@ -1224,6 +1224,23 @@ pub fn trig_simplify(expr: &Expr) -> Expr {
                 }
             }
 
+            // cos(2x) → cos(x)^2 - sin(x)^2
+            if name == "cos" && sargs.len() == 1 {
+                if let Expr::Mul(a, b) = &sargs[0] {
+                    if let Expr::Const(c) = a.as_ref() {
+                        if (*c - 2.0).abs() < 1e-12 {
+                            let inner = trig_simplify(b);
+                            let cos2 = Expr::Fn("cos".to_string(), vec![inner.clone()]);
+                            let sin2 = Expr::Fn("sin".to_string(), vec![inner]);
+                            return simplify(&Expr::Sub(
+                                Box::new(Expr::Mul(Box::new(cos2.clone()), Box::new(cos2))),
+                                Box::new(Expr::Mul(Box::new(sin2.clone()), Box::new(sin2))),
+                            ));
+                        }
+                    }
+                }
+            }
+
             Expr::Fn(name.clone(), sargs)
         }
         _ => expr.clone(),
