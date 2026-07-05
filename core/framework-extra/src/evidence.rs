@@ -6,8 +6,11 @@
 use framework_core::repo_roots::resolve_repo_root_arg;
 use framework_runtime::constants::{
     EVIDENCE_INDEX_FILENAME, EVIDENCE_INDEX_SCHEMA_VERSION,
+    HOOK_EVIDENCE_APPEND_SCHEMA_VERSION,
+    FRAMEWORK_SESSION_ARTIFACT_WRITE_AUTHORITY,
     TASK_POINTERS_FILENAME,
 };
+use framework_core::json_value::value_text;
 use core_state_utils::json_io::read_json_strict;
 use serde_json::{Map, Value, json};
 use std::fs;

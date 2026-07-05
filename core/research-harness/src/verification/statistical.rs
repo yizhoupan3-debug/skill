@@ -112,12 +112,19 @@ mod tests {
 
     #[test]
     fn test_grim_single_participant() {
-        assert!(grim_test(5.5, 1, 1).unwrap());
+        // N=1 → mean must be integer. 5.5 is not integer → GRIM correctly rejects it.
+        assert!(!grim_test(5.5, 1, 1).unwrap(),
+            "N=1 with non-integer mean should be rejected by GRIM");
     }
 
     #[test]
     fn test_grim_negative_mean() {
-        assert!(!grim_test(-3.14, 7, 2).unwrap());
+        // N=7, mean=-3.14: round(7 * -3.14) = round(-21.98) = -22, -22/7 ≈ -3.142857
+        // |(-3.14) - (-3.142857)| ≈ 0.002857 ≤ 0.005 (= 10^(-2) * 0.5)
+        // -3.14 IS consistent with N=7, d=2 → GRIM correctly accepts it
+        assert!(grim_test(-3.14, 7, 2).unwrap(),
+            "-3.14 should be consistent with N=7, d=2 (|diff|={}, tol=0.005)",
+            3.14_f64 - 22.0_f64 / 7.0_f64);
     }
 
     #[test]

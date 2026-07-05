@@ -310,10 +310,29 @@ impl Blueprint {
         round: u64,
         visited: &mut HashSet<String>,
     ) -> Result<VerificationResultExt, FrameworkError> {
-        // Cycle detection: if already visited, this is a cyclic graph -> fail
+        // Path-based cycle detection: node is only "visited" on current call chain.
+        // Shared sub-DAGs (same node reachable via different paths) are NOT cycles
+        // — they are valid in proof DAGs (a lemma reused by multiple parents).
         if !visited.insert(node_id.to_string()) {
             return Ok(VerificationResultExt::new(VerificationStatus::Fail, round));
         }
+
+        let result = self.compute_verify_node(node_id, round, visited);
+
+        // Remove from path when returning — sibling branches can legitimately
+        // share this node as a common sub-proof without triggering a false cycle.
+        visited.remove(node_id);
+
+        result
+    }
+
+    /// Inner body of verify_node, split out so the caller handles path cleanup.
+    fn compute_verify_node(
+        &mut self,
+        node_id: &str,
+        round: u64,
+        visited: &mut HashSet<String>,
+    ) -> Result<VerificationResultExt, FrameworkError> {
 
         // Extract all data from self.nodes before any mutation to avoid borrow conflicts
         let (node_children, node_is_leaf, node_backend_opt, is_or) = {
@@ -415,10 +434,21 @@ impl Blueprint {
         node_id: &str,
         visited: &mut HashSet<String>,
     ) -> Result<(), FrameworkError> {
-        // Skip if already visited (cycle detection)
+        // Path-based visited guard: skip if on current path (cycle), but allow
+        // shared sub-DAGs (same node reachable via different paths).
         if !visited.insert(node_id.to_string()) {
             return Ok(());
         }
+        let result = self.compute_backtrack(node_id, visited);
+        visited.remove(node_id);
+        result
+    }
+
+    fn compute_backtrack(
+        &mut self,
+        node_id: &str,
+        visited: &mut HashSet<String>,
+    ) -> Result<(), FrameworkError> {
 
         // Capture children and label BEFORE any mutable operations on self.nodes
         // (avoids holding an immutable borrow across mutable HashMap operations).
@@ -1289,6 +1319,44 @@ mod tests {
         bp.verify().unwrap();
         let root_status = bp.status.get("root").unwrap();
         assert_eq!(root_status.status, VerificationStatus::Fail);
+    }
+
+    #[test]
+    fn test_verify_shared_subdag_not_false_cycle() {
+        // Shared sub-DAG: A proof lemma reused by multiple parents should NOT
+        // be treated as a cycle.
+        // Structure:
+        //   root (AND) → [branch1, branch2]
+        //     branch1 (OR) → [shared_lemma]
+        //     branch2 (OR) → [shared_lemma]
+        //   shared_lemma (Z3 leaf)
+        let mut bp = Blueprint::new("shared_dag_test", "test");
+        bp.nodes.clear();
+        bp.status.clear();
+        bp.nodes.insert("root".into(), DagNode::OrNode {
+            id: "root".into(), label: "root".into(),
+            children: vec!["branch1".into(), "branch2".into()],
+        });
+        bp.nodes.insert("branch1".into(), DagNode::OrNode {
+            id: "branch1".into(), label: "branch1".into(),
+            children: vec!["shared_lemma".into()],
+        });
+        bp.nodes.insert("branch2".into(), DagNode::OrNode {
+            id: "branch2".into(), label: "branch2".into(),
+            children: vec!["shared_lemma".into()],
+        });
+        bp.nodes.insert("shared_lemma".into(), DagNode::Leaf {
+            id: "shared_lemma".into(), claim: "x >= 0".into(),
+            backend: VerificationBackend::Z3,
+        });
+        for id in &["root", "branch1", "branch2", "shared_lemma"] {
+            bp.status.insert(id.to_string(), VerificationResultExt::new(VerificationStatus::Skip, 0));
+        }
+        bp.verify().unwrap();
+        let root_status = bp.status.get("root").unwrap();
+        // With the path-based fix, root should NOT be Fail (it was a false cycle before)
+        assert_ne!(root_status.status, VerificationStatus::Fail,
+            "shared sub-DAG should not be treated as cycle: root={:?}", root_status);
     }
 
     #[test]

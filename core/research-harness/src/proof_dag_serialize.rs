@@ -185,6 +185,17 @@ mod tests {
     #[test]
     fn test_serialize_verify_round_advances() {
         let mut bp = Blueprint::new("nested goal", "nested");
+        // Add child leaf nodes first so they exist in the DAG
+        bp.nodes.insert("a1".into(), DagNode::Leaf {
+            id: "a1".into(),
+            claim: "x >= 0".into(),
+            backend: VerificationBackend::Z3,
+        });
+        bp.nodes.insert("a2".into(), DagNode::Leaf {
+            id: "a2".into(),
+            claim: "y >= 0".into(),
+            backend: VerificationBackend::Z3,
+        });
         bp.decompose(
             "root",
             vec![DagNode::OrNode {

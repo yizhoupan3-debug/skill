@@ -5868,41 +5868,50 @@ mod tests {
 
     #[test]
     fn test_propagate_dimensions_ast_mul() {
-        let dims = HashMap::from([("x", "L"), ("t", "T")]);
-        let expr = parse("x * t").unwrap();
-        let result = propagate_dimensions_ast(&expr, &dims);
-        assert_eq!(result.as_deref(), Some("L*T"));
+        let mut dims = HashMap::new();
+        dims.insert("x".into(), "L".into());
+        dims.insert("t".into(), "T".into());
+        dims.insert("y".into(), "L*T".into());
+        let result = propagate_dimensions_ast("y = x * t", &dims);
+        assert!(result.consistent, "L*T = L*T should be consistent: {} = {}", result.lhs_dim, result.rhs_dim);
     }
 
     #[test]
     fn test_propagate_dimensions_ast_div() {
-        let dims = HashMap::from([("x", "L"), ("t", "T")]);
-        let expr = parse("x / t").unwrap();
-        let result = propagate_dimensions_ast(&expr, &dims);
-        assert_eq!(result.as_deref(), Some("L*T^-1"));
+        let mut dims = HashMap::new();
+        dims.insert("x".into(), "L".into());
+        dims.insert("t".into(), "T".into());
+        dims.insert("v".into(), "L*T^-1".into());
+        let result = propagate_dimensions_ast("v = x / t", &dims);
+        assert!(result.consistent, "L*T^-1 = L/T should be consistent: {} = {}", result.lhs_dim, result.rhs_dim);
     }
 
     #[test]
     fn test_propagate_dimensions_ast_MISMATCH_on_add() {
-        let dims = HashMap::from([("x", "L"), ("t", "T")]);
-        let expr = parse("x + t").unwrap();
-        let result = propagate_dimensions_ast(&expr, &dims);
-        assert!(result.as_deref().unwrap_or("").contains("MISMATCH"));
+        let mut dims = HashMap::new();
+        dims.insert("x".into(), "L".into());
+        dims.insert("t".into(), "T".into());
+        dims.insert("y".into(), "1".into());
+        let result = propagate_dimensions_ast("y = x + t", &dims);
+        assert!(!result.consistent, "x(L) + t(T) should MISMATCH: {} = {}", result.lhs_dim, result.rhs_dim);
+        assert!(result.rhs_dim.contains("MISMATCH"), "rhs_dim should contain MISMATCH: {}", result.rhs_dim);
     }
 
     #[test]
     fn test_propagate_dimensions_ast_trig_ok() {
-        let dims = HashMap::from([("x", "1")]);
-        let expr = parse("sin(x)").unwrap();
-        let result = propagate_dimensions_ast(&expr, &dims);
-        assert_eq!(result.as_deref(), Some("1"));
+        let mut dims = HashMap::new();
+        dims.insert("x".into(), "1".into());
+        dims.insert("y".into(), "1".into());
+        let result = propagate_dimensions_ast("y = sin(x)", &dims);
+        assert!(result.consistent, "sin(1) should be ok: {} = {}", result.lhs_dim, result.rhs_dim);
     }
 
     #[test]
     fn test_propagate_dimensions_ast_trig_dimensioned() {
-        let dims = HashMap::from([("x", "L")]);
-        let expr = parse("sin(x)").unwrap();
-        let result = propagate_dimensions_ast(&expr, &dims);
-        assert!(result.as_deref().unwrap_or("").contains("REQUIRES_DIMENSIONLESS"));
+        let mut dims = HashMap::new();
+        dims.insert("x".into(), "L".into());
+        dims.insert("y".into(), "1".into());
+        let result = propagate_dimensions_ast("y = sin(x)", &dims);
+        assert!(!result.consistent, "sin(L) should be rejected: {} = {}", result.lhs_dim, result.rhs_dim);
     }
 }

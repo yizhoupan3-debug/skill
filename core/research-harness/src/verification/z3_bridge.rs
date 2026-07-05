@@ -10,11 +10,18 @@ use z3::ast::Ast;
 /// Z3 is always available (bundled via z3 crate).
 pub fn z3_available() -> bool { true }
 
+/// Wrapper to make z3::Solver Send+Sync-safe.
+/// z3's C API solver is thread-safe when protected by a Mutex,
+/// but the Rust bindings' `NonNull` pointer fields prevent auto-derived Send/Sync.
+struct SendSyncSolver(Mutex<z3::Solver>);
+unsafe impl Send for SendSyncSolver {}
+unsafe impl Sync for SendSyncSolver {}
+
 /// A shared solver instance for the single-step solver API.
 /// Ensures push/pop/add/check/reset operate on the same solver context.
 fn shared_solver() -> &'static Mutex<z3::Solver> {
-    static SOLVER: OnceLock<Mutex<z3::Solver>> = OnceLock::new();
-    SOLVER.get_or_init(|| Mutex::new(z3::Solver::new()))
+    static SOLVER: OnceLock<SendSyncSolver> = OnceLock::new();
+    &SOLVER.get_or_init(|| SendSyncSolver(Mutex::new(z3::Solver::new()))).0
 }
 
 /// Known math functions the parser recognizes.
@@ -601,7 +608,10 @@ pub fn solver_check(timeout_ms: Option<u64>) -> VerificationResult {
         Ok(s) => {
             if let Some(ms) = timeout_ms { let mut p = z3::Params::new(); p.set_u32("timeout", ms as u32); s.set_params(&p); }
             match s.check() {
-                z3::SatResult::Sat => VerificationResult { check_name: "math_z3_solver_check".into(), status: VerificationStatus::Pass, details: format!("SAT: {}", model_to_string(&s.get_model().unwrap())), evidence_path: None },
+                z3::SatResult::Sat => {
+                    let model_str = s.get_model().map(|m| model_to_string(&m)).unwrap_or_default();
+                    VerificationResult { check_name: "math_z3_solver_check".into(), status: VerificationStatus::Pass, details: format!("SAT: {model_str}"), evidence_path: None }
+                }
                 z3::SatResult::Unsat => VerificationResult { check_name: "math_z3_solver_check".into(), status: VerificationStatus::Fail, details: "UNSAT".into(), evidence_path: None },
                 z3::SatResult::Unknown => VerificationResult { check_name: "math_z3_solver_check".into(), status: VerificationStatus::Warn, details: "unknown".into(), evidence_path: None },
             }

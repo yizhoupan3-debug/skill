@@ -320,11 +320,14 @@ pub fn solve_optimization(
                 }
             }
         },
-        None => rx.recv().unwrap_or_else(|_| {
-            Err(FrameworkError::validation(
-                "inequality solver channel closed unexpectedly",
-            ))
-        }),
+        None => match rx.recv() {
+            Ok(r) => r,
+            Err(_) => {
+                return FeasibilityResult::Error {
+                    message: "inequality solver thread died unexpectedly (channel closed)".into(),
+                };
+            }
+        },
     };
 
     match result {

@@ -130,6 +130,8 @@ pub fn propagate_dimensions(equation: &str, dimensions: HashMap<String, String>)
 /// - sqrt → half-exponent on the input dimension
 ///
 /// Falls back to the original token-based approach when parsing fails.
+/// Production-dead but kept for cross-validation and test reference.
+#[allow(dead_code)]
 fn heuristic_dimension_propagate(equation: &str, dims: &HashMap<String, String>) -> serde_json::Value {
     let parts: Vec<&str> = equation.split('=').collect();
     if parts.len() < 2 {

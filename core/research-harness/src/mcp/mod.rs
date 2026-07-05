@@ -62,11 +62,11 @@ pub fn tool_definitions() -> Vec<Value> {
             json!({
                 "type": "object",
                 "properties": {
-                    "operation": {"type": "string", "description": "操作：start（默认）/submit_round/status"},
-                    "max_rounds": {"type": "integer", "description": "最大轮次"},
-                    "min_rounds": {"type": "integer", "description": "最小轮次"},
-                    "consecutive_stable_required": {"type": "integer", "description": "连续稳定轮次要求"},
-                    "round": {"type": "integer", "description": "当前轮次号"},
+                    "operation": {"type": "string", "enum": ["start", "submit_round", "status"], "description": "操作：start（默认）/submit_round/status"},
+                    "max_rounds": {"type": "integer", "minimum": 1, "maximum": 100, "description": "最大轮次"},
+                    "min_rounds": {"type": "integer", "minimum": 0, "maximum": 100, "description": "最小轮次"},
+                    "consecutive_stable_required": {"type": "integer", "minimum": 1, "maximum": 50, "description": "连续稳定轮次要求"},
+                    "round": {"type": "integer", "minimum": 0, "description": "当前轮次号"},
                     "findings": {"type": "array", "items": {"type": "object"}, "description": "本轮审稿发现"}
                 }
             }),
@@ -450,13 +450,47 @@ pub fn tool_definitions() -> Vec<Value> {
                 }
             }),
         ),
+        // ── Z3 optimize / check system tools (inputSchema added 2026-07-05) ──
+        tool_def(
+            "math_z3_optimize",
+            "Z3 约束优化：max/min 目标函数，支持多约束",
+            json!({
+                "type": "object",
+                "required": ["objective", "constraints", "direction"],
+                "properties": {
+                    "objective": {"type": "string", "description": "目标函数表达式（如 'x + 2*y'）"},
+                    "constraints": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "约束表达式列表（如 ['x >= 0', 'y <= 5']）"
+                    },
+                    "direction": {"type": "string", "enum": ["minimize", "maximize"], "description": "优化方向"}
+                }
+            }),
+        ),
+        tool_def(
+            "math_z3_check_system",
+            "Z3 多约束系统可满足性检查",
+            json!({
+                "type": "object",
+                "required": ["constraints"],
+                "properties": {
+                    "constraints": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "约束表达式列表（如 ['x > 0', 'x < 10']）"
+                    },
+                    "timeout_ms": {"type": "integer", "description": "超时毫秒数（可选）"}
+                }
+            }),
+        ),
         tool_def(
             "research_verification_prose",
             "验证论文文本质控（术语/slop/hedging）",
             json!({
                 "type": "object",
                 "properties": {
-                    "check": {"type": "string", "description": "检查类型：terminology/slop/hedging"},
+                    "check": {"type": "string", "enum": ["terminology", "slop", "hedging"], "description": "检查类型：terminology/slop/hedging"},
                     "text": {"type": "string", "description": "待检查文本"},
                     "glossary": {"type": "object", "description": "可选术语表（check=terminology 时使用）：{术语→标准译名} 映射"},
                     "language": {"type": "string", "enum": ["en", "zh"], "description": "可选语言（check=slop 时使用）：en=英语 (default), zh=中文"}
@@ -470,9 +504,9 @@ pub fn tool_definitions() -> Vec<Value> {
             json!({
                 "type": "object",
                 "properties": {
-                    "check": {"type": "string", "description": "检查类型：grim/p_value/multiple_comparison"},
+                    "check": {"type": "string", "enum": ["grim", "p_value", "multiple_comparison"], "description": "检查类型：grim/p_value/multiple_comparison"},
                     "mean": {"type": "number", "description": "样本均值（grim 检查时必须）"},
-                    "n": {"type": "integer", "description": "样本量（grim 检查时必须）"},
+                    "n": {"type": "integer", "minimum": 1, "maximum": 1000000000, "description": "样本量（grim 检查时必须）"},
                     "decimals": {"type": "integer", "description": "小数位数（grim 检查可选，默认 2）"},
                     "observed": {"type": "number", "description": "观测 p 值（p_value 检查时必须）"},
                     "expected": {"type": "number", "description": "期望 p 值（p_value 检查时必须）"},
@@ -495,8 +529,8 @@ pub fn tool_definitions() -> Vec<Value> {
                         "items": {"type": "object", "description": "参数键值对，如 {\"lr\": \"0.01\", \"bs\": \"32\"}"},
                         "description": "参数组合列表 — 每个元素启动一次独立的实验运行"
                     },
-                    "concurrency": {"type": "integer", "description": "最大并行子进程数（1–32，默认 4）", "default": 4},
-                    "timeout_ms": {"type": "integer", "description": "单次实验超时时间（毫秒，默认 60000）", "default": 60000},
+                    "concurrency": {"type": "integer", "minimum": 1, "maximum": 32, "description": "最大并行子进程数（1–32，默认 4）", "default": 4},
+                    "timeout_ms": {"type": "integer", "minimum": 100, "maximum": 300000, "description": "单次实验超时时间（毫秒，默认 60000）", "default": 60000},
                     "no_cache": {"type": "boolean", "description": "绕过 LRU+TTL 缓存（默认 false）", "default": false}
                 },
                 "required": ["template", "params"]
@@ -580,7 +614,7 @@ pub fn tool_definitions() -> Vec<Value> {
                 "properties": {
                     "lhs": {"type": "string", "description": "等式左侧表达式"},
                     "rhs": {"type": "string", "description": "等式右侧表达式"},
-                    "timeout_ms": {"type": "integer", "description": "超时时间（毫秒，默认 10000）"}
+                    "timeout_ms": {"type": "integer", "minimum": 100, "maximum": 600000, "description": "超时时间（毫秒，默认 10000）"}
                 }
             }),
         ),
@@ -610,7 +644,7 @@ pub fn tool_definitions() -> Vec<Value> {
                     "variable": {"type": "string", "description": "目标变量名"},
                     "lower": {"type": "number", "description": "初始下界"},
                     "upper": {"type": "number", "description": "初始上界"},
-                    "timeout_ms": {"type": "integer", "description": "单次 Z3 查询超时（毫秒，默认 5000）"}
+                    "timeout_ms": {"type": "integer", "minimum": 100, "maximum": 60000, "description": "单次 Z3 查询超时（毫秒，默认 5000）"}
                 }
             }),
         ),
@@ -630,6 +664,8 @@ pub fn tool_definitions() -> Vec<Value> {
                     },
                     "num_random": {
                         "type": "integer",
+                        "minimum": 0,
+                        "maximum": 100000,
                         "description": "自动生成的随机测试数量（可选，默认 0；witnesses 未提供时默认 50）"
                     },
                     "seed": {
@@ -685,6 +721,8 @@ pub fn tool_definitions() -> Vec<Value> {
                     },
                     "order": {
                         "type": "integer",
+                        "minimum": 1,
+                        "maximum": 10,
                         "description": "展开阶数（默认 2）。order=1 展开到 O(ε), order=2 到 O(ε²)"
                     },
                     "bc": {
@@ -727,7 +765,7 @@ fn tool_literature_search() -> Value {
             "type": "object",
             "properties": {
                 "query": {"type": "string", "description": "Search query (plain text)"},
-                "limit": {"type": "integer", "description": "Max results per source (default 20, max 100)"},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 100, "description": "Max results per source (default 20, max 100)"},
                 "source": {"type": "string", "enum": ["all", "semantic-scholar", "arxiv"], "description": "Source to search (default all)"},
                 "year_from": {"type": "integer", "description": "Minimum publication year (inclusive)"},
                 "year_to": {"type": "integer", "description": "Maximum publication year (inclusive)"},
