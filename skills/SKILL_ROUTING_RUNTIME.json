@@ -2356,9 +2356,7 @@
       null,
       null,
       "skill",
-      [
-        "no_routing"
-      ],
+      null,
       "Guaranteed entry point for Goal management with goal_state_manage.",
       [
         "goal",

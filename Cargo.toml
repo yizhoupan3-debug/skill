@@ -54,7 +54,8 @@ members = [
     "rust_tools/mcp-stdio-common",
     "rust_tools/ooxml_parser_rs",
     "rust_tools/pdf_tool_rs",
-    "rust_tools/pptx_tool_rs"]
+    "rust_tools/pptx_tool_rs",
+    "core/caveman"]
 resolver = "2"
 
 [workspace.lints.rust]
