@@ -535,14 +535,20 @@ pub(super) fn tool_record_evidence(
     let exit_code = arguments.get("exit_code").and_then(Value::as_i64);
     if let Some(ec) = exit_code {
         entry.insert("exit_code".to_string(), json!(ec));
-        if !arguments.get("success").and_then(Value::as_bool).unwrap_or(false) {
+        if let Some(s) = arguments.get("success").and_then(Value::as_bool) {
+            // Cross-validate: reject contradiction like {exit_code:0, success:false}
+            if s != (ec == 0) {
+                return Err(FrameworkError::validation(format!(
+                    "record_evidence: exit_code={ec} and success={s} contradict each other"
+                )));
+            }
+            entry.insert("success".to_string(), json!(s));
+        } else {
             entry.insert("success".to_string(), json!(ec == 0));
         }
     } else {
-        entry.insert("success".to_string(), json!(true));
-    }
-    if let Some(s) = arguments.get("success").and_then(Value::as_bool) {
-        entry.insert("success".to_string(), json!(s));
+        let has_success = arguments.get("success").and_then(Value::as_bool);
+        entry.insert("success".to_string(), json!(has_success.unwrap_or(true)));
     }
     if let Some(c) = confidence {
         entry.insert("confidence".to_string(), json!(c));

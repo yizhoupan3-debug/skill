@@ -702,7 +702,7 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
             // GOAL-012: Checkpoint size limit
             let max_checkpoints = 100u64;
             if let Some(cps) = state.get("checkpoints").and_then(Value::as_array) {
-                if cps.len() as u64 > max_checkpoints {
+                if cps.len() as u64 >= max_checkpoints {
                     return Err(FrameworkError::validation(format!(
                         "checkpoint limit reached ({max_checkpoints} max)"
                     )));
@@ -803,7 +803,7 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
                     let current = state.get("iteration_count").and_then(Value::as_u64).unwrap_or(0);
                     if current + 1 >= max {
                         Some(format!(
-                            "max_iterations ({max}) reached at iteration_count={current}; use 'retry' to continue or the goal will remain failed"
+                            "max_iterations ({max}) reached at iteration_count={current}; use clear + restart to continue"
                         ))
                     } else {
                         None
@@ -1107,7 +1107,14 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
                 Some(blocker.to_string()),
             )
         }
-        "clear" => clear_goal_state(&repo_root, Some(resolve_task_id_strict(&payload)?)),
+        "unblock" => set_terminal_flags(
+            &repo_root,
+            Some(resolve_task_id_strict(&payload)?),
+            "running",
+            None,
+            None,
+        ),
+        "clear" => clear_goal_state(&repo_root, Some(resolve_task_id_strict(&payload)?), &payload),
         "amend" => {
             let task_id = resolve_task_id_strict(&payload)?;
             crate::utils::path_guard::validate_task_id_component(&task_id)?;
@@ -1287,6 +1294,7 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
 fn clear_goal_state(
     repo_root: &Path,
     task_id_resolved: Option<String>,
+    payload: &Value,
 ) -> Result<Value, FrameworkError> {
     let task_id = task_id_resolved.ok_or_else(|| {
         FrameworkError::validation("goal_state_manage: task_id is required (multi-agent safe mode)")
@@ -1300,10 +1308,17 @@ fn clear_goal_state(
         if let Ok(Some(state)) = read_goal_state(repo_root, Some(&task_id)) {
             if state.get("stale").and_then(Value::as_bool) == Some(true) {
                 // Stale guard: require force flag to clear stale goals
-                return Err(FrameworkError::validation(
-                    "cannot clear a stale goal — session_id does not match current session. \
-                     Use force=true to override."
-                ));
+                let force = payload.get("force").and_then(Value::as_bool).unwrap_or(false);
+                if !force {
+                    return Err(FrameworkError::validation(
+                        "cannot clear a stale goal — session_id does not match current session. \
+                         Use force=true to override."
+                    ));
+                }
+                tracing::warn!(
+                    task_id = %task_id,
+                    "clear_goal_state: stale goal cleared with force=true"
+                );
             }
         }
     }
@@ -1326,7 +1341,14 @@ fn clear_goal_state(
             );
         }
     }
-    neutralize_task_pointers_for_task(repo_root, &task_id)?;
+    // Pointer cleanup is best-effort after goal state removal.
+    if let Err(e) = neutralize_task_pointers_for_task(repo_root, &task_id) {
+        tracing::warn!(
+            task_id = %task_id,
+            error = %e,
+            "clear_goal_state: TASK_POINTERS cleanup failed (non-fatal)"
+        );
+    }
     Ok(json!({
         "ok": true,
         "operation": "clear",

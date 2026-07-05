@@ -233,8 +233,10 @@ mod tests {
                 evidence_path: None,
             }
         });
-        assert!(new_trace.verification_time_ms > 0);
+        // The closure is near-instant so elapsed may be 0ms on fast hardware.
+        // The important invariants are that the trace passes through and result is correct.
         assert_eq!(result.status, crate::types::VerificationStatus::Pass);
+        assert_eq!(new_trace.backend, UsedBackend::PureRust);
     }
 
     #[test]
@@ -249,7 +251,7 @@ mod tests {
             }
         });
         assert_eq!(result.status, crate::types::VerificationStatus::Fail);
-        assert!(new_trace.verification_time_ms > 0);
+        assert_eq!(new_trace.backend, UsedBackend::Z3);
     }
 
     #[test]

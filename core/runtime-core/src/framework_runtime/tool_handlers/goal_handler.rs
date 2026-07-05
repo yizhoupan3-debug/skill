@@ -87,17 +87,14 @@ pub(crate) fn goal_state_manage_dispatch(
                 }
             }
 
-            if let Some(ng) = arguments.get("non_goals").and_then(Value::as_array) {
-                payload["non_goals"] = json!(ng);
+            if arguments.get("non_goals").is_some() {
+                payload["non_goals"] = arguments["non_goals"].clone();
             }
-            if let Some(dw) = arguments.get("done_when").and_then(Value::as_array) {
-                payload["done_when"] = json!(dw);
+            if arguments.get("done_when").is_some() {
+                payload["done_when"] = arguments["done_when"].clone();
             }
-            if let Some(vc) = arguments
-                .get("validation_commands")
-                .and_then(Value::as_array)
-            {
-                payload["validation_commands"] = json!(vc);
+            if arguments.get("validation_commands").is_some() {
+                payload["validation_commands"] = arguments["validation_commands"].clone();
             }
 
             let session_id = arguments
@@ -151,19 +148,16 @@ pub(crate) fn goal_state_manage_dispatch(
                 payload["validation_commands"] = v.clone();
             }
         }
-        "pause" | "complete" | "clear" => {}
+        "pause" | "complete" | "clear" | "unblock" => {}
         "amend" => {
-            if let Some(ng) = arguments.get("non_goals").and_then(Value::as_array) {
-                payload["non_goals"] = json!(ng);
+            if arguments.get("non_goals").is_some() {
+                payload["non_goals"] = arguments["non_goals"].clone();
             }
-            if let Some(dw) = arguments.get("done_when").and_then(Value::as_array) {
-                payload["done_when"] = json!(dw);
+            if arguments.get("done_when").is_some() {
+                payload["done_when"] = arguments["done_when"].clone();
             }
-            if let Some(vc) = arguments
-                .get("validation_commands")
-                .and_then(Value::as_array)
-            {
-                payload["validation_commands"] = json!(vc);
+            if arguments.get("validation_commands").is_some() {
+                payload["validation_commands"] = arguments["validation_commands"].clone();
             }
             if let Some(g) = arguments
                 .get("goal")
