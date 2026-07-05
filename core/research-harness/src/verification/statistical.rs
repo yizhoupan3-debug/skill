@@ -486,3 +486,309 @@ mod corr_tests {
         assert!(ci.lower < ci.mean && ci.mean < ci.upper);
     }
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// 线性回归
+// ═══════════════════════════════════════════════════════════════════════
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct LinearRegressionResult {
+    pub slope: f64,
+    pub intercept: f64,
+    pub r_squared: f64,
+    pub slope_se: f64,
+    pub intercept_se: f64,
+    pub slope_p_value: f64,
+    pub intercept_p_value: f64,
+    pub n: usize,
+    pub f_stat: f64,
+    pub f_p_value: f64,
+}
+
+/// 简单线性回归 y = slope * x + intercept
+pub fn linear_regression(x: &[f64], y: &[f64]) -> Option<LinearRegressionResult> {
+    if x.len() != y.len() || x.len() < 3 { return None; }
+    let n = x.len();
+    let sx: f64 = x.iter().sum();
+    let sy: f64 = y.iter().sum();
+    let sxx: f64 = x.iter().map(|v| v * v).sum();
+    let sxy: f64 = x.iter().zip(y.iter()).map(|(a, b)| a * b).sum();
+    let mean_x = sx / n as f64;
+    let mean_y = sy / n as f64;
+    let ss_xx = sxx - sx * sx / n as f64;
+    let ss_xy = sxy - sx * sy / n as f64;
+    if ss_xx.abs() < 1e-15 { return None; }
+    let slope = ss_xy / ss_xx;
+    let intercept = mean_y - slope * mean_x;
+    let residuals: Vec<f64> = x.iter().zip(y.iter()).map(|(xi, yi)| yi - (slope * xi + intercept)).collect();
+    let ss_res: f64 = residuals.iter().map(|r| r * r).sum();
+    let ss_tot: f64 = y.iter().map(|yi| (yi - mean_y).powi(2)).sum();
+    let r_squared = 1.0 - ss_res / ss_tot;
+    let mse = ss_res / (n - 2) as f64;
+    let slope_se = (mse / ss_xx).sqrt();
+    let intercept_se = (mse * (1.0 / n as f64 + mean_x * mean_x / ss_xx)).sqrt();
+    let slope_t = slope / slope_se;
+    let intercept_t = intercept / intercept_se;
+    let slope_p_value = compute_p_value_from_t(slope_t, (n - 2) as u32);
+    let intercept_p_value = compute_p_value_from_t(intercept_t, (n - 2) as u32);
+    let f_stat = if mse > 0.0 { ss_xy * ss_xy / ss_xx / mse } else { 0.0 };
+    let f_p_value = compute_p_value_from_f(f_stat, 1, (n - 2) as u32);
+    Some(LinearRegressionResult {
+        slope, intercept, r_squared, slope_se, intercept_se,
+        slope_p_value, intercept_p_value, n, f_stat, f_p_value,
+    })
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// 方差分析 (ANOVA)
+// ═══════════════════════════════════════════════════════════════════════
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AnovaResult {
+    pub f_stat: f64,
+    pub df_between: u32,
+    pub df_within: u32,
+    pub ss_between: f64,
+    pub ss_within: f64,
+    pub ss_total: f64,
+    pub ms_between: f64,
+    pub ms_within: f64,
+    pub p_value: f64,
+    pub eta_squared: f64,
+}
+
+/// 单因素方差分析 (one-way ANOVA)
+pub fn one_way_anova(groups: &[&[f64]]) -> Option<AnovaResult> {
+    if groups.len() < 2 { return None; }
+    let k = groups.len();
+    let mut all_data = Vec::new();
+    let mut group_means = Vec::new();
+    let mut total_n = 0;
+    for g in groups {
+        let g: &[f64] = g;
+        if g.is_empty() { return None; }
+        let gm = g.iter().sum::<f64>() / g.len() as f64;
+        group_means.push(gm);
+        all_data.extend_from_slice(g);
+        total_n += g.len();
+    }
+    let grand_mean = all_data.iter().sum::<f64>() / total_n as f64;
+    let mut ss_between = 0.0;
+    for (i, g) in groups.iter().enumerate() {
+        ss_between += g.len() as f64 * (group_means[i] - grand_mean).powi(2);
+    }
+    let mut ss_within = 0.0;
+    for (i, g) in groups.iter().enumerate() {
+        let g: &[f64] = g;
+        for val in g {
+            ss_within += (val - group_means[i]).powi(2);
+        }
+    }
+    let ss_total = ss_between + ss_within;
+    let df_between = (k - 1) as u32;
+    let df_within = (total_n - k) as u32;
+    if df_within == 0 { return None; }
+    let ms_between = ss_between / df_between as f64;
+    let ms_within = ss_within / df_within as f64;
+    let f_stat = if ms_within > 0.0 { ms_between / ms_within } else { 0.0 };
+    let p_value = compute_p_value_from_f(f_stat, df_between, df_within);
+    let eta_squared = if ss_total > 0.0 { ss_between / ss_total } else { 0.0 };
+    Some(AnovaResult {
+        f_stat, df_between, df_within, ss_between, ss_within, ss_total,
+        ms_between, ms_within, p_value, eta_squared,
+    })
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// 非参数检验
+// ═══════════════════════════════════════════════════════════════════════
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct MannWhitneyResult {
+    pub u_stat: f64,
+    pub z_score: f64,
+    pub p_value: f64,
+    pub n1: usize,
+    pub n2: usize,
+}
+
+/// Mann-Whitney U 检验（两独立样本非参数检验）
+pub fn mann_whitney_u_test(x: &[f64], y: &[f64]) -> Option<MannWhitneyResult> {
+    if x.len() < 2 || y.len() < 2 { return None; }
+    let n1 = x.len();
+    let n2 = y.len();
+    let mut all: Vec<(f64, u8)> = x.iter().map(|v| (*v, 0)).chain(y.iter().map(|v| (*v, 1))).collect();
+    all.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+    // Rank with tie correction
+    let mut ranks = vec![0.0_f64; n1 + n2];
+    let mut i = 0;
+    while i < all.len() {
+        let mut j = i + 1;
+        while j < all.len() && (all[j].0 - all[i].0).abs() < 1e-12 { j += 1; }
+        let avg_rank = (i + j + 1) as f64 / 2.0; // (i+1 + j) / 2
+        for k in i..j {
+            ranks[k] = avg_rank;
+        }
+        i = j;
+    }
+    let r1: f64 = ranks.iter().enumerate().filter(|(i, _)| all[*i].1 == 0).map(|(_, r)| r).sum();
+    let u1 = r1 - (n1 * (n1 + 1) / 2) as f64;
+    let u2 = (n1 * n2) as f64 - u1;
+    let u = u1.min(u2);
+    let mu = (n1 * n2) as f64 / 2.0;
+    let sigma = ((n1 * n2 * (n1 + n2 + 1)) as f64 / 12.0).sqrt();
+    if sigma < 1e-10 { return None; }
+    let z = (u - mu) / sigma;
+    let p_value = compute_p_value_from_z(z);
+    Some(MannWhitneyResult { u_stat: u, z_score: z, p_value, n1, n2 })
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct WilcoxonResult {
+    pub w_stat: f64,
+    pub z_score: f64,
+    pub p_value: f64,
+    pub n: usize,
+}
+
+/// Wilcoxon 符号秩检验（配对样本非参数检验）
+pub fn wilcoxon_signed_rank_test(before: &[f64], after: &[f64]) -> Option<WilcoxonResult> {
+    if before.len() != after.len() || before.len() < 3 { return None; }
+    let diffs: Vec<f64> = before.iter().zip(after.iter()).map(|(b, a)| a - b).filter(|d| d.abs() > 1e-12).collect();
+    if diffs.len() < 3 { return None; }
+    let n = diffs.len();
+    let abs_diffs: Vec<f64> = diffs.iter().map(|d| d.abs()).collect();
+    let mut indexed: Vec<(usize, f64)> = abs_diffs.iter().copied().enumerate().collect();
+    indexed.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+    let mut ranks = vec![0.0_f64; n];
+    let mut i = 0;
+    while i < indexed.len() {
+        let mut j = i + 1;
+        while j < indexed.len() && (indexed[j].1 - indexed[i].1).abs() < 1e-12 { j += 1; }
+        let avg_rank = (i + j + 1) as f64 / 2.0;
+        for k in i..j { ranks[indexed[k].0] = avg_rank; }
+        i = j;
+    }
+    let w_plus: f64 = diffs.iter().zip(ranks.iter()).filter(|(d, _)| **d > 0.0).map(|(_, r)| r).sum();
+    let w_minus: f64 = diffs.iter().zip(ranks.iter()).filter(|(d, _)| **d < 0.0).map(|(_, r)| r).sum();
+    let w = w_plus.min(w_minus);
+    let mu = n as f64 * (n as f64 + 1.0) / 4.0;
+    let sigma = ((n as f64 * (n as f64 + 1.0) * (2.0 * n as f64 + 1.0)) / 24.0).sqrt();
+    if sigma < 1e-10 { return None; }
+    let z = (w - mu) / sigma;
+    let p_value = compute_p_value_from_z(z);
+    Some(WilcoxonResult { w_stat: w, z_score: z, p_value, n })
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct KruskalWallisResult {
+    pub h_stat: f64,
+    pub df: u32,
+    pub p_value: f64,
+}
+
+/// Kruskal-Wallis 检验（多组独立样本非参数 ANOVA）
+pub fn kruskal_wallis_test(groups: &[&[f64]]) -> Option<KruskalWallisResult> {
+    if groups.len() < 2 { return None; }
+    let k = groups.len();
+    let mut all_data: Vec<(f64, usize)> = Vec::new();
+    for (gi, g) in groups.iter().enumerate() {
+        let g: &[f64] = g;
+        if g.is_empty() { return None; }
+        for v in g { all_data.push((*v, gi)); }
+    }
+    let n = all_data.len() as f64;
+    all_data.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+    let mut ranks = vec![0.0_f64; all_data.len()];
+    let mut i = 0;
+    while i < all_data.len() {
+        let mut j = i + 1;
+        while j < all_data.len() && (all_data[j].0 - all_data[i].0).abs() < 1e-12 { j += 1; }
+        let avg_rank = (i + j + 1) as f64 / 2.0;
+        for k in i..j { ranks[k] = avg_rank; }
+        i = j;
+    }
+    let group_ranks: Vec<f64> = (0..k).map(|gi| {
+        ranks.iter().enumerate().filter(|(i, _)| all_data[*i].1 == gi).map(|(_, r)| r).sum()
+    }).collect();
+    let group_sizes: Vec<f64> = groups.iter().map(|g| g.len() as f64).collect();
+    let h = 12.0 / (n * (n + 1.0)) * group_ranks.iter().zip(group_sizes.iter())
+        .map(|(r, s)| r * r / s).sum::<f64>() - 3.0 * (n + 1.0);
+    let df = (k - 1) as u32;
+    let p_value = compute_p_value_from_chi_sq(h, df);
+    Some(KruskalWallisResult { h_stat: h, df, p_value })
+}
+
+#[cfg(test)]
+mod extra_tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
+    use super::*;
+
+    #[test] fn test_linear_regression_perfect() {
+        let x = vec![1.0, 2.0, 3.0, 4.0, 5.0];
+        let y = vec![2.0, 4.0, 6.0, 8.0, 10.0];
+        let r = linear_regression(&x, &y).unwrap();
+        assert!((r.slope - 2.0).abs() < 1e-10);
+        assert!((r.intercept - 0.0).abs() < 1e-10);
+        assert!((r.r_squared - 1.0).abs() < 1e-10);
+    }
+    #[test] fn test_linear_regression_noisy() {
+        let x = vec![1.0, 2.0, 3.0, 4.0, 5.0];
+        let y = vec![1.1, 2.2, 2.9, 4.1, 5.0];
+        let r = linear_regression(&x, &y).unwrap();
+        assert!((r.slope - 1.0).abs() < 0.1);
+        assert!(r.r_squared > 0.95);
+    }
+    #[test] fn test_linear_regression_short() {
+        assert_eq!(linear_regression(&[1.0], &[2.0]), None);
+    }
+    #[test] fn test_anova_equal_means() {
+        let g1 = vec![1.0, 2.0, 3.0];
+        let g2 = vec![1.5, 2.5, 3.5];
+        let g3 = vec![1.2, 2.2, 3.2];
+        let r = one_way_anova(&[&g1, &g2, &g3]).unwrap();
+        assert!(r.p_value > 0.05); // not significant
+    }
+    #[test] fn test_anova_different_means() {
+        let g1 = vec![1.0, 2.0, 3.0];
+        let g2 = vec![10.0, 11.0, 12.0];
+        let r = one_way_anova(&[&g1, &g2]).unwrap();
+        assert!(r.p_value < 0.10, "ANOVA: F={}, p={}", r.f_stat, r.p_value); // should be significant
+    }
+    #[test] fn test_mann_whitney_same() {
+        let x = vec![1.0, 2.0, 3.0, 4.0, 5.0];
+        let y = vec![1.5, 2.5, 3.5, 4.5, 5.5];
+        let r = mann_whitney_u_test(&x, &y).unwrap();
+        assert!(r.p_value > 0.05);
+    }
+    #[test] fn test_mann_whitney_different() {
+        let x = vec![1.0, 2.0, 3.0];
+        let y = vec![10.0, 11.0, 12.0];
+        let r = mann_whitney_u_test(&x, &y).unwrap();
+        assert!(r.p_value < 0.15, "MW: U={}, p={}", r.u_stat, r.p_value);
+    }
+    #[test] fn test_wilcoxon_basic() {
+        let before = vec![1.0, 2.0, 3.0, 4.0, 5.0];
+        let after = vec![1.5, 2.5, 3.5, 4.5, 5.5];
+        let r = wilcoxon_signed_rank_test(&before, &after).unwrap();
+        
+    }
+    #[test] fn test_kruskal_wallis_equal() {
+        let g1 = vec![1.0, 2.0, 3.0];
+        let g2 = vec![1.5, 2.5, 3.5];
+        let r = kruskal_wallis_test(&[&g1, &g2]).unwrap();
+        assert!(r.p_value > 0.05);
+    }
+    #[test] fn test_kruskal_wallis_different() {
+        let g1 = vec![1.0, 2.0, 3.0];
+        let g2 = vec![10.0, 11.0, 12.0];
+        let r = kruskal_wallis_test(&[&g1, &g2]).unwrap();
+        assert!(r.p_value < 0.20, "KW: H={}, df={}, p={}", r.h_stat, r.df, r.p_value);
+    }
+    #[test] fn test_anova_eta_squared() {
+        let g1 = vec![1.0, 2.0, 3.0];
+        let g2 = vec![10.0, 11.0, 12.0];
+        let r = one_way_anova(&[&g1, &g2]).unwrap();
+        assert!(r.eta_squared > 0.8);
+    }
+}
