@@ -825,6 +825,8 @@ pub(super) fn tool_goal_state_read(
                     "done_when_count": s.get("done_when").and_then(|d| d.as_array()).map(|a| a.len()),
                     "checkpoint_count": s.get("checkpoints").and_then(|c| c.as_array()).map(|a| a.len()),
                     "blocker": s.get("blocker"),
+                    "iteration_count": s.get("iteration_count"),
+                    "drive_until_done": s.get("drive_until_done"),
                 }})
             } else {
                 json!({"ok": true, "goal_state": s})

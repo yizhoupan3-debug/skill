@@ -1048,7 +1048,43 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
             // (MCP tool, PostToolUse hook, task_complete, etc.).
             if let Some(hooks) = framework_core::runtime_hooks::try_hooks() {
                 if let Some(next_task_id) = hooks.after_goal_complete(&repo_root, &task_id) {
-                    response["auto_advance"] = json!({"next_task_id": next_task_id});
+                    let mut adv = json!({"next_task_id": next_task_id});
+
+                    // Detect round transition from TASK_CHAIN.json
+                    let chain_path = repo_root.join("artifacts/current/TASK_CHAIN.json");
+                    if chain_path.is_file() {
+                        if let Ok(chain_raw) = std::fs::read_to_string(&chain_path) {
+                            if let Ok(chain_val) = serde_json::from_str::<serde_json::Value>(&chain_raw) {
+                                let completed_round = chain_val["tasks"].as_array()
+                                    .and_then(|tasks| tasks.iter().find(|t|
+                                        t["task_id"].as_str() == Some(&task_id)))
+                                    .and_then(|t| t["round"].as_u64());
+                                let next_round = chain_val["tasks"].as_array()
+                                    .and_then(|tasks| tasks.iter().find(|t|
+                                        t["task_id"].as_str() == Some(&next_task_id)))
+                                    .and_then(|t| t["round"].as_u64());
+                                if let (Some(cr), Some(nr)) = (completed_round, next_round) {
+                                    if nr > cr {
+                                        // Round transition detected
+                                        let next_round_tasks: Vec<String> = chain_val["tasks"].as_array()
+                                            .map(|tasks| tasks.iter()
+                                                .filter(|t| t["round"].as_u64() == Some(nr)
+                                                    && t["status"].as_str() != Some("completed"))
+                                                .filter_map(|t| t["task_id"].as_str().map(String::from))
+                                                .collect())
+                                            .unwrap_or_default();
+                                        adv["round_transition"] = json!({
+                                            "from": cr,
+                                            "to": nr,
+                                            "next_tasks": next_round_tasks,
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    response["auto_advance"] = adv;
                 }
             }
 

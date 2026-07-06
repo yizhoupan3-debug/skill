@@ -65,6 +65,20 @@ pub fn advance_dag(
         if !condition_met(task, &status_map, task_outputs) {
             continue;
         }
+        // Round barrier: tasks in round N+1 must not start before all
+        // tasks in round N have reached a terminal state (Completed,
+        // Failed, Skipped, Blocked). This prevents cross-round advance
+        // even when depends_on is missing between rounds.
+        if let Some(r) = task.round
+            && r > 1
+        {
+            let any_lower_round_active = root.tasks.iter().any(|t| {
+                t.round.unwrap_or(1) < r && !t.status.is_terminal()
+            });
+            if any_lower_round_active {
+                continue;
+            }
+        }
         any_eligible = true;
         let group_key = task.parallel_group.as_deref();
         eligible_by_group.entry(group_key).or_default().push(task.task_id.as_str());
