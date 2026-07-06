@@ -25,7 +25,7 @@ font8x8 = "0.3"
 image = "0.25"
 mcp-stdio-common = { path = "../mcp-stdio-common" }
 regex = "1.11"
-roxmltree = "0.20"
+roxmltree = "0.21"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 tempfile = "3.15"
