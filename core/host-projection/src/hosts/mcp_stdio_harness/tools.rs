@@ -558,12 +558,157 @@ pub(super) fn tool_goal_state_manage(
     repo_root: &Path,
     connection_session_id: &str,
 ) -> Result<String, FrameworkError> {
-    let result =
-        crate::hooks::tool_goal_state_manage_dispatch(arguments, repo_root, connection_session_id)?;
-    // Note: chain auto-advance now fires from framework_goal_drive_impl's
-    // after_goal_complete runtime hook, covering all caller paths
-    // (MCP tool, task_complete, stop_dispatch, etc.).
-    Ok(result)
+    let operation = arguments
+        .get("operation")
+        .and_then(Value::as_str)
+        .ok_or_else(|| FrameworkError::validation("Missing required argument: operation"))?;
+    let operation = operation.trim().to_ascii_lowercase();
+
+    // Auto-resolve task_id (from argument, TASK_POINTERS, or slugify goal text)
+    let is_start = operation == "start";
+    let task_id = match arguments.get("task_id").and_then(Value::as_str).filter(|s| !s.trim().is_empty()) {
+        Some(tid) => tid.to_string(),
+        None => {
+            if is_start {
+                slugify_goal_text(arguments.get("goal").and_then(Value::as_str).unwrap_or("unnamed"))
+            } else {
+                core_state::state_manager::read_primary_task_id(repo_root)
+                    .or_else(|| discover_most_recent_goal_task_id(repo_root))
+                    .ok_or_else(|| FrameworkError::validation(
+                        "No active task_id in TASK_POINTERS.json and no task_id provided. \
+                         Provide task_id explicitly or create a goal first."
+                    ))?
+            }
+        }
+    };
+    core_state_utils::path_guard::validate_task_id_component(&task_id)?;
+
+    let repo_root_str = repo_root.to_string_lossy().to_string();
+    let mut payload = json!({
+        "repo_root": repo_root_str,
+        "operation": operation,
+        "task_id": task_id,
+    });
+
+    match operation.as_str() {
+        "start" => {
+            let goal = arguments.get("goal")
+                .and_then(Value::as_str)
+                .ok_or_else(|| FrameworkError::validation("start requires 'goal' argument (string)"))?;
+            payload["goal"] = json!(goal);
+
+            let drive = arguments.get("drive_until_done").and_then(Value::as_bool).unwrap_or(true);
+            payload["drive_until_done"] = json!(drive);
+
+            // Auto-fill contract fields when drive_until_done=true and not explicitly provided
+            // (must match goal_ops validate_drive_contract requirements).
+            if drive {
+                if arguments.get("non_goals").is_none() {
+                    payload["non_goals"] = json!(["features outside this goal's scope"]);
+                }
+                if arguments.get("done_when").is_none() {
+                    payload["done_when"] = json!([
+                        format!("goal completed: {goal}"),
+                        "cargo check / test passing",
+                    ]);
+                }
+                if arguments.get("validation_commands").is_none() {
+                    payload["validation_commands"] = json!(["cargo check --workspace", "cargo test --workspace"]);
+                }
+            }
+            // Forward explicit contract fields
+            for field in &["non_goals", "done_when", "validation_commands"] {
+                if arguments.get(field).is_some() {
+                    payload[field] = arguments[field].clone();
+                }
+            }
+
+            payload["session_id"] = json!(
+                arguments.get("session_id").and_then(Value::as_str)
+                    .filter(|s| !s.trim().is_empty())
+                    .unwrap_or(connection_session_id)
+            );
+            if let Some(cg) = arguments.get("completion_gates") { payload["completion_gates"] = cg.clone(); }
+            if let Some(md) = arguments.get("metadata") { payload["metadata"] = md.clone(); }
+            if let Some(true) = arguments.get("set_focus").and_then(Value::as_bool) {
+                payload["set_focus"] = json!(true);
+            }
+        }
+        "checkpoint" => {
+            let note = arguments.get("note").and_then(Value::as_str)
+                .ok_or_else(|| FrameworkError::validation("checkpoint requires 'note' argument (string)"))?;
+            payload["note"] = json!(note);
+        }
+        "block" => {
+            let blocker = arguments.get("blocker").and_then(Value::as_str)
+                .filter(|s| !s.trim().is_empty())
+                .ok_or_else(|| FrameworkError::validation("block requires 'blocker' argument (string)"))?;
+            payload["blocker"] = json!(blocker);
+        }
+        "resume" => {
+            for field in &["drive_until_done", "non_goals", "done_when", "validation_commands"] {
+                if let Some(v) = arguments.get(field) { payload[field] = v.clone(); }
+            }
+        }
+        "amend" => {
+            for field in &["non_goals", "done_when", "validation_commands", "completion_gates", "metadata"] {
+                if let Some(v) = arguments.get(field) { payload[field] = v.clone(); }
+            }
+            if let Some(g) = arguments.get("goal").and_then(Value::as_str).filter(|s| !s.trim().is_empty()) {
+                payload["goal"] = json!(g);
+            }
+            if let Some(kp) = arguments.get("keep_progress").and_then(Value::as_bool) { payload["keep_progress"] = json!(kp); }
+            if let Some(dud) = arguments.get("drive_until_done").and_then(|v| v.as_bool()) { payload["drive_until_done"] = json!(dud); }
+        }
+        "pause" | "complete" | "clear" | "unblock" => {} // no extra fields
+        _ => return Err(FrameworkError::validation(format!(
+            "Unknown goal operation: {operation}. Valid: start, checkpoint, pause, resume, complete, clear, block, amend"
+        ))),
+    }
+
+    let result = core_state::state_manager::framework_goal_drive(payload)
+        .map_err(|e| FrameworkError::from(format!("goal_state_manage: {e}")))?;
+    Ok(serde_json::to_string_pretty(&result)
+        .map_err(|e| FrameworkError::from(e.to_string()))?)
+}
+
+/// Generate a kebab-case task_id from a Chinese/English goal text.
+/// E.g., "修复权限检查bug" → "fix-permission-check-bug"
+fn slugify_goal_text(goal: &str) -> String {
+    let has_chinese = goal.chars().any(|c| ('\u{4e00}'..='\u{9fff}').contains(&c));
+    if has_chinese {
+        let slug: String = goal.chars()
+            .filter(|c| c.is_ascii_alphanumeric() || ('\u{4e00}'..='\u{9fff}').contains(c))
+            .take(40).collect();
+        if !slug.is_empty() { return slug; }
+    }
+    let en_words: Vec<&str> = goal.split(|c: char| !c.is_ascii_alphanumeric())
+        .filter(|w| !w.is_empty() && w.len() > 1).collect();
+    if !en_words.is_empty() {
+        let limit = en_words.len().min(3);
+        return en_words[..limit].join("-").to_ascii_lowercase();
+    }
+    format!("goal-{}", std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs()).unwrap_or(0))
+}
+
+/// Fallback: scan `artifacts/current/` for any GOAL_STATE.json and return the most recent task_id.
+fn discover_most_recent_goal_task_id(repo_root: &Path) -> Option<String> {
+    let dir = std::fs::read_dir(repo_root.join("artifacts/current")).ok()?;
+    let mut candidates: Vec<(String, std::time::SystemTime)> = dir
+        .filter_map(|e| e.ok())
+        .filter_map(|e| {
+            let path = e.path();
+            if !path.is_dir() { return None; }
+            let tid = path.file_name()?.to_str()?;
+            if core_state_utils::path_guard::safe_task_id_component(tid).is_none() { return None; }
+            let mtime = std::fs::metadata(path.join("GOAL_STATE.json")).ok()?.modified().ok()?;
+            Some((tid.to_string(), mtime))
+        })
+        .collect();
+    candidates.sort_by(|a, b| b.1.cmp(&a.1));
+    candidates.into_iter().next().map(|(tid, _)| tid)
 }
 
 /// After goal complete, try to advance the chain DAG to the next step.

@@ -236,7 +236,11 @@ pub fn init_hooks() {
                     decision
                 },
                 // tool_dispatch (4 fields)
-                tool_goal_state_manage_dispatch: crate::framework_runtime::tool_handlers::goal_state_manage_dispatch,
+                tool_goal_state_manage_dispatch: |_, _, _| {
+                    Err(core_errors::FrameworkError::validation(
+                        "goal_state_manage_dispatch: goal handler inlined into host-projection tools.rs"
+                    ))
+                },
                 tool_closeout_record_write_dispatch: crate::framework_runtime::tool_handlers::closeout_record_write_dispatch,
                 tool_closeout_gate_evaluate: crate::framework_runtime::tool_handlers::closeout_gate_evaluate,
                 // browser_dispatch (1 field) — default; set_browser_dispatch overrides via OnceLock
