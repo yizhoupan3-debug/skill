@@ -258,7 +258,6 @@ impl ToolHandler for GoalCloseoutTools {
 
 // ---------------------------------------------------------------------------
 // TaskOutputTools (4 tools: task_output_write, task_output_read,
-//                   task_output_pull, chain_aggregate)
 // ---------------------------------------------------------------------------
 
 pub struct TaskOutputTools;
@@ -268,7 +267,6 @@ impl ToolHandler for TaskOutputTools {
             "task_output_write",
             "task_output_read",
             "task_output_pull",
-            "chain_aggregate",
         ]
     }
     fn dispatch(
@@ -281,8 +279,6 @@ impl ToolHandler for TaskOutputTools {
             "task_output_write" => Ok(tool_task_output_write(args, &ctx.repo_root)?),
             "task_output_read" => Ok(tool_task_output_read(args, &ctx.repo_root)?),
             "task_output_pull" => Ok(tool_task_output_pull(args, &ctx.repo_root)?),
-            "chain_aggregate" => Ok(tool_chain_aggregate(args, &ctx.repo_root)?),
-            "chain_aggregate" => Ok(tool_chain_aggregate(args, &ctx.repo_root)?),
             _ => Err(FrameworkError::not_found(format!(
                 "TaskOutputTools: unknown tool: {tool_name}"
             ))),

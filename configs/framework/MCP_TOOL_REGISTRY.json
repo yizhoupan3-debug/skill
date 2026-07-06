@@ -1,8 +1,8 @@
 {
   "schema_version": "mcp-tool-registry-v2",
   "scope": {
-    "total_count": 114,
-    "builtin_count": 29,
+    "total_count": 113,
+    "builtin_count": 28,
     "research_count": 51,
     "independent_count": 15,
     "external_count": 19,
@@ -3598,27 +3598,6 @@
             "description": "源任务 ID（要拉取输出的任务）"
           }
         }
-      }
-    },
-    {
-      "slug": "chain_aggregate",
-      "display_name": "任务链聚合",
-      "description": "聚合任务链中各步骤的输出",
-      "layer": "builtin",
-      "dispatch_domain": "domain:framework",
-      "owner": "framework",
-      "trigger_hints": [
-        "chain",
-        "aggregate",
-        "任务链",
-        "链聚合"
-      ],
-      "mcp_server": "router-rs-framework",
-      "tool_flags": [],
-      "input_schema": {
-        "type": "object",
-        "required": [],
-        "properties": {}
       }
     }
   ]

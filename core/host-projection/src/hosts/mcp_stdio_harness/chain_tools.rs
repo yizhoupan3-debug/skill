@@ -191,6 +191,13 @@ pub(crate) fn tool_chain_dag_tick(
             },
         )?;
 
+    // Auto-generate chain aggregate when all tasks are terminal.
+    if root.tasks.iter().all(|t| t.status.is_terminal()) {
+        if let Err(e) = core_state::chain_output::build_and_write_chain_aggregate(repo_root) {
+            tracing::warn!(error = %e, "chain_dag_tick: auto-aggregate failed (non-fatal)");
+        }
+    }
+
     // Build response (outside the chain lock — no blocking during JSON serialization)
 
     // Build response
