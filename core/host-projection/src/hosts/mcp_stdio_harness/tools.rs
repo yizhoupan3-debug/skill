@@ -126,11 +126,15 @@ pub(super) fn tool_skill_route(
 
     let no_hit = decision.selected_skill.is_empty() || decision.selected_skill == "none";
 
-    // Build JSON response from RouteDecision fields
+    // Build JSON response from RouteDecision fields — compact
+    let reasons: Vec<String> = decision.reasons.into_iter()
+        .take(3)
+        .map(|r| if r.len() > 80 { format!("{}…", &r[..r.floor_char_boundary(80)]) } else { r })
+        .collect();
     let mut response = serde_json::json!({
         "selected_skill": if no_hit { Value::Null } else { Value::String(decision.selected_skill.clone()) },
         "score": decision.score,
-        "reasons": decision.reasons,
+        "reasons": reasons,
         "matched_token_count": decision.matched_token_count,
         "layer": decision.layer,
         "fuzzy_match": decision.fuzzy_match,
@@ -171,14 +175,18 @@ pub(super) fn tool_skill_route(
                 if results.is_empty() {
                     return None;
                 }
-                Some(results.into_iter().map(|d| json!({
-                    "slug": d.selected_tool, "score": d.score,
-                    "dispatch_domain": d.dispatch_domain,
-                    "mcp_server": d.mcp_server,
-                    "matched_token_count": d.matched_token_count,
-                    "fuzzy_match": d.fuzzy_match,
-                    "reasons": d.reasons,
-                })).collect())
+                Some(results.into_iter().map(|d| {
+                    let tool_reasons: Vec<String> = d.reasons.into_iter()
+                        .take(2)
+                        .map(|r| if r.len() > 60 { format!("{}…", &r[..r.floor_char_boundary(60)]) } else { r })
+                        .collect();
+                    json!({
+                        "slug": d.selected_tool, "score": d.score,
+                        "matched_token_count": d.matched_token_count,
+                        "fuzzy_match": d.fuzzy_match,
+                        "reasons": tool_reasons,
+                    })
+                }).collect())
             })();
             if let Some(t) = &tools {
                 obj.insert("recommended_tools".to_string(), json!(t));
