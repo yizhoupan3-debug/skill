@@ -491,6 +491,10 @@ pub fn build_user_prompt_context_injection(
         }
     }
 
+    // Per-turn caveman reinforcement — prevents drift toward verbosity in long sessions.
+    // Rules sourced from ~/.claude/CLAUDE.md OUTPUT RULES.
+    contexts.push("↑ Caveman active. Keep output terse — drop filler, keep substance.".to_string());
+
     contexts
 }
 
