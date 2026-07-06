@@ -52,6 +52,12 @@ pub fn advance_dag(
         std::collections::HashMap::new();
     let mut any_eligible = false;
 
+    // Pre-compute min non-terminal round for O(1) round barrier check (P3-017)
+    let min_non_terminal_round: Option<u32> = root.tasks.iter()
+        .filter(|t| !t.status.is_terminal())
+        .map(|t| t.round.unwrap_or(1))
+        .min();
+
     for task in &root.tasks {
         if task.status != TaskStatus::Pending && task.status != TaskStatus::RetryScheduled {
             continue;
@@ -69,15 +75,12 @@ pub fn advance_dag(
         // tasks in round N have reached a terminal state (Completed,
         // Failed, Skipped, Blocked). This prevents cross-round advance
         // even when depends_on is missing between rounds.
+        // Uses pre-computed min_non_terminal_round for O(1) lookup.
         if let Some(r) = task.round
             && r > 1
+            && min_non_terminal_round.map_or(false, |min_r| min_r < r)
         {
-            let any_lower_round_active = root.tasks.iter().any(|t| {
-                t.round.unwrap_or(1) < r && !t.status.is_terminal()
-            });
-            if any_lower_round_active {
-                continue;
-            }
+            continue;
         }
         any_eligible = true;
         let group_key = task.parallel_group.as_deref();

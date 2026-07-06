@@ -1025,7 +1025,7 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
             // Enrich response with loop semantics context for model awareness
             let iteration_count = loop_state.get("iteration_count").and_then(Value::as_u64).unwrap_or(0);
             let drive_until_done = loop_state.get("drive_until_done").and_then(Value::as_bool).unwrap_or(false);
-            let done_when = loop_state.get("done_when").cloned().unwrap_or(json!([]));
+            let done_when_count = loop_state.get("done_when").and_then(|d| d.as_array()).map(|a| a.len()).unwrap_or(0);
             let status = loop_state.get("status").and_then(Value::as_str).unwrap_or("running");
 
             let mut response = json!({
@@ -1035,7 +1035,7 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
                 "iteration_count": iteration_count,
                 "status": status,
                 "drive_until_done": drive_until_done,
-                "done_when": done_when,
+                "done_when_count": done_when_count,
             });
 
             // Loop continuation hint: guide the model to keep driving
