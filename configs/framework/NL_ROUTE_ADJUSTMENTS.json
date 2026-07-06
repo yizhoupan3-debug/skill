@@ -1060,8 +1060,59 @@
       },
       "action": {
         "type": "boost",
-        "delta": 25.0,
-        "reason": "Research front-door boost: general investigation wording (调研) detected for research entry."
+        "delta": 35.0,
+        "reason": "Research front-door boost: general investigation wording (调研) detected for research entry. Balanced with deep-search +35 (identical delta, routing falls to other signals)."
+      },
+      "record": {
+        "slug": "research"
+      }
+    },
+    {
+      "when": {
+        "any": [
+          { "query_contains": "帮我研究" },
+          { "query_contains": "研究一下" },
+          { "query_contains": "研究一个" }
+        ]
+      },
+      "action": {
+        "type": "boost",
+        "delta": 35.0,
+        "reason": "Research front-door boost: explicit research request wording detected."
+      },
+      "record": {
+        "slug": "research"
+      }
+    },
+    {
+      "when": {
+        "any": [
+          { "query_contains": "研究进展" },
+          { "query_contains": "研究现状" },
+          { "query_contains": "研究前沿" }
+        ]
+      },
+      "action": {
+        "type": "boost",
+        "delta": 30.0,
+        "reason": "Research front-door boost: literature survey / research status wording detected."
+      },
+      "record": {
+        "slug": "research"
+      }
+    },
+    {
+      "when": {
+        "any": [
+          { "query_contains": "实验分析" },
+          { "query_contains": "实验设计" },
+          { "query_contains": "实验方案" }
+        ]
+      },
+      "action": {
+        "type": "boost",
+        "delta": 30.0,
+        "reason": "Research front-door boost: experiment/execution lane wording detected."
       },
       "record": {
         "slug": "research"
@@ -1125,8 +1176,8 @@
       },
       "action": {
         "type": "boost",
-        "delta": 15,
-        "reason": "Research front-door mode boost: research context detected (light front-door, avoid double-boost overlap with query_contains 科研)."
+        "delta": 40,
+        "reason": "Research front-door mode boost: research context detected. Balanced with research-workspace +50 (workspace is more specific, front-door broader)."
       },
       "record": {
         "slug": "research"
