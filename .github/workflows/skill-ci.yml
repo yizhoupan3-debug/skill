@@ -59,7 +59,7 @@ jobs:
       - run: uv sync --frozen
 
       - name: Enable sccache + mold
-        uses: mozilla/sccache-action@v0.0.8
+        uses: mozilla/sccache-action@v0.0.10
         with:
           version: "latest"
 
@@ -382,7 +382,7 @@ jobs:
         with:
           cache-directories: /tmp/skill-cargo-target
       - name: Enable sccache + mold
-        uses: mozilla/sccache-action@v0.0.8
+        uses: mozilla/sccache-action@v0.0.10
         with:
           version: "latest"
       - name: Install mold linker
@@ -409,7 +409,7 @@ jobs:
         with:
           cache-directories: /tmp/skill-cargo-target
       - name: Enable sccache + mold
-        uses: mozilla/sccache-action@v0.0.8
+        uses: mozilla/sccache-action@v0.0.10
         with:
           version: "latest"
       - name: Install mold linker
