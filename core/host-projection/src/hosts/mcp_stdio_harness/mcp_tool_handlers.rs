@@ -223,7 +223,7 @@ impl ToolHandler for ChainDagTools {
 }
 
 // ---------------------------------------------------------------------------
-// GoalCloseoutTools (4 tools: closeout_gate, closeout_record_write, goal_state_manage, goal_state_read)
+// GoalCloseoutTools (4 tools: closeout_gate, goal_state_manage, goal_state_read)
 // ---------------------------------------------------------------------------
 
 pub struct GoalCloseoutTools;
@@ -231,11 +231,9 @@ impl ToolHandler for GoalCloseoutTools {
     fn tool_names(&self) -> &[&'static str] {
         &[
             "closeout_gate",
-            "closeout_record_write",
             "goal_state_manage",
             "goal_state_read",
             "record_evidence",
-            "session_checkpoint",
         ]
     }
     fn dispatch(

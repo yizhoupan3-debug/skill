@@ -16,7 +16,6 @@ Object {
         ],
         "confirmation_gate_tools": Array [
             String("goal_state_manage"),
-            String("closeout_record_write"),
             String("task_create"),
             String("task_complete"),
             String("task_focus"),

@@ -1,8 +1,8 @@
 {
   "schema_version": "mcp-tool-registry-v2",
   "scope": {
-    "total_count": 116,
-    "builtin_count": 31,
+    "total_count": 114,
+    "builtin_count": 29,
     "research_count": 51,
     "independent_count": 15,
     "external_count": 19,
@@ -1228,83 +1228,6 @@
       }
     },
     {
-      "slug": "closeout_record_write",
-      "display_name": "收尾记录写入",
-      "description": "生成收尾记录并归档到 closeout report",
-      "layer": "builtin",
-      "dispatch_domain": "domain:framework",
-      "owner": "framework",
-      "trigger_hints": [
-        "closeout",
-        "收尾",
-        "record",
-        "记录",
-        "归档"
-      ],
-      "mcp_server": "router-rs-framework",
-      "tool_flags": [],
-      "input_schema": {
-        "type": "object",
-        "required": [
-          "task_id",
-          "summary",
-          "verification_status"
-        ],
-        "properties": {
-          "task_id": {
-            "type": "string",
-            "description": "任务 ID"
-          },
-          "summary": {
-            "type": "string",
-            "description": "收尾摘要"
-          },
-          "verification_status": {
-            "type": "string",
-            "enum": [
-              "passed",
-              "failed",
-              "partial",
-              "not_run"
-            ],
-            "description": "验证状态"
-          },
-          "changed_files": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "description": "变更文件列表（可选）"
-          },
-          "commands_run": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "description": "已执行命令列表（可选）"
-          },
-          "blockers": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "description": "阻塞项列表（可选）"
-          },
-          "risks": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "description": "风险项列表（可选）"
-          },
-          "notes": {
-            "type": "string",
-            "description": "备注（可选）"
-          }
-        }
-      }
-    },
-    {
       "slug": "research_review_dimensions",
       "display_name": "审稿维度",
       "description": "获取审稿维度 prompt，支持多轮对抗审稿",
@@ -1858,27 +1781,6 @@
             "description": "可信度（0.0-1.0，可选）"
           }
         }
-      }
-    },
-    {
-      "slug": "session_checkpoint",
-      "display_name": "会话快照",
-      "description": "保存当前会话进度的 checkpoint 快照。快照范围：激活的 task 状态、evidence 索引、goal 状态、agent 上下文。恢复通过宿主重启时自动载入最近的 checkpoint。",
-      "layer": "builtin",
-      "dispatch_domain": "domain:framework",
-      "owner": "framework",
-      "trigger_hints": [
-        "checkpoint",
-        "快照",
-        "保存进度",
-        "会话快照"
-      ],
-      "mcp_server": "router-rs-framework",
-      "tool_flags": [],
-      "input_schema": {
-        "type": "object",
-        "required": [],
-        "properties": {}
       }
     },
     {

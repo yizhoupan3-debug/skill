@@ -21,8 +21,7 @@ const KNOWN_TOOL_SLUGS: &[&str] = &[
     "math_asymptotic_estimate",
     // Goal / task / lifecycle
     "goal_state_manage", "goal_state_read",
-    "record_evidence", "session_checkpoint",
-    "closeout_gate", "closeout_record_write",
+    "record_evidence", "closeout_gate",
     // GitHub / code
     "gh_source_gate",
     "codegraph_search", "codegraph_impact",
