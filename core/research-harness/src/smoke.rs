@@ -296,6 +296,10 @@ pub(crate) fn run_experiments(
                         };
                         if let Some(ref ck) = cache_key {
                             if let Some(cached_val) = cache.get(ck) {
+                                tracing::debug!(
+                                    run_id = %run.run_id,
+                                    "[smoke] cache HIT — returning cached result"
+                                );
                                 return ExperimentResult {
                                 run_id: run.run_id,
                                 template_name: run.template_name,
@@ -311,9 +315,18 @@ pub(crate) fn run_experiments(
                         }
 
                         // Execute
+                        tracing::debug!(
+                            run_id = %run.run_id, timeout_ms,
+                            "[smoke] starting experiment"
+                        );
                         let start = Instant::now();
                         let mut result = execute_single(&run, timeout_ms);
                         result.wall_time_ms = start.elapsed().as_millis() as u64;
+                        tracing::debug!(
+                            run_id = %run.run_id, wall_time_ms = result.wall_time_ms,
+                            exit_code = result.exit_code,
+                            "[smoke] experiment completed"
+                        );
 
                         // Cache the result (only when cache is active)
                         if let Some(ck) = &cache_key {
@@ -611,12 +624,16 @@ fn build_response(results: &[ExperimentResult]) -> Value {
         })
         .collect();
 
+    let avg_time = results.iter().map(|r| r.wall_time_ms).sum::<u64>().max(1) as f64 / total.max(1) as f64;
+
     json!({
         "experiments": experiments,
         "summary": {
             "total": total,
             "succeeded": succeeded,
             "failed": failed,
+            "avg_wall_time_ms": avg_time.round() as u64,
+            "note": format!("Results also at artifacts/research-log/smoke/results.jsonl (one JSON line per experiment)"),
         }
     })
 }

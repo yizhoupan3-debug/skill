@@ -52,7 +52,9 @@ pub(super) fn tool_research_evaluate(arguments: &Value) -> Result<String, Framew
 
     let concurrency = arguments.get("concurrency").and_then(Value::as_u64).map(|c| c as usize).unwrap_or(4).clamp(1, 32);
     let timeout_ms = arguments.get("timeout_ms").and_then(Value::as_u64).unwrap_or(60_000);
-    let no_cache = arguments.get("no_cache").and_then(Value::as_bool).unwrap_or(false);
+    let no_cache = arguments.get("no_cache").and_then(Value::as_bool)
+        // Default to true: each evaluation has unique template/params, cache never hits
+        .unwrap_or(true);
 
     let baseline_template = get_str(baseline, "template")?;
     let candidate_template = get_str(candidate, "template")?;

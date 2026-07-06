@@ -74,7 +74,9 @@ pub(super) fn tool_research_ablation(arguments: &Value) -> Result<String, Framew
     let no_cache = arguments
         .get("no_cache")
         .and_then(Value::as_bool)
-        .unwrap_or(false);
+        // Default to true: each ablation component has unique params
+        // (SMOKE_ABLATION_REMOVED), so cache never hits.
+        .unwrap_or(true);
 
     // Build component specs
     let mut component_specs = Vec::with_capacity(components.len());
