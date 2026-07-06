@@ -451,8 +451,8 @@ pub fn build_user_prompt_context_injection(
                     .unwrap_or_default()
                     .as_nanos();
                 let task_id = format!("auto-{nanos}");
-                let goal_text = if prompt.len() > 500 {
-                    format!("{}…", &prompt[..prompt.floor_char_boundary(500)])
+                let goal_text = if prompt.len() > 200 {
+                    format!("{}…", &prompt[..prompt.floor_char_boundary(200)])
                 } else {
                     prompt.to_string()
                 };

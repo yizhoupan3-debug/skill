@@ -24,7 +24,7 @@ use crate::util::{
 use core_errors::FrameworkError;
 type Result<T> = std::result::Result<T, FrameworkError>;
 
-const MAX_POST_TOOL_EVIDENCE_ARTIFACTS: usize = 120;
+const MAX_POST_TOOL_EVIDENCE_ARTIFACTS: usize = 60;
 
 /// Compute a fast integrity hash for the evidence chain (EV-F007).
 /// Uses DefaultHasher (SipHash); this is tamper-detection, not cryptographic security.
@@ -209,7 +209,7 @@ pub fn append_evidence_index_merged_row(
         }
 
         if rows.len() > MAX_POST_TOOL_EVIDENCE_ARTIFACTS {
-            // Keep at most 80 success rows + fill remaining budget with non-success rows
+            // Keep at most 40 success rows + fill remaining budget with non-success rows
             let success_budget = (MAX_POST_TOOL_EVIDENCE_ARTIFACTS * 2 / 3).min(rows.len());
             let mut success_rows: Vec<Map<String, Value>> = Vec::new();
             let mut other_rows: Vec<Map<String, Value>> = Vec::new();
@@ -304,7 +304,7 @@ pub fn framework_hook_evidence_append(payload: Value) -> Result<Value> {
         }));
     }
 
-    let preview_store = truncate_utf8_chars(preview_trim, 2000);
+    let preview_store = truncate_utf8_chars(preview_trim, 120);
     let mut entry = Map::new();
     entry.insert("kind".to_string(), json!("external_hook_verification"));
     entry.insert("source".to_string(), json!(source.trim()));

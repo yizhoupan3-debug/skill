@@ -177,12 +177,15 @@ pub struct CloseoutCommand {
     #[serde(default)]
     pub exit_code: i64,
     #[allow(dead_code)]
+    #[serde(skip_serializing)]
     #[serde(default)]
     pub duration_ms: Option<i64>,
     #[allow(dead_code)]
+    #[serde(skip_serializing)]
     #[serde(default)]
     pub stdout_summary: Option<String>,
     #[allow(dead_code)]
+    #[serde(skip_serializing)]
     #[serde(default)]
     pub stderr_summary: Option<String>,
 }
