@@ -35,6 +35,7 @@ mcp-tool-registry = { path = "../mcp-tool-registry" }
 routing-engine = { path = "../routing-engine" }
 tool-routing-engine = { path = "../tool-routing-engine" }
 routing-core = { path = "../routing-core" }
+chain-engine = { path = "../chain-engine" }
 
 [build-dependencies]
 serde_json.workspace = true

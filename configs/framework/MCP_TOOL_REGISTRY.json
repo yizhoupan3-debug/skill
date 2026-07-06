@@ -1,8 +1,8 @@
 {
   "schema_version": "mcp-tool-registry-v2",
   "scope": {
-    "total_count": 113,
-    "builtin_count": 28,
+    "total_count": 118,
+    "builtin_count": 33,
     "research_count": 51,
     "independent_count": 15,
     "external_count": 19,
@@ -232,9 +232,7 @@
         "clear"
       ],
       "mcp_server": "router-rs-framework",
-      "tool_flags": [
-        "no_routing"
-      ],
+      "tool_flags": [],
       "input_schema": {
         "type": "object",
         "required": [
@@ -482,6 +480,156 @@
       "tool_flags": [
         "no_routing"
       ],
+      "input_schema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "slug": "chain_dag_init",
+      "display_name": "DAG 链创建",
+      "description": "创建一个带有依赖图的 DAG 链（含循环检测 + 条件分支 + 并行组 + 重试策略 + 超时组）",
+      "layer": "builtin",
+      "dispatch_domain": "domain:chain",
+      "owner": "framework",
+      "trigger_hints": [
+        "dag",
+        "chain",
+        "链",
+        "初始化",
+        "创建链",
+        "依赖图",
+        "task chain"
+      ],
+      "mcp_server": "router-rs-framework",
+      "tool_flags": [],
+      "input_schema": {
+        "type": "object",
+        "required": ["chain_id", "tasks"],
+        "properties": {
+          "chain_id": {
+            "type": "string",
+            "description": "链 ID（唯一标识）"
+          },
+          "tasks": {
+            "type": "array",
+            "description": "任务描述数组，每个元素含 task_id、depends_on、condition 等"
+          },
+          "global_config": {
+            "type": "object",
+            "description": "全局配置（max_concurrent_tasks、default_retry、on_any_failure）"
+          }
+        }
+      }
+    },
+    {
+      "slug": "chain_dag_tick",
+      "display_name": "DAG 链推进",
+      "description": "手动推进一次 DAG 调度：找可运行任务、执行、更新状态、处理超时/重试/失败",
+      "layer": "builtin",
+      "dispatch_domain": "domain:chain",
+      "owner": "framework",
+      "trigger_hints": [
+        "dag",
+        "tick",
+        "推进",
+        "调度",
+        "执行下一步"
+      ],
+      "mcp_server": "router-rs-framework",
+      "tool_flags": [],
+      "input_schema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "slug": "chain_dag_status",
+      "display_name": "DAG 链状态",
+      "description": "读取完整 DAG 链状态视图（含拓扑层级、任务状态、重试信息）",
+      "layer": "builtin",
+      "dispatch_domain": "domain:chain",
+      "owner": "framework",
+      "trigger_hints": [
+        "dag",
+        "status",
+        "状态",
+        "进度",
+        "链状态"
+      ],
+      "mcp_server": "router-rs-framework",
+      "tool_flags": [],
+      "input_schema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "slug": "chain_dag_retry",
+      "display_name": "DAG 链重试",
+      "description": "手动重试一个失败的任务（重置为 Pending）",
+      "layer": "builtin",
+      "dispatch_domain": "domain:chain",
+      "owner": "framework",
+      "trigger_hints": [
+        "dag",
+        "retry",
+        "重试",
+        "失败重试"
+      ],
+      "mcp_server": "router-rs-framework",
+      "tool_flags": [],
+      "input_schema": {
+        "type": "object",
+        "required": ["task_id"],
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "description": "要重试的任务 ID"
+          }
+        }
+      }
+    },
+    {
+      "slug": "chain_dag_skip",
+      "display_name": "DAG 链跳过",
+      "description": "手动跳过一个任务（标记为 Skipped）",
+      "layer": "builtin",
+      "dispatch_domain": "domain:chain",
+      "owner": "framework",
+      "trigger_hints": [
+        "dag",
+        "skip",
+        "跳过"
+      ],
+      "mcp_server": "router-rs-framework",
+      "tool_flags": [],
+      "input_schema": {
+        "type": "object",
+        "required": ["task_id"],
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "description": "要跳过的任务 ID"
+          }
+        }
+      }
+    },
+    {
+      "slug": "chain_dag_resume",
+      "display_name": "DAG 链恢复",
+      "description": "恢复一个被暂停的 DAG 链",
+      "layer": "builtin",
+      "dispatch_domain": "domain:chain",
+      "owner": "framework",
+      "trigger_hints": [
+        "dag",
+        "resume",
+        "恢复",
+        "继续"
+      ],
+      "mcp_server": "router-rs-framework",
+      "tool_flags": [],
       "input_schema": {
         "type": "object",
         "properties": {}

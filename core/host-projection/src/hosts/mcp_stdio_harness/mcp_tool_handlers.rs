@@ -186,6 +186,43 @@ impl ToolHandler for LoopControlTools {
 }
 
 // ---------------------------------------------------------------------------
+// ChainDagTools (6 tools: chain_dag_init, chain_dag_tick, chain_dag_status,
+//                chain_dag_retry, chain_dag_skip, chain_dag_resume)
+// ---------------------------------------------------------------------------
+
+pub struct ChainDagTools;
+impl ToolHandler for ChainDagTools {
+    fn tool_names(&self) -> &[&'static str] {
+        &[
+            "chain_dag_init",
+            "chain_dag_tick",
+            "chain_dag_status",
+            "chain_dag_retry",
+            "chain_dag_skip",
+            "chain_dag_resume",
+        ]
+    }
+    fn dispatch(
+        &self,
+        tool_name: &str,
+        args: &Value,
+        ctx: &ToolCallContext,
+    ) -> Result<String, FrameworkError> {
+        match tool_name {
+            "chain_dag_init" => Ok(tool_chain_dag_init(args, &ctx.repo_root)?),
+            "chain_dag_tick" => Ok(tool_chain_dag_tick(args, &ctx.repo_root)?),
+            "chain_dag_status" => Ok(tool_chain_dag_status(args, &ctx.repo_root)?),
+            "chain_dag_retry" => Ok(tool_chain_dag_retry(args, &ctx.repo_root)?),
+            "chain_dag_skip" => Ok(tool_chain_dag_skip(args, &ctx.repo_root)?),
+            "chain_dag_resume" => Ok(tool_chain_dag_resume(args, &ctx.repo_root)?),
+            _ => Err(FrameworkError::not_found(format!(
+                "ChainDagTools: unknown tool: {tool_name}"
+            ))),
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // GoalCloseoutTools (4 tools: closeout_gate, closeout_record_write, goal_state_manage, goal_state_read)
 // ---------------------------------------------------------------------------
 

@@ -131,10 +131,28 @@ pub fn is_task_profile(repo_root: Option<&std::path::Path>, _text: &str) -> bool
     if let Some(v) = TEST_TASK_OVERRIDE.with(|c| c.get()) {
         return v;
     }
-    let Some(_root) = repo_root else {
+    let Some(root) = repo_root else {
         return false;
     };
-    // Single-conversation mode: no pointer fallback for goal state lookup.
-    // (Future: check GOAL_STATE.lifecycle_profile for "task")
+    // Check for active GOAL_STATE.json with lifecycle_profile == "task"
+    // to activate goal-drive mode.
+    if let Ok(pointers) = std::fs::read_to_string(root.join("artifacts/current/TASK_POINTERS.json")) {
+        if let Ok(v) = serde_json::from_str::<serde_json::Value>(&pointers) {
+            if let Some(active) = v.get("active_task_id").and_then(|a| a.as_str()) {
+                let goal_path = root
+                    .join("artifacts/current")
+                    .join(active)
+                    .join("GOAL_STATE.json");
+                if let Ok(gs) = std::fs::read_to_string(&goal_path) {
+                    if let Ok(gv) = serde_json::from_str::<serde_json::Value>(&gs) {
+                        return gv
+                            .get("lifecycle_profile")
+                            .and_then(|p| p.as_str())
+                            .is_some_and(|p| p == "task");
+                    }
+                }
+            }
+        }
+    }
     false
 }

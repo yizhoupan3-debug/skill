@@ -99,7 +99,8 @@
         "task_create",
         "task_complete",
         "task_focus",
-        "task_chain_advance"
+        "task_chain_advance",
+        "goal_state_manage"
       ]
     },
     {

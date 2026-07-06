@@ -171,6 +171,8 @@ mod task_tools;
 use task_tools::*;
 mod output_tools;
 use output_tools::*;
+mod chain_tools;
+use chain_tools::*;
 mod mcp_tool_handlers;
 use mcp_tool_handlers::*;
 #[cfg(any(test, feature = "test-support"))]
@@ -307,6 +309,7 @@ pub(super) fn dispatch_tool(
         r.register(ToolDomainTools);
         r.register(TaskCrudTools);
         r.register(LoopControlTools);
+        r.register(ChainDagTools);
         r.register(GoalCloseoutTools);
         r.register(TaskOutputTools);
         r
