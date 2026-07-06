@@ -345,6 +345,10 @@ pub(crate) fn run_experiments(
                 .collect()
         });
         all_results.extend(chunk_results);
+
+        // Flush cache to disk once per chunk (not once per experiment).
+        // This reduces disk writes from O(N) to O(N/concurrency).
+        cache.flush();
     }
 
     all_results

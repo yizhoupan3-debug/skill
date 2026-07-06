@@ -190,15 +190,16 @@ pub fn run_ablation(repo_root: &Path, config: &AblationConfig) -> Result<Ablatio
         &artifacts_dir,
     );
 
-    // Separate baseline from component results
+    // Separate baseline from component results by run_id (not index).
+    // Baseline run_id always ends with "-baseline".
     let mut baseline_result: Option<ExperimentResult> = None;
-    let mut component_results: Vec<(usize, ExperimentResult)> = Vec::new();
+    let mut component_results: Vec<ExperimentResult> = Vec::new();
 
-    for (idx, result) in results.into_iter().enumerate() {
-        if idx == 0 {
+    for result in results.into_iter() {
+        if result.run_id.ends_with("-baseline") {
             baseline_result = Some(result);
         } else {
-            component_results.push((idx - 1, result));
+            component_results.push(result);
         }
     }
 
@@ -216,10 +217,10 @@ pub fn run_ablation(repo_root: &Path, config: &AblationConfig) -> Result<Ablatio
     let mut matrix_rows = Vec::with_capacity(config.components.len());
 
     for (comp_idx, comp) in config.components.iter().enumerate() {
-        let ablated = &component_results
+        let expected_run_id = format!("{}-abl-{comp_idx}-{}", config.template, comp.name);
+        let ablated = component_results
             .iter()
-            .find(|(i, _)| *i == comp_idx)
-            .map(|(_, r)| r)
+            .find(|r| r.run_id == expected_run_id)
             .cloned()
             .unwrap_or_else(|| {
                 // Fallback: create a failed result entry

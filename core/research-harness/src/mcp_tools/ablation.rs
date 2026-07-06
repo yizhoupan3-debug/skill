@@ -3,21 +3,6 @@
 
 use core_errors::FrameworkError;
 use serde_json::Value;
-use std::path::PathBuf;
-
-/// Resolve the framework project root by walking up from CWD.
-fn resolve_repo_root() -> PathBuf {
-    if let Ok(cwd) = std::env::current_dir() {
-        let mut dir = Some(cwd.as_path());
-        while let Some(d) = dir {
-            if d.join("templates").exists() || d.join(".git").exists() {
-                return d.to_path_buf();
-            }
-            dir = d.parent();
-        }
-    }
-    std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
-}
 
 /// Run component-level ablation analysis.
 ///
@@ -151,7 +136,7 @@ pub(super) fn tool_research_ablation(arguments: &Value) -> Result<String, Framew
         no_cache,
     };
 
-    let repo_root = resolve_repo_root();
+    let repo_root = crate::mcp_tools::resolve_repo_root();
     let result = crate::ablation::run_ablation(&repo_root, &config)?;
 
     // Serialize the matrix as the response

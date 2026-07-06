@@ -8,6 +8,10 @@
 //! LRU eviction at capacity limit. TTL check on read (stale entries skipped).
 //!
 //! # Persistence
+//! **In-memory writes are decoupled from disk persistence** — `set()` updates only the
+//! in-memory cache. Explicit `flush()` writes to disk. This avoids O(N) disk writes in
+//! parallel experiment runs where N experiments each call `set()`.
+//!
 //! Atomic write (temp + fsync + rename) via core-state-utils pattern.
 //! Cross-process access protected by `flock` on a sentinel lock file.
 
@@ -17,7 +21,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
-use std::sync::{OnceLock, RwLock};
+use std::sync::{OnceLock, RwLock, atomic::{AtomicBool, Ordering}};
 use std::time::{Duration, Instant};
 
 // ── Constants ──
@@ -43,6 +47,7 @@ pub(crate) struct ExperimentCache {
     capacity: usize,
     ttl: Duration,
     pub no_cache: bool,
+    dirty: AtomicBool,  // true when in-memory cache has changes not yet on disk
 }
 
 impl ExperimentCache {
@@ -53,6 +58,7 @@ impl ExperimentCache {
             capacity: DEFAULT_CAPACITY,
             ttl: Duration::from_secs(DEFAULT_TTL_SECS),
             no_cache,
+            dirty: AtomicBool::new(false),
         }
     }
 
@@ -63,15 +69,19 @@ impl ExperimentCache {
         })
     }
 
-    /// Compute a stable cache key for a template + params combination.
+    /// Compute a stable cache key for a template + content hash + params combination.
     ///
-    /// Uses SHA-256 over the template file content (not mtime) so that
-    /// filesystems with second-only mtime precision don't produce stale hits.
-    pub fn cache_key(template_path: &Path, template_name: &str, params: &HashMap<String, String>) -> String {
-        let content_hash = get_template_content_hash(template_path);
-
-        // Use BTreeMap for deterministic key->value iteration order (fixes pre-existing bug
-        // where collect-to-HashMap shuffled field order across calls).
+    /// This version takes a pre-computed `content_hash` to avoid re-hashing the
+    /// template file for every experiment in a batch. Use `template_hash(path)`
+    /// to pre-compute the hash, then call this function for each params variation.
+    ///
+    /// See also [`cache_key()`](Self::cache_key) for the legacy one-shot variant.
+    pub fn cache_key_with_hash(
+        template_name: &str,
+        content_hash: &str,
+        params: &HashMap<String, String>,
+    ) -> String {
+        // Use BTreeMap for deterministic key->value iteration order
         let sorted: std::collections::BTreeMap<&String, &String> = params.iter().collect();
         let params_json = serde_json::to_string(&sorted).unwrap_or_default();
 
@@ -82,6 +92,16 @@ impl ExperimentCache {
         hasher.update(b"|");
         hasher.update(params_json.as_bytes());
         hex::encode(hasher.finalize())
+    }
+
+    /// Compute a stable cache key for a template + params combination (one-shot).
+    ///
+    /// Convenience wrapper that computes the content hash internally.
+    /// For batch operations on the same template, prefer:
+    /// `cache_key_with_hash(name, &template_hash(path), params)`.
+    pub fn cache_key(template_path: &Path, template_name: &str, params: &HashMap<String, String>) -> String {
+        let content_hash = get_template_content_hash(template_path);
+        Self::cache_key_with_hash(template_name, &content_hash, params)
     }
 
     pub fn get(&self, key: &str) -> Option<Value> {
@@ -96,6 +116,8 @@ impl ExperimentCache {
         Some(entry.result.clone())
     }
 
+    /// Insert into in-memory cache only. Does NOT persist to disk.
+    /// Call [`flush()`](Self::flush) to write pending changes to disk.
     pub fn set(&self, key: String, result: Value) {
         if self.no_cache {
             return;
@@ -121,7 +143,25 @@ impl ExperimentCache {
             cached_at: Instant::now(),
         });
 
-        // Flush to disk best-effort
+        self.dirty.store(true, Ordering::Release);
+    }
+
+    /// Explicitly persist in-memory cache to disk.
+    ///
+    /// This is a no-op if no changes have been made since the last flush.
+    /// Thread-safe: only one writer will actually write while other concurrent
+    /// callers skip.
+    pub fn flush(&self) {
+        if self.no_cache {
+            return;
+        }
+        if !self.dirty.swap(false, Ordering::AcqRel) {
+            return; // nothing to write
+        }
+        let map = match self.cache().read() {
+            Ok(m) => m,
+            Err(_) => return,
+        };
         self.persist_to_disk(&map);
     }
 
@@ -192,7 +232,7 @@ impl ExperimentCache {
         }
         let content = serde_json::to_string(&Value::Object(serializable)).unwrap_or_default();
 
-        // Atomic write: temp file + fsync + rename (matching core-state-utils pattern)
+        // Atomic write: temp file + fsync + rename
         let final_path = self.cache_disk_path();
         let pid = std::process::id();
         let tmp_path = final_path.with_extension(format!("json.tmp-{pid}"));
@@ -216,8 +256,6 @@ impl ExperimentCache {
                     );
                 }
             }
-        } else {
-            // tmp_path could not be opened — nothing to clean up
         }
         let _ = fs::remove_file(&tmp_path);
     }
@@ -250,13 +288,16 @@ fn hash_file_content(path: &Path) -> String {
 
 /// Acquire a flock on `.cache.lock`. Returns a guard that releases the lock on drop.
 fn acquire_cache_lock(lock_path: &Path, exclusive: bool) -> Option<CacheLockGuard> {
-    let file = fs::OpenOptions::new()
+    let file = match fs::OpenOptions::new()
         .create(true)
         .truncate(false)
         .read(true)
         .write(true)
         .open(lock_path)
-        .ok()?;
+    {
+        Ok(f) => f,
+        Err(_) => return None,
+    };
 
     let deadline = Instant::now() + Duration::from_millis(LOCK_ACQUIRE_TIMEOUT_MS);
     let mut delay_ms = 10u64;
@@ -285,7 +326,6 @@ struct CacheLockGuard(fs::File);
 impl Drop for CacheLockGuard {
     fn drop(&mut self) {
         // Lock released automatically when `self.0` is closed.
-        // No explicit unlock needed — fs2::FileExt drops the lock on file close.
     }
 }
 
@@ -366,5 +406,45 @@ mod tests {
         // Set something first
         cache.set("k".into(), json!("v"));
         assert!(cache.get("k").is_none(), "no_cache should skip cache reads");
+    }
+
+    #[test]
+    fn flush_persists_to_disk() {
+        let tmp = tempfile::tempdir().unwrap();
+        let artifacts_dir = tmp.path().join("artifacts/smoke");
+        fs::create_dir_all(&artifacts_dir).unwrap();
+
+        let cache = ExperimentCache::new(&artifacts_dir, false);
+        cache.set("k1".into(), json!("v1"));
+        cache.set("k2".into(), json!("v2"));
+
+        // Flush to disk
+        cache.flush();
+
+        // New cache instance on same dir should load from disk
+        let cache2 = ExperimentCache::new(&artifacts_dir, false);
+        assert_eq!(cache2.get("k1"), Some(json!("v1")));
+        assert_eq!(cache2.get("k2"), Some(json!("v2")));
+    }
+
+    #[test]
+    fn flush_noop_when_not_dirty() {
+        let tmp = tempfile::tempdir().unwrap();
+        let artifacts_dir = tmp.path().join("artifacts/smoke");
+        fs::create_dir_all(&artifacts_dir).unwrap();
+        let path = artifacts_dir.join("cache.json");
+
+        let cache = ExperimentCache::new(&artifacts_dir, false);
+        cache.set("k".into(), json!("v"));
+        cache.flush(); // first flush writes
+        let mtime1 = std::fs::metadata(&path).ok()
+            .and_then(|m| m.modified().ok());
+
+        // Second flush with no new changes should NOT write to disk
+        cache.flush();
+        let mtime2 = std::fs::metadata(&path).ok()
+            .and_then(|m| m.modified().ok());
+
+        assert_eq!(mtime1, mtime2, "flush should be noop when cache is not dirty");
     }
 }

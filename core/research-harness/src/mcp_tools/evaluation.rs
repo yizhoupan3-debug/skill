@@ -4,19 +4,6 @@
 use core_errors::FrameworkError;
 use serde_json::Value;
 
-fn resolve_repo_root() -> std::path::PathBuf {
-    if let Ok(cwd) = std::env::current_dir() {
-        let mut dir = Some(cwd.as_path());
-        while let Some(d) = dir {
-            if d.join("templates").exists() || d.join(".git").exists() {
-                return d.to_path_buf();
-            }
-            dir = d.parent();
-        }
-    }
-    std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."))
-}
-
 /// Run solution evaluation: compare baseline vs candidate across dimensions.
 pub(super) fn tool_research_evaluate(arguments: &Value) -> Result<String, FrameworkError> {
     let baseline = arguments.get("baseline").and_then(Value::as_object).ok_or_else(|| {
@@ -91,7 +78,7 @@ pub(super) fn tool_research_evaluate(arguments: &Value) -> Result<String, Framew
         no_cache,
     };
 
-    let repo_root = resolve_repo_root();
+    let repo_root = crate::mcp_tools::resolve_repo_root();
     let result = crate::evaluation::run_evaluation(&repo_root, &config)?;
 
     let json = crate::evaluation::evaluation_to_json(&result);

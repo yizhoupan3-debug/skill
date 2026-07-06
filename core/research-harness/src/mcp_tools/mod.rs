@@ -51,6 +51,7 @@
 
 use core_errors::FrameworkError;
 use serde_json::Value;
+use std::path::PathBuf;
 
 /// Maximum number of elements in any array-type parameter to a research tool.
 /// Prevents single-call memory exhaustion via malicious oversized arrays.
@@ -59,6 +60,21 @@ pub(super) const MAX_ARRAY_ELEMENTS: usize = 10_000;
 /// Maximum number of key-value arguments in a tool call.
 /// Prevents single-call exhaustion via oversized argument maps.
 pub(super) const MAX_ARGS_ELEMENTS: usize = 100;
+
+/// Resolve the framework project root by walking up from CWD.
+/// Shared utility — avoids duplicating this function across 3 tool modules.
+pub(super) fn resolve_repo_root() -> PathBuf {
+    if let Ok(cwd) = std::env::current_dir() {
+        let mut dir = Some(cwd.as_path());
+        while let Some(d) = dir {
+            if d.join("templates").exists() || d.join(".git").exists() {
+                return d.to_path_buf();
+            }
+            dir = d.parent();
+        }
+    }
+    std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
+}
 
 // ── Module declarations ──
 
