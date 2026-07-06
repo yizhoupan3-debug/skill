@@ -63,9 +63,11 @@ pub(super) const MAX_ARGS_ELEMENTS: usize = 100;
 // ── Module declarations ──
 
 mod aigc;
+mod ablation;
 mod asymptotic;
 mod auto_prover;
 mod claim;
+mod evaluation;
 mod formal;
 mod literature;
 mod proof_dag;
@@ -82,6 +84,7 @@ mod z3;
 // ── Function imports ──
 
 use self::aigc::{tool_research_aigc_check, tool_research_aigc_humanize};
+use self::ablation::tool_research_ablation;
 use self::asymptotic::{tool_math_asymptotic_chain, tool_math_asymptotic_estimate};
 use self::auto_prover::{
     tool_math_auto_prove, tool_math_check_homomorphism, tool_math_identity_chain,
@@ -89,6 +92,7 @@ use self::auto_prover::{
     tool_math_prove_inequality, tool_math_tighten_bounds, tool_math_witness_consistency,
 };
 use self::claim::tool_research_claim_drift;
+use self::evaluation::tool_research_evaluate;
 use self::formal::tool_verification_formal;
 use self::literature::tool_verification_literature;
 use self::proof_dag::{
@@ -128,6 +132,8 @@ pub fn handle_research_tool(name: &str, arguments: &Value) -> Result<String, Fra
         "research_claim_drift" => Ok(tool_research_claim_drift(arguments)?),
         "research_review_loop" => Ok(tool_research_review_loop(arguments)?),
         "research_smoke" => Ok(tool_research_smoke(arguments)?),
+        "research_ablation" => Ok(tool_research_ablation(arguments)?),
+        "research_evaluate" => Ok(tool_research_evaluate(arguments)?),
         "research_literature_search" => Ok(tool_literature_search(arguments)?),
         _ if name.starts_with("math_") => Ok(math_tool_dispatch(name, arguments)?),
         _ if name.starts_with("research_verification_") => {

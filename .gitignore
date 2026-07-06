@@ -205,3 +205,5 @@ logs/
 *.snap.new
 .z3-trace
 tmp_report.json
+memory/
+smoke-enhancement-plan.md

@@ -262,6 +262,19 @@ enum Commands {
         #[arg(short, long)]
         claims: Vec<String>,
     },
+    /// Run smoke tests (research-harness experiment engine)
+    SmokeTest {
+        #[arg(short, long)]
+        template: String,
+        #[arg(short, long)]
+        params: String,
+        #[arg(short, long, default_value_t = 4)]
+        concurrency: usize,
+        #[arg(long, default_value_t = 60_000)]
+        timeout_ms: u64,
+        #[arg(long)]
+        no_cache: bool,
+    },
     /// Barrier escalation (loop bridge)
     Barrier {
         #[arg(short, long)]
@@ -936,6 +949,36 @@ fn cmd_barrier(
     Ok(())
 }
 
+fn cmd_smoke_test(
+    template: &str,
+    params_json: &str,
+    concurrency: usize,
+    timeout_ms: u64,
+    no_cache: bool,
+) -> Result<()> {
+    let params: Vec<serde_json::Value> = serde_json::from_str(params_json)
+        .map_err(|e| anyhow::anyhow!("invalid params JSON: {e}"))?;
+
+    let args = serde_json::json!({
+        "template": template,
+        "params": params,
+        "concurrency": concurrency,
+        "timeout_ms": timeout_ms,
+        "no_cache": no_cache,
+    });
+
+    let cwd = std::env::current_dir()?;
+    let repo_root = cwd
+        .ancestors()
+        .find(|p| p.join("templates").exists() || p.join(".git").exists())
+        .unwrap_or(&cwd)
+        .to_path_buf();
+
+    let result = research_harness::smoke::run_smoke_tests(&repo_root, &args)?;
+    println!("{result}");
+    Ok(())
+}
+
 // ── Entry Point ──
 
 fn main() -> Result<()> {
@@ -1129,6 +1172,13 @@ fn main() -> Result<()> {
             differentiation_strategy,
             &claims,
         )?,
+        Commands::SmokeTest {
+            template,
+            params,
+            concurrency,
+            timeout_ms,
+            no_cache,
+        } => cmd_smoke_test(&template, &params, concurrency, timeout_ms, no_cache)?,
         Commands::Barrier {
             workspace,
             problem,

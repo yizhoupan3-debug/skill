@@ -536,6 +536,93 @@ pub fn tool_definitions() -> Vec<Value> {
             }),
         ),
         tool_def(
+            "research_ablation",
+            "组件级 ablation 分析 — 跑基线 + 逐个去部件，返回贡献矩阵（每部件增益/损害/推荐）",
+            json!({
+                "type": "object",
+                "properties": {
+                    "template": {"type": "string", "description": "模板文件名（位于 templates/ 下的可执行文件）"},
+                    "baseline_params": {
+                        "type": "object",
+                        "additionalProperties": {"type": "string"},
+                        "description": "基线参数键值对，如 {\"lr\": \"0.01\", \"bs\": \"32\"}"
+                    },
+                    "components": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "name": {"type": "string", "description": "部件名称"},
+                                "description": {"type": "string", "description": "部件描述"},
+                                "ablation_params": {
+                                    "type": "object",
+                                    "additionalProperties": {"type": "string"},
+                                    "description": "可选—去部件后使用的参数覆盖（默认同 baseline_params）"
+                                }
+                            },
+                            "required": ["name"]
+                        },
+                        "description": "要测试的部件列表 — 每个元素定义一个独立 ablation"
+                    },
+                    "metrics": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "关注的指标名（如 [\"accuracy\", \"latency_ms\"]）— 空则自动检测所有数值字段"
+                    },
+                    "concurrency": {"type": "integer", "minimum": 1, "maximum": 32, "description": "最大并行子进程数（1–32，默认 4）", "default": 4},
+                    "timeout_ms": {"type": "integer", "minimum": 100, "maximum": 300000, "description": "单次实验超时毫秒（默认 60000）", "default": 60000},
+                    "no_cache": {"type": "boolean", "description": "绕过 LRU+TTL 缓存（默认 false）", "default": false}
+                },
+                "required": ["template", "baseline_params", "components"]
+            }),
+        ),
+        tool_def(
+            "research_evaluate",
+            "方案评估 — 对比 baseline（现有方案）vs candidate（候选方案）的功能覆盖/性能/集成成本/推荐。每个方案需要 template + params + capabilities 列表。",
+            json!({
+                "type": "object",
+                "properties": {
+                    "baseline": {
+                        "type": "object",
+                        "properties": {
+                            "name": {"type": "string", "description": "方案名称"},
+                            "template": {"type": "string", "description": "模板文件名"},
+                            "params": {"type": "object", "additionalProperties": {"type": "string"}, "description": "实验参数"},
+                            "capabilities": {"type": "array", "items": {"type": "string"}, "description": "功能点列表"}
+                        },
+                        "required": ["name", "template"]
+                    },
+                    "candidate": {
+                        "type": "object",
+                        "properties": {
+                            "name": {"type": "string", "description": "方案名称"},
+                            "template": {"type": "string", "description": "模板文件名"},
+                            "params": {"type": "object", "additionalProperties": {"type": "string"}, "description": "实验参数"},
+                            "capabilities": {"type": "array", "items": {"type": "string"}, "description": "功能点列表"}
+                        },
+                        "required": ["name", "template"]
+                    },
+                    "dimensions": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "name": {"type": "string", "description": "评估维度名（必须对应模板输出的指标名）"},
+                                "higher_is_better": {"type": "boolean", "description": "该维度是否越高越好", "default": true},
+                                "weight": {"type": "number", "description": "权重（影响最终推荐），默认 1.0", "default": 1.0}
+                            },
+                            "required": ["name"]
+                        },
+                        "description": "评估维度列表"
+                    },
+                    "concurrency": {"type": "integer", "minimum": 1, "maximum": 32, "description": "最大并行子进程数（1–32，默认 4）", "default": 4},
+                    "timeout_ms": {"type": "integer", "minimum": 100, "maximum": 300000, "description": "单次实验超时毫秒（默认 60000）", "default": 60000},
+                    "no_cache": {"type": "boolean", "description": "绕过 LRU+TTL 缓存（默认 false）", "default": false}
+                },
+                "required": ["baseline", "candidate", "dimensions"]
+            }),
+        ),
+        tool_def(
             "research_verification_literature",
             "验证文献引用准确性：DOI 可达性检查、声明覆盖率计算",
             json!({

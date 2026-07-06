@@ -24,6 +24,8 @@
 //! | `provenance` | Git provenance and environment fingerprint capture |
 //! | `smoke` | General-purpose experiment smoke test engine (quick directional probes) |
 //! | `smoke_cache` | LRU+TTL cache with disk persistence for experiment results |
+//! | `ablation` | Component ablation analysis — baseline-vs-removed delta computation, contribution matrix |
+//! | `evaluation` | External solution evaluation — current vs candidate comparison, gap analysis, cost estimation |
 
 pub mod aigc;
 pub mod citation;
@@ -46,6 +48,8 @@ pub mod types;
 pub mod util;
 pub mod verification;
 pub mod workspace;
+pub mod ablation;
+pub mod evaluation;
 
 /// Register all research hooks into the L0 function-pointer registry.
 ///

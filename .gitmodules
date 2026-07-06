@@ -1,0 +1,6 @@
+[submodule "skills/good-question"]
+	path = skills/good-question
+	url = https://github.com/Rimagination/good-question.git
+[submodule "skills/good-story"]
+	path = skills/good-story
+	url = https://github.com/Rimagination/good-story.git

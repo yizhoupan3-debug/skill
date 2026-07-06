@@ -51,6 +51,7 @@
 | 论文/文档/PDF/PPT/Excel | `$paper-workbench` / `$doc` / `$pdf` / `$slides` / `$spreadsheets` |
 | 代码审查（只审不改） | `$code-review-deep` |
 | 代码简化（复用+质量） | `$simplify` |
+| 部件烟雾测试（内部诊断+外部评估） | `$smoke` |
 | 根因未知故障排查 | `$systematic-debugging` |
 | CI 失败修复 / PR 评论回复 | `$gh-fix-ci` / `$gh-address-comments` |
 | Goal/Task 生命周期 | `goal_state_manage(...)` / `task_create` / `task_focus` / `task_complete` |
@@ -67,7 +68,7 @@
 
 `skill_route(query)` 路由。顶刊专版 + `$ajs-*` 通配符扩展。
 
-`$research` · `$good-question` · `$good-story` · `$deep-search` · `$paper-workbench` · `$citation-management` · `$experiment-reproducibility` · `$statistical-analysis` · `$financial-data` · `$math-verify` · `$math-explore` · `$math-modeling` · `$ajs-*` (9本顶刊) · `$code-review-deep` · `$simplify` · `$systematic-debugging` · `$sentry` · `$gh-fix-ci` · `$gitx` · `$gh-address-comments` · `$update` · `$doc` · `$pdf` · `$slides` · `$spreadsheets` · `$design-md` · `$visual-review` · `$tikz-paper-figure` · `$scipilot-figure` · `$huashu-design` · `$hallmark` · `$research-workspace` · `$web-tools` · `$mcp-server-management` · `$python-env-management` · `$plan-mode` · `$deepinterview` · `$goalx` · `$initx` · `$skill-framework-developer` · `$primary-runtime`
+`$research` · `$good-question` · `$good-story` · `$smoke` · `$deep-search` · `$paper-workbench` · `$citation-management` · `$experiment-reproducibility` · `$statistical-analysis` · `$financial-data` · `$math-verify` · `$math-explore` · `$math-modeling` · `$ajs-*` (9本顶刊) · `$code-review-deep` · `$simplify` · `$systematic-debugging` · `$sentry` · `$gh-fix-ci` · `$gitx` · `$gh-address-comments` · `$update` · `$doc` · `$pdf` · `$slides` · `$spreadsheets` · `$design-md` · `$visual-review` · `$tikz-paper-figure` · `$scipilot-figure` · `$huashu-design` · `$hallmark` · `$research-workspace` · `$web-tools` · `$mcp-server-management` · `$python-env-management` · `$plan-mode` · `$deepinterview` · `$goalx` · `$initx` · `$skill-framework-developer` · `$primary-runtime`
 
 ## 参考文档
 

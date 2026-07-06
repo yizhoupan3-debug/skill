@@ -1,81 +1,281 @@
-# Skill System — 四宿主共用框架
+# Skill Framework — Claude Code / Codex Agent Toolkit
 
-## 一页纸定位
+**A complete Claude Code / Codex skill routing, tool integration, and hook lifecycle framework.**  
+Works on macOS, Linux, and **Windows (Git Bash)**.
 
-这是一整套给 Claude、Codex、Cursor 和 OpenCode 共用的 skill 系统：`skills/` 技能库、路由运行表、维护脚本、CI 校验和项目级 `AGENTS.md` 规则。**使用者快查**（宿主差异、`REVIEW_GATE`、真源阅读顺序、自检命令）：[`docs/README.md`](docs/README.md) + [`AGENTS.md`](AGENTS.md)。
+50+ skills out of the box: research workflow (literature → experiment → math-verify → paper writing), deep code review, deep-search, document processing (PDF/DOCX/PPTX/Excel), design prototyping, MCP server management and more.
 
-**宿主闭集**：`codex`、`claude`、`cursor`、`opencode`，由 `RUNTIME_REGISTRY.json` 驱动。文档地图：[`docs/README.md`](docs/README.md)。
+## Features
 
-## 两条使用路径
+- **NL Routing** — natural language automatically matches the best skill, no commands to memorize
+- **6-event Hooks** — SessionStart/PreToolUse/PostToolUse/UserPromptSubmit/SubagentStartStop/Stop
+- **Rust Core** — `router-rs-cli` drives routing + hook dispatch, zero Python dependency
+- **Cross-host** — same config system for Claude Code (macOS/Linux/Windows), Claude Desktop, Codex
+- **Goal Lifecycle** — auto-detect user intent, create/track/close Goal contracts
+- **50+ Skills** — research/deep-search/code-review/math-verify/paper-workbench/pdf/docx/ppt/simplify/smoke and more
 
-| 路径 | 适合 | 最小准备 |
-|------|------|---------|
-| **A — 只消费 skill 路由（无 hook）** | 只想让 AI 按路由表查 skill | 本仓库根 + `AGENTS.md` + `skills/`；不要求安装 `router-rs` hook 面 |
-| **B — 全量 harness（router-rs + hooks）** | 需要 hook 门控、连续性 `artifacts/current/`、证据索引 | 先 `cargo build --release --manifest-path core/router-rs/Cargo.toml`，再按宿主配置 hooks |
+## Directory Structure
 
-路径 B 全量自检：
+```
+skill/
+├── .claude/
+│   ├── CLAUDE.md                  # Project-level CLAUDE.md (auto-loaded)
+│   ├── settings.json              # Hooks + Permissions + Sandbox (gitignored, copy from setup/)
+│   └── router-rs-hook.env         # Hook env vars (gitignored)
+├── setup/
+│   ├── CLAUDE_USER.md             # User-level CLAUDE.md template → copy to ~/.claude/CLAUDE.md
+│   ├── framework.md               # Framework rules template → copy to ~/.claude/rules/framework.md
+│   ├── settings.json              # Hook settings template → copy to .claude/settings.json
+│   └── install.sh                 # One-click install script
+├── AGENTS.md                      # Host protocol (routing rules + skills directory + quick-ref)
+├── configs/framework/
+│   ├── hook.sh                    # Unified hook dispatcher
+│   ├── claude-router-rs-hook.sh   # Claude-host hook launcher
+│   ├── RUNTIME_REGISTRY.json      # Host registry (claude/cursor/codex/opencode)
+│   ├── MCP_TOOL_REGISTRY.json     # MCP tool registry
+│   └── SKILL_TO_TOOL_MAP.json     # Skill→Tool map
+├── skills/
+│   ├── SKILL_ROUTING_RUNTIME.json # Master routing table (50+ skills registered)
+│   ├── SKILL_ROUTING_LAYERS.md    # Routing layer documentation
+│   ├── research/                  # Research skill group
+│   ├── research-harness/          # Research workspace (Rust core)
+│   ├── code-review-deep/          # Adversarial code review
+│   ├── simplify/                  # Code simplification
+│   ├── deep-search/               # Deep web search engine
+│   ├── math-verify/               # Math verification
+│   ├── paper-workbench/           # Paper full workflow
+│   ├── pdf/ doc/ slides/ spreadsheets/  # Document processing
+│   └── ... (50+ more)
+├── core/
+│   ├── router-rs/                 # Rust core (routing engine + hook dispatcher)
+│   └── research-harness/          # Research workspace Rust crate
+└── configs/framework/             # Framework configs + hook scripts
+```
+
+## Prerequisites
+
+| Component | Requirements |
+|-----------|-------------|
+| **Claude Code / Codex** | Any platform: macOS / Linux / Windows (Git Bash) |
+| **Rust** | Install via [rustup.rs](https://rustup.rs) — builds `router-rs-cli` |
+| **Git** | Clone the repo |
+| **jq** | JSON parsing for hook scripts — `winget install jq` / `brew install jq` / `apt install jq` |
+
+## Quick Start
+
+### 1. Clone
+
+```bash
+git clone --recurse-submodules https://github.com/yizhoupan3-debug/skill.git
+cd skill
+```
+
+### 2. Run install script
+
+```bash
+bash setup/install.sh
+```
+
+This auto-installs: user-level CLAUDE.md → `~/.claude/`, framework rules, native skill symlinks, `router-rs-cli` binary, `.claude/router-rs-hook.env`, and copies `settings.json`.
+
+### 3. Manual setup (if script skips steps)
+
+#### 3a. User-level CLAUDE.md
+
+```bash
+cp setup/CLAUDE_USER.md ~/.claude/CLAUDE.md
+```
+
+#### 3b. Framework rules
+
+```bash
+mkdir -p ~/.claude/rules
+cp setup/framework.md ~/.claude/rules/framework.md
+```
+
+#### 3c. Native skills
+
+**macOS / Linux:**
+```bash
+for skill in simplify gitx update deepinterview smoke goalx initx; do
+  ln -sf "$PWD/skills/$skill" "$HOME/.claude/skills/$skill"
+done
+```
+
+**Windows (Git Bash):**
+```bash
+mkdir -p ~/.claude/skills
+for skill in simplify gitx update deepinterview smoke goalx initx; do
+  mkdir -p "$HOME/.claude/skills/$skill"
+  cp -r "skills/$skill/"* "$HOME/.claude/skills/$skill/"
+done
+```
+
+Also copy these two that don't follow the standard layout:
+
+```bash
+# Windows: copy hallmark and huashu-design
+mkdir -p ~/.claude/skills/hallmark ~/.claude/skills/huashu-design
+cp .claude/skills/hallmark/SKILL.md ~/.claude/skills/hallmark/
+cp .claude/skills/huashu-design/SKILL.md ~/.claude/skills/huashu-design/
+```
+
+#### 3d. Copy settings.json (CRITICAL — enables hooks)
+
+```bash
+cp setup/settings.json .claude/settings.json
+```
+
+Then create `.claude/router-rs-hook.env`:
+
+```
+SKILL_FRAMEWORK_ROOT=/full/path/to/skill
+ROUTER_RS_BIN=${HOME}/.local/bin/router-rs-cli
+ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE=0
+```
+
+#### 3e. Build router-rs-cli
+
+```bash
+cd core/router-rs
+cargo build --release --bin router-rs-cli
+mkdir -p ~/.local/bin
+cp target/release/router-rs-cli ~/.local/bin/
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+```
+
+### 4. Verify
+
+Open Claude Code / Codex in the repo root and try:
+
+```
+What skills are available?
+```
+
+The routing engine will match against `skills/SKILL_ROUTING_RUNTIME.json` with 50+ registered skills. For a full-function check, run the framework doctor:
+
 ```bash
 cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework doctor --repo-root "$PWD"
 ```
 
-## 系统组成
+## How It Works
 
-- `AGENTS.md` — 四宿主（Claude、Codex、Cursor、OpenCode）共同项目规则（含宿主行为差异附录）
-- `docs/README.md` — 文档索引
-- `docs/README.md` — 五层架构参考（crate 归属表、v10 运行时概念、Scene 模型）
-- `skills/` — 所有 skill 源文件（`skills/<name>/SKILL.md`）
-- `skills/SKILL_ROUTING_RUNTIME.json` — 运行时路由入口（唯一热表）
-- `configs/framework/MCP_TOOL_REGISTRY.json` — 工具路由唯一真源（40 工具，11 MCP servers）
-- `core/router-rs/` — 编译器、校验、路由刷新入口
-- `tests/` — 策略与路由约束测试
-- `.github/workflows/` — CI 自动校验
-
-## 分享前检查
-
-```bash
-git status --short --branch
-git diff --stat
-git grep -n -I -E "api_key|secret|token|password|私钥|密码" -- .
+```
+User: "Literature review on X"
+        │
+        ▼
+┌─ skill_route(query) ─────────────────────┐
+│  1. NL match against SKILL_ROUTING_RUNTIME│
+│  2. Returns selected_skill + tools        │
+│  3. Falls back to ~/.claude/skills/<name> │
+└────────────────────────────────────────────┘
+        │
+        ▼
+┌─ Route to skills/research/SKILL.md ──────┐
+│  Research skill internally distributes    │
+│  to lanes: discovery / execution / paper  │
+└────────────────────────────────────────────┘
 ```
 
-不要分享：`.env`、`artifacts/`、`output/`、`archives/`、`.supervisor_state.json`。`.gitignore` 已覆盖大部分临时目录。
+### Hook Event Flow (enabled by settings.json)
 
-## 日常维护
+```
+UserPromptSubmit → router-rs goal_auto_detect
+PreToolUse       → router-rs route_intercept
+PostToolUse      → router-rs evidence_record
+Stop             → router-rs closeout_gate + review_gate
+SessionStart     → router-rs session_init
+SubagentStart    → router-rs agent_health_monitor start
+SubagentStop     → router-rs agent_health_monitor stop
+```
+
+### NL Routing Pipeline
+
+```
+prompt
+  → skill_route(prompt) → SKILL_ROUTING_RUNTIME.json
+  → search_tools(prompt, top_k) → MCP_TOOL_REGISTRY.json
+  → selected_skill + matching tools returned to AI context
+```
+
+## Skill Quick Reference
+
+| Skill | When to use |
+|-------|-------------|
+| `$research` | Unified research entry (literature/experiment/manuscript) |
+| `$code-review-deep` | Adversarial deep code review |
+| `$simplify` | Code simplification (reuse + quality) |
+| `$deep-search` | Deep web search + fact verification |
+| `$math-verify` | Math derivation / proof / formula verification |
+| `$paper-workbench` | Full paper workflow (review/write/rebuttal) |
+| `$pdf` / `$doc` / `$slides` / `$spreadsheets` | Document format handling |
+| `$smoke` | Internal component diagnostics + external evaluation |
+| `$good-question` | Research question sharpening |
+| `$good-story` | Results to narrative |
+| `$systematic-debugging` | Root-cause debugging |
+| `$design-md` / `$hallmark` | Design systems / UI design |
+| `$tikz-paper-figure` | Publication-grade TikZ figures |
+| `$goalx` | Goal lifecycle management |
+| `$initx` | Project-level harness installation |
+
+Full list: see [AGENTS.md](AGENTS.md) Skill Directory section and `skills/SKILL_ROUTING_RUNTIME.json`.
+
+## Host Support
+
+| Host | Status | Notes |
+|------|--------|-------|
+| **Claude Code** | ✅ Full | macOS/Linux/Windows CLI |
+| **Claude Desktop** | ✅ Full | GUI version (MCP-based) |
+| **Codex (Windows)** | ✅ Supported | Fully functional under Git Bash |
+| **Cursor** | ⚠️ Registered | Needs validation |
+| **OpenCode** | ⚠️ Registered | Needs validation |
+
+Each host's config paths, hook adapter, and settings format are defined in `configs/framework/RUNTIME_REGISTRY.json`.
+
+## Windows-Specific Notes
+
+1. **Git Bash is the recommended terminal** — supports bash scripts but not full symlinks
+2. **Symlink fallback:** the install script auto-falls back to `cp -r` instead of `ln -sf`
+3. **PATH setup:** add `%USERPROFILE%\.local\bin` and `%USERPROFILE%\.cargo\bin` to system PATH
+4. **Claude Code on Windows:** installed at `%LOCALAPPDATA%\Claude Code`
+5. **jq on Windows:** `winget install jq` or download `jq.exe` and place it in PATH
+6. **Performance:** `cargo build` is slow on first run; subsequent builds reuse the cache
+
+## FAQ
+
+**Q: Hooks keep reporting "router-rs binary unavailable"?**  
+A: Make sure `router-rs-cli` is built and on PATH, or set `ROUTER_RS_BIN` correctly in `.claude/router-rs-hook.env`.
+
+**Q: `skill_route` can't find a matching skill?**  
+A: Check the skill's `trigger_hints` in `skills/SKILL_ROUTING_RUNTIME.json` — routing uses NL matching, not exact keywords. Try more descriptive phrasing.
+
+**Q: settings.json is gitignored — copy every clone?**  
+A: Yes. `.claude/settings.json` contains local paths, permissions, and personal config. `setup/settings.json` is the template; `setup/install.sh` copies it automatically.
+
+**Q: Do I need Rust just to use the skills?**  
+A: No. Core skills (research/code-review/paper/doc handling) work without the router-rs binary. Hooks (goal auto-detect, closeout gate) need the binary for full effect.
+
+**Q: Can I just copy `skills/` to use the routing?**  
+A: Not recommended. The full routing requires `skills/SKILL_ROUTING_RUNTIME.json`, `AGENTS.md` (or .claude/CLAUDE.md), and the framework configs together.
+
+## Daily Maintenance
 
 ```bash
-# 全量（推荐，等同 /update）
-export SKILL_FRAMEWORK_ROOT=/abs/path/to/framework-repo
-cargo run --release --manifest-path "${SKILL_FRAMEWORK_ROOT}/core/router-rs/Cargo.toml" -- framework maint update-one-shot
+# Full framework update (equals /update)
+cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework maint update-one-shot
 
-# 技能刷新 + 测试
+# Skill refresh + tests
 cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework skills refresh --write
-cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework sync-entrypoints --repo-root "$PWD"
 cargo test --test policy_contracts
 ```
 
-## 修改或新增 skill
+## Adding a New Skill
 
-1. 创建 `skills/<skill-name>/SKILL.md`（frontmatter + `## When to use` / `## Do not use`）
-2. 手改热路由真源：`skills/SKILL_ROUTING_RUNTIME.json`
-3. 再生 companion：`cargo run --manifest-path core/router-rs/Cargo.toml -- framework skills refresh --write --write-companions`
-4. 验证：`framework skills validate`；`cargo test --test policy_contracts`
+1. Create `skills/<name>/SKILL.md` (frontmatter + `## When to use` / `## Do not use`)
+2. Add entry to `skills/SKILL_ROUTING_RUNTIME.json`
+3. Rebuild companion indexes: `cargo run --manifest-path core/router-rs/Cargo.toml -- framework skills refresh --write --write-companions`
+4. Validate: `cargo test --test policy_contracts`
 
-## 常见问题
+## License
 
-| 问题 | 答案 |
-|------|------|
-| Rust 编译慢？ | 首次慢正常，后续复用缓存 |
-| Codex 不按 skill 路由？ | 确认工作目录为此仓库根，告知 Codex "先查 SKILL_ROUTING_RUNTIME.json，命中后只读对应 SKILL.md" |
-| 可以只复制 `skills/`？ | 不推荐。`AGENTS.md`、编译器、测试、CI 一起克隆最稳 |
-| PowerShell 换行？ | 用反引号 `` ` `` 续行；Git Bash 用反斜杠 `\` |
-
-## Hook integration quickstart
-
-```bash
-# 宿主 hooks 自检
-cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework maint verify-host-hooks --host-id cursor
-# 宿主投影安装
-cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework host-integration install --to codex --scope user
-# 全局安装 router-rs
-cargo install --path core/router-rs --locked --force
-```
+MIT

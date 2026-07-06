@@ -430,6 +430,14 @@
     {
       "skill_slug": "systematic-debugging",
       "tool_slugs": null
+    },
+    {
+      "skill_slug": "smoke",
+      "tool_slugs": [
+        "research_smoke",
+        "research_ablation",
+        "research_evaluate"
+      ]
     }
   ]
 }

@@ -49,7 +49,7 @@
 L0  agent-swarm-orchestration, gh-address-comments, gh-fix-ci, sentry,
     skill-framework-developer, systematic-debugging
 L1  plan-mode
-L2  code-review-deep, good-question, good-story,
+L2  code-review-deep, good-question, good-story, smoke,
     research (统一科研前门 — 内部含 discovery/execution/paper-workbench)
 L3  citation-management, deep-search, design-md, doc,
     experiment-reproducibility, mcp-server-management, pdf,
@@ -100,6 +100,10 @@ Runtime lanes  planning, execution/code, language/framework, platform/integratio
 - `good-story` vs `research/paper-workbench` → 具体边界见 [`docs/routing/good-skill-overlap-resolution.md`](../docs/routing/good-skill-overlap-resolution.md) §1（story: 零散结果→Story Card / paper-workbench: 完整手稿→审稿/改写）
 - `good-story` vs `good-question` → 具体边界见 [`docs/routing/good-skill-overlap-resolution.md`](../docs/routing/good-skill-overlap-resolution.md) §3（question: 管线最前选题 / story: 管线中后叙事组织）
 - `runtime checklist planning` vs `runtime checklist execution` → 生成/整理 execution-ready checklist vs 按 checklist 执行
+- `smoke` vs `deepinterview` → 用户有具体实现/方案需要测（smoke）vs 用户只有模糊想法/需求需要澄清（deepinterview）。核心判别：被测对象是否存在。详见 [`docs/routing/smoke-overlap-resolution.md`](../docs/routing/smoke-overlap-resolution.md)
+- `smoke` vs `research-workspace` → 部件贡献诊断/方案评估（smoke, 技能级分析工作流）vs 科研实验快速 probe（research-workspace, research-harness 引擎）。同属 scene=research，路由路由区分在 trigger 语境：代码分解→smoke，实验模板→research-workspace
+- `smoke` vs `systematic-debugging` → 广度逐部件探查已知功能（smoke）vs 深度追查未知根因（systematic-debugging）
+- `smoke` vs `code-review-deep` → 执行验证/功能行为（smoke）vs 静态代码审查/安全性（code-review-deep）
 
 ## 重路由信号
 

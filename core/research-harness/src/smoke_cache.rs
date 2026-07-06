@@ -280,7 +280,6 @@ fn acquire_cache_lock(lock_path: &Path, exclusive: bool) -> Option<CacheLockGuar
     }
 }
 
-#[allow(dead_code)]
 struct CacheLockGuard(fs::File);
 
 impl Drop for CacheLockGuard {

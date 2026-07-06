@@ -2910,6 +2910,70 @@
       null
     ],
     [
+      "smoke",
+      "L2",
+      "owner",
+      "none",
+      "P2",
+      "快速烟雾测试 — 内部部件诊断（每部件贡献/增益/损害）+ 外部方案评估（是否值得替换）。科研场景。",
+      "preferred",
+      [
+        "smoke test",
+        "smoke-test",
+        "烟雾测试",
+        "快速验证",
+        "部件诊断",
+        "部件贡献",
+        "组件验证",
+        "去掉会怎样",
+        "ablation test",
+        "实际增益",
+        "快速评估方案",
+        "外部方案评估",
+        "是否值得替换",
+        "替换代价",
+        "拆部件",
+        "逐部件",
+        "快测",
+        "冒烟测试",
+        "冒烟",
+        "快速 prototyping",
+        "初步验证",
+        "改动验证",
+        "功能完整性",
+        "筛一下"
+      ],
+      "skills/smoke/SKILL.md",
+      null,
+      "skill",
+      [],
+      "快速烟雾测试 — 内部部件诊断 + 外部方案评估",
+      [
+        "smoke",
+        "testing",
+        "ablation",
+        "evaluation",
+        "diagnosis"
+      ],
+      "用户有具体实现/方案需要逐部件验证贡献，或面对外部方案需要快速判断是否值得替换时使用。",
+      "需求模糊需要澄清的场景（走 deepinterview）、深度根因排查（走 systematic-debugging）、完整 code review（走 code-review-deep）。",
+      {
+        "platforms": [
+          "supported"
+        ],
+        "tags": [
+          "smoke",
+          "testing",
+          "ablation",
+          "evaluation",
+          "diagnosis"
+        ],
+        "version": "1.0.0"
+      },
+      "research",
+      null
+    ],
+    [
       "humanizer-v2",
       "L4",
       "owner",

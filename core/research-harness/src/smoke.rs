@@ -49,7 +49,7 @@ const MAX_CONCURRENCY: usize = 32;
 const MAX_STDERR_CHARS: usize = 4096;
 const TEMPLATES_DIR: &str = "templates";
 const ARTIFACTS_SUBDIR: &str = "artifacts/research-log/smoke";
-const MAX_MCP_RESPONSE_BYTES: usize = 4 * 1024 * 1024;
+pub(crate) const MAX_MCP_RESPONSE_BYTES: usize = 4 * 1024 * 1024;
 const POLL_INTERVAL_MS: u64 = 50;
 /// Conservative per-experiment result size estimate for pre-flight size check.
 const ESTIMATED_BYTES_PER_RESULT: usize = 1024;
@@ -265,7 +265,7 @@ fn build_runs(template_name: &str, template_path: &Path, params_list: &[Value]) 
 /// a Semaphore (not yet stabilized in std). For quick probe experiments this
 /// works well — the last chunk may have idle threads, but wall-clock is
 /// dominated by the slowest experiment, not chunk alignment.
-fn run_experiments(
+pub(crate) fn run_experiments(
     runs: &[ExperimentRun],
     timeout_ms: u64,
     concurrency: usize,
@@ -329,8 +329,10 @@ fn run_experiments(
                             cache.set(ck.clone(), cache_result);
                         }
 
-                        // Append to results JSONL (file-locked)
-                        append_result_jsonl(&artifacts_dir, &result);
+                        // Append to results JSONL (file-locked, best-effort)
+                        if let Err(e) = append_result_jsonl(&artifacts_dir, &result) {
+                            tracing::warn!(error = %e, run_id = %result.run_id, "[smoke] append_result_jsonl failed");
+                        }
 
                         result
                     })
@@ -455,11 +457,7 @@ fn execute_single(run: &ExperimentRun, timeout_ms: u64) -> ExperimentResult {
                 let error = if timed_out {
                     Some(format!("timeout after {timeout_ms}ms (pid={pid})"))
                 } else if let Some(msg) = parse_error {
-                    if exit_code != 0 {
-                        Some(format!("exit={exit_code}, parse: {msg}"))
-                    } else {
-                        Some(format!("parse: {msg}"))
-                    }
+                    Some(format!("exit={exit_code}, parse: {msg}"))
                 } else if exit_code != 0 {
                     let detail = if stderr_str.is_empty() {
                         "no stderr".into()
@@ -563,7 +561,8 @@ fn parse_last_json(stdout: &str) -> (Value, Option<String>) {
 
 /// Append an experiment result to `results.jsonl` using framework-runtime's
 /// `append_text_with_process_lock()` for cross-process safety.
-fn append_result_jsonl(artifacts_dir: &Path, result: &ExperimentResult) {
+/// Returns `Ok(())` on success or a descriptive error string on failure.
+fn append_result_jsonl(artifacts_dir: &Path, result: &ExperimentResult) -> Result<(), String> {
     use framework_runtime::io_utils::append_text_with_process_lock;
 
     let entry = json!({
@@ -576,18 +575,14 @@ fn append_result_jsonl(artifacts_dir: &Path, result: &ExperimentResult) {
         "wall_time_ms": result.wall_time_ms,
     });
 
-    let line = match serde_json::to_string(&entry) {
-        Ok(l) => l + "\n",
-        Err(e) => {
-            tracing::warn!(error = %e, "[smoke] JSONL serialization failed");
-            return;
-        }
-    };
+    let line = serde_json::to_string(&entry)
+        .map_err(|e| format!("JSONL serialization failed: {e}"))?;
+    let line = line + "\n";
 
     let jsonl_path = artifacts_dir.join("results.jsonl");
-    if let Err(e) = append_text_with_process_lock(&jsonl_path, &line, "experiment-smoke") {
-        tracing::warn!(error = %e, path = %jsonl_path.display(), "[smoke] append result failed");
-    }
+    append_text_with_process_lock(&jsonl_path, &line, "experiment-smoke")
+        .map_err(|e| format!("append result to {} failed: {e}", jsonl_path.display()))?;
+    Ok(())
 }
 
 // ── Response builder ──
@@ -648,15 +643,18 @@ fn truncate(s: &str, max: usize) -> String {
 /// Convert a JSON parameter value to its string representation.
 ///
 /// Strings pass through, numbers/bools become their text form, null becomes
-/// empty string. This prevents silent data loss when users pass `{"lr": 0.01}`
-/// (number) instead of `{"lr": "0.01"}` (string).
+/// empty string. Arrays and objects are serialized as JSON with a prefix marker
+/// so the subprocess can detect and parse them — no silent data loss.
 fn param_value_to_string(v: &Value) -> String {
     match v {
         Value::String(s) => s.clone(),
         Value::Number(n) => n.to_string(),
         Value::Bool(b) => b.to_string(),
         Value::Null => String::new(),
-        Value::Array(_) | Value::Object(_) => String::new(),
+        Value::Array(_) | Value::Object(_) => {
+            // Serialize nested values as JSON with a marker so scripts can detect them
+            format!("__JSON__{}", serde_json::to_string(v).unwrap_or_default())
+        }
     }
 }
 
@@ -772,5 +770,62 @@ mod tests {
         assert_eq!(resp["summary"]["total"], 2);
         assert_eq!(resp["summary"]["succeeded"], 1);
         assert_eq!(resp["summary"]["failed"], 1);
+    }
+
+    #[test]
+    fn param_value_to_string_nested() {
+        // Arrays serialize as JSON with __JSON__ marker
+        let arr = param_value_to_string(&json!([1, 2, 3]));
+        assert!(arr.starts_with("__JSON__"), "array should get __JSON__ prefix: {arr}");
+        assert!(arr.contains("1"), "array values should be present: {arr}");
+
+        // Objects serialize as JSON with __JSON__ marker
+        let obj = param_value_to_string(&json!({"nested": "deep"}));
+        assert!(obj.starts_with("__JSON__"), "object should get __JSON__ prefix: {obj}");
+
+        // Strings pass through unchanged
+        let s = param_value_to_string(&Value::String("hello".into()));
+        assert_eq!(s, "hello");
+
+        // Numbers preserve
+        let n = param_value_to_string(&json!(42));
+        assert_eq!(n, "42");
+
+        let f = param_value_to_string(&json!(3.14));
+        assert_eq!(f, "3.14");
+
+        // Bool
+        let t = param_value_to_string(&Value::Bool(true));
+        assert_eq!(t, "true");
+    }
+
+    #[test]
+    fn build_params_from_nested_value() {
+        // Ensure build_runs properly delegates nested values to param_value_to_string
+        let params = json!([{"layers": [64, 128], "config": {"dropout": 0.5}, "lr": 0.01}]);
+        let runs = build_runs("test", &Path::new("test.sh"), params.as_array().unwrap());
+        assert_eq!(runs.len(), 1);
+        let p = &runs[0].params;
+        assert!(p.get("layers").map_or(false, |v| v.starts_with("__JSON__")),
+            "nested array should be marked: {:?}", p.get("layers"));
+        assert!(p.get("config").map_or(false, |v| v.starts_with("__JSON__")),
+            "nested object should be marked: {:?}", p.get("config"));
+        assert_eq!(p.get("lr").map(String::as_str), Some("0.01"));
+    }
+
+    #[test]
+    fn parse_last_json_exit_code_included() {
+        // Exit code 0 with invalid JSON should still report exit code
+        let result = ExperimentResult {
+            run_id: "t-0".into(),
+            template_name: "t".into(),
+            params: HashMap::new(),
+            exit_code: 0,
+            result: Value::Null,
+            error: Some("exit=0, parse: stdout is not valid JSON".into()),
+            wall_time_ms: 10,
+        };
+        assert!(result.error.as_ref().unwrap().contains("exit=0"),
+            "exit code should be reported even when 0: {:?}", result.error);
     }
 }

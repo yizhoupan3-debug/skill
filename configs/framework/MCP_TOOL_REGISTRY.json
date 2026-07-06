@@ -1924,15 +1924,18 @@
     },
     {
       "slug": "research_smoke",
-      "display_name": "数据源烟雾测试",
-      "description": "对 arXiv 和 Semantic Scholar 做数据源可达性烟雾测试",
+      "display_name": "通用实验烟雾测试引擎",
+      "description": "从 templates/ 运行可执行实验模板，注入参数组合为环境变量，解析 stdout JSON。支持 LRU+TTL 缓存、并行子进程、进程组隔离。",
       "layer": "research",
       "dispatch_domain": "domain:research",
       "owner": "research",
       "trigger_hints": [
         "smoke",
         "烟雾",
-        "数据源测试"
+        "实验引擎",
+        "模板测试",
+        "实验运行",
+        "快速实验"
       ],
       "mcp_server": "research-harness",
       "tool_flags": [
@@ -1968,6 +1971,144 @@
             "type": "boolean",
             "description": "是否跳过缓存（默认 false）"
           }
+        }
+      }
+    },
+    {
+      "slug": "research_ablation",
+      "display_name": "组件级 Ablation 分析",
+      "description": "运行基线 + 逐个去部件实验，返回每部件增益/损害/推荐矩阵。模板脚本通过 EXPERIMENT_SMOKE_ABLATION_REMOVED 环境变量感知 ablation 信号。",
+      "layer": "research",
+      "dispatch_domain": "domain:research",
+      "owner": "research",
+      "trigger_hints": [
+        "ablation",
+        "ablation test",
+        "部件贡献",
+        "部件诊断",
+        "去掉部件",
+        "组件影响"
+      ],
+      "mcp_server": "research-harness",
+      "tool_flags": [
+        "readonly"
+      ],
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "template",
+          "baseline_params",
+          "components"
+        ],
+        "properties": {
+          "template": {
+            "type": "string",
+            "description": "模板文件名（可执行实验模板，位于 templates/ 下）"
+          },
+          "baseline_params": {
+            "type": "object",
+            "additionalProperties": {"type": "string"},
+            "description": "基线参数键值对"
+          },
+          "components": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {"type": "string", "description": "部件名称"},
+                "description": {"type": "string", "description": "部件描述"},
+                "ablation_params": {
+                  "type": "object",
+                  "additionalProperties": {"type": "string"},
+                  "description": "可选—去部件后的参数覆盖"
+                }
+              },
+              "required": ["name"]
+            },
+            "description": "要逐个测试的部件列表"
+          },
+          "metrics": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "关注的指标名（空则自动检测所有数值字段）"
+          },
+          "concurrency": {
+            "type": "integer",
+            "description": "并发数（默认 4，范围 1-32）"
+          },
+          "timeout_ms": {
+            "type": "integer",
+            "description": "每个实验的超时毫秒数（默认 60000）"
+          },
+          "no_cache": {
+            "type": "boolean",
+            "description": "是否跳过缓存（默认 false）"
+          }
+        }
+      }
+    },
+    {
+      "slug": "research_evaluate",
+      "display_name": "方案评估",
+      "description": "对比 baseline（现有方案）vs candidate（候选方案）的功能覆盖、性能指标，产出集成成本估计和推荐结论",
+      "layer": "research",
+      "dispatch_domain": "domain:research",
+      "owner": "research",
+      "trigger_hints": [
+        "方案评估",
+        "对比方案",
+        "替换评估",
+        "candidate evaluation",
+        "方案对比"
+      ],
+      "mcp_server": "research-harness",
+      "tool_flags": [
+        "readonly"
+      ],
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "baseline",
+          "candidate",
+          "dimensions"
+        ],
+        "properties": {
+          "baseline": {
+            "type": "object",
+            "properties": {
+              "name": {"type": "string", "description": "方案名称"},
+              "template": {"type": "string", "description": "模板文件名（位于 templates/ 下）"},
+              "params": {"type": "object", "additionalProperties": {"type": "string"}, "description": "实验参数"},
+              "capabilities": {"type": "array", "items": {"type": "string"}, "description": "功能点列表"}
+            },
+            "required": ["name", "template"]
+          },
+          "candidate": {
+            "type": "object",
+            "properties": {
+              "name": {"type": "string", "description": "方案名称"},
+              "template": {"type": "string", "description": "模板文件名"},
+              "params": {"type": "object", "additionalProperties": {"type": "string"}, "description": "实验参数"},
+              "capabilities": {"type": "array", "items": {"type": "string"}, "description": "功能点列表"}
+            },
+            "required": ["name", "template"]
+          },
+          "dimensions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {"type": "string", "description": "评估维度"},
+                "higher_is_better": {"type": "boolean", "description": "是否越高越好"},
+                "weight": {"type": "number", "description": "权重"}
+              },
+              "required": ["name"]
+            },
+            "description": "评估维度列表"
+          },
+          "concurrency": {"type": "integer", "description": "并发数（默认 4）"},
+          "timeout_ms": {"type": "integer", "description": "超时毫秒（默认 60000）"},
+          "no_cache": {"type": "boolean", "description": "跳过缓存"}
         }
       }
     },

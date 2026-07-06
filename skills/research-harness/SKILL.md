@@ -97,6 +97,7 @@ systematic research and returns candidates.
 - The user only asks for **mathematical exploration, pattern discovery, or conjecture generation** → use `$math-explore`.
 - The user only asks for **citation metadata cleanup** → use `$citation-management`.
 - The user asks for **ordinary coding** → answer in the current coding context.
+- The user needs a **general (non-research) smoke test** on codebase implementations/components → use `$smoke`. (This skill covers research experiment smoke probes only.)
 
 ## Operating contract
 
@@ -114,7 +115,7 @@ systematic research and returns candidates.
 | `claim_planning` | `plan-search / brief-first-claim / gate-from-research` | Search planning and novelty gate |
 | `run_annotation` | `annotate-run / audit-reuse` | Run reuse metadata and audit |
 | `sync` | `sync` | Sync to artifact |
-| `smoke_test` | 通过 `research_smoke` MCP 工具调用 | Quick directional experiment probes via templates/ |
+| `smoke_test` | 通过 `research_smoke` MCP 工具调用 | 科研实验快速 probe — 非科研场景的部件诊断/方案评估用 `$smoke` skill |
 | `log` | (library API) | Layered logging — SQLite FTS5 (`research_harness::log`) |
 | `barrier_escalation` | `barrier <problem>` | **Loop bridge**: systematic research on hard barriers |
 
@@ -170,6 +171,8 @@ General-purpose experiment smoke engine:
 - Execution: `cargo run -p research-harness --bin autoresearch -- smoke-test --template <name> --params '[{"key":"val"}]'`
 - Params injected as `EXPERIMENT_<KEY>=<VALUE>` env vars
 - Structured JSON output, LRU+TTL cache, parallel subprocess execution
+- Ablation: `research_ablation` MCP tool for component-vs-baseline contribution matrix (metrics delta, gain/damage, recommendation)
+- Evaluation: `research_evaluate` MCP tool for external solution comparison (gap analysis, cost estimate, verdict)
 
 ### Verification and failure contract
 
