@@ -18,9 +18,12 @@ pub const MATH_KEYWORDS: &[&str] = &[
     "sinh", "cosh", "tanh",
     // Inverse trig
     "asin", "acos", "atan", "atan2",
+    // Inverse hyperbolic
+    "asinh", "acosh", "atanh",
     // Misc math
     "sqrt", "abs", "exp", "log", "ln", "log2", "log10",
-    "erf", "gamma", "ceil", "floor", "round", "sign", "sgn",
+    "erf", "erfc", "gamma", "digamma",
+    "ceil", "floor", "round", "sign", "sgn",
     "min", "max", "pow", "mod", "rem",
     // Constants
     "pi", "e",
@@ -531,6 +534,51 @@ pub fn eval(expr: &Expr, vars: &HashMap<String, f64>) -> Result<f64, FrameworkEr
                     let poly = t * (0.254_829_592 + t * (-0.284_496_736 + t * (1.421_413_741 + t * (-1.453_152_027 + t * 1.061_405_429))));
                     Ok(sign * (1.0 - poly * (-ax * ax).exp()))
                 }
+                "erfc" => {
+                    if vals.len() != 1 {
+                        return Err(FrameworkError::validation("erfc requires 1 argument"));
+                    }
+                    // Complementary error function: erfc(x) = 1 - erf(x)
+                    // Use Abramowitz-Stegun approximation for erf(x)
+                    let x = vals[0];
+                    let ax = x.abs();
+                    let t = 1.0 / (1.0 + 0.327_591_1 * ax);
+                    let poly = t * (0.254_829_592 + t * (-0.284_496_736 + t * (1.421_413_741 + t * (-1.453_152_027 + t * 1.061_405_429))));
+                    let erf_approx = if x >= 0.0 {
+                        1.0 - poly * (-ax * ax).exp()
+                    } else {
+                        -(1.0 - poly * (-ax * ax).exp())
+                    };
+                    Ok(1.0 - erf_approx)
+                }
+                "gamma" => {
+                    if vals.len() != 1 {
+                        return Err(FrameworkError::validation("gamma requires 1 argument"));
+                    }
+                    // Lanczos approximation for gamma function
+                    let x = vals[0];
+                    // Use f64::exp/gamma for x >= 0.5 via reflection formula for x < 0.5
+                    // Scipy-compatible implementation
+                    if x <= 0.0 && x.fract().abs() < 1e-12 {
+                        // Pole at non-positive integers
+                        return Err(FrameworkError::validation(
+                            "gamma: pole at non-positive integer"
+                        ));
+                    }
+                    if x < 0.5 {
+                        // Reflection formula: Γ(x) = π / (sin(πx) * Γ(1-x))
+                        let sin_pi_x = (std::f64::consts::PI * x).sin();
+                        Ok(std::f64::consts::PI / (sin_pi_x * gamma_impl(1.0 - x)))
+                    } else {
+                        Ok(gamma_impl(x))
+                    }
+                }
+                "digamma" => {
+                    if vals.len() != 1 {
+                        return Err(FrameworkError::validation("digamma requires 1 argument"));
+                    }
+                    Ok(digamma_impl(vals[0]))
+                }
                 "atan2" => {
                     if vals.len() != 2 {
                         return Err(FrameworkError::validation("atan2 requires 2 arguments"));
@@ -543,6 +591,63 @@ pub fn eval(expr: &Expr, vars: &HashMap<String, f64>) -> Result<f64, FrameworkEr
             }
         }
     }
+}
+
+/// Lanczos approximation for gamma function.
+/// Valid for x >= 0.5; use reflection formula for x < 0.5.
+fn gamma_impl(x: f64) -> f64 {
+    // Lanczos coefficients (g=7, n=9)
+    const P: [f64; 9] = [
+        0.999_999_999_999_809_93,
+        676.520_368_121_885_1,
+        -1259.139_216_722_402_8,
+        771.323_428_777_653_13,
+        -176.615_029_162_140_59,
+        12.507_343_278_686_905,
+        -0.138_571_095_265_720_12,
+        9.984_369_578_019_571_6e-6,
+        1.505_632_735_149_311_1e-7,
+    ];
+    let x = x - 1.0;
+    let t = x + 7.5;
+    let mut y = P[0];
+    for i in 1..9 {
+        y += P[i] / (x + i as f64);
+    }
+    (2.0 * std::f64::consts::PI).sqrt() * t.powf(x + 0.5) * (-t).exp() * y
+}
+
+/// Digamma function (logarithmic derivative of gamma).
+/// Uses asymptotic series for large |x|, reflection for negative x,
+/// and a Laurent series near the pole at 0.
+fn digamma_impl(x: f64) -> f64 {
+    if x <= 0.0 && x.fract().abs() < 1e-12 {
+        return f64::NAN; // Pole at non-positive integers
+    }
+    // Reflection for negative arguments: ψ(x) = ψ(1-x) - π*cot(πx)
+    if x < 0.0 {
+        let psi_1mx = digamma_impl(1.0 - x);
+        let pi_cot = std::f64::consts::PI / (std::f64::consts::PI * x).tan();
+        return psi_1mx - pi_cot;
+    }
+    if x < 1e-6 {
+        // ψ(x) ≈ -1/x - γ (Laurent expansion near 0)
+        return -1.0 / x - 0.577_215_664_901_532_9;
+    }
+    // Asymptotic series for x >= 8
+    if x >= 8.0 {
+        let inv_x2 = 1.0 / (x * x);
+        return x.ln() - 0.5 / x - inv_x2 * (1.0 / 12.0 + inv_x2 * (1.0 / 120.0 + inv_x2 / 252.0));
+    }
+    // Recurrence: ψ(x+1) = ψ(x) + 1/x, step up to large x
+    let mut sum = 0.0;
+    let mut z = x;
+    while z < 8.0 {
+        sum += 1.0 / z;
+        z += 1.0;
+    }
+    let inv_z2 = 1.0 / (z * z);
+    z.ln() - 0.5 / z - inv_z2 * (1.0 / 12.0 + inv_z2 * (1.0 / 120.0 + inv_z2 / 252.0)) - sum
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -1124,6 +1229,67 @@ pub fn trig_simplify(expr: &Expr) -> Expr {
             let n = terms.len();
             let mut used = vec![false; n];
 
+            // ── New: tan² + 1 → sec² and 1 + cot² → csc² ──
+            // Run before sin²+cos² to ensure term availability
+            for i in 0..n {
+                if used[i] { continue; }
+                // tan²(x) + 1 → sec²(x)
+                if let Some(inner) = extract_tan_sq_inner(&terms[i]) {
+                    for j in (i + 1)..n {
+                        if !used[j] && matches!(&terms[j], Expr::Const(c) if (*c - 1.0).abs() < 1e-12) {
+                            result.push(Expr::Pow(
+                                Box::new(Expr::Fn("sec".to_string(), vec![inner.clone()])),
+                                Box::new(Expr::Const(2.0)),
+                            ));
+                            used[i] = true;
+                            used[j] = true;
+                            break;
+                        }
+                    }
+                    if used[i] { continue; }
+                }
+                // 1 + cot²(x) → csc²(x)
+                if let Some(inner) = extract_cot_sq_inner(&terms[i]) {
+                    for j in (i + 1)..n {
+                        if !used[j] && matches!(&terms[j], Expr::Const(c) if (*c - 1.0).abs() < 1e-12) {
+                            result.push(Expr::Pow(
+                                Box::new(Expr::Fn("csc".to_string(), vec![inner.clone()])),
+                                Box::new(Expr::Const(2.0)),
+                            ));
+                            used[i] = true;
+                            used[j] = true;
+                            break;
+                        }
+                    }
+                    if used[i] { continue; }
+                }
+                // Const(1) + tan²(x) → sec²(x) (reversed order)
+                if matches!(&terms[i], Expr::Const(c) if (*c - 1.0).abs() < 1e-12) {
+                    for j in (i + 1)..n {
+                        if !used[j] {
+                            if let Some(inner) = extract_tan_sq_inner(&terms[j]) {
+                                result.push(Expr::Pow(
+                                    Box::new(Expr::Fn("sec".to_string(), vec![inner.clone()])),
+                                    Box::new(Expr::Const(2.0)),
+                                ));
+                                used[i] = true;
+                                used[j] = true;
+                                break;
+                            }
+                            if let Some(inner) = extract_cot_sq_inner(&terms[j]) {
+                                result.push(Expr::Pow(
+                                    Box::new(Expr::Fn("csc".to_string(), vec![inner.clone()])),
+                                    Box::new(Expr::Const(2.0)),
+                                ));
+                                used[i] = true;
+                                used[j] = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+
             for i in 0..n {
                 if used[i] {
                     continue;
@@ -1187,11 +1353,11 @@ pub fn trig_simplify(expr: &Expr) -> Expr {
                             if aa.len() == 1 && ab.len() == 1 => {
                             let a = &aa[0]; let b = &ab[0];
                             match (na.as_str(), nb.as_str()) {
-                                ("sin", "sin") if display(a) != display(b) => {
+                                ("sin", "sin") if a.fingerprint() != b.fingerprint() => {
                                     st_result.push(st_formula(a, b, "sin", "cos", 2.0));
                                     used_st[i] = true; used_st[j] = true; paired = true;
                                 }
-                                ("cos", "cos") if display(a) != display(b) => {
+                                ("cos", "cos") if a.fingerprint() != b.fingerprint() => {
                                     st_result.push(st_formula(a, b, "cos", "cos", 2.0));
                                     used_st[i] = true; used_st[j] = true; paired = true;
                                 }
@@ -1433,15 +1599,15 @@ fn st_formula(a: &Expr, b: &Expr, fn1: &str, fn2: &str, k: f64) -> Expr {
     )
 }
 
-/// Check if an expression is `sin(arg)^2`.
-fn is_sin_sq(expr: &Expr) -> Option<String> {
+/// Check if an expression is `sin(arg)^2`. Returns the fingerprint of the inner argument.
+fn is_sin_sq(expr: &Expr) -> Option<u64> {
     match expr {
         Expr::Pow(base, exp)
             if matches!(exp.as_ref(), Expr::Const(c) if (*c - 2.0).abs() < 1e-12) =>
         {
             if let Expr::Fn(name, args) = base.as_ref() {
                 if name == "sin" && args.len() == 1 {
-                    return Some(display(&args[0]));
+                    return Some(args[0].fingerprint());
                 }
             }
             None
@@ -1450,15 +1616,15 @@ fn is_sin_sq(expr: &Expr) -> Option<String> {
     }
 }
 
-/// Check if an expression is `cos(arg)^2`.
-fn is_cos_sq(expr: &Expr) -> Option<String> {
+/// Check if an expression is `cos(arg)^2`. Returns the fingerprint of the inner argument.
+fn is_cos_sq(expr: &Expr) -> Option<u64> {
     match expr {
         Expr::Pow(base, exp)
             if matches!(exp.as_ref(), Expr::Const(c) if (*c - 2.0).abs() < 1e-12) =>
         {
             if let Expr::Fn(name, args) = base.as_ref() {
                 if name == "cos" && args.len() == 1 {
-                    return Some(display(&args[0]));
+                    return Some(args[0].fingerprint());
                 }
             }
             None
@@ -1493,6 +1659,74 @@ fn extract_cos_sq_inner(expr: &Expr) -> Option<&Expr> {
             if let Expr::Fn(name, args) = base.as_ref() {
                 if name == "cos" && args.len() == 1 {
                     return Some(&args[0]);
+                }
+            }
+            None
+        }
+        _ => None,
+    }
+}
+
+/// Extract the inner expression from tan(arg)^2, for identity rewriting.
+fn extract_tan_sq_inner(expr: &Expr) -> Option<&Expr> {
+    match expr {
+        Expr::Pow(base, exp)
+            if matches!(exp.as_ref(), Expr::Const(c) if (*c - 2.0).abs() < 1e-12) =>
+        {
+            if let Expr::Fn(name, args) = base.as_ref() {
+                if name == "tan" && args.len() == 1 {
+                    return Some(&args[0]);
+                }
+            }
+            None
+        }
+        _ => None,
+    }
+}
+
+/// Extract the inner expression from cot(arg)^2, for identity rewriting.
+fn extract_cot_sq_inner(expr: &Expr) -> Option<&Expr> {
+    match expr {
+        Expr::Pow(base, exp)
+            if matches!(exp.as_ref(), Expr::Const(c) if (*c - 2.0).abs() < 1e-12) =>
+        {
+            if let Expr::Fn(name, args) = base.as_ref() {
+                if name == "cot" && args.len() == 1 {
+                    return Some(&args[0]);
+                }
+            }
+            None
+        }
+        _ => None,
+    }
+}
+
+/// Check if an expression is `tan(arg)^2`. Returns the fingerprint of the inner argument.
+fn is_tan_sq(expr: &Expr) -> Option<u64> {
+    match expr {
+        Expr::Pow(base, exp)
+            if matches!(exp.as_ref(), Expr::Const(c) if (*c - 2.0).abs() < 1e-12) =>
+        {
+            if let Expr::Fn(name, args) = base.as_ref() {
+                if name == "tan" && args.len() == 1 {
+                    return Some(args[0].fingerprint());
+                }
+            }
+            None
+        }
+        _ => None,
+    }
+}
+
+/// Check if an expression is `cot(arg)^2`. Returns the fingerprint of the inner argument.
+fn is_cot_sq(expr: &Expr) -> Option<u64> {
+    match expr {
+        Expr::Pow(base, exp)
+            if matches!(exp.as_ref(), Expr::Const(c) if (*c - 2.0).abs() < 1e-12) =>
+        {
+            if let Expr::Fn(name, args) = base.as_ref() {
+                if name == "cot" && args.len() == 1 {
+                    return Some(args[0].fingerprint());
                 }
             }
             None
@@ -1693,20 +1927,37 @@ fn find_common_factors(terms: &[Vec<Expr>]) -> Vec<Expr> {
         .collect()
 }
 
-/// Euclidean GCD for integer-valued floating-point coefficients.
+/// Euclidean GCD for integer-valued or rational floating-point coefficients.
 fn gcd_f64(a: f64, b: f64) -> f64 {
+    // Fast path: integer coefficients
     let ai = a.round() as i64;
     let bi = b.round() as i64;
-    if (ai as f64 - a).abs() > 1e-10 || (bi as f64 - b).abs() > 1e-10 {
-        return 1.0;
+    if (ai as f64 - a).abs() < 1e-10 && (bi as f64 - b).abs() < 1e-10 {
+        let (mut a, mut b) = (ai, bi);
+        while b != 0 {
+            let t = b;
+            b = a % b;
+            a = t;
+        }
+        return a.abs() as f64;
     }
-    let (mut a, mut b) = (ai, bi);
-    while b != 0 {
-        let t = b;
-        b = a % b;
-        a = t;
+    // Rational path: scale up to integer space for finite decimal representations
+    // e.g., 0.5 and 0.25 → scale by 100 → 50 and 25 → GCD 25 → scale back 0.25
+    let scale = 1e10;
+    let ai = (a * scale).round() as i64;
+    let bi = (b * scale).round() as i64;
+    if (ai as f64 - a * scale).abs() < 1.0 && (bi as f64 - b * scale).abs() < 1.0 {
+        let (mut a, mut b) = (ai, bi);
+        while b != 0 {
+            let t = b;
+            b = a % b;
+            a = t;
+        }
+        let result = a.abs() as f64 / scale;
+        if result > 1e-12 { result } else { 1.0 }
+    } else {
+        1.0 // Irrational or near-irrational → give up
     }
-    a.abs() as f64
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -2987,7 +3238,10 @@ pub fn differentiate(expr: &Expr, var: &str) -> Expr {
                 (false, false) => Expr::Const(0.0), // constant^constant
                 (true, false) => {
                     // Power rule: d/dx f(x)^n = n * f^(n-1) * f'
-                    if let Expr::Const(n) = b.as_ref() {
+                    // First try direct match on Expr::Const(n)
+                    // Then try eval fallback for simplified-constant exponents (e.g. x^(2+1))
+                    let exponent = simplify(b);
+                    if let Expr::Const(n) = &exponent {
                         let df = differentiate(a, var);
                         let pow_minus_1 = Expr::Pow(
                             Box::new((**a).clone()),
@@ -2995,6 +3249,20 @@ pub fn differentiate(expr: &Expr, var: &str) -> Expr {
                         );
                         simplify(&Expr::Mul(
                             Box::new(Expr::Const(*n)),
+                            Box::new(Expr::Mul(
+                                Box::new(pow_minus_1),
+                                Box::new(df),
+                            )),
+                        ))
+                    } else if let Ok(n) = eval(&exponent, &HashMap::new()) {
+                        // Exponent evaluates to a constant even if not Expr::Const
+                        let df = differentiate(a, var);
+                        let pow_minus_1 = Expr::Pow(
+                            Box::new((**a).clone()),
+                            Box::new(Expr::Const(n - 1.0)),
+                        );
+                        simplify(&Expr::Mul(
+                            Box::new(Expr::Const(n)),
                             Box::new(Expr::Mul(
                                 Box::new(pow_minus_1),
                                 Box::new(df),
@@ -3277,6 +3545,77 @@ pub fn differentiate(expr: &Expr, var: &str) -> Expr {
                     Expr::Const(0.0)
                 }
             }
+            // d/dx asinh(f(x)) = f'(x) / sqrt(f(x)^2 + 1)
+            "asinh" => {
+                if args.len() == 1 {
+                    let df = differentiate(&args[0], var);
+                    let one = Expr::Const(1.0);
+                    let f_sq = Expr::Pow(Box::new(args[0].clone()), Box::new(Expr::Const(2.0)));
+                    let inner = Expr::Add(Box::new(f_sq), Box::new(one));
+                    let sqrt_inner = Expr::Fn("sqrt".to_string(), vec![inner]);
+                    simplify(&Expr::Div(Box::new(df), Box::new(sqrt_inner)))
+                } else {
+                    Expr::Const(0.0)
+                }
+            }
+            // d/dx acosh(f(x)) = f'(x) / sqrt(f(x)^2 - 1)
+            "acosh" => {
+                if args.len() == 1 {
+                    let df = differentiate(&args[0], var);
+                    let one = Expr::Const(1.0);
+                    let f_sq = Expr::Pow(Box::new(args[0].clone()), Box::new(Expr::Const(2.0)));
+                    let inner = Expr::Sub(Box::new(f_sq), Box::new(one));
+                    let sqrt_inner = Expr::Fn("sqrt".to_string(), vec![inner]);
+                    simplify(&Expr::Div(Box::new(df), Box::new(sqrt_inner)))
+                } else {
+                    Expr::Const(0.0)
+                }
+            }
+            // d/dx atanh(f(x)) = f'(x) / (1 - f(x)^2)
+            "atanh" => {
+                if args.len() == 1 {
+                    let df = differentiate(&args[0], var);
+                    let one = Expr::Const(1.0);
+                    let f_sq = Expr::Pow(Box::new(args[0].clone()), Box::new(Expr::Const(2.0)));
+                    let denom = Expr::Sub(Box::new(one), Box::new(f_sq));
+                    simplify(&Expr::Div(Box::new(df), Box::new(denom)))
+                } else {
+                    Expr::Const(0.0)
+                }
+            }
+            // d/dx erfc(f(x)) = -2/sqrt(pi) * exp(-f(x)^2) * f'(x)
+            "erfc" => {
+                if args.len() == 1 {
+                    let df = differentiate(&args[0], var);
+                    let two_over_sqrt_pi = Expr::Div(
+                        Box::new(Expr::Const(2.0)),
+                        Box::new(Expr::Fn("sqrt".to_string(), vec![Expr::Var("pi".to_string())])),
+                    );
+                    let f_sq = Expr::Pow(Box::new(args[0].clone()), Box::new(Expr::Const(2.0)));
+                    let neg_f_sq = Expr::Neg(Box::new(f_sq));
+                    let exp_term = Expr::Fn("exp".to_string(), vec![neg_f_sq]);
+                    simplify(&Expr::Mul(
+                        Box::new(Expr::Neg(Box::new(two_over_sqrt_pi))),
+                        Box::new(Expr::Mul(Box::new(exp_term), Box::new(df))),
+                    ))
+                } else {
+                    Expr::Const(0.0)
+                }
+            }
+            // d/dx gamma(f(x)) = gamma(f(x)) * digamma(f(x)) * f'(x)
+            "gamma" => {
+                if args.len() == 1 {
+                    let df = differentiate(&args[0], var);
+                    let gamma_f = Expr::Fn("gamma".to_string(), vec![args[0].clone()]);
+                    let digamma_f = Expr::Fn("digamma".to_string(), vec![args[0].clone()]);
+                    simplify(&Expr::Mul(
+                        Box::new(gamma_f),
+                        Box::new(Expr::Mul(Box::new(digamma_f), Box::new(df))),
+                    ))
+                } else {
+                    Expr::Const(0.0)
+                }
+            }
             // Non-differentiable functions: floor, ceil, round, sign, sgn, step, heaviside
             "floor" | "ceil" | "round" | "sign" | "sgn" | "step" | "heaviside" => {
                 // These are non-differentiable; return 0 as a piecewise-constant approximation
@@ -3297,6 +3636,22 @@ pub fn differentiate(expr: &Expr, var: &str) -> Expr {
             }
         },
     }
+}
+
+/// Compute the n-th derivative of `expr` with respect to `var`.
+///
+/// Uses repeated differentiation with intermediate simplification.
+/// - `n == 0`: returns `simplify(expr)` unchanged.
+/// - `n > 0`: applies `differentiate` n times.
+pub fn nth_derivative(expr: &Expr, var: &str, n: u32) -> Expr {
+    if n == 0 {
+        return simplify(expr);
+    }
+    let mut result = expr.clone();
+    for _ in 0..n {
+        result = differentiate(&result, var);
+    }
+    result
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -4453,6 +4808,255 @@ pub fn series(expr: &Expr, var: &str, point: f64, order: u32) -> Expr {
     simplify(&make_add(terms))
 }
 
+/// Laurent series expansion around a point that may be a pole.
+///
+/// Automatically detects pole order k by finding the smallest k such that
+/// `(x-a)^k * f(x)` is regular (evaluable) at `x = a`.
+/// Falls back to Taylor series when `f` is regular at the point.
+pub fn series_laurent(expr: &Expr, var: &str, point: f64, order: u32) -> Expr {
+    // Try Taylor first
+    let taylor = series(expr, var, point, order);
+    // Check if the Taylor result is meaningful (non-zero or regular)
+    let mut vars = HashMap::new();
+    vars.insert(var.to_string(), point);
+    let has_pole = match taylor {
+        Expr::Const(0.0) => eval(expr, &vars).is_err(),
+        _ => false,
+    };
+    if !has_pole {
+        return taylor;
+    }
+    // Detect pole order algebraically: examine expression tree for Div
+    // terms containing (x-a) in the denominator.
+    let mut k = find_denominator_pole_order(expr, var, point, order + 3);
+    if k == 0 {
+        return taylor;
+    }
+    // Multiply by (x-a)^k and expand via Taylor
+    let factor = Expr::Pow(
+        Box::new(Expr::Sub(
+            Box::new(Expr::Var(var.to_string())),
+            Box::new(Expr::Const(point)),
+        )),
+        Box::new(Expr::Const(k as f64)),
+    );
+    let g = simplify(&Expr::Mul(Box::new(factor), Box::new(expr.clone())));
+
+    // Evaluate g and its derivatives using near-point eval to handle
+    // removable singularities (e.g. x*(1/x) at x=0 → 1).
+    let mut laurent_terms: Vec<Expr> = Vec::new();
+    let mut current = g.clone();
+    let mut fact = 1.0_f64;
+
+    // Helper: eval at a point with directional epsilon to bypass poles
+    let eval_near = |e: &Expr| -> Option<f64> {
+        // Try a range of epsilon values to handle high-order poles
+        for eps in [1e-3, 1e-6, 1e-8, 1e-12, -1e-3, -1e-6, -1e-8] {
+            let mut v = HashMap::new();
+            v.insert(var.to_string(), point + eps);
+            if let Ok(val) = eval(e, &v) {
+                if val.is_finite() {
+                    // Cross-check with a different epsilon
+                    let mut v2 = HashMap::new();
+                    v2.insert(var.to_string(), point + eps * 2.0);
+                    if let Ok(val2) = eval(e, &v2) {
+                        if val2.is_finite() && (val - val2).abs() < 1e-6 * val.abs().max(1.0) {
+                            return Some(val);
+                        }
+                    }
+                }
+            }
+        }
+        // Try at point directly
+        let mut v = HashMap::new();
+        v.insert(var.to_string(), point);
+        eval(e, &v).ok().filter(|v| v.is_finite())
+    };
+
+    // n=0: g(a) via near-point eval
+    if let Some(g0) = eval_near(&g) {
+        if g0.abs() > 1e-15 {
+            laurent_terms.push(shift_laurent_term(
+                &Expr::Const(g0), var, point, 0.0, -(k as f64),
+            ));
+        }
+    }
+
+    // n=1..order-1: differentiate g and evaluate via near-point
+    for n in 1..order {
+        current = differentiate(&current, var);
+        fact *= n as f64;
+        if let Some(dv) = eval_near(&current) {
+            if dv.abs() > 1e-15 {
+                let coeff = dv / fact;
+                laurent_terms.push(shift_laurent_term(
+                    &Expr::Const(coeff), var, point, n as f64, -(k as f64),
+                ));
+            }
+        }
+    }
+
+    if laurent_terms.is_empty() {
+        return Expr::Const(0.0);
+    }
+    simplify(&make_add(laurent_terms))
+}
+
+/// Build a Taylor/Laurent term `coeff * (x-a)^(n + delta)` for the series.
+fn shift_laurent_term(coeff: &Expr, var: &str, point: f64, n: f64, delta: f64) -> Expr {
+    let new_exp = n + delta;
+    if new_exp.abs() < 1e-12 {
+        return coeff.clone();
+    }
+    let x_minus_a = Expr::Sub(
+        Box::new(Expr::Var(var.to_string())),
+        Box::new(Expr::Const(point)),
+    );
+    let pow_term = if (new_exp - 1.0).abs() < 1e-12 {
+        x_minus_a
+    } else {
+        Expr::Pow(Box::new(x_minus_a), Box::new(Expr::Const(new_exp)))
+    };
+    Expr::Mul(Box::new(coeff.clone()), Box::new(pow_term))
+}
+
+/// Find the pole order by inspecting the denominator of the expression.
+/// Returns 0 if no pole is detected.
+fn find_denominator_pole_order(expr: &Expr, var: &str, point: f64, max_order: u32) -> u32 {
+    match expr {
+        Expr::Div(num, den) => {
+            // Check if the denominator vanishes at the point
+            let mut v = HashMap::new();
+            v.insert(var.to_string(), point);
+            let den_at_point = eval(den, &v);
+            if den_at_point.map(|d| d.abs() < 1e-10).unwrap_or(true) {
+                // Denominator is zero at point — find (x-a)^k factor in den
+                let k = count_factor(den, var, point);
+                if k > 0 {
+                    // Check the numerator: also vanishes? Might cancel.
+                    let num_at_point = eval(num, &v);
+                    if num_at_point.map(|n| n.abs() > 1e-10).unwrap_or(true) {
+                        // Numerator non-zero at point, so pole order = k
+                        return k.min(max_order);
+                    }
+                    // Both vanish — pole order = k - (numerator's factor order)
+                    let num_k = count_factor(num, var, point);
+                    let net = k.saturating_sub(num_k);
+                    if net > 0 { return net.min(max_order); }
+                }
+            }
+            find_denominator_pole_order(num, var, point, max_order)
+                .max(find_denominator_pole_order(den, var, point, max_order))
+        }
+        Expr::Pow(base, exp) => {
+            // Negative power like x^(-k) means a pole
+            if count_factor(base, var, point) > 0 {
+                if let Expr::Const(e) = exp.as_ref() {
+                    if *e < 0.0 {
+                        let k = (-e) as u32;
+                        return k.min(max_order);
+                    }
+                }
+            }
+            0
+        }
+        Expr::Add(a, b) | Expr::Sub(a, b) | Expr::Mul(a, b) => {
+            std::cmp::max(
+                find_denominator_pole_order(a, var, point, max_order),
+                find_denominator_pole_order(b, var, point, max_order),
+            )
+        }
+        _ => 0,
+    }
+}
+
+/// Count the exponent of (x-a) factor in an expression (positive exponents only).
+/// For Pow(Sub(x, a), Const(n)) with n > 0, returns n.
+/// For Var(x) and Sub(x, a), returns 1. For others, returns 0.
+fn count_factor(expr: &Expr, var: &str, point: f64) -> u32 {
+    match expr {
+        Expr::Var(v) if v == var => 1,
+        Expr::Sub(v, p) => {
+            let has_var = matches!(v.as_ref(), Expr::Var(vn) if vn == var);
+            let is_point = matches!(p.as_ref(), Expr::Const(pv) if (*pv - point).abs() < 1e-12);
+            if has_var && is_point { 1 } else { 0 }
+        }
+        Expr::Pow(base, exp) => {
+            if let Expr::Const(e) = exp.as_ref() {
+                if *e > 0.0 && e.fract() == 0.0 {
+                    let n = *e as u32;
+                    if count_factor(base, var, point) > 0 { n } else { 0 }
+                } else { 0 }
+            } else { 0 }
+        }
+        Expr::Mul(a, b) => {
+            count_factor(a, var, point) + count_factor(b, var, point)
+        }
+        _ => 0,
+    }
+}
+
+/// Shift all (x-a)^n exponents in a series expansion by `delta`.
+/// Used by `series_laurent` to produce negative-exponent terms.
+fn shift_exponent_series(expr: &Expr, var: &str, point: f64, delta: f64) -> Expr {
+    // Collect &Expr references from flatten_add, then convert to owned
+    let refs: Vec<&Expr> = flatten_add(expr);
+    let terms: Vec<Expr> = refs.iter().map(|&term| {
+        let term: &Expr = term; // Now &Expr (not &&Expr)
+        if let Expr::Mul(coeff, pow_term) = term {
+            if let Expr::Pow(base, exp) = pow_term.as_ref() {
+                if let Expr::Const(e) = exp.as_ref() {
+                    if let Expr::Sub(v, p) = base.as_ref() {
+                        if matches!(v.as_ref(), Expr::Var(vn) if vn == var)
+                            && matches!(p.as_ref(), Expr::Const(pv) if (*pv - point).abs() < 1e-12)
+                        {
+                            let new_exp = e + delta;
+                            if new_exp.abs() < 1e-12 {
+                                return (**coeff).clone();
+                            }
+                            if (new_exp - 1.0).abs() < 1e-12 {
+                                return Expr::Mul(
+                                    Box::new((**coeff).clone()),
+                                    Box::new(Expr::Sub(
+                                        Box::new(Expr::Var(var.to_string())),
+                                        Box::new(Expr::Const(point)),
+                                    )),
+                                );
+                            }
+                            return Expr::Mul(
+                                Box::new((**coeff).clone()),
+                                Box::new(Expr::Pow(
+                                    Box::new(Expr::Sub(
+                                        Box::new(Expr::Var(var.to_string())),
+                                        Box::new(Expr::Const(point)),
+                                    )),
+                                    Box::new(Expr::Const(new_exp)),
+                                )),
+                            );
+                        }
+                    }
+                }
+            }
+        }
+        // If no (x-a)^n pattern found or it's the constant term
+        if delta.abs() < 1e-12 {
+            return term.clone();
+        }
+        // Constant term with non-zero delta: multiply by (x-a)^delta
+        Expr::Mul(
+            Box::new(term.clone()),
+            Box::new(Expr::Pow(
+                Box::new(Expr::Sub(
+                    Box::new(Expr::Var(var.to_string())),
+                    Box::new(Expr::Const(point)),
+                )),
+                Box::new(Expr::Const(delta)),
+            )),
+        )
+    }).collect();
+    simplify(&make_add(terms))
+}
+
 // ════════════════════════════════════════════════════════════════════════════
 // Limit evaluation
 // ════════════════════════════════════════════════════════════════════════════
@@ -4521,7 +5125,7 @@ pub fn limit(expr: &Expr, var: &str, point: &str, direction: Option<&str>) -> Re
                 }
 
                 // Fallback: series expansion
-                let series_expr = series(expr, var, pt, 4);
+                let series_expr = series(expr, var, pt, 6);
                 let simplified = simplify(&series_expr);
 
                 if let Expr::Const(c) = &simplified {
@@ -5012,11 +5616,13 @@ pub fn propagate_dimensions_ast(
 ) -> DimensionResult {
     let parts: Vec<&str> = equation.split('=').collect();
     if parts.len() < 2 {
+        // No equation sign — compute dimension of the expression as a scalar
+        let dim = compute_expression_dimension(equation, dimensions);
         return DimensionResult {
-            lhs_dim: "unknown".into(),
-            rhs_dim: "unknown".into(),
+            lhs_dim: dim.clone().unwrap_or_else(|| "unknown".into()),
+            rhs_dim: "1".into(),
             consistent: true,
-            method: "no_equals".into(),
+            method: "single_expr".into(),
         };
     }
 
@@ -5103,11 +5709,24 @@ fn compute_expr_dim(
                 .unwrap_or_else(|| "1".into());
             match name.as_str() {
                 // Transcendental functions require dimensionless input
-                "sin" | "cos" | "tan" | "exp" | "ln" | "log" | "asin" | "acos" | "atan" => {
+                "sin" | "cos" | "tan" | "exp" | "ln" | "log"
+                | "asin" | "acos" | "atan"
+                | "sinh" | "cosh" | "tanh" => {
                     if da == "1" || da == "unknown" {
                         Some("1".into()) // output is dimensionless
                     } else {
                         Some(format!("FN_REQUIRES_DIMENSIONLESS({da})"))
+                    }
+                }
+                "atan2" => {
+                    // atan2(y,x) — both arguments must be dimensionless
+                    let da2 = args.get(1)
+                        .and_then(|a| compute_expr_dim(a, dims))
+                        .unwrap_or_else(|| "1".into());
+                    if (da == "1" || da == "unknown") && (da2 == "1" || da2 == "unknown") {
+                        Some("1".into())
+                    } else {
+                        Some(format!("FN_REQUIRES_DIMENSIONLESS({da},{da2})"))
                     }
                 }
                 "sqrt" => Some(sqrt_dimension(&da)),
@@ -5677,6 +6296,53 @@ mod tests {
         vars.insert("y".into(), 5.0);
         let result = eval(&t, &vars).unwrap();
         assert!((result - 6.0).abs() < 1e-10, "expected 6, got {result}");
+    }
+
+    // ── New: tan² + 1 → sec² and 1 + cot² → csc² ──
+
+    #[test]
+    fn test_trig_tan_sq_plus_one() {
+        let e = parse("tan(x)^2 + 1").unwrap();
+        let t = trig_simplify(&e);
+        let s = display(&t);
+        assert!(s.contains("sec"),
+            "tan²+1 should simplify to sec²: {s}");
+        // Numerical verification
+        let mut vars = HashMap::new();
+        vars.insert("x".into(), 0.5);
+        let val = eval(&t, &vars).unwrap();
+        let expected = 1.0 / (0.5_f64.cos()).powi(2);
+        assert!((val - expected).abs() < 1e-10, "tan²(0.5)+1 = sec²(0.5) = {expected}, got {val}");
+    }
+
+    #[test]
+    fn test_trig_tan_sq_plus_one_reversed() {
+        let e = parse("1 + tan(x)^2").unwrap();
+        let t = trig_simplify(&e);
+        let s = display(&t);
+        assert!(s.contains("sec"),
+            "1 + tan² should simplify to sec²: {s}");
+        // Check structural equivalence: sec²(x) should equal 1/cos²(x)
+        let mut vars = HashMap::new();
+        vars.insert("x".into(), 0.5);
+        let val = eval(&t, &vars).unwrap();
+        let expected = 1.0 / (0.5_f64.cos()).powi(2);
+        assert!((val - expected).abs() < 1e-10, "1+tan²(0.5) = sec²(0.5) = {expected}, got {val}");
+    }
+
+    #[test]
+    fn test_trig_one_plus_cot_sq() {
+        let e = parse("1 + cot(x)^2").unwrap();
+        let t = trig_simplify(&e);
+        let s = display(&t);
+        assert!(s.contains("csc"),
+            "1 + cot² should simplify to csc²: {s}");
+        // Numerical verification
+        let mut vars = HashMap::new();
+        vars.insert("x".into(), 0.5);
+        let val = eval(&t, &vars).unwrap();
+        let expected = 1.0 / (0.5_f64.sin()).powi(2);
+        assert!((val - expected).abs() < 1e-10, "1+cot²(0.5) = csc²(0.5) = {expected}, got {val}");
     }
 
     // ── Rationalization ──
@@ -6727,6 +7393,74 @@ mod tests {
         let result = propagate_dimensions_ast("y = sin(x)", &dims);
         assert!(!result.consistent, "sin(L) should be rejected: {} = {}", result.lhs_dim, result.rhs_dim);
     }
+
+    // ── New: dimensional analysis — missing functions ──
+
+    #[test]
+    fn test_propagate_dimensions_ast_sinh_dimensionless_ok() {
+        let mut dims = HashMap::new();
+        dims.insert("x".into(), "1".into());
+        dims.insert("y".into(), "1".into());
+        let result = propagate_dimensions_ast("y = sinh(x)", &dims);
+        assert!(result.consistent, "sinh(1) should be ok: {} = {}", result.lhs_dim, result.rhs_dim);
+    }
+
+    #[test]
+    fn test_propagate_dimensions_ast_sinh_dimensioned_fails() {
+        let mut dims = HashMap::new();
+        dims.insert("x".into(), "L".into());
+        dims.insert("y".into(), "1".into());
+        let result = propagate_dimensions_ast("y = sinh(x)", &dims);
+        assert!(!result.consistent, "sinh(L) should be rejected: {} = {}", result.lhs_dim, result.rhs_dim);
+    }
+
+    #[test]
+    fn test_propagate_dimensions_ast_cosh_dimensionless_ok() {
+        let mut dims = HashMap::new();
+        dims.insert("x".into(), "1".into());
+        dims.insert("y".into(), "1".into());
+        let result = propagate_dimensions_ast("y = cosh(x)", &dims);
+        assert!(result.consistent);
+    }
+
+    #[test]
+    fn test_propagate_dimensions_ast_tanh_dimensionless_ok() {
+        let mut dims = HashMap::new();
+        dims.insert("x".into(), "1".into());
+        dims.insert("y".into(), "1".into());
+        let result = propagate_dimensions_ast("y = tanh(x)", &dims);
+        assert!(result.consistent);
+    }
+
+    #[test]
+    fn test_propagate_dimensions_ast_atan2_dimensionless_ok() {
+        let mut dims = HashMap::new();
+        dims.insert("x".into(), "1".into());
+        dims.insert("y".into(), "1".into());
+        dims.insert("z".into(), "1".into());
+        let result = propagate_dimensions_ast("z = atan2(y, x)", &dims);
+        assert!(result.consistent);
+    }
+
+    #[test]
+    fn test_propagate_dimensions_ast_atan2_dimensioned_fails() {
+        let mut dims = HashMap::new();
+        dims.insert("x".into(), "L".into());
+        dims.insert("y".into(), "1".into());
+        dims.insert("z".into(), "1".into());
+        let result = propagate_dimensions_ast("z = atan2(y, x)", &dims);
+        assert!(!result.consistent, "atan2(y, L) should be rejected: {} = {}", result.lhs_dim, result.rhs_dim);
+    }
+
+    #[test]
+    fn test_propagate_dimensions_ast_no_equals_single_expr() {
+        let mut dims = HashMap::new();
+        dims.insert("x".into(), "L".into());
+        let result = propagate_dimensions_ast("x * x", &dims);
+        assert_eq!(result.method, "single_expr");
+        assert_eq!(result.lhs_dim, "L^2");
+    }
+
     // ── sec/csc/cot evaluation ──
 
     #[test]
@@ -6894,4 +7628,204 @@ mod tests {
             "integral log10(x) = x*log10(x) - x/ln(10): {result_str}");
     }
 
+    // ── New: Inverse hyperbolic differentiation ──
+
+    #[test]
+    fn test_diff_asinh() {
+        // d/dx asinh(x) = 1/sqrt(x^2 + 1)
+        let expr = parse("asinh(x)").unwrap();
+        let d = differentiate(&expr, "x");
+        let val_at_0 = eval(&d, &HashMap::from([("x".into(), 0.0)])).unwrap();
+        assert!((val_at_0 - 1.0).abs() < 1e-10, "asinh'(0) = 1, got {val_at_0}");
+        let val_at_1 = eval(&d, &HashMap::from([("x".into(), 1.0)])).unwrap();
+        let expected = 1.0 / 2.0_f64.sqrt();
+        assert!((val_at_1 - expected).abs() < 1e-10, "asinh'(1) = {expected}, got {val_at_1}");
+    }
+
+    #[test]
+    fn test_diff_asinh_chain() {
+        // d/dx asinh(2*x) = 2/sqrt((2*x)^2 + 1), at x=0 gives 2
+        let expr = parse("asinh(2*x)").unwrap();
+        let d = differentiate(&expr, "x");
+        let val = eval(&d, &HashMap::from([("x".into(), 0.0)])).unwrap();
+        assert!((val - 2.0).abs() < 1e-10, "asinh'(2x) at x=0 = 2, got {val}");
+    }
+
+    #[test]
+    fn test_diff_acosh() {
+        // d/dx acosh(x) = 1/sqrt(x^2 - 1)
+        let expr = parse("acosh(x)").unwrap();
+        let d = differentiate(&expr, "x");
+        let val = eval(&d, &HashMap::from([("x".into(), 2.0)])).unwrap();
+        let expected = 1.0 / 3.0_f64.sqrt();
+        assert!((val - expected).abs() < 1e-10, "acosh'(2) = {expected}, got {val}");
+    }
+
+    #[test]
+    fn test_diff_atanh() {
+        // d/dx atanh(x) = 1/(1 - x^2)
+        let expr = parse("atanh(x)").unwrap();
+        let d = differentiate(&expr, "x");
+        let val = eval(&d, &HashMap::from([("x".into(), 0.0)])).unwrap();
+        assert!((val - 1.0).abs() < 1e-10, "atanh'(0) = 1, got {val}");
+    }
+
+    // ── New: erfc differentiation ──
+
+    #[test]
+    fn test_diff_erfc() {
+        // d/dx erfc(x) = -2/sqrt(pi) * exp(-x^2)
+        let expr = parse("erfc(x)").unwrap();
+        let d = differentiate(&expr, "x");
+        let mut vars = HashMap::new();
+        vars.insert("x".into(), 0.0);
+        vars.insert("pi".into(), std::f64::consts::PI);
+        let val = eval(&d, &vars).unwrap();
+        let expected = -2.0 / std::f64::consts::PI.sqrt();
+        assert!((val - expected).abs() < 1e-8, "erfc'(0) = {expected}, got {val}");
+    }
+
+    // ── New: gamma differentiation ──
+
+    #[test]
+    fn test_diff_gamma_symbolic() {
+        // d/dx gamma(x) = gamma(x) * digamma(x)
+        let expr = parse("gamma(x)").unwrap();
+        let d = differentiate(&expr, "x");
+        let s = display(&d);
+        assert!(s.contains("gamma"), "gamma derivative should contain gamma: {s}");
+        assert!(s.contains("digamma"), "gamma derivative should contain digamma: {s}");
+    }
+
+    #[test]
+    fn test_diff_gamma_numeric() {
+        // gamma'(1) = gamma(1) * digamma(1) = 1 * (-γ) ≈ -0.5772
+        let expr = parse("gamma(x)").unwrap();
+        let d = differentiate(&expr, "x");
+        let val = eval(&d, &HashMap::from([("x".into(), 1.0)])).unwrap();
+        let expected = -0.5772156649015329;
+        assert!((val - expected).abs() < 1e-5, "gamma'(1) = {expected}, got {val}");
+    }
+
+    // ── New: nth_derivative ──
+
+    #[test]
+    fn test_nth_derivative_sin() {
+        // d²/dx² sin(x) = -sin(x)
+        let expr = parse("sin(x)").unwrap();
+        let d2 = nth_derivative(&expr, "x", 2);
+        let val = eval(&d2, &HashMap::from([("x".into(), 0.0)])).unwrap();
+        assert!((val - 0.0).abs() < 1e-10, "sin''(0) = 0, got {val}");
+        let val2 = eval(&d2, &HashMap::from([("x".into(), std::f64::consts::FRAC_PI_2)])).unwrap();
+        assert!((val2 + 1.0).abs() < 1e-10, "sin''(pi/2) = -1, got {val2}");
+    }
+
+    #[test]
+    fn test_nth_derivative_seventh_sin_is_minus_cos() {
+        // d⁷/dx⁷ sin(x) = -cos(x)
+        let expr = parse("sin(x)").unwrap();
+        let d7 = nth_derivative(&expr, "x", 7);
+        let val = eval(&d7, &HashMap::from([("x".into(), 0.0)])).unwrap();
+        assert!((val + 1.0).abs() < 1e-10, "sin⁽⁷⁾(0) = -1, got {val}");
+    }
+
+    #[test]
+    fn test_nth_derivative_zero() {
+        // n=0 returns the expression
+        let expr = parse("x^2 + 3*x").unwrap();
+        let d0 = nth_derivative(&expr, "x", 0);
+        let val = eval(&d0, &HashMap::from([("x".into(), 2.0)])).unwrap();
+        assert!((val - 10.0).abs() < 1e-10, "0th derivative at x=2 = 10, got {val}");
+    }
+
+    // ── New: Constant exponent fix ──
+
+    #[test]
+    fn test_diff_power_simplified_constant_exponent() {
+        // x^(2+1) = x³, derivative = 3x²
+        let expr = parse("x^(2+1)").unwrap();
+        let d = differentiate(&expr, "x");
+        let val = eval(&d, &HashMap::from([("x".into(), 2.0)])).unwrap();
+        assert!((val - 12.0).abs() < 1e-10, "d/dx x^(2+1) at x=2 = 12, got {val}");
+    }
+
+    // ── New: gamma / digamma eval ──
+
+    #[test]
+    fn test_eval_gamma_positive() {
+        let e = parse("gamma(5)").unwrap();
+        let v = eval(&e, &HashMap::new()).unwrap();
+        assert!((v - 24.0).abs() < 1e-8, "gamma(5) = 24, got {v}");
+    }
+
+    #[test]
+    fn test_eval_gamma_half() {
+        // gamma(0.5) = sqrt(pi)
+        let e = parse("gamma(0.5)").unwrap();
+        let v = eval(&e, &HashMap::new()).unwrap();
+        let expected = std::f64::consts::PI.sqrt();
+        assert!((v - expected).abs() < 1e-8, "gamma(0.5) = sqrt(pi) = {expected}, got {v}");
+    }
+
+    #[test]
+    fn test_eval_digamma_one() {
+        // digamma(1) = -γ (Euler-Mascheroni constant)
+        let e = parse("digamma(1)").unwrap();
+        let v = eval(&e, &HashMap::new()).unwrap();
+        let expected = -0.5772156649015329;
+        assert!((v - expected).abs() < 1e-5, "digamma(1) = -γ = {expected}, got {v}");
+    }
+
+    // ── New: erfc eval ──
+
+    #[test]
+    fn test_eval_erfc_basic() {
+        let e = parse("erfc(0)").unwrap();
+        let v = eval(&e, &HashMap::new()).unwrap();
+        assert!((v - 1.0).abs() < 1e-8, "erfc(0) = 1, got {v}");
+    }
+
+    // ── New: Laurent series ──
+
+    #[test]
+    fn test_series_laurent_first_order_pole() {
+        // 1/x has a simple pole at x=0 → Laurent series starts with x^(-1)
+        let e = parse("1/x").unwrap();
+        let s = series_laurent(&e, "x", 0.0, 4);
+        let s_str = display(&s);
+        assert!(s_str.contains("x^(-1)") || s_str.contains("x^-1") || s_str.contains("1/x"),
+            "Laurent of 1/x should contain x^(-1): {s_str}");
+    }
+
+    #[test]
+    fn test_series_laurent_second_order_pole() {
+        // 1/x^2 has a double pole at x=0 → Laurent series starts with x^(-2)
+        let e = parse("1/x^2").unwrap();
+        let s = series_laurent(&e, "x", 0.0, 4);
+        let s_str = display(&s);
+        assert!(s_str.contains("x^(-2)") || s_str.contains("x^-2"),
+            "Laurent of 1/x^2 should contain x^(-2): {s_str}");
+    }
+
+    #[test]
+    fn test_series_laurent_regular_point_falls_back_to_taylor() {
+        // sin(x) is regular at 0 — Laurent should match Taylor
+        let e = parse("sin(x)").unwrap();
+        let l = series_laurent(&e, "x", 0.0, 4);
+        let t = series(&e, "x", 0.0, 4);
+        let l_str = display(&l);
+        let t_str = display(&t);
+        assert_eq!(l_str, t_str,
+            "Laurent at regular point should match Taylor: Laurent={l_str}, Taylor={t_str}");
+    }
+
+    #[test]
+    fn test_series_laurent_higher_order_pole() {
+        // 1/x^3 has a triple pole at x=0
+        let e = parse("1/x^3").unwrap();
+        let s = series_laurent(&e, "x", 0.0, 5);
+        let s_str = display(&s);
+        assert!(s_str.contains("x^(-3)") || s_str.contains("x^-3"),
+            "Laurent of 1/x^3 should contain x^(-3): {s_str}");
+    }
 }
