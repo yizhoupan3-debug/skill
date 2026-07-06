@@ -55,7 +55,6 @@
 | CI 失败修复 / PR 评论回复 | `$gh-fix-ci` / `$gh-address-comments` |
 | Goal/Task 生命周期 | `goal_state_manage(...)` / `task_create` / `task_focus` / `task_complete` |
 | DAG 编排 | `chain_dag_init` / `chain_dag_tick` |
-| Closeout 记录 | `closeout_record_write` |
 | 文献/统计/实验验证 | `research_verification_*` 系列 |
 | 框架运维/路由治理 | `$skill-framework-developer` |
 | 设计/原型/品牌 | `$design-md` / `$visual-review` / `$hallmark` / `$huashu-design` |

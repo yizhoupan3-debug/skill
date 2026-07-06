@@ -764,6 +764,11 @@ fn handle_prompts_list(id: Option<Value>) -> Value {
                     "description": "closeout checklist",
                     "arguments": [],
                 },
+                {
+                    "name": "task_workflow",
+                    "description": "task/goal/chain DAG step workflow guidance",
+                    "arguments": [],
+                },
             ],
         },
     })
@@ -785,6 +790,7 @@ fn handle_prompts_get(
         "framework_routing" => "framework routing",
         "review_gate" => "review gate advisory",
         "closeout_checklist" => "closeout checklist",
+        "task_workflow" => "task/goal/chain DAG workflow",
         _ => "",
     };
 
@@ -839,6 +845,49 @@ fn handle_prompts_get(
              - [ ] Verification evidence recorded\n\
              - [ ] Blockers in NEXT_ACTIONS\n\n\
              Call closeout_gate for machine-readable check."
+            .to_string(),
+        "task_workflow" => "\
+[Task/Goal/Chain DAG Workflow]\n\n\
+核心概念:\n\
+- task = 一个 step（步骤），有 task_id\n\
+- goal = step 的目标和追踪（GOAL_STATE.json）\n\
+- chain = step 序列（TASK_CHAIN.json），round 分组\n\
+- round = 一轮工作，包含多个 step\n\n\
+完整工作流:\n\
+1. 定义 step 序列:\n\
+   chain_dag_init(chain_id, tasks=[\n\
+     {task_id:\"step-1\", title:\"xxx\", round:1},\n\
+     {task_id:\"step-2\", title:\"xxx\", round:1},\n\
+     {task_id:\"step-3\", title:\"xxx\", round:2}\n\
+   ])\n\n\
+2. 创建并启动当前 step:\n\
+   task_create(task_id=\"step-1\", title=\"xxx\")\n\
+   goal_state_manage(operation=start, task_id=\"step-1\", goal=\"...\", drive_until_done=true)\n\
+   tip: task_create 先建目录和指针，goal_state_manage(start) 启动 goal 追踪\n\n\
+3. 查看进展（compact 省 token）:\n\
+   goal_state_read(compact=true)\n\
+   → 返回 goal + round 分组的 step 状态\n\n\
+4. 推进到下一步:\n\
+   chain_dag_tick()\n\
+   → 自动找依赖满足的下一个 step 并推进\n\n\
+5. 完成当前 step:\n\
+   goal_state_manage(operation=complete, task_id=\"step-1\")\n\
+   → 自动触发 chain advance，启动 round 中下一个 step\n\n\
+6. 全部 step 完成后:\n\
+   task_list() — 查看所有 step 的完成状态\n\n\
+何时用什么:\n\
+- task_create: 创建 step（必先创建再 goal_state_manage）\n\
+- goal_state_manage(start): 有明确 goal 和 done_when 时\n\
+- goal_state_manage(checkpoint): 记录进展\n\
+- task_complete: 无 goal 的简单 step 完成\n\
+- chain_dag_init: 有多步需要顺序执行时\n\
+- chain_dag_tick: 手动推进（也可自动，complete 时自动触发）\n\
+- chain_dag_status: 看当前 DAG 全貌\n\
+- chain_dag_retry/skip: 手动干预失败/跳过\n\
+- record_evidence: 记录验证证据\n\n\
+Token 优化:\n\
+- 用 goal_state_read(compact=true) 而非 goal_state_manage(status)\n\
+- chain_dag_status 默认只返回摘要（round + status_counts）"
             .to_string(),
         _ => format!("Unknown prompt: {prompt_name}"),
     };

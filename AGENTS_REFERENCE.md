@@ -20,7 +20,7 @@
 | `task_output_validate` | 校验 TASK_OUTPUT.json 字段完整性 |
 | `chain_aggregate` | 手动触发生成 CHAIN_OUTPUT.json |
 
-**自动集成**：`task_create` 自动 init；`closeout_record_write` 自动同步 closeout → TASK_OUTPUT。
+**自动集成**：`task_create` 自动 init；`task_output_write(closeout=...)` 自动同步 closeout → TASK_OUTPUT。
 
 ### 输出字段
 
