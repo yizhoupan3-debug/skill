@@ -315,7 +315,7 @@ fn compute_verdict(
         _ => 0.4,
     };
 
-    let score = win_ratio * (1.0 - coverage_penalty) * (1.0 - cost_penalty);
+    let score = (win_ratio * (1.0 - coverage_penalty) * (1.0 - cost_penalty)).min(1.0);
 
     let (recommendation, confidence) = if score > 0.6 {
         ("replace", score)

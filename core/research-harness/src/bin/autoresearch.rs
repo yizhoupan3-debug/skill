@@ -884,8 +884,22 @@ fn cmd_barrier(
     consecutive_failures: u32,
 ) -> Result<()> {
     let ws = resolve_workspace(workspace)?;
-    // Initialize workspace for barrier research
+    // 1. Record blocker in parent state (if parent state exists)
     let barrier_dir = ws.join("barrier-research");
+    let parent_state_path = ws.join("research-state.yaml");
+    if parent_state_path.exists() {
+        match research_harness::state::load_state(&parent_state_path) {
+            Ok(parent_state) => {
+                let parent_state =
+                    research_harness::claims::lifecycle::add_blocker(&parent_state, problem)?;
+                research_harness::state::dump_state(&parent_state_path, &parent_state)?;
+            }
+            Err(e) => {
+                eprintln!("Warning: could not record blocker in parent state: {e}");
+            }
+        }
+    }
+    // 2. Initialize workspace for barrier research
     let state = research_harness::claims::lifecycle::default_state("barrier", problem, "barrier");
     std::fs::create_dir_all(&barrier_dir)?;
     research_harness::state::dump_state(&barrier_dir.join("research-state.yaml"), &state)?;

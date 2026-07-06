@@ -29,6 +29,19 @@ use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::path::Path;
 
+/// Built-in metric name patterns for which lower values are better.
+/// Extend this list to add new directions without modifying the detection logic.
+const LOWER_IS_BETTER_PATTERNS: &[&str] = &[
+    "latency",
+    "time",
+    "ms",
+    "cost",
+    "error",
+    "loss",
+    "memory",
+    "size",
+];
+
 // ── Public types ──
 
 /// A single component to ablate.
@@ -355,16 +368,8 @@ fn compute_deltas(
         let a = ablated.get(key).copied().unwrap_or(0.0);
         let delta = a - b;
 
-        // Determine direction heuristically based on key name conventions
-        let direction = if key.contains("latency")
-            || key.contains("time")
-            || key.contains("ms")
-            || key.contains("cost")
-            || key.contains("error")
-            || key.contains("loss")
-            || key.contains("memory")
-            || key.contains("size")
-        {
+        // Determine direction based on configurable pattern list
+        let direction = if LOWER_IS_BETTER_PATTERNS.iter().any(|p| key.contains(p)) {
             DeltaDirection::LowerIsBetter
         } else {
             // Default: accuracy, f1, recall, score, throughput, etc. — higher is better

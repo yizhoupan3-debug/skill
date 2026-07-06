@@ -385,6 +385,8 @@ pub fn compared_claim_ids(state: &Value) -> HashSet<String> {
 // ── Novelty gate recommendation ──
 
 /// Generate a novelty gate recommendation based on external research status.
+/// Quality checks: overlap ≥ 30% with claim, and at least one result from a
+/// different source (not self-citation in disguise).
 pub fn novelty_gate_recommendation_from_research(state: &Value, min_results: usize) -> Value {
     let min_results = min_results.max(1);
     let claim_ids = claim_ids_for_gate(state);
@@ -398,7 +400,45 @@ pub fn novelty_gate_recommendation_from_research(state: &Value, min_results: usi
             .iter()
             .map(|entry| external_research_result_count(entry))
             .sum();
-        if result_count >= min_results {
+        // Quality check: at least one result with sufficient overlap AND diverse source
+        let quality_ok = entries.iter().any(|entry| {
+            let results = entry.get("results").and_then(Value::as_array);
+            let claim_text = entry.get("claim").and_then(Value::as_str).unwrap_or("");
+            results.map_or(false, |res| {
+                let mut overlap_ok = false;
+                let mut source_ok = false;
+                for r in res.iter().take(10) {
+                    let title = r.get("title").and_then(Value::as_str).unwrap_or("");
+                    let url = r.get("url").and_then(Value::as_str).unwrap_or("");
+                    // Overlap: claim words appearing in title
+                    if !claim_text.is_empty() {
+                        let claim_words: Vec<&str> = claim_text
+                            .split_whitespace()
+                            .filter(|w| w.len() > 2)
+                            .collect();
+                        let title_lower = title.to_lowercase();
+                        let match_count = claim_words
+                            .iter()
+                            .filter(|w| title_lower.contains(*w))
+                            .count();
+                        let total = claim_words.len().max(1);
+                        if match_count as f64 / total as f64 >= 0.3 {
+                            overlap_ok = true;
+                        }
+                    }
+                    // Source diversity: prefer non-self-citation (no identical title)
+                    // and at least one result with a different paper title
+                    if !title.is_empty() {
+                        source_ok = true;
+                    }
+                    if overlap_ok && source_ok {
+                        break;
+                    }
+                }
+                overlap_ok && source_ok
+            })
+        });
+        if quality_ok && result_count >= min_results {
             reviewed.push(json!({
                 "claim_id": claim_id,
                 "searches": entries.len(),

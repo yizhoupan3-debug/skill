@@ -108,6 +108,20 @@ impl ReviewDimension {
     }
 }
 
+// ── Barrier / Blocker ──
+
+/// A research barrier — a blocking problem that stopped progress.
+/// Created by the barrier escalation workflow, resolved when overcome.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Blocker {
+    pub id: String,
+    pub description: String,
+    pub status: String,            // "active" | "resolved"
+    pub created_at: String,
+    pub resolved_at: Option<String>,
+    pub resolution: Option<String>,
+}
+
 // ── Claims ──
 
 /// A single claim in the claim ledger.

@@ -4,13 +4,13 @@
 
 use crate::types::Severity;
 
-/// Classify a finding's severity based on keyword heuristics.
+/// Classify a finding's severity based on keyword heuristics with negation guard.
 /// This is a first-pass classifier; the reviewer subagent makes the final call.
 pub fn classify_finding(text: &str) -> Severity {
     let lower = text.to_ascii_lowercase();
 
     // P0: 数据完整性/学术诚信/硬理论错误
-    if contains_any(
+    if contains_any_negation_aware(
         &lower,
         &[
             "数据造假",
@@ -31,7 +31,7 @@ pub fn classify_finding(text: &str) -> Severity {
     }
 
     // A: 核心硬伤
-    if contains_any(
+    if contains_any_negation_aware(
         &lower,
         &[
             "逻辑错误",
@@ -55,7 +55,7 @@ pub fn classify_finding(text: &str) -> Severity {
     }
 
     // B: 需补充
-    if contains_any(
+    if contains_any_negation_aware(
         &lower,
         &[
             "缺少实验",
@@ -80,7 +80,7 @@ pub fn classify_finding(text: &str) -> Severity {
     }
 
     // Warning: 隐晦警告
-    if contains_any(
+    if contains_any_negation_aware(
         &lower,
         &[
             "可能误导",
@@ -104,8 +104,26 @@ pub fn classify_finding(text: &str) -> Severity {
     Severity::C
 }
 
-fn contains_any(text: &str, keywords: &[&str]) -> bool {
-    keywords.iter().any(|kw| text.contains(kw))
+/// Check for any keyword match with negation guard.
+/// Returns false if keyword is found but preceded (within 40 chars) by a negation word.
+/// Only checks the first occurrence of each keyword; multi-keyword lists still work independently.
+fn contains_any_negation_aware(text: &str, keywords: &[&str]) -> bool {
+    let negations = [
+        "not ", "no ", "cannot ", "can't ", "don't ", "doesn't ",
+        "isn't ", "aren't ", "won't ", "without ", "never ",
+        "没有", "不是", "并非", "无法", "不能", "不会",
+    ];
+    for kw in keywords {
+        if let Some(pos) = text.find(kw) {
+            let window_start = pos.saturating_sub(40);
+            let window = &text[window_start..pos];
+            let negated = negations.iter().any(|n| window.contains(n));
+            if !negated {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 #[cfg(test)]
@@ -148,5 +166,43 @@ mod tests {
     #[test]
     fn test_c_default() {
         assert_eq!(classify_finding("建议改进段落过渡"), Severity::C);
+    }
+
+    #[test]
+    fn test_negation_prevents_false_positive() {
+        assert_eq!(
+            classify_finding("The result is not irreproducible — we confirmed it 3 times"),
+            Severity::C,
+            "negated 'irreproducible' should not trigger P0"
+        );
+        assert_eq!(
+            classify_finding("没有数据造假嫌疑，所有数据均有原始记录"),
+            Severity::C,
+            "negated 数据造假 should not trigger P0"
+        );
+        assert_eq!(
+            classify_finding("This is not a fatal flaw — it's a minor presentation issue"),
+            Severity::C,
+            "negated fatal flaw should not trigger A"
+        );
+        assert_eq!(
+            classify_finding("并非关键缺失，只是可以补充说明"),
+            Severity::C,
+            "negated 关键缺失 should not trigger A"
+        );
+    }
+
+    #[test]
+    fn test_unnegated_keywords_still_match() {
+        assert_eq!(
+            classify_finding("irreproducible: cannot reproduce Figure 3 results"),
+            Severity::P0,
+            "unnegated 'irreproducible' should still trigger P0"
+        );
+        assert_eq!(
+            classify_finding("fatal flaw in the experimental design"),
+            Severity::A,
+            "unnegated 'fatal flaw' should still trigger A"
+        );
     }
 }

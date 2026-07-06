@@ -9,7 +9,7 @@ use serde_json::{Value, json};
 use std::path::Path;
 
 use crate::util::{
-    arr, arr_mut, novelty_arr, novelty_gate_mut, novelty_str, set_key, str_field,
+    arr, arr_mut, novelty_arr, novelty_gate_mut, novelty_str, obj_mut, set_key, str_field,
     str_field_default, value_as_string_list,
 };
 
@@ -795,6 +795,56 @@ pub fn missing_reuse_annotation_runs(state: &Value) -> Vec<Value> {
                 || str_field_default(r, "decision_delta", "").is_empty()
                 || str_field_default(r, "reuse_note", "").is_empty()
         })
+        .collect()
+}
+
+// ── Barrier / Blocker ──
+
+/// Add a blocker to the state. Returns the updated state with the new blocker appended.
+pub fn add_blocker(state: &Value, description: &str) -> Result<Value> {
+    let mut state = ensure_state_defaults(state)?;
+    let blockers = obj_mut(&mut state)
+        .entry("blockers".to_string())
+        .or_insert_with(|| json!([]))
+        .as_array_mut()
+        .ok_or_else(|| anyhow!("blockers must be an array"))?;
+    blockers.push(json!({
+        "id": format!("blk-{}", framework_core::time::now_iso().replace(&['-', ':', '.', 'T', 'Z'][..], "")),
+        "description": description,
+        "status": "active",
+        "created_at": framework_core::time::now_iso(),
+        "resolved_at": null,
+        "resolution": null,
+    }));
+    Ok(state)
+}
+
+/// Resolve a blocker by ID. Returns the updated state with the blocker marked resolved.
+pub fn resolve_blocker(state: &Value, blocker_id: &str, resolution: &str) -> Result<Value> {
+    let mut state = ensure_state_defaults(state)?;
+    let blockers = arr_mut(&mut state, "blockers")?;
+    for b in blockers.iter_mut() {
+        if b.get("id").and_then(Value::as_str) == Some(blocker_id) {
+            if let Some(obj) = b.as_object_mut() {
+                obj.insert("status".into(), json!("resolved"));
+                obj.insert("resolved_at".into(), json!(framework_core::time::now_iso()));
+                obj.insert("resolution".into(), json!(resolution));
+            }
+            break;
+        }
+    }
+    Ok(state)
+}
+
+/// List all active (unresolved) blockers from the state.
+pub fn active_blockers(state: &Value) -> Vec<Value> {
+    arr(state, "blockers")
+        .iter()
+        .filter(|b| {
+            let status = b.get("status").and_then(Value::as_str).unwrap_or("");
+            status == "active"
+        })
+        .cloned()
         .collect()
 }
 
