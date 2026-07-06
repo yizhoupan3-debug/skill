@@ -396,13 +396,18 @@ impl Blueprint {
                 if child_result.status == VerificationStatus::Pass {
                     return Ok(VerificationResultExt::new(VerificationStatus::Pass, round));
                 }
-                best = Some(best.map_or(child_result.clone(), |b| {
-                    if status_priority(&child_result.status) > status_priority(&b.status) {
-                        child_result
-                    } else {
-                        b
+                // Avoid unnecessary clone: move child_result into best,
+                // keeping the existing best if its priority is >= child's.
+                best = Some(match best {
+                    None => child_result,
+                    Some(b) => {
+                        if status_priority(&b.status) >= status_priority(&child_result.status) {
+                            b
+                        } else {
+                            child_result
+                        }
                     }
-                }));
+                });
             }
             Ok(best.unwrap_or_else(|| VerificationResultExt::new(VerificationStatus::Fail, round)))
         } else {
