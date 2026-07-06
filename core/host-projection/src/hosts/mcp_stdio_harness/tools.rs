@@ -289,7 +289,7 @@ pub(super) fn tool_skill_read(
     let format = arguments
         .get("format")
         .and_then(Value::as_str)
-        .unwrap_or("full");
+        .unwrap_or("compact");
     let max_chars = arguments
         .get("max_chars")
         .and_then(Value::as_u64)

@@ -12,7 +12,7 @@
     {
       "slug": "skill_read",
       "display_name": "技能读取",
-      "description": "读取 skill 的 SKILL.md",
+      "description": "读取 skill 的核心规格 — 默认 format=compact 返回结构化 JSON（allowed_tools/quick_ref/boundaries）。format=full 返回完整 SKILL.md。",
       "layer": "builtin",
       "dispatch_domain": "domain:framework",
       "owner": "framework",
@@ -48,7 +48,7 @@
     {
       "slug": "skill_route",
       "display_name": "技能路由",
-      "description": "自然语言查询 → 路由到最佳匹配 skill。响应包含 selected_skill（命中 skill）、recommended_tools（同域工具列表，top-3）、skill_summary（SKILL.md 摘要）。Agent 收到后优先读 recommended_tools + skill_summary，无需额外调用 skill_read。",
+      "description": "自然语言查询 → 路由到最佳匹配 skill。响应含 selected_skill、reasons、recommended_tools top-3（含 slug/score/reasons）。查询 skill 详细规格用 skill_read（默认 compact）。",
       "layer": "builtin",
       "dispatch_domain": "domain:framework",
       "owner": "framework",

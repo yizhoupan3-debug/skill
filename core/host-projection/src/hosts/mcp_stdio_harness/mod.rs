@@ -796,7 +796,8 @@ fn handle_prompts_get(
                  Use this repo shared framework runtime.\n\n\
                  Routing 指引:\n\
                  - 我知道要做什么任务 → skill_route(query)\n\
-                   → 响应含 recommended_tools + skill_summary, 读完即用\n\
+                   → 响应含 selected_skill + recommended_tools, 立即使用\n\
+                 - 看 skill 详细规格 → skill_read(skill, format=compact)\n\
                  - 想搜索有什么可用 → skill_search(query, limit)\n\
                  - 探索工具生态 → search_tools(query, top_k)\n\n\
                  项目同步（skill 更新后传播到所有项目）:\n\
