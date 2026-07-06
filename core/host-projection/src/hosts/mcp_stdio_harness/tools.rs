@@ -492,7 +492,144 @@ pub(super) fn tool_goal_state_manage(
 ) -> Result<String, FrameworkError> {
     let result =
         crate::hooks::tool_goal_state_manage_dispatch(arguments, repo_root, connection_session_id)?;
+
+    // After a successful complete, auto-advance the chain DAG to the next step.
+    if is_complete_operation(arguments, &result) {
+        let task_id = arguments.get("task_id").and_then(Value::as_str).unwrap_or("");
+        let chain_advance = auto_advance_chain_after_complete(repo_root, task_id);
+        match chain_advance {
+            Ok(Some(next)) => {
+                // Try to merge the next-step info into the response
+                if let Ok(mut v) = serde_json::from_str::<Value>(&result) {
+                    v["auto_advance"] = json!({"next_task_id": next});
+                    return Ok(serde_json::to_string_pretty(&v)
+                        .map_err(|e| FrameworkError::from(e.to_string()))?);
+                }
+            }
+            Ok(None) => {} // No chain or no next step — normal
+            Err(e) => {
+                tracing::warn!(
+                    error = %e,
+                    task_id = task_id,
+                    "tool_goal_state_manage: chain auto-advance failed (non-fatal)"
+                );
+            }
+        }
+    }
+
     Ok(result)
+}
+
+/// Check if the completed goal operation was a successful "complete".
+fn is_complete_operation(arguments: &Value, result: &str) -> bool {
+    let op = arguments
+        .get("operation")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    if op.trim().to_ascii_lowercase() != "complete" {
+        return false;
+    }
+    // Verify result indicates success
+    if let Ok(v) = serde_json::from_str::<Value>(result) {
+        v.get("ok").and_then(Value::as_bool).unwrap_or(false)
+    } else {
+        false
+    }
+}
+
+/// After goal complete, try to advance the chain DAG to the next step.
+/// Returns `Ok(Some(next_task_id))` if a next step was auto-started,
+/// `Ok(None)` if no chain or no next step, or `Err` on failure.
+fn auto_advance_chain_after_complete(
+    repo_root: &Path,
+    completed_task_id: &str,
+) -> Result<Option<String>, FrameworkError> {
+    use chain_engine::scheduler::{
+        advance_dag, load_condition_task_outputs, with_chain_lock, write_chain_file,
+    };
+    use chain_engine::types::TaskStatus;
+
+    let chain_path = chain_engine::chain_file_path(repo_root);
+    if !chain_path.is_file() {
+        return Ok(None); // No chain → nothing to advance
+    }
+
+    // Atomically: mark current task complete, advance DAG, write back.
+    let ready = with_chain_lock(|| -> Result<Vec<String>, FrameworkError> {
+        let mut root = chain_engine::load_chain_from_path(&chain_path)?;
+
+        // Mark the completed task in the chain
+        if !completed_task_id.is_empty() {
+            if let Some(task) = root.task_by_id_mut(completed_task_id) {
+                if task.status != TaskStatus::Completed {
+                    task.status = TaskStatus::Completed;
+                    task.completed_at = Some(framework_core::time::now_iso());
+                }
+            }
+        }
+
+        // Load task outputs for condition evaluation, then advance
+        let task_outputs = load_condition_task_outputs(repo_root, &root)?;
+        let ready = advance_dag(&mut root, &task_outputs);
+
+        // Write the updated chain
+        write_chain_file(&chain_path, &root)?;
+        Ok(ready)
+    })?;
+
+    if ready.is_empty() {
+        return Ok(None); // No new ready tasks
+    }
+
+    // Auto-start each newly-ready task as a goal
+    let mut first_next: Option<String> = None;
+    for next_task_id in &ready {
+        // Reload chain to get task metadata
+        if let Ok(root) = chain_engine::load_chain_from_path(&chain_path) {
+            let goal_text = root
+                .task_by_id(next_task_id)
+                .and_then(|t| t.title.as_deref())
+                .unwrap_or(next_task_id);
+
+            let start_payload = json!({
+                "repo_root": repo_root.to_string_lossy().to_string(),
+                "operation": "start",
+                "task_id": next_task_id,
+                "goal": goal_text,
+                "drive_until_done": true,
+                "non_goals": ["features outside this step's scope"],
+                "done_when": [
+                    format!("step completed: {goal_text}"),
+                ],
+                "validation_commands": [
+                    "cargo check --workspace",
+                    "cargo test --workspace",
+                ],
+            });
+
+            match core_state::state_manager::framework_goal_drive(start_payload) {
+                Ok(_) => {
+                    tracing::info!(
+                        task_id = %next_task_id,
+                        goal = %goal_text,
+                        "chain: auto-started next step after complete"
+                    );
+                    if first_next.is_none() {
+                        first_next = Some(next_task_id.clone());
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        task_id = %next_task_id,
+                        error = %e,
+                        "chain: auto-start failed for next step (non-fatal)"
+                    );
+                }
+            }
+        }
+    }
+
+    Ok(first_next)
 }
 
 pub(super) fn tool_goal_state_read(
