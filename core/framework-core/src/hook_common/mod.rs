@@ -92,7 +92,7 @@ pub fn set_test_task_override(v: Option<bool>) {
 }
 
 /// Default UTF-8 **char** budget for assistant text on hook signal / lint paths (all hosts).
-pub const HOOK_SIGNAL_ASSISTANT_TAIL_CHARS: usize = 4096;
+pub const HOOK_SIGNAL_ASSISTANT_TAIL_CHARS: usize = 2048;
 
 /// Truncate assistant text for hook signal paths (char-based; matches deep-continuation tail style).
 /// Single pass via char_indices() — avoids separate .chars().count() traversal.

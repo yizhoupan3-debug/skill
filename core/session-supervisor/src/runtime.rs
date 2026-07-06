@@ -16,7 +16,7 @@ use crate::types::{
 
 /// Maximum number of events kept per worker. Oldest events are truncated
 /// when this limit is reached, preventing unbounded Vec growth (P1 leak).
-const MAX_WORKER_EVENTS: usize = 100;
+const MAX_WORKER_EVENTS: usize = 50;
 
 /// Maximum retention for terminated worker records (seconds). Workers in
 /// terminal states (interrupted, failed, completed) older than this are

@@ -213,8 +213,8 @@ pub(super) fn tool_skill_route(
             // --- skill_summary: inline SKILL.md first N chars ---
             if let Ok(path) = skill_body_path(repo_root, &decision.selected_skill) {
                 if let Ok(content) = std::fs::read_to_string(&path) {
-                    let preview: String = content.chars().take(600).collect();
-                    let truncated = content.chars().count() > 600;
+                    let preview: String = content.chars().take(300).collect();
+                    let truncated = content.chars().count() > 300;
                     obj.insert("skill_summary".to_string(), json!({
                         "preview": preview, "truncated": truncated,
                         "full_path": format!("{}", path.display()),

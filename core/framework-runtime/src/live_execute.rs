@@ -240,7 +240,7 @@ fn merge_usage_totals(
     Some(merged)
 }
 
-pub const DEEP_CONTINUATION_ASSISTANT_TAIL_CHARS: usize = 1600;
+pub const DEEP_CONTINUATION_ASSISTANT_TAIL_CHARS: usize = 1000;
 const DEEP_CONTINUATION_ANCHOR_CHARS: usize = 200;
 
 fn build_compact_anchor(raw: &str, max_chars: usize) -> String {
