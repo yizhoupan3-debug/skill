@@ -1,8 +1,8 @@
 {
   "schema_version": "mcp-tool-registry-v2",
   "scope": {
-    "total_count": 118,
-    "builtin_count": 33,
+    "total_count": 116,
+    "builtin_count": 31,
     "research_count": 51,
     "independent_count": 15,
     "external_count": 19,
@@ -3666,37 +3666,6 @@
       }
     },
     {
-      "slug": "task_output_init",
-      "display_name": "任务输出初始化",
-      "description": "初始化任务输出目录和文件结构",
-      "layer": "builtin",
-      "dispatch_domain": "domain:framework",
-      "owner": "framework",
-      "trigger_hints": [
-        "task output",
-        "output init",
-        "输出初始化"
-      ],
-      "mcp_server": "router-rs-framework",
-      "tool_flags": [],
-      "input_schema": {
-        "type": "object",
-        "required": [
-          "task_id"
-        ],
-        "properties": {
-          "task_id": {
-            "type": "string",
-            "description": "任务 ID"
-          },
-          "title": {
-            "type": "string",
-            "description": "任务标题（可选）"
-          }
-        }
-      }
-    },
-    {
       "slug": "task_output_pull",
       "display_name": "任务输出拉取",
       "description": "从指定路径拉取输出内容到 task output 目录",
@@ -3725,33 +3694,6 @@
           "source_task_id": {
             "type": "string",
             "description": "源任务 ID（要拉取输出的任务）"
-          }
-        }
-      }
-    },
-    {
-      "slug": "task_output_validate",
-      "display_name": "任务输出验证",
-      "description": "验证任务输出是否符合预期格式",
-      "layer": "builtin",
-      "dispatch_domain": "domain:framework",
-      "owner": "framework",
-      "trigger_hints": [
-        "task output",
-        "output validate",
-        "输出验证"
-      ],
-      "mcp_server": "router-rs-framework",
-      "tool_flags": [],
-      "input_schema": {
-        "type": "object",
-        "required": [
-          "task_id"
-        ],
-        "properties": {
-          "task_id": {
-            "type": "string",
-            "description": "任务 ID"
           }
         }
       }
