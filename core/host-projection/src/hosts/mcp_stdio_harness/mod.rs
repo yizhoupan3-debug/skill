@@ -849,45 +849,54 @@ fn handle_prompts_get(
         "task_workflow" => "\
 [Task/Goal/Chain DAG Workflow]\n\n\
 核心概念:\n\
-- task = 一个 step（步骤），有 task_id\n\
-- goal = step 的目标和追踪（GOAL_STATE.json）\n\
-- chain = step 序列（TASK_CHAIN.json），round 分组\n\
-- round = 一轮工作，包含多个 step\n\n\
+- task = 一个 step，有 task_id、产出（TASK_OUTPUT.json）、状态\n\
+- goal = step 的追踪层（GOAL_STATE.json），含目标、合约、迭代计数\n\
+- chain = step 序列（TASK_CHAIN.json），按 round 分组\n\
+- round = 一轮工作，含多个 step。同一 round 的 step 可以有依赖顺序\n\
+- loop = 单 step 的多轮迭代。goal 被 complete 后状态保持 running，iteration_count 递增\n\n\
+Round 机制:\n\
+- chain_dag_init 时每个 task 指定 round: N，同 round 的 step 视为同一轮\n\
+- round 之间的依赖通过 depends_on 表达：round 1 的 step 完成后，\n\
+  round 2 的 step 自动就绪（depends_on 满足时）\n\
+- goal_state_read(compact=true) 按 round 分组返回 step 状态\n\n\
+Loop 机制:\n\
+- goal_state_manage(complete) 后 goal 状态保持 running（并非终止）\n\
+- iteration_count 每次 complete 递增（可在 goal_state_read 中看到）\n\
+- drive_until_done=true: 需反复 complete 直到全部 done_when 满足\n\
+- drive_until_done=false: single-pass mode，一次 complete 即完成\n\n\
 完整工作流:\n\
-1. 定义 step 序列:\n\
-   chain_dag_init(chain_id, tasks=[\n\
-     {task_id:\"step-1\", title:\"xxx\", round:1},\n\
-     {task_id:\"step-2\", title:\"xxx\", round:1},\n\
-     {task_id:\"step-3\", title:\"xxx\", round:2}\n\
+1. 规划 step 序列（3-5 步最佳）:\n\
+   chain_dag_init(chain_id='fix-bugs', tasks=[\n\
+     {task_id:'s1', title:'find root cause', round:1},\n\
+     {task_id:'s2', title:'fix P0 issues', round:1, depends_on:['s1']},\n\
+     {task_id:'s3', title:'verify & benchmark', round:2, depends_on:['s2']},\n\
    ])\n\n\
-2. 创建并启动当前 step:\n\
-   task_create(task_id=\"step-1\", title=\"xxx\")\n\
-   goal_state_manage(operation=start, task_id=\"step-1\", goal=\"...\", drive_until_done=true)\n\
-   tip: task_create 先建目录和指针，goal_state_manage(start) 启动 goal 追踪\n\n\
+2. 启动第 1 个 step:\n\
+   task_create(task_id='s1', title='find root cause')\n\
+   goal_state_manage(operation=start, task_id='s1', goal='...')\n\n\
 3. 查看进展（compact 省 token）:\n\
-   goal_state_read(compact=true)\n\
-   → 返回 goal + round 分组的 step 状态\n\n\
-4. 推进到下一步:\n\
-   chain_dag_tick()\n\
-   → 自动找依赖满足的下一个 step 并推进\n\n\
-5. 完成当前 step:\n\
-   goal_state_manage(operation=complete, task_id=\"step-1\")\n\
-   → 自动触发 chain advance，启动 round 中下一个 step\n\n\
-6. 全部 step 完成后:\n\
-   task_list() — 查看所有 step 的完成状态\n\n\
+   goal_state_read(compact=true) → 返回 goal + round 分组状态\n\n\
+4. 完成当前 step 自动推进:\n\
+   goal_state_manage(operation=complete, task_id='s1')\n\
+   → 自动触发 chain advance + 启动 round 中下一个 step\n\n\
+5. 干预:\n\
+   chain_dag_tick() — 手动推进（罕见，一般为自动）\n\
+   chain_dag_status — 看 DAG 全貌\n\
+   chain_dag_retry(task_id) — 重试失败 step\n\n\
+6. 全部完成后:\n\
+   task_list() — 查看所有 step 状态\n\n\
 何时用什么:\n\
-- task_create: 创建 step（必先创建再 goal_state_manage）\n\
+- task_create: 创建 step（必须先创建 step 再启动 goal）\n\
 - goal_state_manage(start): 有明确 goal 和 done_when 时\n\
 - goal_state_manage(checkpoint): 记录进展\n\
-- task_complete: 无 goal 的简单 step 完成\n\
-- chain_dag_init: 有多步需要顺序执行时\n\
-- chain_dag_tick: 手动推进（也可自动，complete 时自动触发）\n\
-- chain_dag_status: 看当前 DAG 全貌\n\
-- chain_dag_retry/skip: 手动干预失败/跳过\n\
+- goal_state_manage(complete): 完成单次迭代（loop 模式不自停）\n\
+- chain_dag_init: 定义多步序列\n\
+- chain_dag_tick: 手动推进（自动触发已覆盖大多数场景）\n\
 - record_evidence: 记录验证证据\n\n\
 Token 优化:\n\
-- 用 goal_state_read(compact=true) 而非 goal_state_manage(status)\n\
-- chain_dag_status 默认只返回摘要（round + status_counts）"
+- goal_state_read(compact=true) 替代 goal_state_manage(status)\n\
+- chain_dag_status 默认只返回摘要\n\
+- round 分组输出在 goal_state_read 中已内联（不需另行调用 chain_dag_status）"
             .to_string(),
         _ => format!("Unknown prompt: {prompt_name}"),
     };
