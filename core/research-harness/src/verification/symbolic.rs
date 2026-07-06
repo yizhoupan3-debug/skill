@@ -874,8 +874,9 @@ fn normalize_mul_order(expr: &Expr) -> Expr {
         Expr::Mul(..) => {
             let mut ops: Vec<Expr> = Vec::new();
             flatten_mul_skip_const(expr, &mut ops);
-            // Sort non-constant operands by display for canonical key
-            ops.sort_by(|a, b| display(a).cmp(&display(b)));
+            // Sort non-constant operands by fingerprint for canonical key
+            // (O(N) fingerprint vs O(N²) display(); fingerprint is collision-resistant FNV)
+            ops.sort_by_key(|a| a.fingerprint());
             // Rebuild as flat chain: a * b * c
             let mut result = ops.pop().unwrap_or(Expr::Const(1.0));
             while let Some(op) = ops.pop() {
@@ -972,7 +973,7 @@ fn simplify_add(items: Vec<Expr>) -> Expr {
         if !a_is_const && b_is_const {
             return std::cmp::Ordering::Less;
         }
-        display(a).cmp(&display(b))
+        a.fingerprint().cmp(&b.fingerprint())
     });
 
     make_add(terms)
@@ -1507,7 +1508,7 @@ fn extract_cos_sq_inner(expr: &Expr) -> Option<&Expr> {
 /// Rationalize an expression — put all terms over a common denominator.
 ///
 /// E.g. `a/b + c/d` → `(a*d + b*c) / (b*d)`.
-pub fn rationalize(expr: &Expr) -> Expr {
+pub(crate) fn rationalize(expr: &Expr) -> Expr {
     let expr = simplify(expr);
     match &expr {
         Expr::Add(..) | Expr::Sub(..) => {
@@ -1548,7 +1549,7 @@ pub fn rationalize(expr: &Expr) -> Expr {
 
             // Find all unique denominators
             let mut dens: Vec<Expr> = pairs.iter().map(|(_, d)| d.clone()).collect();
-            dens.sort_by(|a, b| display(a).cmp(&display(b)));
+            dens.sort_by_key(|a| a.fingerprint());
             dens.dedup();
 
             // If all denominators are 1, nothing to do
@@ -2784,7 +2785,7 @@ pub fn simplify_expression(expr_str: &str) -> String {
 ///
 /// With `commutativity = true`, `a + b` matches `b + a` and `a * b` matches `b * a`.
 /// (Terms are compared as multisets.)
-pub fn structural_equal(a: &Expr, b: &Expr, commutativity: bool) -> bool {
+pub(crate) fn structural_equal(a: &Expr, b: &Expr, commutativity: bool) -> bool {
     if a == b {
         return true;
     }
@@ -2895,7 +2896,7 @@ fn canonical_order(expr: &Expr) -> Expr {
                 if !a_is_const && b_is_const {
                     return std::cmp::Ordering::Less;
                 }
-                display(a).cmp(&display(b))
+                a.fingerprint().cmp(&b.fingerprint())
             });
             make_add(sorted)
         }
@@ -2908,7 +2909,7 @@ fn canonical_order(expr: &Expr) -> Expr {
                 .map(|f| canonical_order(f))
                 .collect();
             let mut sorted = factors;
-            sorted.sort_by(|a, b| display(a).cmp(&display(b)));
+            sorted.sort_by(|a, b| a.fingerprint().cmp(&b.fingerprint()));
             make_mul(sorted)
         }
         Expr::Div(a, b) => {
@@ -4010,6 +4011,34 @@ pub fn integrate(expr: &Expr, var: &str) -> Expr {
                             }
                         }
                     }
+                    // ∫ log2(x) dx = x*log2(x) - x/ln(2)
+                    "log2" => {
+                        if let Expr::Var(v) = &args[0] {
+                            if v == var {
+                                let x = Expr::Var(var.to_string());
+                                let log2_x = Expr::Fn("log2".to_string(), vec![x.clone()]);
+                                let ln2 = Expr::Fn("ln".to_string(), vec![Expr::Const(2.0)]);
+                                return simplify(&Expr::Sub(
+                                    Box::new(Expr::Mul(Box::new(x.clone()), Box::new(log2_x))),
+                                    Box::new(Expr::Div(Box::new(x), Box::new(ln2))),
+                                ));
+                            }
+                        }
+                    }
+                    // ∫ log10(x) dx = x*log10(x) - x/ln(10)
+                    "log10" => {
+                        if let Expr::Var(v) = &args[0] {
+                            if v == var {
+                                let x = Expr::Var(var.to_string());
+                                let log10_x = Expr::Fn("log10".to_string(), vec![x.clone()]);
+                                let ln10 = Expr::Fn("ln".to_string(), vec![Expr::Const(10.0)]);
+                                return simplify(&Expr::Sub(
+                                    Box::new(Expr::Mul(Box::new(x.clone()), Box::new(log10_x))),
+                                    Box::new(Expr::Div(Box::new(x), Box::new(ln10))),
+                                ));
+                            }
+                        }
+                    }
                     // ∫ tanh(x) dx = ln(cosh(x))
                     "tanh" => {
                         if let Expr::Var(v) = &args[0] {
@@ -4049,6 +4078,41 @@ pub fn integrate(expr: &Expr, var: &str) -> Expr {
                                     let t2 = Expr::Mul(Box::new(Expr::Const(*c * 0.5)), Box::new(asin_part));
                                     return simplify(&Expr::Add(Box::new(t1), Box::new(t2)));
                                 }}
+                            }
+                        }
+                    }
+                    // ∫ acos(x) dx = x*acos(x) - sqrt(1-x^2) + C
+                    "acos" => {
+                        if let Expr::Var(v) = &args[0] {
+                            if v == var {
+                                let x = Expr::Var(var.to_string());
+                                let acos_x = Expr::Fn("acos".to_string(), vec![x.clone()]);
+                                let one_minus_x2 = Expr::Sub(
+                                    Box::new(Expr::Const(1.0)),
+                                    Box::new(Expr::Pow(Box::new(x.clone()), Box::new(Expr::Const(2.0)))),
+                                );
+                                let sqrt_part = Expr::Fn("sqrt".to_string(), vec![one_minus_x2]);
+                                return simplify(&Expr::Sub(
+                                    Box::new(Expr::Mul(Box::new(x), Box::new(acos_x))),
+                                    Box::new(sqrt_part),
+                                ));
+                            }
+                        }
+                        // Chain rule: ∫ acos(ax) dx = x*acos(ax) - sqrt(1-(ax)^2)/a + C
+                        if let Some((inner, a)) = extract_linear_coeff(&args[0], var) {
+                            if a.abs() > 1e-15 {
+                                let x = Expr::Var(var.to_string());
+                                let acos_ax = Expr::Fn("acos".to_string(), vec![inner.clone()]);
+                                let ax = simplify(&Expr::Mul(Box::new(Expr::Const(a)), Box::new(x.clone())));
+                                let one_minus_ax2 = Expr::Sub(
+                                    Box::new(Expr::Const(1.0)),
+                                    Box::new(Expr::Pow(Box::new(ax), Box::new(Expr::Const(2.0)))),
+                                );
+                                let sqrt_part = Expr::Fn("sqrt".to_string(), vec![one_minus_ax2]);
+                                return simplify(&Expr::Sub(
+                                    Box::new(Expr::Mul(Box::new(x), Box::new(acos_ax))),
+                                    Box::new(Expr::Div(Box::new(sqrt_part), Box::new(Expr::Const(a)))),
+                                ));
                             }
                         }
                     }
@@ -4109,7 +4173,7 @@ fn extract_simple_term(term: &Expr, var: &str, sign: f64, coeffs: &mut HashMap<u
 /// Non-polynomial terms containing `var` are silently skipped.
 /// Negation over `Add/Sub` is distributed to correctly handle forms like
 /// `-(x + 3)` (which after simplification stays as `Neg(Add(x, 3))`).
-pub fn collect_poly_coeffs(expr: &Expr, var: &str) -> HashMap<u32, f64> {
+pub(crate) fn collect_poly_coeffs(expr: &Expr, var: &str) -> HashMap<u32, f64> {
     let terms = flatten_add(expr);
     let mut coeffs: HashMap<u32, f64> = HashMap::new();
 
@@ -5634,7 +5698,8 @@ mod tests {
         // No fractions — unchanged
         let e = parse("x + y").unwrap();
         let r = rationalize(&e);
-        assert_eq!(display(&r), "x + y");
+        // Fingerprint-based ordering: y comes before x
+        assert_eq!(display(&r), "y + x");
     }
 
     #[test]
@@ -5682,7 +5747,8 @@ mod tests {
         // No common factor — unchanged
         let e = parse("x + y").unwrap();
         let f = factor_common(&e);
-        assert_eq!(display(&f), "x + y");
+        // Fingerprint-based ordering: y comes before x
+        assert_eq!(display(&f), "y + x");
     }
 
     #[test]
@@ -5763,9 +5829,9 @@ mod tests {
     fn test_normalize_sorts_vars() {
         let a = parse("y + x + 2*1").unwrap();
         let n = normalize(&a);
-        // Constants folded, terms sorted: "x + y + 2"
+        // Constants folded, terms sorted by fingerprint: "y + x + 2"
         let result = display(&n);
-        assert_eq!(result, "x + y + 2", "got {result}");
+        assert_eq!(result, "y + x + 2", "got {result}");
     }
 
     #[test]
@@ -6120,7 +6186,8 @@ mod tests {
         // No factoring possible — should return unchanged
         let e = parse("x + y").unwrap();
         let f = factor(&e);
-        assert_eq!(display(&f), "x + y");
+        // Fingerprint-based ordering: y comes before x
+        assert_eq!(display(&f), "y + x");
     }
 
     #[test]
@@ -6785,6 +6852,46 @@ mod tests {
         let result = integrate(&expr, "x");
         let result_str = display(&result);
         assert!(result_str.contains("ln"), "integral 1/sqrt(x^2+9) should contain ln: {result_str}");
+    }
+
+    #[test]
+    fn test_integrate_acos() {
+        // ∫ acos(x) dx = x*acos(x) - sqrt(1-x^2) + C
+        let expr = parse("acos(x)").unwrap();
+        let result = integrate(&expr, "x");
+        let result_str = display(&result);
+        assert!(result_str.contains("acos") && result_str.contains("sqrt"),
+            "integral acos(x) = x*acos(x) - sqrt(1-x^2): {result_str}");
+    }
+
+    #[test]
+    fn test_integrate_acos_chain() {
+        // ∫ acos(2x) dx = x*acos(2x) - sqrt(1-(2x)^2)/2 + C
+        let expr = parse("acos(2*x)").unwrap();
+        let result = integrate(&expr, "x");
+        let result_str = display(&result);
+        assert!(result_str.contains("acos") && result_str.contains("sqrt"),
+            "integral acos(2x) should contain acos and sqrt: {result_str}");
+    }
+
+    #[test]
+    fn test_integrate_log2() {
+        // ∫ log2(x) dx = x*log2(x) - x/ln(2) + C
+        let expr = parse("log2(x)").unwrap();
+        let result = integrate(&expr, "x");
+        let result_str = display(&result);
+        assert!(result_str.contains("log2") && result_str.contains("ln"),
+            "integral log2(x) = x*log2(x) - x/ln(2): {result_str}");
+    }
+
+    #[test]
+    fn test_integrate_log10() {
+        // ∫ log10(x) dx = x*log10(x) - x/ln(10) + C
+        let expr = parse("log10(x)").unwrap();
+        let result = integrate(&expr, "x");
+        let result_str = display(&result);
+        assert!(result_str.contains("log10") && result_str.contains("ln"),
+            "integral log10(x) = x*log10(x) - x/ln(10): {result_str}");
     }
 
 }

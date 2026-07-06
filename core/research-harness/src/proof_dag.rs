@@ -13,6 +13,17 @@ use core_errors::FrameworkError;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
+use std::sync::LazyLock;
+
+/// Pre-compiled regex for extracting variable names from claims.
+static RE_VARS: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"[a-zA-Z_][a-zA-Z0-9_]*").expect("valid regex")
+});
+
+/// Pre-compiled regex for decomposing inequality expressions.
+static RE_INEQUALITY: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"^(.+?)\s*(<=|>=|<|>|==|=|!=)\s*(.+)$").expect("valid regex")
+});
 
 // ===========================================================================
 // Types
@@ -296,10 +307,11 @@ impl Blueprint {
             result.stale();
         }
 
-        // Recursive verification
+        // Recursive verification - clone root once to avoid borrow conflicts
         let mut visited = HashSet::new();
-        let root_status = self.verify_node(&self.root.clone(), current_round, &mut visited)?;
-        self.status.insert(self.root.clone(), root_status);
+        let root_id = self.root.clone();
+        let root_status = self.verify_node(&root_id, current_round, &mut visited)?;
+        self.status.insert(root_id, root_status);
 
         Ok(())
     }
@@ -865,8 +877,7 @@ fn attempt_asymptotic_verify(bp: &Blueprint, node_id: &str) -> (VerificationStat
     // Extract variables from the claim — uses the canonical keyword set
     // from symbolic.rs so all verification modules stay in sync.
     let known_keywords = crate::verification::symbolic::MATH_KEYWORDS;
-    let re_vars = Regex::new(r"[a-zA-Z_][a-zA-Z0-9_]*").expect("valid regex");
-    let var = re_vars
+    let var = RE_VARS
         .find_iter(&claim)
         .map(|m| m.as_str())
         .find(|v| !known_keywords.contains(v))
@@ -926,8 +937,7 @@ fn claims_contradict(a: &str, b: &str) -> bool {
 
     // Decompose each claim: left-hand side, operator, right-hand side (owned strings)
     let decompose = |s: &str| -> Option<(String, String, String)> {
-        let re = Regex::new(r"^(.+?)\s*(<=|>=|<|>|==|=|!=)\s*(.+)$").ok()?;
-        let caps = re.captures(s)?;
+        let caps = RE_INEQUALITY.captures(s)?;
         Some((
             caps.get(1)?.as_str().trim().to_string(),
             caps.get(2)?.as_str().to_string(),

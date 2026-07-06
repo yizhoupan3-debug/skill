@@ -77,7 +77,7 @@ pub(crate) fn parse_z3_bool(solver: &z3::Solver, expr: &str) -> Result<z3::ast::
         if parts.len() != 2 { return Err("ForAll requires 2 arguments: [vars] and body".into()); }
         let var_names = parse_var_list(&parts[0])?;
         let bound_vars: Vec<z3::ast::Real> = var_names.iter()
-            .map(|v| z3::ast::Real::new_const(v.as_str()))
+            .map(|&v| z3::ast::Real::new_const(v))
             .collect();
         let body = parse_z3_bool(solver, &parts[1])?;
         let bounds_refs: Vec<&dyn z3::ast::Ast> = bound_vars.iter().map(|v| v as &dyn z3::ast::Ast).collect();
@@ -90,7 +90,7 @@ pub(crate) fn parse_z3_bool(solver: &z3::Solver, expr: &str) -> Result<z3::ast::
         if parts.len() != 2 { return Err("Exists requires 2 arguments: [vars] and body".into()); }
         let var_names = parse_var_list(&parts[0])?;
         let bound_vars: Vec<z3::ast::Real> = var_names.iter()
-            .map(|v| z3::ast::Real::new_const(v.as_str()))
+            .map(|&v| z3::ast::Real::new_const(v))
             .collect();
         let body = parse_z3_bool(solver, &parts[1])?;
         let bounds_refs: Vec<&dyn z3::ast::Ast> = bound_vars.iter().map(|v| v as &dyn z3::ast::Ast).collect();
@@ -129,23 +129,27 @@ fn parse_arith_depth(solver: &z3::Solver, expr: &str, init_depth: i32) -> Result
 }
 
 /// Split an expression on top-level + and - operators.
+///
+/// Uses byte-level scanning for speed (math expressions are always ASCII).
 fn split_add_sub(expr: &str) -> Result<Vec<(&str, bool)>, String> {
     split_add_sub_depth(expr, 0)
 }
 
 /// Split with initial depth (for function arg context).
+///
+/// Uses byte-level scanning for speed (math expressions are always ASCII).
 fn split_add_sub_depth(expr: &str, init_depth: i32) -> Result<Vec<(&str, bool)>, String> {
-    let chars: Vec<char> = expr.chars().collect();
+    let bytes = expr.as_bytes();
     let mut depth = init_depth;
     let mut segments: Vec<(&str, bool)> = Vec::new();
     let mut last = 0;
     let mut next_positive = true;
 
-    for i in 0..chars.len() {
-        match chars[i] {
-            '(' => depth += 1,
-            ')' => depth -= 1,
-            '+' if depth == 0 && i > 0 => {
+    for i in 0..bytes.len() {
+        match bytes[i] {
+            b'(' => depth += 1,
+            b')' => depth -= 1,
+            b'+' if depth == 0 && i > 0 => {
                 let term = expr[last..i].trim();
                 if !term.is_empty() {
                     segments.push((term, next_positive));
@@ -153,9 +157,9 @@ fn split_add_sub_depth(expr: &str, init_depth: i32) -> Result<Vec<(&str, bool)>,
                 last = i + 1;
                 next_positive = true;
             }
-            '-' if depth == 0 && i > 0 => {
-                let prev = chars[i - 1];
-                if matches!(prev, '(' | '+' | '-' | '*' | '/' | '^' | ',') {
+            b'-' if depth == 0 && i > 0 => {
+                let prev = bytes[i - 1];
+                if matches!(prev, b'(' | b'+' | b'-' | b'*' | b'/' | b'^' | b',') {
                     continue; // unary minus
                 }
                 let term = expr[last..i].trim();
@@ -180,21 +184,21 @@ fn split_add_sub_depth(expr: &str, init_depth: i32) -> Result<Vec<(&str, bool)>,
 }
 
 /// Build a z3 Real from pre-split add/sub segments.
+///
+/// Collects all terms into a single Vec to minimize allocations,
+/// applying unary minus to negative terms inline.
 fn build_add_sub(solver: &z3::Solver, segments: &[(&str, bool)], depth: i32) -> Result<z3::ast::Real, String> {
-    let mut positives: Vec<z3::ast::Real> = Vec::new();
-    let mut negatives: Vec<z3::ast::Real> = Vec::new();
+    let mut terms: Vec<z3::ast::Real> = Vec::with_capacity(segments.len());
     for &(term, positive) in segments {
         let val = parse_mul_div_depth(solver, term.trim(), depth)?;
-        if positive { positives.push(val); } else { negatives.push(val); }
+        if positive { terms.push(val); } else { terms.push(val.unary_minus()); }
     }
-    let mut all: Vec<z3::ast::Real> = positives;
-    for n in &negatives { all.push(n.unary_minus()); }
-    Ok(if all.is_empty() {
+    Ok(if terms.is_empty() {
         z3::ast::Real::from_rational(0, 1)
-    } else if all.len() == 1 {
-        all.into_iter().next().unwrap()
+    } else if terms.len() == 1 {
+        terms.into_iter().next().unwrap()
     } else {
-        let refs: Vec<&z3::ast::Real> = all.iter().collect();
+        let refs: Vec<&z3::ast::Real> = terms.iter().collect();
         z3::ast::Real::add(&refs)
     })
 }
@@ -202,16 +206,18 @@ fn build_add_sub(solver: &z3::Solver, segments: &[(&str, bool)], depth: i32) -> 
 /// Check if an expression is wrapped in matching parentheses.
 /// Returns true only when the outer pair of parens are properly balanced
 /// (e.g., `(x+y)` → true, `(x+y)(x-y)` → false).
+///
+/// Uses byte-level scanning for speed (math expressions are always ASCII).
 fn has_matching_parens(expr: &str) -> bool {
     if !expr.starts_with('(') || !expr.ends_with(')') {
         return false;
     }
     let inner = &expr[1..expr.len() - 1];
     let mut depth = 0i32;
-    for c in inner.chars() {
-        match c {
-            '(' => depth += 1,
-            ')' => depth -= 1,
+    for &b in inner.as_bytes() {
+        match b {
+            b'(' => depth += 1,
+            b')' => depth -= 1,
             _ => {}
         }
         if depth < 0 {
@@ -227,6 +233,8 @@ fn parse_mul_div(solver: &z3::Solver, expr: &str) -> Result<z3::ast::Real, Strin
 }
 
 /// Parse mul/div with depth context.
+///
+/// Uses byte-level scanning for speed (math expressions are always ASCII).
 fn parse_mul_div_depth(solver: &z3::Solver, expr: &str, depth: i32) -> Result<z3::ast::Real, String> {
     let expr = expr.trim();
 
@@ -237,20 +245,20 @@ fn parse_mul_div_depth(solver: &z3::Solver, expr: &str, depth: i32) -> Result<z3
         return parse_arith_depth(solver, &expr[1..expr.len() - 1], depth);
     }
 
-    let chars: Vec<char> = expr.chars().collect();
+    let bytes = expr.as_bytes();
 
     // Find top-level * or / (right-to-left for left-assoc)
-    let mut depth = 0i32;
-    for i in (0..chars.len()).rev() {
-        match chars[i] {
-            '(' => depth -= 1,
-            ')' => depth += 1,
-            '*' if depth == 0 && i > 0 => {
+    let mut local_depth = 0i32;
+    for i in (0..bytes.len()).rev() {
+        match bytes[i] {
+            b'(' => local_depth -= 1,
+            b')' => local_depth += 1,
+            b'*' if local_depth == 0 && i > 0 => {
                 let left = parse_mul_div_depth(solver, expr[..i].trim(), 0)?;
                 let right = parse_pow_depth(solver, expr[i + 1..].trim(), 0)?;
                 return Ok(z3::ast::Real::mul(&[&left, &right]));
             }
-            '/' if depth == 0 && i > 0 => {
+            b'/' if local_depth == 0 && i > 0 => {
                 let left = parse_mul_div_depth(solver, expr[..i].trim(), 0)?;
                 let right = parse_pow_depth(solver, expr[i + 1..].trim(), 0)?;
                 return Ok(left.div(&right));
@@ -263,15 +271,15 @@ fn parse_mul_div_depth(solver: &z3::Solver, expr: &str, depth: i32) -> Result<z3
     // Only split when the alphabetic char is the START of a new identifier
     // (prev is NOT alphabetic) or after a closing paren.
     let mut d = 0i32;
-    for i in 1..chars.len() {
-        match chars[i] {
-            '(' => d += 1,
-            ')' => d -= 1,
-            c if d == 0 && (c.is_alphabetic() || c == '_') => {
-                let prev = chars[i - 1];
+    for i in 1..bytes.len() {
+        match bytes[i] {
+            b'(' => d += 1,
+            b')' => d -= 1,
+            c if d == 0 && (c.is_ascii_alphabetic() || c == b'_') => {
+                let prev = bytes[i - 1];
                 // Split at identifier boundary: after digits, underscore, or ')'
                 // NOT inside a multi-char function name (prev is alphabetic)
-                if prev == ')' || prev.is_ascii_digit() || prev == '_' {
+                if prev == b')' || prev.is_ascii_digit() || prev == b'_' {
                     let left = parse_pow_depth(solver, expr[..i].trim(), 0)?;
                     let right = parse_pow_depth(solver, expr[i..].trim(), 0)?;
                     return Ok(z3::ast::Real::mul(&[&left, &right]));
@@ -285,15 +293,17 @@ fn parse_mul_div_depth(solver: &z3::Solver, expr: &str, depth: i32) -> Result<z3
 }
 
 /// Parse power (`base^exp`) with depth context.
+///
+/// Uses byte-level scanning for speed (math expressions are always ASCII).
 fn parse_pow_depth(solver: &z3::Solver, expr: &str, depth: i32) -> Result<z3::ast::Real, String> {
     let expr = expr.trim();
-    let chars: Vec<char> = expr.chars().collect();
+    let bytes = expr.as_bytes();
     let mut local_depth = 0i32;
-    for i in (0..chars.len()).rev() {
-        match chars[i] {
-            '(' => local_depth -= 1,
-            ')' => local_depth += 1,
-            '^' if local_depth == 0 && i > 0 => {
+    for i in (0..bytes.len()).rev() {
+        match bytes[i] {
+            b'(' => local_depth -= 1,
+            b')' => local_depth += 1,
+            b'^' if local_depth == 0 && i > 0 => {
                 let base = parse_atom_depth(solver, expr[..i].trim(), depth)?;
                 let exp_str = expr[i + 1..].trim();
                 if let Ok(n) = exp_str.parse::<i64>() {
@@ -469,7 +479,7 @@ fn parse_atom_depth(solver: &z3::Solver, expr: &str, depth: i32) -> Result<z3::a
     }
 
     // Variable
-    if !expr.is_empty() && (expr.chars().next().unwrap().is_alphabetic() || expr.starts_with('_')) {
+    if !expr.is_empty() && (expr.as_bytes()[0].is_ascii_alphabetic() || expr.starts_with('_')) {
         return Ok(z3::ast::Real::new_const(expr.to_string()));
     }
 
@@ -491,24 +501,40 @@ fn strip_prefix_parens<'a>(expr: &'a str, prefix: &str) -> Option<&'a str> {
     None
 }
 
-fn split_top_level_args(args: &str) -> Result<Vec<String>, String> {
+/// Split comma-separated arguments at the top parenthesis depth level.
+///
+/// Returns borrowed slices to avoid allocations.
+/// Uses byte-level scanning for speed (math expressions are always ASCII).
+fn split_top_level_args(args: &str) -> Result<Vec<&str>, String> {
     let mut parts = Vec::new();
     let mut depth = 0i32;
     let mut last = 0;
-    for (i, c) in args.chars().enumerate() {
-        match c {
-            '(' => depth += 1,
-            ')' => depth -= 1,
-            ',' if depth == 0 => { parts.push(args[last..i].trim().to_string()); last = i + 1; }
+    let bytes = args.as_bytes();
+    for i in 0..bytes.len() {
+        match bytes[i] {
+            b'(' => depth += 1,
+            b')' => depth -= 1,
+            b',' if depth == 0 => {
+                let part = args[last..i].trim();
+                if !part.is_empty() {
+                    parts.push(part);
+                }
+                last = i + 1;
+            }
             _ => {}
         }
     }
-    parts.push(args[last..].trim().to_string());
-    Ok(parts.into_iter().filter(|s| !s.is_empty()).collect())
+    let last_part = args[last..].trim();
+    if !last_part.is_empty() {
+        parts.push(last_part);
+    }
+    Ok(parts)
 }
 
 /// Parse a bracketed list of variable names: `[x, y, z]` → `["x", "y", "z"]`.
-fn parse_var_list(s: &str) -> Result<Vec<String>, String> {
+///
+/// Returns borrowed slices to avoid allocations.
+fn parse_var_list(s: &str) -> Result<Vec<&str>, String> {
     let s = s.trim();
     let inner = if s.starts_with('[') && s.ends_with(']') {
         &s[1..s.len() - 1]
@@ -516,7 +542,7 @@ fn parse_var_list(s: &str) -> Result<Vec<String>, String> {
         return Err(format!("expected [vars], got: {s}"));
     };
     Ok(inner.split(',')
-        .map(|v| v.trim().to_string())
+        .map(|v| v.trim())
         .filter(|v| !v.is_empty())
         .collect())
 }
@@ -524,8 +550,9 @@ fn parse_var_list(s: &str) -> Result<Vec<String>, String> {
 fn parse_comparison(expr: &str) -> Option<(&str, &str, &str)> {
     let ops = [">=", "<=", "!=", "==", ">", "<", "="];
     let mut depth = 0i32;
-    for (i, c) in expr.chars().enumerate() {
-        match c { '(' => depth += 1, ')' => depth -= 1, _ => {} }
+    let bytes = expr.as_bytes();
+    for i in 0..bytes.len() {
+        match bytes[i] { b'(' => depth += 1, b')' => depth -= 1, _ => {} }
         if depth == 0 {
             for op in &ops {
                 if expr[i..].starts_with(op) {
