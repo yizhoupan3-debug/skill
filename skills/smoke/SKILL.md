@@ -19,7 +19,7 @@ metadata:
   - ablation
   - evaluation
   - diagnosis
-  version: '1.0.0'
+  version: '1.0.3'
 network_access: conditional
 scene: research
 risk: low
@@ -65,6 +65,18 @@ trigger_hints:
 - 初步测试
 ---
 
+## 路由三问（优先判断）
+
+进入 smoke 之前，先过这三个问题：
+
+| # | 问题 | 是 → 做什么 | 否 → 转什么 |
+|---|------|------------|-------------|
+| 1 | 用户有具体的可执行对象（代码/文件/命令/API）？ | 继续 | → `$deepinterview`（需求未收敛） |
+| 2 | 用户想要的是"测一下每块的贡献"或"评估这个方案值不值"？ | 继续 | → 无模糊需求则不处理 |
+| 3 | 用户说的"smoke"是科研实验参数可运行性探测（templates 目录）？ | → `$research-workspace` | 继续用本 skill |
+
+> **核⼼判别**：smoke = "已经有东西要测"，deepinterview = "还不知道要什么"
+
 ## When to use
 
 ### 场景 A：内部部件诊断
@@ -90,132 +102,150 @@ trigger_hints:
 
 ## Do not use
 
-- **用户需求模糊、需要澄清问题 → 先走 `$deepinterview`**（deepinterview 是「还不知道要什么」，smoke 是「已经有东西要测」）
-- **需要深度根因排查 → 走 `$systematic-debugging`**（smoke 是广度覆盖，devugging 是深度追踪）
-- **需要完整 code review（审代码质量/安全） → 走 `$code-review-deep`**（smoke 是验证功能行为，不是审代码）
-- **需要完整文献调研或学术实验设计 → 走 `$research`**（smoke 只做快速 probe，不做系统性调查）
-- **只有模糊兴趣/想法/方向 → 先问清楚再测**（smoke 要求有具体的被测对象）
+- **用户需求模糊、需求未收敛 → 先 `$deepinterview`**
+- **深度根因排查（未知故障、偶发崩溃）→ `$systematic-debugging`**（smoke 是广度，debugging 是深度追踪）
+- **完整 code review（代码质量/安全审查）→ `$code-review-deep`**（smoke 测行为而非审代码）
+- **完整文献调研/学术实验 → `$research`**（smoke 只做快速 probe）
+- **用户说"有一个想法/思路"尚无具体实现 → 先问清楚再测**
 
-## Workflow
+## LLM ⼯作流
 
 ### 场景 A：内部部件诊断
 
-1. **分解部件** —— 梳理目标系统的部件边界，条目化输出部件清单
-2. **设计 smoke** —— 对每个部件设计一个最简可执行验证（最小输入 → 预期输出），标注可观测指标
-3. **逐件 smoke** —— 逐个执行：单独运行、去掉该部件运行、对比基线
-4. **整理结论** —— 每部件的贡献/增益/损害量化结果 → 部件影响矩阵
-5. **建议** —— 哪些部件关键、哪些可有可无、哪些拖累、哪些可替换
-
-输出格式：
 ```
-| 部件 | 增益贡献 | 损害/成本 | 可替换性 | 建议 |
-|------|---------|---------|---------|------|
-| A    | +30%    | 5ms     | 高       | 保留 |
-| B    | -2%     | 0ms     | 中       | 可砍 |
+step 1: 分解部件
+───────────────
+agent("梳理目标系统的部件边界", schema = {部件清单})
+→ 输出: [{name, description, how_to_isolate, metrics}]
+→ how_to_isolate 描述如何去掉该部件运行
+   (例如: 注释 import、交换实现、加 --no-feature flag、改 config)
+→ metrics 是每个部件的关键可观测指标
+   (如: latency_ms, accuracy, throughput, memory_mb)
+
+step 2: 为每个部件生成 ablation 模板脚本
+───────────────
+→ 从当前代码库提取测试入口
+→ 为 baseline(全量) 和每个部件(去掉该部件) 各编写 one-shot 测试脚本
+→ 放在 templates/ 目录下
+→ 模板脚本必须:
+   • 检查 $EXPERIMENT_SMOKE_ABLATION_REMOVED
+     - 空/未设置 → baseline 模式（全量运行）
+     - 有值 → 去掉该部件后运行
+   • 末行 stdout 输出 JSON: {"metric": numeric_value, ...}
+   • exit 0 表示运行成功（即使结果差），非 0 表示失败
+
+step 3: 运行 ablation
+───────────────
+research_ablation({
+  template: "benchmark.sh",
+  baseline_params: {同 step 1 定义的参数},
+  components: [{name, description, ablation_params?}],
+  metrics: ["acc", "latency"]  // 关注的指标，空则自动检测
+})
+
+→ 输出(例子):
+{
+  "baseline": { "result": {"acc": 0.95, "latency": 50} },
+  "components": [{
+    "component": "module_a",
+    "deltas": {"acc_delta": -0.30, "latency_delta": 10},
+    "contribution_score": 0.68,
+    "damage_score": 0.05,
+    "recommendation": "critical"
+  }, ...],
+  "summary": {"critical":2, "retain":1, "optimizable":3, "removable":1}
+}
+
+step 4: 解释结果并输出决策建议
+───────────────
+→ 根据 contribution_score / damage_score 判断每部件命运
+→ 输出最终建议: 保留/优化/移除/替换
 ```
 
 ### 场景 B：外部方案评估
 
-1. **锁定候选** —— 明确外部方案名称/版本/接口
-2. **现有基线** —— 当前部件的关键指标（功能集、性能、维护成本等）
-3. **差距分析** —— 候选方案覆盖现有功能的程度、功能缺口、额外能力
-4. **快速试跑** —— 如果可行，对候选方案做最小可行执行验证
-5. **替换成本评估** —— 集成难度/API 适配/迁移成本/维护风险
-6. **结论** —— 推荐替换/不推荐/有条件替换（条件是什么）
-
-输出格式：
 ```
-| 维度         | 现有 | 候选 | 差距 | 影响 |
-|--------------|------|------|------|------|
-| 功能覆盖率   | 80%  | 60%  | -20% | blocker |
-| 性能(吞吐)   | 100  | 120  | +20% | 正收益 |
-| 集成成本     | -    | 3d   | -    | 中   |
-```
+step 1: 锁定当前基线
+───────────────
+agent("提取当前方案的信息")
+→ 输出: {name, template, params, capabilities: [功能点列表], dimensions: [{name, higher_is_better}]}
 
-## Automation (MCP tools)
+step 2: 获取候选方案信息
+───────────────
+→ web_search / gh / crates.io / npm / pypi 等方式收集
+→ 也跑一遍它的 smoke 模板
+→ 输出: {name, template, params, capabilities: [功能点列表]}
 
-此 skill 的自动化由 `core/research-harness` crate 的 3 个 MCP 工具驱动：
+step 3: 运行评估
+───────────────
+research_evaluate({
+  baseline: {name, template, params, capabilities},
+  candidate: {name, template, params, capabilities},
+  dimensions: [{name: "throughput", higher_is_better: true, weight: 2}, ...]
+})
 
-| 工具 | 作用 | 对应场景 |
-|------|------|----------|
-| `research_smoke` | 运行可执行模板，注入参数为环境变量，解析 stdout JSON | 单次实验/基础 smoke |
-| `research_ablation` | 跑基线 + 逐个去部件，返回贡献矩阵（Δ、增益、损害、推荐） | 场景A — 部件诊断 |
-| `research_evaluate` | 对比 baseline vs candidate 方案的功能覆盖/性能/集成成本/推荐 | 场景B — 方案评估 |
+→ 输出(例子):
+{
+  "dimensions": [{"name":"throughput", "baseline":100, "candidate":200, "delta":100, "winner":"candidate"}],
+  "coverage": {"shared":["auth"], "baseline_only":["reporting"], "candidate_only":["streaming"], "gap_score":0.5},
+  "integration_cost": {"person_days": 2.5, "risk": "medium"},
+  "verdict": {"recommendation": "conditional", "confidence": 0.45, "reasoning": [...]}
+}
 
-### 场景A 自动编排
-
-```
-1. agent("分解部件", schema=ComponentsSchema)
-   → 输出: [{name, description, test_command, metrics}]
-
-2. agent("为每个部件编写 ablation 模板脚本", schema=ScriptSchema)
-   → 输出: baseline.sh + 每个部件的 ablation 脚本
-   → 模板脚本读取 EXPERIMENT_SMOKE_ABLATION_REMOVED 环境变量来判断哪个部件被去除
-
-3. research_ablation(template, baseline_params, components, metrics)
-   → 输出: {baseline, components: [{name, deltas, contribution_score, damage_score, recommendation}], summary}
-
-4. agent("解释 ablation 结果", schema=ContributionMatrix)
-   → 输出: 决策建议（哪些保留/优化/移除）
+step 4: 输出推荐
+───────────────
+→ replace: 值得替换。信任条件: confidence > 0.6
+→ conditional: 有条件替换。列明缺什么（gap），满足后可升级为 replace
+→ reject: 不值得。列明为什么（性能倒挂/缺口太大/集成成本过高）
 ```
 
-### 场景B 自动编排
+## MCP 工具参考
+
+| 工具 | 作用 | 关键参数 | 输出 |
+|------|------|---------|------|
+| `research_smoke` | 运行模板注入参数 | template, params, concurrency, timeout_ms | `{experiments: [{run_id, exit_code, result, wall_time_ms}]}` |
+| `research_ablation` | 部件贡献矩阵 | template, baseline_params, components, metrics | `{baseline, components[{name, deltas, contribution_score, damage_score, recommendation}], summary}` |
+| `research_evaluate` | 方案对比 | baseline, candidate, dimensions | `{metrics, coverage, integration_cost, verdict}` |
+
+## 结果解读指南
+
+### Ablation 矩阵（场景 A）
+
+| 输出字段 | 含义 | 阈值 |
+|----------|------|------|
+| `contribution_score` (0~1) | 该部件对系统的正面贡献 | >0.6=critical, >0.4=retain, >0.2=optimizable, 余=removable |
+| `damage_score` (0~1) | 该部件引入的负面影响（性能开销等） | >0.5=removable |
+| `delta` | 去掉部件后该指标的变化量 | 负数(对 HigherIsBetter)=该部件有正面贡献 |
+| `recommendation` | 推荐意见 | critical/retain/optimizable/removable/insufficient_data |
+
+**解读逻辑**：
+- **critical**（贡献大/损害小）：核心组件，不能动。任何修改需要最高优先级测试
+- **retain**（贡献中/损害小）：有价值的部件，保留但可优化
+- **optimizable**（贡献小/损害小）：边际部件。可以考虑重构或合并
+- **removable**（贡献小/损害大或贡献极小）：可以直接移除，或者用外部方案替换
+
+### 评估报告（场景 B）
+
+| 输出字段 | 含义 | 决策影响 |
+|----------|------|----------|
+| `verdict.recommendation` | replace/conditional/reject | 最终建议 |
+| `verdict.confidence` | 置信度 0~1 | >0.6=可信 |
+| `coverage.gap_score` | baseline 功能在 candidate 中的缺失比例 | gap 越高，替换成本越大 |
+| `integration_cost.risk` | low/medium/high | 影响是否值得替换 |
+
+### 两个场景如何切换
 
 ```
-1. agent("提取当前方案基线", schema=BaselineSchema)
-   → 输出: {name, template, params, capabilities}
-
-2. web_search / gh / crates.io 等方式获取候选方案信息
-   → 输出: {name, template, params, capabilities, dimensions}
-
-3. research_evaluate(baseline, candidate, dimensions)
-   → 输出: {metrics, coverage, integration_cost, verdict}
-
-4. agent("解释评估结果", schema=EvaluationReport)
-   → 输出: 推荐结论
-```
-
-### 脚本模板约定
-
-模板脚本（放在 `templates/` 下）必须遵守以下契约：
-
-- **输出**：stdout 末行必须是 JSON 对象 `{"metric_name": numeric_value, ...}`
-- **Ablation 感知**：检查 `EXPERIMENT_SMOKE_ABLATION_REMOVED` 环境变量
-  - 未设置或空 → 全量运行（baseline）
-  - 设置为部件名 → 去掉该部件后运行
-- **参数注入**：所有参数通过 `EXPERIMENT_<UPPERCASE_KEY>` 环境变量传入
-- **退出码**：0 表示运行成功（即使结果不佳），非 0 表示运行失败
-
-示例模板（shell）：
-```bash
-#!/bin/bash
-# templates/benchmark.sh
-# 感知 ablation：
-if [ -n "$EXPERIMENT_SMOKE_ABLATION_REMOVED" ]; then
-    echo "Ablation mode: $EXPERIMENT_SMOKE_ABLATION_REMOVED removed" >&2
-fi
-
-# 参数从环境变量读取
-LR="${EXPERIMENT_LR:-0.01}"
-BS="${EXPERIMENT_BS:-32}"
-
-# 运行实验...
-result=$(python -c "print('{\"accuracy\": 0.85, \"latency_ms\": 42}')")
-
-# 输出结果（末行 JSON）
-echo "$result"
-```
-
-### CLI 接口
-
-`research_smoke` 引擎也通过 `autoresearch` CLI 暴露：
-
-```bash
-cargo run -p research-harness --bin autoresearch -- smoke-test \
-    --template benchmark.sh \
-    --params '[{"lr": "0.01", "bs": "32"}]' \
-    --concurrency 4 \
-    --timeout-ms 60000
+用户请求
+  ├── 有实现/代码要看每块贡献 → 场景 A (内部诊断)
+  │     └── 用 research_ablation
+  │
+  ├── 有现有方案和候选方案要对比 → 场景 B (外部评估)
+  │     └── 用 research_evaluate
+  │
+  └── 就在代码库内对比两个实现（一个 baseline 一个 candidate）
+        → 适用场景 B 的逻辑，但 template 指向同一个本地文件
+        → 场景 B 本质上就是"对比两个点"——不一定是外部方案
 ```
 
 ## Constraints
