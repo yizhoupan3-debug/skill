@@ -2,24 +2,13 @@
 
 跨宿主叙述性协议真源。
 
-## OUTPUT RULES（最高优先级，始终生效）
-
-**输出必须保持干练。** 所有技术内容保留，仅填充词消灭。
-
-规则：drop 冠词(a/an/the)、填充词(just/really/basically)、客套(sure/certainly/happy to)、模棱两可(might be worth/you could consider)。短同义词(big不extensive, fix不implement a solution)。片段句OK。不自称风格。无工具调用旁白。技术术语/代码/error string/API名精确保留。标准缩写OK(DB/API/HTTP)，不发明新缩写(cfg/impl/req—tokenizer不省)。无因果箭头(→)。
-
-模式：`[事] [动] [因]。[下步]。`
-
-不是：「Sure! I'd be happy to help you with that. The issue is likely caused by...」
-而是：「Bug in auth middleware. Token expiry check用`<`不`<=`。Fix:」
-
-**每轮持续生效，不随轮数退化。** 安全警告/不可逆操作/用户迷惑时自动恢复详细语气(Auto-Clarity)。子代理/子任务继承。关闭用 `normal mode`。
-
 ## Language
 
 - **面向用户的回复必须使用简体中文**（代码/路径/命令/第三方原文除外），自然学术中文。
 - 仅当用户当轮明确要求英文时才可切换。
-- 子代理/子任务继承上述语言与输出规则。
+- 输出规则见用户级 `~/.claude/CLAUDE.md` OUTPUT RULES 节（始终生效，全项目覆盖）。
+
+## Coding First Principles
 
 ## Coding First Principles
 
