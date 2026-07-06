@@ -136,11 +136,31 @@ pub(crate) fn tool_task_output_read(
         ));
     }
     validate_task_id_component(task_id)?;
+    let compact = arguments.get("compact").and_then(Value::as_bool).unwrap_or(false);
 
     let output = task_output_mod::read_task_output(repo_root, task_id)?;
     match output {
-        Some(o) => serde_json::to_string(&o)
-            .map_err(|e| FrameworkError::from(e.to_string())),
+        Some(o) => {
+            if compact {
+                let status = o.status;
+                let summary = o.outputs.summary.clone();
+                let verification_status = o.outputs.verification_status.clone();
+                let file_count = o.outputs.changed_files.len();
+                let cmd_count = o.outputs.commands_run.len();
+                Ok(serde_json::to_string(&json!({
+                    "ok": true, "task_id": task_id,
+                    "status": status,
+                    "summary": summary,
+                    "verification_status": verification_status,
+                    "changed_file_count": file_count,
+                    "command_count": cmd_count,
+                    "consumed_count": o.consumed_inputs.len(),
+                })).map_err(|e| FrameworkError::from(e.to_string()))?)
+            } else {
+                serde_json::to_string(&o)
+                    .map_err(|e| FrameworkError::from(e.to_string()))
+            }
+        }
         None => Ok(serde_json::to_string(&json!({
             "ok": false,
             "task_id": task_id,
@@ -527,11 +547,12 @@ mod tests {
         let v: Value = serde_json::from_str(&resp).expect("parse");
         assert_eq!(v["ok"], json!(true));
 
-        // Verify outputs are derived from closeout
+        // Verify outputs are derived from closeout (closeout no longer stored separately)
         let read_v = tool_task_output_read(&json!({"task_id": "test-task"}), &repo)
             .expect("read");
         let output: Value = serde_json::from_str(&read_v).expect("parse");
-        assert_eq!(output["closeout"]["verification_status"], "passed");
+        assert_eq!(
+            output["outputs"]["verification_status"], "passed");
         assert_eq!(
             output["outputs"]["evidence_summary"]["total_commands"],
             2

@@ -191,7 +191,9 @@ pub(crate) fn tool_task_list(repo_root: &Path) -> std::result::Result<String, Fr
                     .get("goal")
                     .and_then(Value::as_str)
                     .unwrap_or("")
-                    .to_string();
+                    .chars()
+                    .take(120)
+                    .collect::<String>();
                 let evidence_path = task_dir.join("EVIDENCE_INDEX.json");
                 let has_evidence = evidence_path.is_file()
                     && fs::read_to_string(&evidence_path)
