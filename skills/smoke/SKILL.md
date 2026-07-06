@@ -248,6 +248,45 @@ step 4: 输出推荐
         → 场景 B 本质上就是"对比两个点"——不一定是外部方案
 ```
 
+## 并行执行模型
+
+三个 MCP 工具的内部执行策略不完全相同。了解这些能帮你在配置 `concurrency` 时做出合理决策：
+
+| 工具 | baseline vs 去部件 | 子进程之间 | 线程模型 |
+|------|-------------------|-----------|---------|
+| `research_smoke` | N/A（只有参数组合） | **并行**，按 chunk 分批次 | `std::thread::scope` + per-process stdout/stderr reader 线程（每个子进程 2 个读取线程） |
+| `research_ablation` | **一次跑完** — baseline 和所有部件 ablation 在同一个并发池中 | **并行**，不等待 baseline 完成再跑部件 | 同 `research_smoke` |
+| `research_evaluate` | **一次跑完** — baseline 和 candidate 同时并发 | **并行**，两个实验同时启动 | 同 `research_smoke` |
+
+**关键推导**：
+
+- `concurrency` 控制同时运行的子进程数。设为 4 时，baseline + 3 个部件同时跑，剩下的排队下一批。
+- `research_ablation` 不等待 baseline 完成再跑部件 — baseline 和所有部件 ablation 混在一个并发池中。
+- 每个子进程在单独的线程中执行。子进程内部再开 2 个线程（stdout + stderr 读取）。
+- 总线程数 ≈ `concurrency × 3`（子进程执行 + stdout 读取 + stderr 读取）。
+- Chunk 内最慢的实验决定了这个 chunk 的 wall-clock。不要同一个 chunk 内混跑 60s+ 和 1s 的实验 — 分成两次调用。
+
+## 内存管理策略
+
+| 层面 | 策略 | 限制 | 超过后的行为 |
+|------|------|------|-------------|
+| **MCP 响应体** | 实验全部完成后一次返回 JSON | 4MB | 截断为摘要 + 提示查看 `artifacts/research-log/smoke/results.jsonl` |
+| **预检** | 运行前检查 `params 数量 × 1024` 是否超过 4MB | 4MB | 拒绝执行，提示减少 params 或查看 JSONL |
+| **磁盘缓存** | LRU + TTL，原子写（tmp+fsync+rename） | 256 条目，TTL 1h | 自动驱逐最早条目 |
+| **内存缓存** | `RwLock<HashMap>` 保护 | 同磁盘缓存（加载到内存） | 达到容量上限时 LRU 驱逐 |
+| **子进程输出** | stdout/stderr 各用一个 `Vec<u8>` 完整读取 | 无硬限制（由 `timeout_ms` 控制） | 无截断，但大输出会增加 MCP 响应体大小 |
+| **JSONL 持久化** | 每实验 append 到 `results.jsonl`，flock 保护 | 无限制 | 总是追加，不截断 |
+| **Chunk 内线程** | `std::thread::scope` 自动 join | 由 `concurrency` × 每个实验的 3 线程决定 | 超出系统上限 → `std::thread::scope` panic |
+| **Ablation 结果** | 每个部件的结果完整保留在响应中 | 同 MCP 响应体 4MB 限制 | 截断后可通过 JSONL 获取完整数据 |
+
+**实用建议**：
+
+- `concurrency` 不超过 `nproc / 3`（每个进程 3 线程）。16 核机器上设为 4-5。
+- 100+ 个部件的 ablation → 拆成多组调用，每组 ≤ 20 部件，或者将 `concurrency` 设高。
+- 预期结果很大时传 `no_cache: true` 避免缓存写开销。
+- 同一模板+同一组 params 的重复调用命中缓存（1 小时内），避免不必要的重跑。
+- `timeout_ms` 是硬限制。超时后 `SIGTERM` → 200ms → `SIGKILL`。
+
 ## Constraints
 
 - **快**：每个 smoke 点应在 60 秒内完成验证（跑不快的说明不是 smoke，是完整测试）
