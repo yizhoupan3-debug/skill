@@ -197,7 +197,7 @@ fn find_counterexample(lhs: &str, rhs: &str) -> Option<HashMap<String, f64>> {
     };
 
     let mut rng = crate::verification::symbolic::SimpleRng::new(42);
-    let mut trial = HashMap::new();
+    let mut trial = HashMap::with_capacity(all_vars.len());
 
     for _ in 0..100 {
         trial.clear();

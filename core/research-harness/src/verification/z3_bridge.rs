@@ -346,10 +346,11 @@ fn parse_atom_depth(solver: &z3::Solver, expr: &str, depth: i32) -> Result<z3::a
         if KNOWN_FUNCTIONS.contains(&name) {
             let mut pd = 0i32;
             let mut close_pos = None;
-            for (j, c) in expr[paren_pos..].chars().enumerate() {
+            let suffix = expr[paren_pos..].as_bytes();
+            for (j, &c) in suffix.iter().enumerate() {
                 match c {
-                    '(' => pd += 1,
-                    ')' => { pd -= 1; if pd == 0 { close_pos = Some(paren_pos + j); break; } }
+                    b'(' => pd += 1,
+                    b')' => { pd -= 1; if pd == 0 { close_pos = Some(paren_pos + j); break; } }
                     _ => {}
                 }
             }
