@@ -294,7 +294,8 @@ pub fn build_handoff_with_feedback(
     };
 
     format!(
-        "## Objective\n\
+        "Caveman active. Respond terse — drop filler, keep substance. Use Auto-Clarity for safety warnings.\n\
+         ## Objective\n\
          {desc}\n\n\
          ## Scope (HARD)\n\
          - Write scope: {scope}\n\
