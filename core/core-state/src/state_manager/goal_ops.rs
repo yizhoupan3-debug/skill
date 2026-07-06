@@ -581,12 +581,24 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
             } else {
                 goal_state_path_for_task(&repo_root, &tid).unwrap_or_else(|_| PathBuf::new())
             };
+            let goal_state_summary = match state {
+                Some(ref s) => json!({
+                    "status": s.get("status"),
+                    "goal": s.get("goal").and_then(|g| g.as_str()).map(|g| {
+                        if g.len() > 120 { format!("{}…", &g[..g.floor_char_boundary(120)]) } else { g.to_string() }
+                    }),
+                    "done_when_count": s.get("done_when").and_then(|d| d.as_array()).map(|a| a.len()),
+                    "checkpoint_count": s.get("checkpoints").and_then(|c| c.as_array()).map(|a| a.len()),
+                    "blocker": s.get("blocker"),
+                }),
+                None => json!(null),
+            };
             Ok(json!({
                 "ok": true,
                 "operation": "status",
                 "task_id": tid,
                 "goal_state_path": path.display().to_string(),
-                "goal_state": state,
+                "goal_state": goal_state_summary,
             }))
         }
         "start" | "upsert" => {

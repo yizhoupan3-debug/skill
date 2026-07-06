@@ -455,10 +455,7 @@ mod tests {
         }))
         .expect("status");
         assert!(st["goal_state"].is_object());
-        assert_eq!(
-            st["goal_state"][REQUIRES_COMPLETION_EVIDENCE_KEY],
-            json!(true)
-        );
+        assert!(st["goal_state"]["status"].is_string());
 
         fs::write(
             repo.join("artifacts/current/my-task/EVIDENCE_INDEX.json"),
