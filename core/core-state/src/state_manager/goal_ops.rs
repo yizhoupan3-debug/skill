@@ -1043,6 +1043,15 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
                 response["next_action"] = json!("continue");
             }
 
+            // After-complete hook: chain DAG advance, step tracking, etc.
+            // Fires via framework_core::runtime_hooks::try_hooks() from any caller path
+            // (MCP tool, PostToolUse hook, task_complete, etc.).
+            if let Some(hooks) = framework_core::runtime_hooks::try_hooks() {
+                if let Some(next_task_id) = hooks.after_goal_complete(&repo_root, &task_id) {
+                    response["auto_advance"] = json!({"next_task_id": next_task_id});
+                }
+            }
+
             Ok(response)
         }
         "retry" => {

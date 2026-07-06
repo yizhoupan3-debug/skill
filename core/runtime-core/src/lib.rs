@@ -282,6 +282,20 @@ pub fn init_hooks() {
             ensure_kernel_bootstrap: kernel_bootstrap::ensure_kernel_bootstrap,
             evaluate_quality_gate: crate::qg_entry::evaluate_quality_gate_hook,
             evaluate_closeout_gate: crate::framework_runtime::tool_handlers::closeout_handler::evaluate_closeout_gate_hook,
+            after_goal_complete: |repo_root, task_id| {
+                // Auto-advance chain DAG after complete — fail-open, log on error
+                match host_projection::hosts::mcp_stdio_harness::tools::auto_advance_chain_after_complete(repo_root, task_id) {
+                    Ok(next) => next,
+                    Err(e) => {
+                        tracing::warn!(
+                            error = %e,
+                            task_id = task_id,
+                            "after_goal_complete: chain auto-advance failed (non-fatal)"
+                        );
+                        None
+                    }
+                }
+            },
         });
 
         // 4. QG Route: scene-dispatched CheckerRegistry

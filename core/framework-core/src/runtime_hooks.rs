@@ -112,6 +112,10 @@ impl RuntimeCoreHooks {
     ) -> Result<serde_json::Value, core_errors::FrameworkError> {
         (self.evaluate_closeout_gate)(payload)
     }
+
+    pub fn after_goal_complete(&self, repo_root: &Path, task_id: &str) -> Option<String> {
+        (self.after_goal_complete)(repo_root, task_id)
+    }
 }
 
 /// Builder for `RuntimeCoreHooks` — enforces all fields are set at compile time.
@@ -124,6 +128,7 @@ pub struct RuntimeCoreHooksBuilder {
     ensure_kernel_bootstrap: Option<fn()>,
     evaluate_quality_gate: Option<fn(serde_json::Value) -> Result<serde_json::Value, FrameworkError>>,
     evaluate_closeout_gate: Option<fn(serde_json::Value) -> Result<serde_json::Value, FrameworkError>>,
+    after_goal_complete: Option<fn(&Path, &str) -> Option<String>>,
 }
 
 impl Default for RuntimeCoreHooksBuilder {
@@ -141,6 +146,7 @@ impl RuntimeCoreHooksBuilder {
             ensure_kernel_bootstrap: None,
             evaluate_quality_gate: None,
             evaluate_closeout_gate: None,
+            after_goal_complete: None,
         }
     }
 
@@ -152,6 +158,7 @@ impl RuntimeCoreHooksBuilder {
     pub fn ensure_kernel_bootstrap(mut self, v: fn()) -> Self { self.ensure_kernel_bootstrap = Some(v); self }
     pub fn evaluate_quality_gate(mut self, v: fn(serde_json::Value) -> Result<serde_json::Value, FrameworkError>) -> Self { self.evaluate_quality_gate = Some(v); self }
     pub fn evaluate_closeout_gate(mut self, v: fn(serde_json::Value) -> Result<serde_json::Value, FrameworkError>) -> Self { self.evaluate_closeout_gate = Some(v); self }
+    pub fn after_goal_complete(mut self, v: fn(&Path, &str) -> Option<String>) -> Self { self.after_goal_complete = Some(v); self }
 
     /// Pre-filled builder for tests — all fields are stub fns.
     pub fn for_testing() -> Self {
@@ -159,6 +166,7 @@ impl RuntimeCoreHooksBuilder {
         fn stub2() -> Result<Value, FrameworkError> { Ok(Value::Null) }
         fn stub3() {}
         fn stub4(_: serde_json::Value) -> Result<serde_json::Value, FrameworkError> { Ok(serde_json::Value::Null) }
+        fn stub5(_: &Path, _: &str) -> Option<String> { None }
         Self {
             host_provider: Some(HostProviderHooks {
                 for_routing_spelling: |_| None,
@@ -172,6 +180,7 @@ impl RuntimeCoreHooksBuilder {
             ensure_kernel_bootstrap: Some(stub3),
             evaluate_quality_gate: Some(stub4),
             evaluate_closeout_gate: Some(stub4),
+            after_goal_complete: Some(stub5),
         }
     }
 
@@ -186,6 +195,7 @@ impl RuntimeCoreHooksBuilder {
             ensure_kernel_bootstrap: self.ensure_kernel_bootstrap.ok_or("ensure_kernel_bootstrap not set")?,
             evaluate_quality_gate: self.evaluate_quality_gate.ok_or("evaluate_quality_gate not set")?,
             evaluate_closeout_gate: self.evaluate_closeout_gate.ok_or("evaluate_closeout_gate not set")?,
+            after_goal_complete: self.after_goal_complete.ok_or("after_goal_complete not set")?,
         })
     }
 }
@@ -228,4 +238,9 @@ pub struct RuntimeCoreHooks {
     /// Returns: { result: String, passed: bool, findings: Vec<String> }
     pub evaluate_closeout_gate:
         fn(serde_json::Value) -> Result<serde_json::Value, core_errors::FrameworkError>,
+
+    /// Called after `framework_goal_drive(complete)` succeeds.
+    /// Receives (repo_root, task_id) and returns optional next_task_id.
+    /// Implementations may advance a chain DAG, start the next step, etc.
+    pub after_goal_complete: fn(&Path, &str) -> Option<String>,
 }

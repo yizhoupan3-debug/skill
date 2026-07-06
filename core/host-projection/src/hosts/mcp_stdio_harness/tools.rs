@@ -560,55 +560,19 @@ pub(super) fn tool_goal_state_manage(
 ) -> Result<String, FrameworkError> {
     let result =
         crate::hooks::tool_goal_state_manage_dispatch(arguments, repo_root, connection_session_id)?;
-
-    // After a successful complete, auto-advance the chain DAG to the next step.
-    if is_complete_operation(arguments, &result) {
-        let task_id = arguments.get("task_id").and_then(Value::as_str).unwrap_or("");
-        let chain_advance = auto_advance_chain_after_complete(repo_root, task_id);
-        match chain_advance {
-            Ok(Some(next)) => {
-                // Try to merge the next-step info into the response
-                if let Ok(mut v) = serde_json::from_str::<Value>(&result) {
-                    v["auto_advance"] = json!({"next_task_id": next});
-                    return Ok(serde_json::to_string_pretty(&v)
-                        .map_err(|e| FrameworkError::from(e.to_string()))?);
-                }
-            }
-            Ok(None) => {} // No chain or no next step — normal
-            Err(e) => {
-                tracing::warn!(
-                    error = %e,
-                    task_id = task_id,
-                    "tool_goal_state_manage: chain auto-advance failed (non-fatal)"
-                );
-            }
-        }
-    }
-
+    // Note: chain auto-advance now fires from framework_goal_drive_impl's
+    // after_goal_complete runtime hook, covering all caller paths
+    // (MCP tool, task_complete, stop_dispatch, etc.).
     Ok(result)
 }
 
-/// Check if the completed goal operation was a successful "complete".
-fn is_complete_operation(arguments: &Value, result: &str) -> bool {
-    let op = arguments
-        .get("operation")
-        .and_then(Value::as_str)
-        .unwrap_or("");
-    if op.trim().to_ascii_lowercase() != "complete" {
-        return false;
-    }
-    // Verify result indicates success
-    if let Ok(v) = serde_json::from_str::<Value>(result) {
-        v.get("ok").and_then(Value::as_bool).unwrap_or(false)
-    } else {
-        false
-    }
-}
-
 /// After goal complete, try to advance the chain DAG to the next step.
-/// Returns `Ok(Some(next_task_id))` if a next step was auto-started,
-/// `Ok(None)` if no chain or no next step, or `Err` on failure.
-fn auto_advance_chain_after_complete(
+/// Returns `Some(next_task_id)` if a next step was auto-started,
+/// or `None` if no chain or no next step.
+///
+/// This is registered as the `after_goal_complete` runtime hook callback
+/// and is also called directly from `task_tools.rs::tool_task_complete`.
+pub fn auto_advance_chain_after_complete(
     repo_root: &Path,
     completed_task_id: &str,
 ) -> Result<Option<String>, FrameworkError> {

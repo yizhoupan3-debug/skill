@@ -165,7 +165,7 @@ macro_rules! poison_safe_lock {
     }};
 }
 
-mod tools;
+pub mod tools;
 use tools::*;
 mod task_tools;
 use task_tools::*;
