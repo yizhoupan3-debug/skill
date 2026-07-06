@@ -1,8 +1,8 @@
-<!-- managed_by: skill-framework · claude · keep ≤30 lines · projection_id: claude-project-narrative · host_projection: claude · install_scope: project -->
+<!-- managed_by: skill-framework · claude · keep ≤25 lines · projection_id: claude-project-narrative · host_projection: claude · install_scope: project -->
 
 # Claude Code（本项目）
 
-框架入口：**`AGENTS.md`**（策略真源 + 速查卡）。路由：`skill_route(query)`。
+NL 路由：`skill_route(query)` → selected_skill + recommended_tools。工具搜索：`search_tools(query, top_k)`。Slash command `/name` → 原生 `~/.claude/skills/`。
 
 ## 生命周期
 
@@ -13,11 +13,5 @@
 
 - 四事件：PreToolUse/UserPromptSubmit/PostToolUse/Stop（`.claude/settings.json` → `router-rs claude hook`）。
 - Review 默认 findings-only。REVIEW_GATE 不硬阻断 Stop。
-
-## 路由
-
-1) Start from `AGENTS.md`。
-2) NL queries → `skills/SKILL_ROUTING_RUNTIME.json`。Slash command（`/name`）→ 原生 `~/.claude/skills/`，不经过 MCP。
-3) Read only matched `skill_path`。
 
 Framework root: `${FRAMEWORK_ROOT}` · Project root: `${PROJECT_ROOT}` · 产物: `artifacts/current/`
