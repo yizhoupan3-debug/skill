@@ -27,7 +27,7 @@
       "owner",
       "none",
       "P2",
-      "统一科研前门：内部自动路由到 discovery（文献/理论）、execution（实验/数学/代码）、paper-workbench（手稿/审稿/润色）、research-harness（研究工作区/CLI）四个 lane。单一入口，内部 lane 分发。",
+      "统一科研前门：内部自动路由到 discovery（文献/理论）、execution（实验/数学/代码）、paper-workbench（手稿/审稿/润色）、research-workspace（研究工作区/CLI）四个 lane。单一入口，内部 lane 分发。",
       "preferred",
       [
         "科研",
@@ -187,7 +187,7 @@
         "实验探测",
         "假设追踪"
       ],
-      "skills/research-harness/SKILL.md",
+      "skills/research-workspace/SKILL.md",
       null,
       "skill",
       [],

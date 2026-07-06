@@ -50,7 +50,7 @@ trigger_hints:
 - **execution**：实验设计、数学建模/验证、代码验证、实验复现
 - **paper-workbench**：手稿审阅、返修、润色、投稿策略、rebuttal
 
-> 研究平台工作区（研究方向初始化、claim/假设管理、实验记录、barrier 升级）由独立一等技能 `$research-workspace` 提供，见 [`../research-harness/SKILL.md`](../research-harness/SKILL.md)。
+> 研究平台工作区（研究方向初始化、claim/假设管理、实验记录、barrier 升级）由独立一等技能 `$research-workspace` 提供，见 [`../research-workspace/SKILL.md`](../research-workspace/SKILL.md)。
 
 ## When to use（入口条件）
 
