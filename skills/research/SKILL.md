@@ -1,12 +1,10 @@
 ---
-description: '统一科研前门：内部自动路由到 discovery（文献/理论）、execution（实验/数学/代码）、paper-workbench（手稿/审稿/润色）三个 lane。单一入口，内部 lane 分发。研究工作区管理由独立一等技能 research-workspace 提供。'
+description: '统一科研前门：内部自动路由到 paper-workbench（手稿/审稿/润色）和 research-workspace 两个 lane。单一入口，内部 lane 分发。'
 metadata:
   platforms:
   - supported
   tags:
   - research
-  - discovery
-  - execution
   - paper
   - manuscript
   - theory
@@ -20,7 +18,7 @@ routing_layer: L2
 routing_owner: owner
 routing_priority: P2
 session_start: preferred
-short_description: 统一科研前门——文献调研、实验设计、手稿审改（研究工作区由独立技能 research-workspace 提供）
+short_description: 统一科研前门——手稿审改、科学探索（研究工作区由独立技能 research-workspace 提供）
 trigger_hints:
 - 科研
 - 研究
@@ -44,10 +42,8 @@ trigger_hints:
 ---
 # Research — 统一科研前门
 
-本 skill 是 **科研工作的统一 L2 前门**。它根据用户意图自动路由到内部 lane：
+本 skill 是 **科研工作的统一 L2 前门**。它根据用户意图分发到对应 lane：
 
-- **discovery**：文献调研、理论背景、数学背景询问、知识图谱
-- **execution**：实验设计、数学建模/验证、代码验证、实验复现
 - **paper-workbench**：手稿审阅、返修、润色、投稿策略、rebuttal
 
 > 研究平台工作区（研究方向初始化、claim/假设管理、实验记录、barrier 升级）由独立一等技能 `$research-workspace` 提供，见 [`../research-workspace/SKILL.md`](../research-workspace/SKILL.md)。
@@ -55,7 +51,7 @@ trigger_hints:
 ## When to use（入口条件）
 
 - 用户想做任何涉及 **学术/工程科研** 的事情
-- 用户的问题跨越 discovery / execution / paper 中多个阶段
+- 用户的问题涉及 paper-workbench / research-workspace 中多个阶段
 - 用户不确定自己是"查文献"还是"做实验"还是"写论文"，从此开始
 
 ## 内部路由逻辑
@@ -65,8 +61,6 @@ trigger_hints:
 | 信号关键词 | Lane | 说明 |
 |------------|------|------|
 | 论文、审稿、改稿、润色、能不能投、R&R、rebuttal、cover letter、顶刊、顶会、投稿 | **paper-workbench** | 手稿全流程 |
-| 文献综述、相关定理、数学背景、未知性质、知识地图、survey、landscape、理论背景、研究方向 | **discovery** | 发现阶段 |
-| 实验设计、ablation、benchmark、数学建模、控制方程、量纲分析、代码验证、复现、实验反思 | **execution** | 执行阶段 |
 
 > 研究方向初始化、claim 管理、假设跟踪、实验记录、smoke test、瓶颈研究等请直接使用独立技能 `$research-workspace`。
 
@@ -74,13 +68,11 @@ trigger_hints:
 
 ## 关联 skill
 
-本前门下辖以下内部 lane（非独立路由入口，仅为文档/用途分组）：
+本前门下辖以下内部 lane（非独立路由入口，仅为用途分组）：
 
-- [lanes/discovery.md](lanes/discovery.md) — 文献发现、理论调研
-- [lanes/execution.md](lanes/execution.md) — 实验执行、数学/代码验证
 - [paper-workbench/SKILL.md](paper-workbench/SKILL.md) — 手稿前门（保留独立 framework contracts + flags）
 
-> **研究平台工作区**（研究方向初始化、claim/假设管理、实验记录、barrier 升级）现已独立为 L2 一等技能 `$research-workspace`：见 [`../research-harness/SKILL.md`](../research-harness/SKILL.md)
+> **研究平台工作区**（研究方向初始化、claim/假设管理、实验记录、barrier 升级）现已独立为 L2 一等技能 `$research-workspace`。
 
 外部调用的 L3/L4 工具 skill：
 
@@ -109,9 +101,7 @@ handoff_evidence: <向下游传递的结构化上下文>
 
 ## Lane handoffs（跨 lane 传递协议）
 
-- discovery → execution：只需传递 `claims_to_verify` + `retrieval_trace` + `unresolved_assumptions`，见 [`references/research-lane-routing.md`](references/research-lane-routing.md) §Discovery→Execution。
-- execution → discovery（loop-back）：执行中发现未知未知时**必须 loop back**，传递 `new_unknown` + `retrieval_scope` + `hypothesis`，见同一文档 §Execution→Discovery。
-- execution → paper-workbench：传递 `experiment_design` + `code_verification` + `reproducibility` + `math_results` 和 `language_register`。
+- → paper-workbench：传递 `experiment_design` + `code_verification` + `reproducibility` + `math_results` 和 `language_register`。
 - → research-workspace：研究工作区管理（方向初始化/claim/实验记录/barrier 升级）请直接调用独立一等技能 `$research-workspace`，不通过本前门路由。
 
 ## Cross-references
@@ -119,7 +109,6 @@ handoff_evidence: <向下游传递的结构化上下文>
 - **内部 lane 路由协议**：[references/research-lane-routing.md](references/research-lane-routing.md) — 内部分发规则、math 分工线、scenario routing table
 - **学术来源检索**：[references/academic-sources.md](references/academic-sources.md) — arXiv / OpenAlex / CrossRef / PubMed / DOAJ API
 - **手稿 prose chain**：[paper-workbench/references/prose-chain-contract.md](paper-workbench/references/prose-chain-contract.md)
-- **质量门（退出门）**：`$formal-verification` / `$literature-verification` / `$prose-verification` / `$reproducibility-verification` / `$statistical-verification` / `$structure-verification`（均为 L4，作为 loop engine 退出门自动触发）
 - **旧路径映射**：[../LEGACY_MAP.md](../LEGACY_MAP.md)
 
 ## Hard constraints
@@ -127,7 +116,5 @@ handoff_evidence: <向下游传递的结构化上下文>
 - 不要跳过 lane 分发直接做子 lane 的工作
 - 如果意图不明朗，给出路由菜单让用户选择
 - 手稿工作必须路由到 paper-workbench lane（保留独立 contracts）
-- 研究工作区管理一律交给独立一等技能 `$research-workspace`，本前门不吞并平台工作区 CLI 文档
-- Keep manuscript work out of discovery lane
 - Keep citation formatting out of this front door; hand it to `$citation-management`
 - For reproducibility-only tasks, hand off to `$experiment-reproducibility`

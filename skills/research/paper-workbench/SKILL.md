@@ -305,10 +305,10 @@ In filesystem-backed work, the stable artifacts are:
 ## Verification skill integration
 
 When lanes require structured verification, load the corresponding skill:
-- `@lane:reviewer` prose quality checks → [`../../../quality-gates/prose-verification/SKILL.md`](../../../quality-gates/prose-verification/SKILL.md)
-- `@lane:reviewer` structure/logic checks → [`../../../quality-gates/structure-verification/SKILL.md`](../../../quality-gates/structure-verification/SKILL.md)
-- Literature/citation integrity checks → [`../../../quality-gates/literature-verification/SKILL.md`](../../../quality-gates/literature-verification/SKILL.md)
-- Statistical methodology checks → [`../../../quality-gates/statistical-verification/SKILL.md`](../../../quality-gates/statistical-verification/SKILL.md)
+- `@lane:reviewer` prose quality checks → Prose Quality Check（本文档内）
+- `@lane:reviewer` structure/logic checks → Structure Check（本文档内）
+- Literature/citation integrity checks → [`../../citation-management/SKILL.md`](../../citation-management/SKILL.md)
+- Statistical methodology checks → [`../../statistical-analysis/SKILL.md` (Verify Audit Mode)](../../statistical-analysis/SKILL.md)
 
 ## Upstream skill integration: good-story
 
