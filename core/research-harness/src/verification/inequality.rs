@@ -135,7 +135,7 @@ fn parse_via_regex(expr: &str) -> Result<Vec<Inequality>, FrameworkError> {
         return Ok(results);
     }
 
-    let re = regex::Regex::new(r"^(.+?)\s*(<=|>=|==|=|<|>)\s*(.+)$")
+    let re = regex::Regex::new(r"^(.+?)\s*(<=|>=|!=|==|=|<|>)\s*(.+)$")
         .map_err(|e| FrameworkError::validation(format!("regex: {e}")))?;
     let caps = re
         .captures(&cleaned)

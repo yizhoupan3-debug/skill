@@ -1019,4 +1019,106 @@ mod tests {
             vr.details
         );
     }
+
+    // ── check_tilde_equivalence with regime=0 ──
+
+    #[test]
+    fn test_check_tilde_identical_regime_zero() {
+        let vr = check_tilde_equivalence("n", "n", "n", "0");
+        assert_eq!(vr.status, VerificationStatus::Pass);
+    }
+
+    // ── verify_asymptotic_chain longer chains ──
+
+    #[test]
+    fn test_verify_asymptotic_chain_three_step() {
+        let steps = vec![
+            AsymptoticStep { premise: "log(n)".into(), relation: OrderRelation::MuchLess, conclusion: "n".into(), justification: "".into() },
+            AsymptoticStep { premise: "n".into(), relation: OrderRelation::MuchLess, conclusion: "n^2".into(), justification: "".into() },
+            AsymptoticStep { premise: "n^2".into(), relation: OrderRelation::MuchLess, conclusion: "n^3".into(), justification: "".into() },
+        ];
+        let vr = verify_asymptotic_chain(&steps, "n", "oo", true);
+        assert_eq!(vr.status, VerificationStatus::Pass, "3-step: {:?}", vr.status);
+    }
+
+    // ── compose_asymptotic_chain property tests ──
+
+    #[test]
+    fn test_transitive_property_all_relations() {
+        assert!(OrderRelation::LessSim.is_transitive());
+        assert!(OrderRelation::MuchLess.is_transitive());
+    }
+
+    #[test]
+    fn test_chain_composition_mixed_has_warning() {
+        let steps = vec![
+            AsymptoticStep { premise: "n".into(), relation: OrderRelation::LessSim, conclusion: "n^2".into(), justification: "".into() },
+            AsymptoticStep { premise: "n^2".into(), relation: OrderRelation::MuchLess, conclusion: "2^n".into(), justification: "".into() },
+        ];
+        let chain = AsymptoticChain::new(steps);
+        let comp = compose_asymptotic_chain(&chain);
+        assert!(comp.mixed_chain_warning.is_some());
+    }
+
+    // ── compare_magnitudes edge cases ──
+
+    #[test]
+    fn test_compare_magnitudes_identical() {
+        let r = compare_magnitudes("n", "n", "n", "oo");
+        assert_eq!(r.relation, OrderRelation::Asymp);
+    }
+
+    #[test]
+    fn test_compare_magnitudes_constants_only() {
+        let r = compare_magnitudes("42", "100", "n", "oo");
+        assert_eq!(r.relation, OrderRelation::Asymp);
+    }
+
+    // ── check_asymptotic_claim edge cases ──
+
+    #[test]
+    fn test_check_asymptotic_claim_asymp_same() {
+        let vr = check_asymptotic_claim("n", "n", &OrderRelation::Asymp, "n", "oo");
+        assert_eq!(vr.status, VerificationStatus::Pass);
+    }
+
+    #[test]
+    fn test_check_asymptotic_claim_wrong_direction() {
+        let vr = check_asymptotic_claim("n^2", "n", &OrderRelation::MuchLess, "n", "oo");
+        assert_eq!(vr.status, VerificationStatus::Fail);
+    }
+
+    #[test]
+    fn test_check_asymptotic_claim_less_sim_different() {
+        let vr = check_asymptotic_claim("n", "n^2", &OrderRelation::LessSim, "n", "oo");
+        assert_eq!(vr.status, VerificationStatus::Pass);
+    }
+
+    // ── magnitude_estimate edge cases ──
+
+    #[test]
+    fn test_magnitude_estimate_constant_only() {
+        let vr = magnitude_estimate("42", "n", "oo");
+        assert_eq!(vr.status, VerificationStatus::Pass);
+    }
+
+    #[test]
+    fn test_magnitude_estimate_with_custom_name() {
+        let vr = magnitude_estimate_with_name("n", "n", "oo", "custom_name");
+        assert_eq!(vr.status, VerificationStatus::Pass);
+        assert_eq!(vr.check_name, "custom_name");
+    }
+
+    // ── chain serialization ──
+
+    #[test]
+    fn test_chain_serialization_roundtrip() {
+        let chain = AsymptoticChain::new(vec![
+            AsymptoticStep { premise: "n".into(), relation: OrderRelation::MuchLess, conclusion: "n^2".into(), justification: "poly".into() },
+        ]);
+        let json = serde_json::to_string(&chain).unwrap();
+        let back: AsymptoticChain = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.steps.len(), 1);
+        assert_eq!(back.steps[0].premise, "n");
+    }
 }
