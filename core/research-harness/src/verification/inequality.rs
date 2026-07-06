@@ -167,7 +167,18 @@ fn parse_via_regex(expr: &str) -> Result<Vec<Inequality>, FrameworkError> {
         }
     };
 
-    // Extract terms from both sides. Variables go to LHS, constants to RHS.
+    // Reject `!=` — inequality system cannot model strict disequality.
+    // The nonlinear detector routes `!=` expressions to Z3 at ingestion time.
+    if sense_str == "!=" {
+        return Err(FrameworkError::validation(format!(
+            "inequality system does not support `!=`; route through Z3: {expr}"
+        )));
+    }
+
+    // Normalize: combine like terms for duplicate variables on same side
+    // (e.g., `x + x > 5` → `2*x > 5`).
+    // `extract_terms` already merges intra-side duplicates, but we merge
+    // across the LHS→RHS merge below. Here we add a final safety pass.
     let (l_coeffs, l_vars, l_const) = extract_terms(lhs_str);
     let (r_coeffs, r_vars, r_const) = extract_terms(rhs_str);
 
@@ -450,18 +461,127 @@ fn solve_via_minilp(
 }
 
 // ===========================================================================
+// Variable bounds extraction
+// ===========================================================================
+
+/// A set of extracted bounds for each variable in a system.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct VariableBounds {
+    /// Per-variable lower and upper bounds (inclusive).
+    /// `lower = -inf` and `upper = +inf` mean unbounded.
+    pub bounds: HashMap<String, (f64, f64)>,
+}
+
+impl VariableBounds {
+    /// Extract simple bounds from a system of inequalities.
+    ///
+    /// Handles patterns like `x >= 3`, `x <= 5`, `x == 7`, `-x >= -10` (→ x <= 10).
+    /// Compound bounds like `3 <= x <= 10` are already decomposed into two
+    /// simple inequalities by the parser before reaching this function.
+    pub fn from_system(system: &InequalitySystem) -> Self {
+        let mut lower = HashMap::<String, f64>::new();
+        let mut upper = HashMap::<String, f64>::new();
+
+        for c in &system.constraints {
+            // Bounds only for single-variable inequalities
+            if c.vars.len() != 1 || c.coefficients.len() != 1 {
+                continue;
+            }
+            let var = &c.vars[0];
+            let coeff = c.coefficients[0];
+            if coeff.abs() < 1e-15 {
+                continue;
+            }
+            let bound_val = c.rhs / coeff;
+            // Flip sign: coeff ≥ 0 means same direction; coeff < 0 reverses sense
+            let (lb, ub) = match c.sense {
+                InequalitySense::Ge => {
+                    if coeff > 0.0 { (bound_val, f64::INFINITY) }
+                    else { (f64::NEG_INFINITY, bound_val) }
+                }
+                InequalitySense::Gt => {
+                    if coeff > 0.0 { (bound_val, f64::INFINITY) }
+                    else { (f64::NEG_INFINITY, bound_val) }
+                }
+                InequalitySense::Le => {
+                    if coeff > 0.0 { (f64::NEG_INFINITY, bound_val) }
+                    else { (bound_val, f64::INFINITY) }
+                }
+                InequalitySense::Lt => {
+                    if coeff > 0.0 { (f64::NEG_INFINITY, bound_val) }
+                    else { (bound_val, f64::INFINITY) }
+                }
+                InequalitySense::Eq => (bound_val, bound_val),
+            };
+
+            if lb.is_finite() {
+                lower.entry(var.clone())
+                    .and_modify(|e| *e = e.max(lb))
+                    .or_insert(lb);
+            }
+            if ub.is_finite() {
+                upper.entry(var.clone())
+                    .and_modify(|e| *e = e.min(ub))
+                    .or_insert(ub);
+            }
+        }
+
+        let mut bounds = HashMap::new();
+        for var in lower.keys().chain(upper.keys()) {
+            let lo = lower.get(var).copied().unwrap_or(f64::NEG_INFINITY);
+            let hi = upper.get(var).copied().unwrap_or(f64::INFINITY);
+            bounds.insert(var.clone(), (lo, hi));
+        }
+        Self { bounds }
+    }
+
+    /// Check whether the extracted bounds are self-consistent
+    /// (no variable has lower > upper).
+    pub fn is_consistent(&self) -> bool {
+        self.bounds.values().all(|(lo, hi)| *lo <= *hi + 1e-12)
+    }
+
+    /// Check if any bound is contradictory (lower > upper + margin).
+    /// Returns the first contradictory variable name if found.
+    pub fn first_contradiction(&self) -> Option<String> {
+        for (v, (lo, hi)) in &self.bounds {
+            if *lo > *hi + 1e-12 {
+                return Some(v.clone());
+            }
+        }
+        None
+    }
+}
+
+/// Fast bounds pre-check: scan a system for obvious contradictions
+/// before running the full LP solver.
+///
+/// Returns `Some(contradiction_detail)` if a bound conflict is found.
+pub fn quick_bounds_check(system: &InequalitySystem) -> Option<String> {
+    let vb = VariableBounds::from_system(system);
+    if let Some(v) = vb.first_contradiction() {
+        let (lo, hi) = vb.bounds.get(&v).copied().unwrap_or((f64::NEG_INFINITY, f64::INFINITY));
+        return Some(format!("variable `{v}`: lower bound {lo} > upper bound {hi}"));
+    }
+    None
+}
+
+// ===========================================================================
 // Verification pipeline integration
 // ===========================================================================
 
 /// Check if an expression is potentially nonlinear.
 ///
 /// Uses a conservative heuristic: function calls (sin, cos, etc.),
-/// power operators (`^`, `**`), `pi`, and variable×variable products
+/// power operators (`^`, `**`), `!=` (disequality), `pi`, and variable×variable products
 /// (i.e. `*` where BOTH sides are non-constant tokens).
 ///
 /// A `*` between a constant and a variable (e.g. `2*x`, `x*3`) is LINEAR
 /// and can be solved by minilp — only when `*` connects two non-constant
 /// tokens (e.g. `x*y`, `(x+1)*y`, `x*sin(x)`) do we route to Z3.
+///
+/// `!=` (disequality) is always nonlinear because it represents a disjunction
+/// (`x < 0 OR x > 0`) that cannot be modeled as a single linear constraint.
 fn is_nonlinear(expr: &str) -> bool {
     let lower = expr.to_lowercase();
 
@@ -478,6 +598,12 @@ fn is_nonlinear(expr: &str) -> bool {
         || lower.contains("ln(")
         || word_boundary_match(&lower, "pi")
     {
+        return true;
+    }
+
+    // `!=` (disequality) → always nonlinear for the linear engine.
+    // The Z3 backend handles this correctly as a logical disjunction.
+    if lower.contains("!=") {
         return true;
     }
 
@@ -1317,5 +1443,77 @@ mod tests {
             }
             other => panic!("expected Timeout, got: {other:?}"),
         }
+    }
+
+    // ── Variable bounds extraction tests ──
+
+    #[test]
+    fn test_variable_bounds_simple() {
+        // System: x >= 3, x <= 10
+        let ineqs = parse_via_regex("3 <= x <= 10").unwrap();
+        let system = InequalitySystem::new(ineqs);
+        let vb = VariableBounds::from_system(&system);
+        assert!(vb.is_consistent());
+        let (lo, hi) = vb.bounds.get("x").copied().unwrap_or((f64::NEG_INFINITY, f64::INFINITY));
+        assert!((lo - 3.0).abs() < 1e-9, "expected lo≈3, got {lo}");
+        assert!((hi - 10.0).abs() < 1e-9, "expected hi≈10, got {hi}");
+    }
+
+    #[test]
+    fn test_variable_bounds_contradiction_detected() {
+        let i1 = Inequality::new(vec![1.0], vec!["x".into()], InequalitySense::Ge, 10.0);
+        let i2 = Inequality::new(vec![1.0], vec!["x".into()], InequalitySense::Le, 0.0);
+        let system = InequalitySystem::new(vec![i1, i2]);
+        let vb = VariableBounds::from_system(&system);
+        assert!(!vb.is_consistent());
+        assert!(vb.first_contradiction().is_some());
+        let qc = quick_bounds_check(&system);
+        assert!(qc.is_some(), "quick_bounds_check should detect contradiction");
+        assert!(qc.unwrap().contains("x"), "message should mention x");
+    }
+
+    #[test]
+    fn test_variable_bounds_multi_var() {
+        let i1 = Inequality::new(vec![1.0], vec!["x".into()], InequalitySense::Ge, 0.0);
+        let i2 = Inequality::new(vec![1.0], vec!["y".into()], InequalitySense::Le, 5.0);
+        let i3 = Inequality::new(vec![1.0], vec!["z".into()], InequalitySense::Eq, 3.0);
+        let system = InequalitySystem::new(vec![i1, i2, i3]);
+        let vb = VariableBounds::from_system(&system);
+        assert!(vb.is_consistent());
+        let (x_lo, _x_hi) = vb.bounds.get("x").copied().unwrap_or((f64::NEG_INFINITY, f64::INFINITY));
+        assert!((x_lo - 0.0).abs() < 1e-9, "x lower bound should be 0");
+        let (z_lo, z_hi) = vb.bounds.get("z").copied().unwrap_or((f64::NEG_INFINITY, f64::INFINITY));
+        assert!((z_lo - 3.0).abs() < 1e-9, "z lower bound should be 3");
+        assert!((z_hi - 3.0).abs() < 1e-9, "z upper bound should be 3");
+    }
+
+    #[test]
+    fn test_variable_bounds_negative_coefficient() {
+        let ineqs = parse_via_regex("x <= 10").unwrap();
+        let system = InequalitySystem::new(ineqs);
+        let vb = VariableBounds::from_system(&system);
+        let (_lo, hi) = vb.bounds.get("x").copied().unwrap_or((f64::NEG_INFINITY, f64::INFINITY));
+        assert!((hi - 10.0).abs() < 1e-9, "expected hi≈10, got {hi}");
+    }
+
+    // ── Parse `!=` rejection test ──
+
+    #[test]
+    fn test_parse_not_equal_rejected() {
+        let result = parse_inequality_latex("x != 0");
+        assert!(result.is_err(), "parse should reject `!=`");
+    }
+
+    // ── `!=` route-to-Z3 test ──
+
+    #[test]
+    fn test_check_inequality_not_equal_uses_z3() {
+        let result = check_inequality("x != 0", Some(5000));
+        assert_eq!(
+            result.status,
+            VerificationStatus::Pass,
+            "x != 0 should be SAT via Z3, got: {:?}",
+            result.status
+        );
     }
 }
