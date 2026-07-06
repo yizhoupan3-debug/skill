@@ -505,7 +505,10 @@
       "tool_flags": [],
       "input_schema": {
         "type": "object",
-        "required": ["chain_id", "tasks"],
+        "required": [
+          "chain_id",
+          "tasks"
+        ],
         "properties": {
           "chain_id": {
             "type": "string",
@@ -517,7 +520,7 @@
           },
           "global_config": {
             "type": "object",
-            "description": "全局配置（max_concurrent_tasks、default_retry、on_any_failure）"
+            "description": "全局配置"
           }
         }
       }
@@ -546,7 +549,7 @@
     {
       "slug": "chain_dag_status",
       "display_name": "DAG 链状态",
-      "description": "读取完整 DAG 链状态视图（含拓扑层级、任务状态、重试信息）",
+      "description": "读取 DAG 链状态摘要（status_counts + 活跃 step IDs），加 detail=true 获取完整详情",
       "layer": "builtin",
       "dispatch_domain": "domain:chain",
       "owner": "framework",
@@ -561,7 +564,12 @@
       "tool_flags": [],
       "input_schema": {
         "type": "object",
-        "properties": {}
+        "properties": {
+          "detail": {
+            "type": "boolean",
+            "description": "true 时返回每个 step 的完整详情，默认只返回摘要（status_counts + active_step_ids）"
+          }
+        }
       }
     },
     {
@@ -581,7 +589,9 @@
       "tool_flags": [],
       "input_schema": {
         "type": "object",
-        "required": ["task_id"],
+        "required": [
+          "task_id"
+        ],
         "properties": {
           "task_id": {
             "type": "string",
@@ -606,7 +616,9 @@
       "tool_flags": [],
       "input_schema": {
         "type": "object",
-        "required": ["task_id"],
+        "required": [
+          "task_id"
+        ],
         "properties": {
           "task_id": {
             "type": "string",

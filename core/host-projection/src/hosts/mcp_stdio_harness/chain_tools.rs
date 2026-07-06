@@ -213,7 +213,7 @@ pub(crate) fn tool_chain_dag_tick(
 
 /// Read the current DAG chain's full status.
 pub(crate) fn tool_chain_dag_status(
-    _arguments: &Value,
+    arguments: &Value,
     repo_root: &Path,
 ) -> std::result::Result<String, FrameworkError> {
     let path = chain_engine::chain_file_path(repo_root);
@@ -226,26 +226,23 @@ pub(crate) fn tool_chain_dag_status(
     let root = chain_engine::load_chain_from_path(&path)?;
     let counts = root.status_counts();
 
-    let tasks_summary: Vec<Value> = root
+    let is_complete = root.tasks.iter().all(|t| t.status.is_terminal());
+    let active_step_ids: Vec<&str> = root
         .tasks
         .iter()
-        .map(|t| {
-            json!({
-                "task_id": t.task_id,
-                "title": t.title,
-                "status": t.status.as_str(),
-                "attempt": t.attempt,
-                "depends_on": t.depends_on,
-                "parallel_group": t.parallel_group,
-                "error": t.error,
-            })
-        })
+        .filter(|t| t.status == chain_engine::types::TaskStatus::Running)
+        .map(|t| t.task_id.as_str())
         .collect();
 
-    Ok(serde_json::to_string(&json!({
+    // Default: summary mode. Pass detail=true for full task details.
+    let detail = arguments
+        .get("detail")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+
+    let mut resp = json!({
         "ok": true,
         "chain_id": root.chain_id,
-        "mode": root.mode,
         "paused": root.paused,
         "task_count": root.tasks.len(),
         "status_counts": {
@@ -256,13 +253,35 @@ pub(crate) fn tool_chain_dag_status(
             "skipped": counts.get("skipped").copied().unwrap_or(0),
             "blocked": counts.get("blocked").copied().unwrap_or(0),
         },
-        "tasks": tasks_summary,
-        "global_config": {
+        "active_step_ids": active_step_ids,
+        "is_complete": is_complete,
+    });
+
+    if detail {
+        let tasks_summary: Vec<Value> = root
+            .tasks
+            .iter()
+            .map(|t| {
+                json!({
+                    "task_id": t.task_id,
+                    "title": t.title,
+                    "status": t.status.as_str(),
+                    "attempt": t.attempt,
+                    "depends_on": t.depends_on,
+                    "parallel_group": t.parallel_group,
+                    "error": t.error,
+                })
+            })
+            .collect();
+        resp["mode"] = json!(root.mode);
+        resp["tasks"] = json!(tasks_summary);
+        resp["global_config"] = json!({
             "max_concurrent_tasks": root.global_config.max_concurrent_tasks,
             "on_any_failure": format!("{:?}", root.global_config.on_any_failure).to_ascii_lowercase(),
-        },
-        "is_complete": root.tasks.iter().all(|t| t.status.is_terminal()),
-    }))?)
+        });
+    }
+
+    Ok(serde_json::to_string(&resp)?)
 }
 
 /// Manually retry a specific failed task.

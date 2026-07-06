@@ -605,14 +605,8 @@ fn auto_advance_chain_after_complete(
                 "task_id": next_task_id,
                 "goal": goal_text,
                 "drive_until_done": true,
-                "non_goals": ["features outside this step's scope"],
-                "done_when": [
-                    format!("step completed: {goal_text}"),
-                ],
-                "validation_commands": [
-                    "cargo check --workspace",
-                    "cargo test --workspace",
-                ],
+                // non_goals/done_when/validation_commands: auto-filled by
+                // goal_handler.rs drive_until_done=true defaults (lines 74-88).
             });
 
             match core_state::state_manager::framework_goal_drive(start_payload) {
@@ -648,17 +642,32 @@ pub(super) fn tool_goal_state_read(
         .get("task_id")
         .and_then(Value::as_str)
         .filter(|s| !s.trim().is_empty());
+    let compact = arguments.get("compact").and_then(Value::as_bool).unwrap_or(false);
     let state = core_state::state_manager::read_goal_state(repo_root, task_id)
         .map_err(|e| FrameworkError::from(format!("goal_state_read: {e}")))?;
     let response = match state {
-        Some(s) => json!({"ok": true, "goal_state": s}),
+        Some(s) => {
+            if compact {
+                json!({"ok": true, "goal_state": {
+                    "status": s.get("status"),
+                    "goal": s.get("goal").and_then(|g| g.as_str()).map(|g| {
+                        if g.len() > 120 { format!("{}…", &g[..g.floor_char_boundary(120)]) } else { g.to_string() }
+                    }),
+                    "done_when_count": s.get("done_when").and_then(|d| d.as_array()).map(|a| a.len()),
+                    "checkpoint_count": s.get("checkpoints").and_then(|c| c.as_array()).map(|a| a.len()),
+                    "blocker": s.get("blocker"),
+                }})
+            } else {
+                json!({"ok": true, "goal_state": s})
+            }
+        }
         None => json!({
             "ok": false,
             "goal_state": null,
-            "message": "No active goal state found. Use 'goal_state_manage(operation=\"start\", ...)' to create one, or provide an explicit 'task_id' parameter."
+            "message": "No goal state found. Use 'goal_state_manage(operation=\"start\", ...)' to create one."
         }),
     };
-    Ok(serde_json::to_string_pretty(&response)
+    Ok(serde_json::to_string(&response)
         .map_err(|e| FrameworkError::from(e.to_string()))?)
 }
 

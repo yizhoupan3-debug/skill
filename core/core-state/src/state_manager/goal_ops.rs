@@ -1040,11 +1040,6 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, FrameworkError> {
 
             // Loop continuation hint: guide the model to keep driving
             if drive_until_done && status == "running" {
-                response["message"] = json!(
-                    "Iteration completed. Goal is still running — continue executing \
-                     until all done_when items are satisfied, then call complete again. \
-                     Use checkpoint to record progress between iterations."
-                );
                 response["next_action"] = json!("continue");
             }
 
