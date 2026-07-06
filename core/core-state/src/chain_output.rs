@@ -20,9 +20,6 @@ pub struct ChainTaskEntry {
     /// Task execution status at chain completion time.
     #[serde(default)]
     pub status: String,
-    /// Relative path to the task's TASK_OUTPUT.json.
-    #[serde(default)]
-    pub output_path: String,
     /// One-line summary from the task's closeout.
     #[serde(default)]
     pub summary: String,
@@ -222,11 +219,6 @@ pub fn build_chain_aggregate(
         output.tasks.push(ChainTaskEntry {
             task_id: tid.to_string(),
             status: status.clone(),
-            output_path: if tid.is_empty() {
-                String::new()
-            } else {
-                format!("artifacts/current/{tid}/TASK_OUTPUT.json")
-            },
             summary,
             verification_status,
         });
@@ -284,16 +276,12 @@ mod tests {
                 ChainTaskEntry {
                     task_id: "scan".to_string(),
                     status: "completed".to_string(),
-                    output_path: "artifacts/current/scan/TASK_OUTPUT.json"
-                        .to_string(),
                     summary: "scanned codebase".to_string(),
                     verification_status: "passed".to_string(),
                 },
                 ChainTaskEntry {
                     task_id: "fix".to_string(),
                     status: "completed".to_string(),
-                    output_path: "artifacts/current/fix/TASK_OUTPUT.json"
-                        .to_string(),
                     summary: "fixed issues".to_string(),
                     verification_status: "passed".to_string(),
                 },

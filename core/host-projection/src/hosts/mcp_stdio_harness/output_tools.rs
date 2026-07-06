@@ -92,7 +92,7 @@ pub(crate) fn tool_task_output_write(
         },
     };
 
-    // If a `closeout` sub-object is provided, embed it.
+    // If a `closeout` sub-object is provided, derive outputs from it.
     if let Some(closeout_val) = arguments.get("closeout") {
         let closeout_v = closeout_val.clone();
         if let Ok(record) =
@@ -100,11 +100,7 @@ pub(crate) fn tool_task_output_write(
                 closeout_v,
             )
         {
-            output.closeout = Some(record);
-            // Re-derive evidence summary from closeout command records if available.
-            if let Some(ref rec) = output.closeout {
-                output.outputs = OutputData::from_closeout_record(rec);
-            }
+            output.outputs = OutputData::from_closeout_record(&record);
         }
     }
 
@@ -366,9 +362,9 @@ pub(crate) fn tool_task_output_validate(
                             "completed/failed task has empty verification_status".to_string(),
                         );
                     }
-                    if output.closeout.is_none() {
+                    if output.outputs.changed_files.is_empty() && output.outputs.commands_run.is_empty() {
                         issues.push(
-                            "completed/failed task has no embedded closeout record".to_string(),
+                            "completed/failed task has no output data".to_string(),
                         );
                     }
                 }

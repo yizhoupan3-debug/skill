@@ -170,7 +170,6 @@ impl Default for EvidenceSummary {
 /// a downstream consumer needs, without requiring access to the task's internal
 /// artifact files (GOAL_STATE, EVIDENCE_INDEX, closeout record).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(deny_unknown_fields)]
 pub struct TaskOutput {
     /// Schema version — always "task-output-v1".
     pub schema_version: String,
@@ -185,9 +184,6 @@ pub struct TaskOutput {
     /// Producer label — "task-engine" | "goal-engine" | "swarm" | "custom".
     #[serde(default)]
     pub producer: String,
-    /// Embedded closeout record (optional — present when task is completed/failed).
-    #[serde(default)]
-    pub closeout: Option<crate::closeout_validation::CloseoutRecord>,
     /// Structured output data (always present after completion).
     #[serde(default)]
     pub outputs: OutputData,
@@ -211,7 +207,6 @@ impl TaskOutput {
             title: None,
             status: TaskOutputStatus::Running,
             producer: String::new(),
-            closeout: None,
             outputs: OutputData::default(),
             consumed_inputs: Vec::new(),
             aggregates: None,
@@ -289,14 +284,14 @@ mod tests {
     }
 
     #[test]
-    fn task_output_deny_unknown_fields() {
+    fn task_output_ignores_unknown_fields_for_backward_compat() {
         let json = r#"{
             "schema_version": "task-output-v1",
             "task_id": "t1",
             "unknown_field": "boom"
         }"#;
         let result: Result<TaskOutput, _> = serde_json::from_str(json);
-        assert!(result.is_err(), "should reject unknown fields");
+        assert!(result.is_ok(), "should accept unknown fields for backward compat");
     }
 
     #[test]
