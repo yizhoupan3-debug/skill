@@ -187,7 +187,26 @@ git status --short                # 确认工作区干净
 
 **提交失败处理**：暂停说明原因，不重试（避免重复提交）。
 
-### 7. 清理车道
+### 7. 推送（自动执行）
+
+提交成功后自动执行，不暂停：
+
+```bash
+git remote -v                                   # 检查是否有 upstream remote
+git rev-list --count --left-right main...@{upstream}  # ahead/behind
+```
+
+**有 upstream remote 且 ahead > 0** → 直接 `git push`
+
+**异常处理（全自动，不暂停）**：
+
+| 异常 | 处理 |
+|------|------|
+| 无 remote | 静默跳过 |
+| push rejected（non-fast-forward） | 自动 `git pull --ff-only` → 再次 `git push` → 仍失败则静默跳过 |
+| 无 ahead（remote 已最新） | 静默跳过 |
+
+### 8. 清理车道
 
 ```bash
 git log --oneline HEAD~N..HEAD
@@ -198,7 +217,7 @@ git log --oneline HEAD~N..HEAD
 - 确认后执行，`git range-diff` 验证
 - **rebase 失败**：自动 `git rebase --abort`，暂停说明
 
-### 8. 分支/worktree 收拢（每次 gitx 自动执行）
+### 9. 分支/worktree 收拢（每次 gitx 自动执行）
 
 提交完成后自动执行，不暂停：
 
@@ -225,6 +244,7 @@ git worktree list --porcelain
 | review | 发现安全问题 → 暂停说明 |
 | 验证 | 测试失败 → 自动 fix 重试一次；仍失败则暂停 |
 | 提交 | commit 失败 → 暂停说明，不重试 |
+| 推送 | push rejected → `git pull --ff-only` 重试 → 仍失败则静默跳过（不暂停） |
 | rebase | 冲突 → `git rebase --abort`，暂停说明 |
 | 收拢 | ff-only 冲突 → 跳过该分支，继续其他 |
 
