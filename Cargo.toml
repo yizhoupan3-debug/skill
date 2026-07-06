@@ -90,7 +90,7 @@ rusqlite = { version = "0.32", features = ["bundled"] }
 quick-xml = "0.36"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-serde_yml = "=0.0.12"
+serde_yml = "=0.0.13"
 sha2 = "0.11"
 tempfile = "3.15"
 tokio = { version = "1.44", features = ["sync", "rt", "macros", "time"] }
