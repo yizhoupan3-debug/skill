@@ -286,27 +286,87 @@ pub(super) fn tool_skill_read(
         .get("skill")
         .and_then(Value::as_str)
         .ok_or_else(|| FrameworkError::from("Missing required argument: skill".to_string()))?;
+    let format = arguments
+        .get("format")
+        .and_then(Value::as_str)
+        .unwrap_or("full");
     let max_chars = arguments
         .get("max_chars")
         .and_then(Value::as_u64)
-        .unwrap_or(20_000)
+        .unwrap_or(if format == "compact" { 500 } else { 20_000 })
         .clamp(1, 50_000) as usize;
 
     let path = skill_body_path(repo_root, slug)?;
     let content = fs::read_to_string(&path)
         .map_err(|e| FrameworkError::from(format!("{}: {e}", path.display())))?;
+
+    if format == "compact" {
+        return Ok(build_skill_read_compact(slug, &content, max_chars));
+    }
+
+    // Full format (default): return raw content
     let truncated = content.chars().count() > max_chars;
     let truncated_content: String = content.chars().take(max_chars).collect();
-
     Ok(json!({
         "schema_version": "cowork-skill-read-v1",
         "authority": "router-rs-framework",
         "skill": slug,
-        // HPM-14: return slug only, not absolute file path (directory structure leak)
         "content": truncated_content,
         "truncated": truncated,
     })
     .to_string())
+}
+
+/// Build a compact structured skill read response.
+/// The model needs: allowed_tools, quick_ref (Rules section), boundaries.
+fn build_skill_read_compact(slug: &str, content: &str, max_body_chars: usize) -> String {
+    // Split on --- to separate frontmatter from body
+    let parts: Vec<&str> = content.splitn(3, "---\n").collect();
+    let body = if parts.len() >= 3 { parts[2] } else { content };
+
+    // Extract allowed_tools from frontmatter (simple line scan)
+    let frontmatter = if parts.len() >= 2 { parts[1] } else { "" };
+    let mut allowed_tools: Vec<String> = Vec::new();
+    let mut in_allowed = false;
+    for line in frontmatter.lines() {
+        if line.starts_with("allowed_tools:") {
+            in_allowed = true;
+        } else if in_allowed && line.trim_start().starts_with("- ") {
+            allowed_tools.push(line.trim_start_matches("- ").trim().to_string());
+        } else if in_allowed && !line.trim().is_empty() && !line.starts_with("  ") {
+            in_allowed = false;
+        }
+    }
+
+    // Extract quick_ref (Rules section or first few lines of body)
+    let quick_ref: String = extract_section(body, "## Rules")
+        .or_else(|| Some(body.chars().take(max_body_chars).collect()))
+        .unwrap_or_default()
+        .chars()
+        .take(max_body_chars)
+        .collect();
+
+    // Extract boundaries section
+    let boundaries = extract_section(body, "## Boundaries").unwrap_or_default();
+
+    json!({
+        "skill": slug,
+        "allowed_tools": allowed_tools,
+        "quick_ref": quick_ref.trim(),
+        "boundaries": boundaries.trim(),
+    })
+    .to_string()
+}
+
+/// Extract text content of a markdown section by heading name.
+fn extract_section(body: &str, heading: &str) -> Option<String> {
+    let heading_line = format!("\n{heading}");
+    let start = body.find(&heading_line).or_else(|| body.find(heading))?;
+    let content_start = start + heading_line.len();
+    let remaining = &body[content_start..];
+    // Find next heading at same or higher level
+    let end = remaining.find("\n## ").unwrap_or(remaining.len());
+    Some(remaining[..end].trim().to_string())
 }
 
 fn skill_runtime_available(repo_root: &Path) -> bool {
