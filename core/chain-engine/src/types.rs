@@ -211,6 +211,10 @@ pub struct DagTaskEntry {
     /// Upstream task IDs that must complete before this task.
     #[serde(default)]
     pub depends_on: Vec<String>,
+    /// Round number for hierarchical grouping (default 1).
+    /// Steps in round N must complete before round N+1 begins.
+    #[serde(default)]
+    pub round: Option<u32>,
     /// Optional condition gate — if present, must evaluate to true to execute.
     #[serde(default)]
     pub condition: Option<DagCondition>,
@@ -254,6 +258,7 @@ impl DagTaskEntry {
             task_id: task_id.into(),
             title: None,
             depends_on: Vec::new(),
+            round: None,
             condition: None,
             parallel_group: None,
             timeout_group: None,
@@ -382,6 +387,7 @@ mod tests {
                     task_id: "fix".to_string(),
                     title: None,
                     depends_on: vec!["scan".to_string()],
+                    round: None,
                     condition: None,
                     parallel_group: None,
                     timeout_group: None,

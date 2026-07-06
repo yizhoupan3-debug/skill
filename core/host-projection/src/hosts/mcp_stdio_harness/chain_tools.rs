@@ -81,6 +81,9 @@ pub(crate) fn tool_chain_dag_init(
             entry.title = Some(title.to_string());
         }
 
+        // Round (default 1 if not specified)
+        entry.round = t.get("round").and_then(Value::as_u64).map(|r| r as u32);
+
         // Depends on
         if let Some(deps) = t.get("depends_on").and_then(Value::as_array) {
             entry.depends_on = deps
@@ -227,12 +230,54 @@ pub(crate) fn tool_chain_dag_status(
     let counts = root.status_counts();
 
     let is_complete = root.tasks.iter().all(|t| t.status.is_terminal());
-    let active_step_ids: Vec<&str> = root
-        .tasks
-        .iter()
-        .filter(|t| t.status == chain_engine::types::TaskStatus::Running)
-        .map(|t| t.task_id.as_str())
-        .collect();
+
+    // Group tasks by round for hierarchical output
+    let max_round = root.tasks.iter()
+        .filter_map(|t| t.round)
+        .max()
+        .unwrap_or(1);
+    let mut rounds: Vec<Value> = Vec::new();
+    let mut total_active: Vec<&str> = Vec::new();
+    for r in 1..=max_round {
+        let round_tasks: Vec<&chain_engine::types::DagTaskEntry> = root.tasks.iter()
+            .filter(|t| t.round.unwrap_or(1) == r)
+            .collect();
+        if round_tasks.is_empty() { continue; }
+        let mut rc = json!({"round": r, "steps": {}});
+        let mut sc = json!({});
+        let mut running: Vec<&str> = Vec::new();
+        for t in &round_tasks {
+            let status = t.status.as_str();
+            rc["steps"][t.task_id.as_str()] = json!(status);
+            let count = sc.get(status).and_then(Value::as_u64).unwrap_or(0);
+            sc[status] = json!(count + 1);
+            if status == "running" {
+                running.push(t.task_id.as_str());
+            }
+        }
+        rc["running"] = json!(running);
+        rc["status_counts"] = sc;
+        total_active.extend(running);
+        rounds.push(rc);
+    }
+    // Fallback: no round field → single flat round
+    if rounds.is_empty() {
+        let running: Vec<&str> = root.tasks.iter()
+            .filter(|t| t.status == chain_engine::types::TaskStatus::Running)
+            .map(|t| t.task_id.as_str())
+            .collect();
+        rounds.push(json!({
+            "round": 1, "running": running,
+            "status_counts": {
+                "pending": counts.get("pending").copied().unwrap_or(0),
+                "running": counts.get("running").copied().unwrap_or(0),
+                "completed": counts.get("completed").copied().unwrap_or(0),
+                "failed": counts.get("failed").copied().unwrap_or(0),
+                "skipped": counts.get("skipped").copied().unwrap_or(0),
+                "blocked": counts.get("blocked").copied().unwrap_or(0),
+            }
+        }));
+    }
 
     // Default: summary mode. Pass detail=true for full task details.
     let detail = arguments
@@ -245,15 +290,8 @@ pub(crate) fn tool_chain_dag_status(
         "chain_id": root.chain_id,
         "paused": root.paused,
         "task_count": root.tasks.len(),
-        "status_counts": {
-            "pending": counts.get("pending").copied().unwrap_or(0),
-            "running": counts.get("running").copied().unwrap_or(0),
-            "completed": counts.get("completed").copied().unwrap_or(0),
-            "failed": counts.get("failed").copied().unwrap_or(0),
-            "skipped": counts.get("skipped").copied().unwrap_or(0),
-            "blocked": counts.get("blocked").copied().unwrap_or(0),
-        },
-        "active_step_ids": active_step_ids,
+        "rounds": rounds,
+        "active_step_ids": total_active,
         "is_complete": is_complete,
     });
 
