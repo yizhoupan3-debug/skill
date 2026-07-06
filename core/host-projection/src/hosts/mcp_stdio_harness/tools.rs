@@ -816,7 +816,7 @@ pub(super) fn tool_goal_state_read(
         .map_err(|e| FrameworkError::from(format!("goal_state_read: {e}")))?;
     let response = match state {
         Some(s) => {
-            if compact {
+            let mut resp_obj = if compact {
                 json!({"ok": true, "goal_state": {
                     "status": s.get("status"),
                     "goal": s.get("goal").and_then(|g| g.as_str()).map(|g| {
@@ -828,7 +828,15 @@ pub(super) fn tool_goal_state_read(
                 }})
             } else {
                 json!({"ok": true, "goal_state": s})
+            };
+
+            // Attach round-grouped step summary from TASK_CHAIN.json (if present).
+            // Uses short field names to minimize token cost: r=round, s=steps.
+            if let Some(rounds) = build_round_summary(repo_root) {
+                resp_obj["rounds"] = rounds;
             }
+
+            resp_obj
         }
         None => json!({
             "ok": false,
@@ -838,6 +846,30 @@ pub(super) fn tool_goal_state_read(
     };
     Ok(serde_json::to_string(&response)
         .map_err(|e| FrameworkError::from(e.to_string()))?)
+}
+
+/// Build round-grouped step summary from TASK_CHAIN.json.
+/// Returns None if no chain file exists.
+/// Uses short keys (r, s) to minimize token cost.
+fn build_round_summary(repo_root: &Path) -> Option<Value> {
+    let chain_path = chain_engine::chain_file_path(repo_root);
+    if !chain_path.is_file() { return None; }
+    let root = chain_engine::load_chain_from_path(&chain_path).ok()?;
+    if root.tasks.is_empty() { return None; }
+
+    let max_round = root.tasks.iter().filter_map(|t| t.round).max().unwrap_or(1);
+    let mut rounds: Vec<Value> = Vec::new();
+    for r in 1..=max_round {
+        let round_tasks: Vec<&chain_engine::types::DagTaskEntry> = root.tasks.iter()
+            .filter(|t| t.round.unwrap_or(1) == r).collect();
+        if round_tasks.is_empty() { continue; }
+        let mut steps = json!({});
+        for t in &round_tasks {
+            steps[t.task_id.as_str()] = json!(t.status.as_str());
+        }
+        rounds.push(json!({"r": r, "s": steps}));
+    }
+    Some(json!(rounds))
 }
 
 // ── Record Evidence ──
